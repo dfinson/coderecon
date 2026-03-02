@@ -32,6 +32,9 @@ _LANGUAGE_TO_TOOL_PREFIX: dict[str, str] = {
     "sql": "sql",
 }
 
+LINT_TIMEOUT_SECONDS: int = 30
+"""Default timeout in seconds for lint subprocess execution."""
+
 
 def _generate_agentic_hint(languages: list[str]) -> str:
     """Generate agentic hint for unhandled case based on detected languages."""
@@ -350,7 +353,9 @@ class LintOps:
                 cwd=self._repo_root,
                 env=sub_env,
             )
-            stdout_bytes, stderr_bytes = await proc.communicate()
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                proc.communicate(), timeout=LINT_TIMEOUT_SECONDS
+            )
             stdout = stdout_bytes.decode(errors="replace")
             stderr = stderr_bytes.decode(errors="replace")
 

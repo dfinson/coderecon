@@ -16,7 +16,11 @@ from codeplane.lint import (
     parsers,
     registry,
 )
-from codeplane.lint.ops import _LANGUAGE_TO_TOOL_PREFIX, _generate_agentic_hint
+from codeplane.lint.ops import (
+    _LANGUAGE_TO_TOOL_PREFIX,
+    LINT_TIMEOUT_SECONDS,
+    _generate_agentic_hint,
+)
 from codeplane.lint.tools import LintTool
 
 
@@ -34,6 +38,18 @@ def create_mock_coordinator() -> MagicMock:
 # =============================================================================
 # Model Tests
 # =============================================================================
+
+
+class TestLintTimeoutConstant:
+    """Tests for LINT_TIMEOUT_SECONDS constant."""
+
+    def test_lint_timeout_value(self) -> None:
+        """LINT_TIMEOUT_SECONDS equals 30."""
+        assert LINT_TIMEOUT_SECONDS == 30
+
+    def test_lint_timeout_is_int(self) -> None:
+        """LINT_TIMEOUT_SECONDS is an int."""
+        assert isinstance(LINT_TIMEOUT_SECONDS, int)
 
 
 class TestSeverity:
