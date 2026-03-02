@@ -252,8 +252,8 @@ class OutputTier(StrEnum):
     SCAFFOLD:  Above elbow — imports + signatures.
     LITE:      Below elbow — path + description only.
 
-    v2 design: no FULL_FILE tier.  Full content is always fetched via
-    recon_resolve as a separate step.
+    v2 design: no FULL_FILE tier.  Full content is read via terminal
+    (cat, head, sed -n) after recon identifies relevant files.
 
     Legacy aliases (FULL_FILE, MIN_SCAFFOLD, SUMMARY_ONLY) are kept for
     internal pipeline compatibility — they map to the v2 values and are
@@ -605,7 +605,7 @@ class FileCandidate:
     tier: OutputTier = OutputTier.SUMMARY_ONLY
 
     # Unique identifier assigned during recon pipeline assembly.
-    # Used by recon_resolve to validate that the agent is requesting
+    # Used by refactor_plan to validate that the agent is requesting
     # files that originate from a recon result (not arbitrary paths).
     candidate_id: str = ""
 
