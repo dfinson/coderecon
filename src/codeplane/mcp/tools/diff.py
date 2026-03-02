@@ -625,8 +625,8 @@ def _build_agentic_hint(
     lines.append("")
     lines.append(
         "WORKFLOW: For each domain above, call recon(read_only=True, "
-        "pinned_paths=...) to get context, then recon_resolve to read "
-        "changed files. Focus on breaking changes and high-risk body changes."
+        "pinned_paths=...) to get context, then read changed files via "
+        "terminal (cat/head). Focus on breaking changes and high-risk body changes."
     )
 
     return "\n".join(lines)

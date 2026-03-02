@@ -24,7 +24,7 @@ EXCLUSIVE_TOOLS: frozenset[str] = frozenset({"checkpoint", "semantic_diff"})
 class EditTicket:
     """Proof that a file was resolved — required by refactor_edit.
 
-    Minted by recon_resolve, consumed (and refreshed) by refactor_edit.
+    Minted by refactor_plan, consumed (and refreshed) by refactor_edit.
     Format: ``{candidate_id}:{sha256_prefix}`` e.g. ``"abc123:0:3bd2b2fb"``
     """
 
@@ -125,7 +125,7 @@ class SessionState:
     fingerprints: dict[str, str] = field(default_factory=dict)
     counters: dict[str, int] = field(default_factory=dict)
     # Maps recon_id → {candidate_id: repo_relative_path}.
-    # Populated by recon pipeline, consumed by recon_resolve for
+    # Populated by recon pipeline, consumed by refactor_plan for
     # ID-based file selection (no raw path access).
     candidate_maps: dict[str, dict[str, str]] = field(default_factory=dict)
     # Unified mutation lifecycle — tracks plan+edit AND refactor_*

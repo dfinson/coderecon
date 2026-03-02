@@ -244,7 +244,7 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
             ...,
             description=(
                 "candidate_id values of files you will edit. "
-                "Must have been resolved via recon_resolve first."
+                "Must be from recon scaffold_files or lite_files."
             ),
         ),
         description: str = Field(
@@ -279,7 +279,7 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
     ) -> dict[str, Any]:
         """Declare your edit set and call budget before editing.
 
-        Call this AFTER recon_resolve to commit to your edit targets.
+        Call this AFTER recon to commit to your edit targets.
         This mints edit tickets required by refactor_edit.
 
         DEFAULT: expected_edit_calls=1. You MUST batch all edits into

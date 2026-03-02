@@ -276,7 +276,7 @@ def _build_recon_hint(cache_id: str, byte_size: int, payload: dict[str, Any]) ->
         "",
         "STEP 1 — CANDIDATES: Read the full candidate list (each entry has .id and .path)",
         f"  {_cpl_json_cmd(cache_id, 'candidates')}",
-        "  Parse the .id field from each candidate — you need these to call recon_resolve.",
+        "  Parse the .id field from each candidate — you need these for refactor_plan.",
         "",
     ]
 
@@ -297,8 +297,9 @@ def _build_recon_hint(cache_id: str, byte_size: int, payload: dict[str, Any]) ->
     parts.append("")
 
     parts.append(
-        "NEXT: Call recon_resolve with the .id values from candidates as candidate_id. "
-        "Resolve ALL files in ONE call — incremental resolves are rate-limited."
+        "NEXT: Read the files you need via terminal (cat/head) "
+        "using paths from the scaffold headers. "
+        "Then call refactor_plan with candidate_id values to declare your edit set."
     )
 
     return "\n".join(parts)
@@ -453,9 +454,7 @@ def _build_checkpoint_hint(
                 "  Edit tickets are pre-minted — call refactor_edit directly "
                 "with plan_id and edit_tickets from the fix_plan field below."
             )
-            parts.append(
-                "  Budget is RESET. Batch ALL fixes into ONE refactor_edit call."
-            )
+            parts.append("  Budget is RESET. Batch ALL fixes into ONE refactor_edit call.")
             parts.append("")
             step += 1
 
@@ -464,7 +463,7 @@ def _build_checkpoint_hint(
         )
         parts.append(
             "DO NOT re-read entire files — use snippets above. "
-            "Call recon_resolve ONLY if you need more context."
+            "Read files via terminal (cat/head) if you need more context."
         )
 
     return "\n".join(parts)

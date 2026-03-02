@@ -290,7 +290,7 @@ def _build_unindexed_fallback(full_path: Any, rel_path: str) -> dict[str, Any]:
         "imports": [],
         "summary": f"unindexed: {rel_path}, {total_lines} lines",
         "agentic_hint": (
-            "This file is not in the structural index. Use recon_resolve to fetch its full content."
+            "This file is not in the structural index. Read it via terminal (cat/head)."
         ),
     }
 

@@ -273,8 +273,8 @@ def _resolve_edit(
             "The file may have changed since you last read it."
         ),
         remediation=(
-            "Re-read the file with recon_resolve to get current content "
-            f"and sha256. File starts with:\n{preview}"
+            "Re-read the file via terminal (cat/head) to get current content. "
+            f"File starts with:\n{preview}"
         ),
     )
 
