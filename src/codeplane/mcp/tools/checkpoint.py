@@ -1172,17 +1172,9 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
                     "status": "skipped",
                     "reason": "lint failed — fix lint issues first",
                 }
-                result["summary"] = _summarize_verify(
-                    lint_status, lint_diagnostics, test_passed, test_failed, test_status
-                )
-                result["passed"] = False
-                result["agentic_hint"] = (
-                    f"STOP! Lint found {lint_diagnostics} issues. Tests were skipped. "
-                    "Fix ALL lint issues before proceeding. "
-                    "These failures are almost certainly YOUR fault — you passed changed_files "
-                    "so lint ran ONLY on code affected by YOUR changes."
-                )
-                return result
+                # Don't return early — fall through to the unified failure
+                # block which handles fix_plan generation and wrap_response.
+                tests = False  # skip test phase
 
         # --- Phase 2: Tests ---
         if tests:
