@@ -196,9 +196,11 @@ def _serialize_refactor_result(result: "RefactorResult") -> dict[str, Any]:
 def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
     """Register refactor tools with FastMCP server."""
 
-    def _require_recon_and_justification(session: Any, justification: str | None) -> None:
+    def _require_recon_and_justification(
+        session: Any, justification: str | None, *, allow_read_only: bool = False
+    ) -> None:
         """Gate: recon must have been called + justification required + not read-only."""
-        if getattr(session, "read_only", None) is True:
+        if not allow_read_only and getattr(session, "read_only", None) is True:
             raise MCPError(
                 code=MCPErrorCode.INVALID_PARAMS,
                 message="Session is read-only — refactor tools are blocked.",
@@ -656,7 +658,7 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
     ) -> dict[str, Any]:
         """Find all references to a symbol/file for impact analysis before removal."""
         session = app_ctx.session_manager.get_or_create(ctx.session_id)
-        _require_recon_and_justification(session, justification)
+        _require_recon_and_justification(session, justification, allow_read_only=True)
 
         result = await app_ctx.refactor_ops.impact(
             target,
