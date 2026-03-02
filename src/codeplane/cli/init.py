@@ -76,14 +76,14 @@ CodePlane equivalent (`docker`, `curl` to external services, etc.).
 One call returns SCAFFOLD (imports + signatures), LITE (path + description), and repo_map.
 
 ```
-recon(task="<describe the task in natural language>", read_only=<True or False>)
+recon(task="<describe the task>", seeds=["SymA", "SymB", ...], read_only=<True or False>)
 ```
 
-All parameter details are in the tool schema.
+**ONE recon call handles multiple symbols** — put ALL names in `seeds`, never loop.
 
 ### After Recon: Resolve, Plan, Edit, Checkpoint
 
-1. `recon_resolve(targets=[...], justification="...")` — full content + sha256 (uses candidate_id, not raw paths)
+1. `recon_resolve(targets=[...], justification="...")` — full content + sha256. **ALL files in ONE call** (uses candidate_id, not raw paths)
 2. `refactor_plan(edit_targets=["<candidate_id>"])` — declare edit set, get plan_id + edit_tickets
 3. `refactor_edit(plan_id=..., edits=[...])` — find-and-replace with sha256 locking (one call can edit MULTIPLE files)
 4. `checkpoint(changed_files=[...], commit_message="...")` — lint → test → commit → push
@@ -186,6 +186,8 @@ Budget resets on failure. `fix_plan` is always in the checkpoint response — no
 ### Common Mistakes (Don't Do These)
 
 - **DON'T** skip `recon` and manually search+read — `recon` is faster and more complete
+- **DON'T** call `recon` in a loop (once per symbol) — put ALL symbols in `seeds` in ONE call
+- **DON'T** call `recon_resolve` per file — batch ALL targets in ONE call
 - **DON'T** use `refactor_rename` with file:line:col — pass the symbol NAME only
 - **DON'T** skip `checkpoint` after `refactor_edit` — always lint + test your changes
 - **DON'T** ignore `agentic_hint` in responses
