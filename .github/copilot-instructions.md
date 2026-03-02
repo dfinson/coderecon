@@ -207,6 +207,7 @@ pre-minted edit tickets returned inline — call `refactor_edit` directly (no ne
 | Task-aware discovery | `mcp_codeplane-codeplane_recon` | Manual search + read loops |
 | Fetch file content | `mcp_codeplane-codeplane_recon_resolve` | `cat`, `head`, `less`, `tail` |
 | Edit files | `mcp_codeplane-codeplane_refactor_edit` | `sed`, `echo >>`, `awk`, `tee` |
+| Delete file | `mcp_codeplane-codeplane_refactor_edit(delete=True)` | `git rm`, `rm` |
 | Rename symbol | `mcp_codeplane-codeplane_refactor_rename` | Find-and-replace, `sed` |
 | Move file | `mcp_codeplane-codeplane_refactor_move` | `mv` + manual import fixup |
 | Impact analysis | `mcp_codeplane-codeplane_refactor_impact` | `grep` for references |
@@ -221,7 +222,7 @@ pre-minted edit tickets returned inline — call `refactor_edit` directly (no ne
 STOP before using `refactor_edit` for multi-file changes:
 - Changing a name across files? → `refactor_rename` (NOT refactor_edit + manual fixup)
 - Moving a file? → `refactor_move` (NOT refactor_edit + delete)
-- Deleting a symbol or file? → `refactor_impact` first
+- Deleting a file? → `refactor_impact` first, then `refactor_edit(delete=True)`
 
 ### Refactor: preview → commit/cancel
 
@@ -262,6 +263,18 @@ recon(task="...", read_only=False)
 → refactor_commit(refactor_id="...")                      # apply all
 ```
 
+**Delete a file:**
+```
+recon(task="...", read_only=False)
+→ refactor_impact(path="file/to/delete.py")           # check dependents first
+→ refactor_plan(edit_targets=["<candidate_id>"])
+→ refactor_edit(plan_id="...", edits=[{
+      "edit_ticket": "...", "path": "file/to/delete.py",
+      "delete": true, "expected_file_sha256": "..."
+  }])
+→ checkpoint(changed_files=["file/to/delete.py"])
+```
+
 **Checkpoint fails → fix → retry:**
 ```
 checkpoint(changed_files=["..."]) → FAILED, fix_plan returned inline
@@ -284,4 +297,5 @@ Budget resets on failure. `fix_plan` is always in the checkpoint response — no
 - **DON'T** dismiss lint/test failures as "pre-existing" or "not your problem" — fix ALL issues
 - **DON'T** use one `refactor_edit` call per file — batch ALL edits into ONE call
 - **DON'T** panic on checkpoint failure — budget resets, use the `fix_plan` tickets provided
+- **DON'T** use `git rm` or `rm` to delete files — use `refactor_edit(delete=True)`
 <!-- /codeplane-instructions -->
