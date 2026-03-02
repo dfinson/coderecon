@@ -1373,6 +1373,7 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
                     # ── Pre-mint edit tickets ──
                     # Clear old mutation state, create fresh plan + tickets
                     chk_session.mutation_ctx.clear()
+                    chk_session.pattern_detector.clear()
                     app_ctx.refactor_ops.clear_pending()
 
                     plan_id = f"fix_{_uuid.uuid4().hex[:12]}"
@@ -1495,6 +1496,7 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
                 try:
                     chk_session = app_ctx.session_manager.get_or_create(ctx.session_id)
                     chk_session.mutation_ctx.clear()
+                    chk_session.pattern_detector.clear()
                     app_ctx.refactor_ops.clear_pending()
                 except Exception:  # noqa: BLE001
                     pass
@@ -1509,6 +1511,7 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
                 chk_session = app_ctx.session_manager.get_or_create(ctx.session_id)
                 chk_session.mutation_ctx.clear()
                 chk_session.resolve_batch_count = 0
+                chk_session.pattern_detector.clear()
                 app_ctx.refactor_ops.clear_pending()
             except Exception:  # noqa: BLE001
                 pass

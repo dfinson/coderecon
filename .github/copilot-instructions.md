@@ -211,6 +211,10 @@ recon(task="<describe the task>", seeds=["SymA", "SymB", ...], read_only=<True o
 Batch source + test edits into ONE call. On checkpoint failure: budget RESETS, `fix_plan` with
 pre-minted edit tickets returned inline — call `refactor_edit` directly (no new plan needed).
 
+**Session reset:** `checkpoint` resets ALL session state (mutation budget, pattern detection,
+resolve counts). Call `checkpoint(changed_files=[])` after read-only flows to reset the session
+before starting the next task.
+
 ### Reviewing Changes
 
 `semantic_diff(base="main")` for structural overview, then `recon_resolve` changed files to review.
