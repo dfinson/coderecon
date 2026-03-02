@@ -3,6 +3,7 @@
 Verifies summary helpers, serialization, and recon/justification gates.
 """
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -334,15 +335,17 @@ class TestRefactorPlan:
         return FastMCP("test")
 
     @pytest.fixture
-    def app_ctx(self) -> MagicMock:
+    def app_ctx(self, tmp_path: Path) -> MagicMock:
         ctx = MagicMock()
         session = MagicMock()
         session.candidate_maps = {
             "r1": {"r1:0": "foo.py", "r1:1": "bar.py"},
         }
-        session.counters = {
-            "resolved_files": {"foo.py": "a" * 64, "bar.py": "b" * 64},
-        }
+        # Create real files for disk-based sha256 computation
+        (tmp_path / "foo.py").write_text("# foo")
+        (tmp_path / "bar.py").write_text("# bar")
+        ctx.coordinator.repo_root = tmp_path
+        session.counters = {}
         session.edit_tickets = {}
         session.active_plan = None
         session.read_only = False
@@ -472,12 +475,15 @@ class TestRefactorPlan:
         assert result["expected_edit_calls"] == 2
 
     @pytest.mark.asyncio
-    async def test_plan_rejects_unresolved_target(
+    async def test_plan_rejects_missing_file(
         self, mcp_app: FastMCP, app_ctx: MagicMock, fastmcp_ctx: MagicMock
     ) -> None:
-        """Target not resolved via recon_resolve is rejected."""
+        """Target file not found on disk is rejected."""
         session = app_ctx.session_manager.get_or_create.return_value
-        session.counters = {"resolved_files": {}}
+        # Add candidate pointing to a file that does NOT exist on disk
+        session.candidate_maps = {
+            "r1": {"r1:0": "foo.py", "r1:1": "bar.py", "r1:2": "missing.py"},
+        }
 
         from codeplane.mcp.tools.refactor import register_tools
 
@@ -485,10 +491,10 @@ class TestRefactorPlan:
         tools = get_tools_sync(mcp_app)
         plan_fn = tools["refactor_plan"].fn
 
-        with pytest.raises(MCPError, match="not been resolved"):
+        with pytest.raises(MCPError, match="not found on disk"):
             await plan_fn(
                 ctx=fastmcp_ctx,
-                edit_targets=["r1:0"],
+                edit_targets=["r1:2"],
                 description=self._DESCRIPTION,
                 expected_edit_calls=1,
                 batch_justification=None,

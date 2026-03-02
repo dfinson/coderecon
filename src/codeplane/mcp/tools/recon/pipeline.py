@@ -1022,13 +1022,12 @@ def _check_recon_gate(
             reason_min_chars=_RECON_GATE_REASON_MIN,
             reason_prompt=(
                 "Explain in ≥500 characters why your first recon call was "
-                "insufficient and what specific context is still missing "
-                "that cannot be obtained via recon_resolve."
+                "insufficient and what specific context is still missing."
             ),
             expires_calls=3,
             message=(
-                "Recon is hard-gated to 1 call per task.  Use recon_resolve "
-                "to read specific files from your first recon result, or "
+                "Recon is hard-gated to 1 call per task.  Read files "
+                "via terminal (cat/head), then "
                 "proceed to refactor_plan → refactor_edit → checkpoint."
             ),
         )
@@ -1039,16 +1038,16 @@ def _check_recon_gate(
                 "code": "RECON_HARD_GATE",
                 "message": (
                     "2nd consecutive recon call is blocked. recon is "
-                    "hard-gated to 1 call per task. Use recon_resolve "
-                    "to fetch file content from your first recon result."
+                    "hard-gated to 1 call per task. Read files via "
+                    "terminal (cat/head) from your first recon result."
                 ),
             },
             "gate": gate_block,
             "agentic_hint": (
                 "HARD GATE: recon allows 1 call per task. Your first "
                 "recon result already contains scaffolds, lites, and "
-                "repo_map. Use recon_resolve to read full content for "
-                "any file from that result.\n\n"
+                "repo_map. Read files via terminal (cat/head) using "
+                "paths from scaffolds.\n\n"
                 "If you genuinely need a new recon (different task, "
                 "different seeds), use the gate_token from the gate "
                 "block below on your next call along with gate_reason "
@@ -1119,13 +1118,13 @@ def _check_recon_gate(
             f"This is recon call #{consecutive + 1}. Explain in ≥500 "
             "characters why your previous recon calls were insufficient "
             "and what specific context is still missing that cannot be "
-            "obtained via recon_resolve."
+            "obtained from recon scaffolds."
         ),
         expires_calls=3,
         message=(
             f"Recon call #{consecutive + 1} requires gate confirmation. "
             "You have called recon multiple times without making progress "
-            "via refactor_edit.  Consider using recon_resolve to expand on "
+            "via refactor_edit.  Consider reading files via terminal to expand on "
             "specific files, or proceed to refactor_edit with the context "
             "you already have."
         ),
@@ -1141,7 +1140,7 @@ def _check_recon_gate(
             f"2. Provide gate_reason (≥{_RECON_GATE_REASON_MIN} chars) "
             "explaining why previous recon calls were insufficient\n"
             "3. Include pinned_paths\n\n"
-            "Alternative: use recon_resolve to expand on specific files "
+            "Alternative: read files via terminal to expand on specific files "
             "from previous recon results, or proceed to refactor_edit."
         ),
         "consecutive_recon_calls": consecutive + 1,
@@ -1233,7 +1232,7 @@ def register_tools(mcp: FastMCP, app_ctx: AppContext) -> None:
         - LITE: path + description for tail
 
         Also includes a repo_map for structural orientation.
-        Use recon_resolve to fetch full content for files you
+        Read files via terminal (cat/head) for full content of files you
         want to read or edit.
 
         Pipeline: parse_task → file-level embedding harvest →
@@ -1438,15 +1437,10 @@ def register_tools(mcp: FastMCP, app_ctx: AppContext) -> None:
             " (functions, classes, methods with line numbers)."
             " Use these to decide which files you need full content for.",
             "",
-            "NEXT: call recon_resolve with candidate_id values"
-            " from the scaffold headers."
-            " Resolve ALL files you need in ONE call —"
-            " incremental resolves are rate-limited"
-            " (max 3 before hard block)."
-            " Each target needs: candidate_id (required),"
-            " optional start_line/end_line."
-            " Include a justification (50+ chars)"
-            " explaining your resolve batch.",
+            "NEXT: Read the files you need via terminal (cat/head)"
+            " using paths from the scaffold headers."
+            " Then call refactor_plan with candidate_id values"
+            " to declare your edit set.",
         ]
 
         # Test co-evolution hint for write-mode recon calls
@@ -1500,10 +1494,8 @@ def register_tools(mcp: FastMCP, app_ctx: AppContext) -> None:
             # Store read_only intent — gates mutation tools until
             # a new recon call overrides it.
             session.read_only = read_only
-            # Track last recon_id for resolve ordering gate
+            # Track last recon_id for plan validation
             session.last_recon_id = recon_id
-            # Reset resolve batch count on new recon call
-            session.resolve_batch_count = 0
         except Exception:  # noqa: BLE001
             pass
 

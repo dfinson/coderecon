@@ -35,7 +35,7 @@ _AGENT_TAG = "\\[agent] "
 # Weighted rotation: A appears twice, B once per cycle.
 _REJOINDER_INTERVAL = 5
 _REJOINDERS = (
-    "REJOINDER: recon + recon_resolve replace grep/rg/find/cat/head/tail/sed/wc.",
+    "REJOINDER: recon replaces grep/rg/find/ag/wc/ls. Read files via terminal (cat/head).",
     "REJOINDER: checkpoint replaces direct test runner and linter invocation.",
 )
 _REJOINDER_ROTATION = (0, 1, 0)
@@ -784,10 +784,6 @@ class ToolMiddleware(Middleware):
         if tool_name == "recon":
             files = data.get("files", [])
             return f"{len(files)} files returned"
-
-        if tool_name == "recon_resolve":
-            files = data.get("files", [])
-            return f"{len(files)} files resolved"
 
         if tool_name == "refactor_edit":
             edits = data.get("edits", [])

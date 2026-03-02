@@ -131,17 +131,12 @@ class SessionState:
     # Unified mutation lifecycle — tracks plan+edit AND refactor_*
     # under one budget.  Created lazily, cleared by checkpoint.
     mutation_ctx: MutationContext = field(default_factory=MutationContext)
-    # Resolve batch counter — used for escalating pressure hints.
-    resolve_batch_count: int = 0
-    # Tracks which files the agent has already resolved in this session.
-    # Maps repo-relative path → sha256 hash.  Used by resolve hint to
-    # remind agents what they already have (anti-reread mitigation).
-    resolved_paths: dict[str, str] = field(default_factory=dict)
+
     # Read-only intent: True = research-only session (mutations blocked),
     # False = read-write session, None = not yet declared.
     # Set by recon(read_only=...), reset on new recon call.
     read_only: bool | None = None
-    # Last recon_id — set by recon, required by resolve for ordering.
+    # Last recon_id — set by recon; used for plan validation.
     last_recon_id: str | None = None
     gate_manager: GateManager = field(default_factory=GateManager)
     pattern_detector: CallPatternDetector = field(default_factory=CallPatternDetector)

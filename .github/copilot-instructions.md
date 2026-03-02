@@ -162,7 +162,7 @@ python benchmarking/cpl_bench/setup_and_run.py /path/to/repo --reindex
 
 The script automatically kills the daemon when the experiment finishes.
 
-For CodePlane MCP tool usage instructions (recon → resolve → plan → edit → checkpoint workflow),
+For CodePlane MCP tool usage instructions (recon → plan → edit → checkpoint workflow),
 see [AGENTS.md](../AGENTS.md). The mutation budget rules above are the most critical subset.
 
 <!-- codeplane-instructions -->
@@ -177,7 +177,7 @@ CodePlane tools — NEVER through terminal commands.** Violations break the muta
 and corrupt the index.
 
 **Explicitly banned** (non-exhaustive — if a CodePlane tool can do it, the terminal MUST NOT):
-- `cat`, `head`, `tail`, `less`, `sed -n`, `bat` → use `recon_resolve`
+- `cat`, `head`, `tail`, `less`, `sed -n`, `bat` → allowed for reading files after `recon`
 - `grep`, `rg`, `find`, `ag`, `wc`, `ls` → use `recon`
 - `sed -i`, `awk`, `echo >>`, `tee`, `perl -i` → use `refactor_edit`
 - `rm`, `git rm` → use `refactor_edit(delete=True)`
@@ -202,13 +202,13 @@ recon(task="<describe the task>", seeds=["SymA", "SymB", ...], read_only=<True o
 **ONE recon call handles multiple symbols** — put ALL names in `seeds`, never loop.
 
 **Recon is hard-gated to 1 call per task.** The 2nd call is blocked unconditionally.
-Use `recon_resolve` to read files from your first result. A gate escape (gate_token)
+Read files via terminal (`cat`, `head`) using paths from scaffolds. A gate escape (gate_token)
 is issued on the 2nd block for emergencies only.
 
-### After Recon: Resolve, Plan, Edit, Checkpoint
+### After Recon: Read, Plan, Edit, Checkpoint
 
-1. `recon_resolve(targets=[...], justification="...")` — full content + sha256. **ALL files in ONE call** (uses candidate_id, not raw paths)
-2. `refactor_plan(edit_targets=["<candidate_id>"])` — declare edit set, get plan_id + edit_tickets
+1. Read files via terminal (`cat`, `head`, `sed -n`) using paths from recon scaffolds
+2. `refactor_plan(edit_targets=["<candidate_id>"])` — declare edit set, get plan_id + edit_tickets (sha256 computed from disk)
 3. `refactor_edit(plan_id=..., edits=[...])` — find-and-replace with sha256 locking (one call can edit MULTIPLE files)
 4. `checkpoint(changed_files=[...], commit_message="...")` — lint → test → commit → push
 
@@ -218,14 +218,14 @@ pre-minted edit tickets returned inline — call `refactor_edit` directly (no ne
 
 ### Reviewing Changes
 
-`semantic_diff(base="main")` for structural overview, then `recon_resolve` changed files to review.
+`semantic_diff(base="main")` for structural overview, then read changed files via terminal.
 
 ### Required Tool Mapping
 
 | Operation | REQUIRED Tool | FORBIDDEN Alternative |
 |-----------|---------------|----------------------|
 | Task-aware discovery | `mcp_codeplane-codeplane_recon` | Manual search + read loops |
-| Fetch file content | `mcp_codeplane-codeplane_recon_resolve` | `cat`, `head`, `less`, `tail` |
+| Read file content | `cat`, `head`, `sed -n` (terminal) | N/A — terminal reads are allowed |
 | Edit files | `mcp_codeplane-codeplane_refactor_edit` | `sed`, `echo >>`, `awk`, `tee` |
 | Delete file | `mcp_codeplane-codeplane_refactor_edit(delete=True)` | `git rm`, `rm` |
 | Rename symbol | `mcp_codeplane-codeplane_refactor_rename` | Find-and-replace, `sed` |
@@ -264,15 +264,15 @@ If `delivery` = `"sidecar_cache"`, run `agentic_hint` commands to fetch content 
 **Read-only research:**
 ```
 recon(task="...", read_only=True)
-→ recon_resolve(targets=[{"candidate_id": "<id>"}], justification="...")
+→ cat src/path/file.py                               # read via terminal
 → checkpoint(changed_files=[])                      # reset session state
 ```
 
 **Edit a file:**
 ```
 recon(task="...", read_only=False)
-→ recon_resolve(targets=[...], justification="...")  # get sha256
-→ refactor_plan(edit_targets=["<candidate_id>"])
+→ cat src/path/file.py                               # read via terminal
+→ refactor_plan(edit_targets=["<candidate_id>"])     # sha256 computed from disk
 → refactor_edit(plan_id="...", edits=[...])          # batch ALL files in ONE call
 → checkpoint(changed_files=["..."])
 ```
@@ -289,7 +289,7 @@ recon(task="...", read_only=False)
 ```
 recon(task="...", seeds=["SymbolName"], read_only=True)
 → refactor_impact(target="SymbolName")         # returns ALL reference sites
-→ recon_resolve(targets=[...])                 # resolve files you need to read
+→ cat src/path/file.py                         # read files you need via terminal
 ```
 
 **Delete a file:**
@@ -320,7 +320,6 @@ Budget resets on failure. `fix_plan` is always in the checkpoint response — no
 
 - **DON'T** skip `recon` and manually search+read — `recon` is faster and more complete
 - **DON'T** call `recon` in a loop (once per symbol) — put ALL symbols in `seeds` in ONE call
-- **DON'T** call `recon_resolve` per file — batch ALL targets in ONE call
 - **DON'T** use `refactor_rename` with file:line:col — pass the symbol NAME only
 - **DON'T** skip `checkpoint` after `refactor_edit` — always lint + test your changes
 - **DON'T** ignore `agentic_hint` in responses
@@ -330,5 +329,5 @@ Budget resets on failure. `fix_plan` is always in the checkpoint response — no
 - **DON'T** grep/filter scaffold metadata to find files — scaffolds are a TABLE OF CONTENTS,
   not a search index. Use `refactor_impact` to find all usages of a symbol
 - **DON'T** skip `checkpoint(changed_files=[])` after read-only flows — session state
-  (recon gate, mutation budget, resolve counts) carries over and blocks the next task
+  (recon gate, mutation budget) carries over and blocks the next task
 <!-- /codeplane-instructions -->

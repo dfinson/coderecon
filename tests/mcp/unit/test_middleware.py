@@ -409,12 +409,6 @@ class TestToolMiddleware:
         formatted = middleware._format_tool_summary("recon", result)
         assert formatted == "3 files returned"
 
-    def test_format_tool_summary_recon_resolve(self, middleware):
-        """Test recon_resolve-specific formatting."""
-        result = {"files": [{"path": "a.py"}, {"path": "b.py"}]}
-        formatted = middleware._format_tool_summary("recon_resolve", result)
-        assert formatted == "2 files resolved"
-
     def test_format_tool_summary_refactor_edit(self, middleware):
         """Test refactor_edit-specific formatting."""
         result = {"edits": [{"status": "ok"}, {"status": "ok"}, {"status": "error"}]}

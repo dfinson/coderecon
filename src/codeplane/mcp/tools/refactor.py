@@ -1,5 +1,6 @@
 """Refactor MCP tools - refactor_* handlers."""
 
+import hashlib
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -394,9 +395,7 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
             raise MCPError(
                 code=MCPErrorCode.INVALID_PARAMS,
                 message="No recon data found. Call recon first.",
-                remediation=(
-                    'Call recon(task="...") first, then recon_resolve, then refactor_plan.'
-                ),
+                remediation=('Call recon(task="...") first, then refactor_plan.'),
             )
 
         # Pick the recon to use
@@ -416,13 +415,8 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
         for cmap in session.candidate_maps.values():
             id_to_path.update(cmap)
 
-        # Get resolved files (path → sha256)
-        resolved_files: dict[str, str] = session.counters.get(  # type: ignore[assignment]
-            "resolved_files",
-            {},
-        )
-
-        # Map targets and mint tickets
+        # Map targets and mint tickets (sha256 computed from disk)
+        repo_root = app_ctx.coordinator.repo_root
         target_paths: dict[str, str] = {}
         minted_tickets: dict[str, EditTicket] = {}
         ticket_list: list[dict[str, str]] = []
@@ -437,17 +431,15 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
                         "Use candidate_id values from recon scaffold_files or lite_files."
                     ),
                 )
-            sha256 = resolved_files.get(path)
-            if sha256 is None:
+            # Compute sha256 from disk at plan time (optimistic lock)
+            full_path = repo_root / path
+            if not full_path.exists():
                 raise MCPError(
-                    code=MCPErrorCode.INVALID_PARAMS,
-                    message=(f"File '{path}' (candidate {cid}) has not been resolved."),
-                    remediation=(
-                        "Call recon_resolve with this candidate_id first "
-                        "to fetch content and sha256, then include it in "
-                        "the plan."
-                    ),
+                    code=MCPErrorCode.FILE_NOT_FOUND,
+                    message=f"File '{path}' (candidate {cid}) not found on disk.",
+                    remediation="Check the path. Call recon to discover files.",
                 )
+            sha256 = hashlib.sha256(full_path.read_bytes()).hexdigest()
             target_paths[cid] = path
             ticket_id = f"{cid}:{sha256[:8]}"
             ticket = EditTicket(
@@ -497,23 +489,7 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
         if budget_warnings:
             budget_note += "\n\u26a0 " + " ".join(budget_warnings)
 
-        # ── Build plan-scoped context reminder ──
-        context_lines: list[str] = []
-        try:
-            if session.resolved_paths:
-                plan_paths = set(target_paths.values())
-                resolved_but_not_planned = {
-                    p for p in session.resolved_paths if p not in plan_paths
-                }
-                if resolved_but_not_planned:
-                    extra = ", ".join(sorted(resolved_but_not_planned))
-                    context_lines.append(
-                        f"Also resolved (not in edit set): {extra}. "
-                        "Use content from prior resolve — do NOT re-read."
-                    )
-        except Exception:  # noqa: BLE001
-            pass
-        context_str = "\n".join(context_lines)
+        context_str = ""
 
         agentic_hint = (
             f"Plan created: {plan_id}\n"

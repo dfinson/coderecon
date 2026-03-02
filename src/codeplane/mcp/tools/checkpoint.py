@@ -1105,7 +1105,6 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
 
             # ── Reset session state so next task starts clean ──
             session.mutation_ctx.clear()
-            session.resolve_batch_count = 0
             session.pattern_detector.clear()
             session.counters.pop("recon_consecutive", None)
             app_ctx.refactor_ops.clear_pending()
@@ -1432,14 +1431,6 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
                     chk_session.mutation_ctx.plan = fix_plan
                     chk_session.mutation_ctx.edit_tickets.update(minted_tickets)
 
-                    # Update resolved_files/resolved_paths with refreshed sha256s
-                    if "resolved_files" not in chk_session.counters:
-                        chk_session.counters["resolved_files"] = {}  # type: ignore[assignment]
-                    resolved_files: dict[str, str] = chk_session.counters["resolved_files"]  # type: ignore[assignment]
-                    for r in refreshed:
-                        resolved_files[r["path"]] = r["file_sha256"]
-                        chk_session.resolved_paths[r["path"]] = r["file_sha256"]
-
                     # Build fix_plan response for inline + cache
                     fix_plan_data: dict[str, Any] = {
                         "plan_id": plan_id,
@@ -1520,7 +1511,6 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
             try:
                 chk_session = app_ctx.session_manager.get_or_create(ctx.session_id)
                 chk_session.mutation_ctx.clear()
-                chk_session.resolve_batch_count = 0
                 chk_session.pattern_detector.clear()
                 chk_session.counters.pop("recon_consecutive", None)
                 app_ctx.refactor_ops.clear_pending()

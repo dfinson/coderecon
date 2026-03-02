@@ -49,7 +49,6 @@ from codeplane.mcp.tools import (
     introspection,
     recon,
     refactor,
-    resolve,
 )
 
 __all__ = [
@@ -59,5 +58,4 @@ __all__ = [
     "introspection",
     "recon",
     "refactor",
-    "resolve",
 ]
