@@ -9,95 +9,27 @@ This repository uses CodePlane MCP. **You MUST use CodePlane tools instead of te
 
 Terminal fallback is permitted ONLY when no CodePlane tool exists for the operation.
 
-### What CodePlane Provides
-
-CodePlane maintains a **structural index** of your codebase — definitions, imports,
-references, embeddings. This enables task-aware code discovery, semantic diff,
-impact-aware test selection, and safe refactoring that terminal commands cannot provide.
-
 ### Start Every Task With `recon`
 
 **`recon` is the PRIMARY entry point.** It replaces manual search + read loops.
-
-One call to `recon` returns everything you need to start working:
-- **SCAFFOLD** — imports + signatures for top-ranked files (edit targets)
-- **LITE** — path + description for peripheral context files
-- **repo_map** — structural overview of the entire repository
+One call returns SCAFFOLD (imports + signatures), LITE (path + description), and repo_map.
 
 ```
 recon(task="<describe the task in natural language>", read_only=<True or False>)
 ```
 
-**Parameters:**
-- `task` (required): Natural language task description. Be specific — include symbol
-  names, file paths, or domain terms. The server extracts signals automatically.
-- `read_only` (required): Declare task intent. `True` = research/read-only session
-  (mutation tools blocked, sha256/edit_tickets skipped). `False` = read-write session
-  (full edit workflow enabled). You MUST explicitly declare intent every time.
-- `seeds`: Optional list of symbol names to anchor on (e.g., `["IndexCoordinator"]`).
-- `pinned_paths`: Optional file paths to force-include (e.g., `["src/core/base.py"]`).
-- `expand_reason`: REQUIRED on 2nd consecutive recon call — explain what was missing.
-- `gate_token` / `gate_reason`: Required on 3rd+ calls (gated to prevent waste).
+All parameter details are in the tool schema.
 
-**Consecutive call discipline:**
-- 1st call: just `task` (and optionally `seeds`/`pinned_paths`)
-- 2nd call: MUST include `expand_reason` explaining what was missing
-- 3rd+ call: requires `gate_token` from previous response + `gate_reason` (500+ chars)
+### After Recon: Resolve, Plan, Edit, Checkpoint
 
-### After Recon: Resolve Files You Need
+1. `recon_resolve(targets=[...], justification="...")` — full content + sha256 (uses candidate_id, not raw paths)
+2. `refactor_plan(edit_targets=["<candidate_id>"])` — declare edit set, get plan_id + edit_tickets
+3. `refactor_edit(plan_id=..., edits=[...])` — find-and-replace with sha256 locking (one call can edit MULTIPLE files)
+4. `checkpoint(changed_files=[...], commit_message="...")` — lint → test → commit → push
 
-After recon identifies relevant files, use `recon_resolve` to get full content:
-
-```
-recon_resolve(targets=[{"path": "src/foo.py"}])
-```
-
-Returns full file content + `sha256` hash per file (sha256 skipped in read-only mode).
-The sha256 is **required** by `refactor_edit` to ensure edits target the correct version.
-
-### Planning and Editing Files
-
-Before editing, declare your edit set:
-`refactor_plan(edit_targets=["<candidate_id from recon>"])` → returns `plan_id` + `edit_ticket` per file.
-
-Then apply changes with `refactor_edit`:
-
-```
-refactor_edit(plan_id="<plan_id>", edits=[{
-    "path": "src/foo.py",
-    "edit_ticket": "<ticket from plan>",
-    "old_content": "def hello():
-    pass",
-    "new_content": "def hello():
-    return 'world'",
-    "expected_file_sha256": "<sha256 from recon_resolve>"
-}])
-```
-
-- Omit `old_content` to create a new file (no plan/ticket needed). Set `delete: true` to delete.
-- One call can edit **multiple files** — each edit has its own `path` via `edit_ticket`.
-
-### Edit Budget
-
-- **2 mutation batches** max before checkpoint. Each `refactor_edit` call = 1 batch.
-- Batch source + test edits into ONE call. Prefer 1 batch.
-- On checkpoint failure: budget RESETS, `fix_plan` with pre-minted tickets returned.
-  Batch ALL fixes into one `refactor_edit` call, then retry checkpoint.
-
-### Workflow
-
-1. `recon(task="...", read_only=True/False)` — discover relevant files + declare intent
-2. `recon_resolve(targets=[...])` — get full content + sha256
-3. `refactor_plan(edit_targets=[...])` — declare edit set, get plan_id + tickets
-4. `refactor_edit(plan_id=..., edits=[...])` — make changes (batch into ONE call)
-5. `checkpoint(changed_files=[...])` — lint + test + optionally commit
-
-### CRITICAL: After Every Code Change
-
-**`checkpoint(changed_files=[...], commit_message="...")`** — lint → test → commit → push.
-
-Omit `commit_message` to lint+test only (no commit).
-Include `push=True` to push after commit (ask the user before pushing).
+**Budget:** 2 mutation batches max before checkpoint. Each `refactor_edit` call = 1 batch.
+Batch source + test edits into ONE call. On checkpoint failure: budget RESETS, `fix_plan` with
+pre-minted edit tickets returned inline — call `refactor_edit` directly (no new plan needed).
 
 **FORBIDDEN**: `pytest`, `ruff`, `mypy`, `git add`, `git commit`, `git push` in terminal.
 
@@ -130,7 +62,8 @@ STOP before using `refactor_edit` for multi-file changes:
 
 ### Refactor: preview → commit/cancel
 
-1. `refactor_rename`/`refactor_move`/`refactor_impact` — preview with `refactor_id`
+1. `refactor_rename(symbol="Name", new_name="NewName", justification="...")` — `justification` is **required**
+   `refactor_move`/`refactor_impact` — same pattern, preview with `refactor_id`
 2. If `verification_required`: `refactor_commit(refactor_id=..., inspect_path=...)` — review low-certainty matches
 3. `refactor_commit(refactor_id=...)` to apply, or `refactor_cancel(refactor_id=...)` to discard
 
@@ -141,10 +74,46 @@ before proceeding. Also check: `coverage_hint`, `display_to_user`.
 
 If `delivery` = `"sidecar_cache"`, run `agentic_hint` commands to fetch content sections.
 
+### Common Patterns (copy-paste these)
+
+**Read-only research:**
+```
+recon(task="...", read_only=True)
+→ recon_resolve(targets=[{"candidate_id": "<id>"}], justification="...")
+```
+
+**Edit a file:**
+```
+recon(task="...", read_only=False)
+→ recon_resolve(targets=[...], justification="...")  # get sha256
+→ refactor_plan(edit_targets=["<candidate_id>"])
+→ refactor_edit(plan_id="...", edits=[...])          # batch ALL files in ONE call
+→ checkpoint(changed_files=["..."])
+```
+
+**Rename a symbol:**
+```
+recon(task="...", read_only=False)
+→ refactor_rename(symbol="OldName", new_name="NewName", justification="...")
+→ refactor_commit(refactor_id="...", inspect_path="...")  # review low-certainty
+→ refactor_commit(refactor_id="...")                      # apply all
+```
+
+**Checkpoint fails → fix → retry:**
+```
+checkpoint(changed_files=["..."]) → FAILED, fix_plan returned inline
+→ refactor_edit(plan_id=fix_plan.plan_id, edits=[{
+      "edit_ticket": fix_plan.edit_tickets[0].edit_ticket,
+      "path": "...", "old_content": "...", "new_content": "...",
+      "expected_file_sha256": "..."  # from fix_plan or file_manifest
+  }])
+→ checkpoint(changed_files=["..."])  # retry
+```
+Budget resets on failure. `fix_plan` is always in the checkpoint response — no cache read needed.
+
 ### Common Mistakes (Don't Do These)
 
 - **DON'T** skip `recon` and manually search+read — `recon` is faster and more complete
-- **DON'T** guess tool parameter names — use `describe(action='tool', name='...')` first
 - **DON'T** use `refactor_rename` with file:line:col — pass the symbol NAME only
 - **DON'T** skip `checkpoint` after `refactor_edit` — always lint + test your changes
 - **DON'T** ignore `agentic_hint` in responses

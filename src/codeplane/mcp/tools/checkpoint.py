@@ -1068,6 +1068,10 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
         3. (optional) if commit_message is set and all checks pass:
            stage changed_files → pre-commit hooks → commit → push → lean semantic diff
 
+        On failure: returns a fix_plan with pre-minted edit tickets.
+        Budget resets automatically — call refactor_edit directly with
+        the fix_plan tickets (no new refactor_plan needed), then retry.
+
         Returns combined results with pass/fail verdict.
         """
         session = app_ctx.session_manager.get_or_create(ctx.session_id)
