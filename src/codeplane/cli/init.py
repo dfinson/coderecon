@@ -49,9 +49,26 @@ def _make_codeplane_snippet(tool_prefix: str) -> str:
 <!-- codeplane-instructions -->
 ## CodePlane MCP: Mandatory Tool Selection
 
-This repository uses CodePlane MCP. **You MUST use CodePlane tools instead of terminal commands.**
+This repository uses CodePlane MCP.
 
-Terminal fallback is permitted ONLY when no CodePlane tool exists for the operation.
+### ⛔ NEVER Use Terminal to Bypass CodePlane ⛔
+
+**Every file read, search, edit, delete, git operation, lint, and test run MUST go through
+CodePlane tools — NEVER through terminal commands.** Violations break the mutation ledger
+and corrupt the index.
+
+**Explicitly banned** (non-exhaustive — if a CodePlane tool can do it, the terminal MUST NOT):
+- `cat`, `head`, `tail`, `less`, `sed -n`, `bat` → use `recon_resolve`
+- `grep`, `rg`, `find`, `ag`, `wc`, `ls` → use `recon`
+- `sed -i`, `awk`, `echo >>`, `tee`, `perl -i` → use `refactor_edit`
+- `rm`, `git rm` → use `refactor_edit(delete=True)`
+- `mv` → use `refactor_move` or `refactor_rename`
+- `git add`, `git commit`, `git push`, `git diff`, `git status`, `git log` → use `checkpoint` or `semantic_diff`
+- `pytest`, `python -m pytest`, `ruff`, `mypy`, `flake8`, `black` → use `checkpoint`
+
+**Allowed terminal use (exhaustive):** `jq` for sidecar cache reads per `agentic_hint`,
+package installation, running the user's application, and operations with genuinely no
+CodePlane equivalent (`docker`, `curl` to external services, etc.).
 
 ### Start Every Task With `recon`
 
@@ -74,8 +91,6 @@ All parameter details are in the tool schema.
 **Budget:** 2 mutation batches max before checkpoint. Each `refactor_edit` call = 1 batch.
 Batch source + test edits into ONE call. On checkpoint failure: budget RESETS, `fix_plan` with
 pre-minted edit tickets returned inline — call `refactor_edit` directly (no new plan needed).
-
-**FORBIDDEN**: `pytest`, `ruff`, `mypy`, `git add`, `git commit`, `git push` in terminal.
 
 ### Reviewing Changes
 
@@ -174,11 +189,9 @@ Budget resets on failure. `fix_plan` is always in the checkpoint response — no
 - **DON'T** use `refactor_rename` with file:line:col — pass the symbol NAME only
 - **DON'T** skip `checkpoint` after `refactor_edit` — always lint + test your changes
 - **DON'T** ignore `agentic_hint` in responses
-- **DON'T** use raw `git add` + `git commit` — use `checkpoint` with `commit_message`
 - **DON'T** dismiss lint/test failures as "pre-existing" or "not your problem" — fix ALL issues
 - **DON'T** use one `refactor_edit` call per file — batch ALL edits into ONE call
 - **DON'T** panic on checkpoint failure — budget resets, use the `fix_plan` tickets provided
-- **DON'T** use `git rm` or `rm` to delete files — use `refactor_edit(delete=True)`
 <!-- /codeplane-instructions -->
 """
 
