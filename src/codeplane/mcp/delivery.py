@@ -208,7 +208,7 @@ def _cpl_cmd(cache_id: str, slice_key: str) -> str:
     from codeplane.mcp.sidecar_cache import jq_available
 
     if jq_available():
-        return f"jq -r '.[\"{slice_key}\"]' .codeplane/cache/{cache_id}.json"
+        return f"jq -r --arg k \"{slice_key}\" '.[$k]' .codeplane/cache/{cache_id}.json"
     return f'python3 .codeplane/scripts/cplcache.py --cache-id "{cache_id}" --slice "{slice_key}"'
 
 
@@ -221,7 +221,7 @@ def _cpl_json_cmd(cache_id: str, slice_key: str) -> str:
     from codeplane.mcp.sidecar_cache import jq_available
 
     if jq_available():
-        return f"jq '.[\"{slice_key}\"]' .codeplane/cache/{cache_id}.json"
+        return f"jq --arg k \"{slice_key}\" '.[$k]' .codeplane/cache/{cache_id}.json"
     return f'python3 .codeplane/scripts/cplcache.py --cache-id "{cache_id}" --slice "{slice_key}"'
 
 
@@ -233,7 +233,7 @@ def _cpl_cmd_template(cache_id: str) -> str:
     from codeplane.mcp.sidecar_cache import jq_available
 
     if jq_available():
-        return f"jq -r '.[\"<SLICE>\"]' .codeplane/cache/{cache_id}.json"
+        return f"jq -r --arg k \"<SLICE>\" '.[$k]' .codeplane/cache/{cache_id}.json"
     return f'python3 .codeplane/scripts/cplcache.py --cache-id "{cache_id}" --slice "<SLICE>"'
 
 
