@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from codeplane.files.ops import FileOps
     from codeplane.git.ops import GitOps
-    from codeplane.index.ops import IndexCoordinator
+    from codeplane.index.ops import IndexCoordinatorEngine
     from codeplane.lint.ops import LintOps
     from codeplane.mcp.session import SessionManager
     from codeplane.mutation.ops import MutationOps
@@ -29,7 +29,7 @@ class AppContext:
 
     repo_root: Path
     git_ops: GitOps
-    coordinator: IndexCoordinator
+    coordinator: IndexCoordinatorEngine
     file_ops: FileOps
     mutation_ops: MutationOps
     refactor_ops: RefactorOps
@@ -43,7 +43,7 @@ class AppContext:
         repo_root: Path,
         db_path: Path,
         tantivy_path: Path,
-        coordinator: IndexCoordinator | None = None,
+        coordinator: IndexCoordinatorEngine | None = None,
     ) -> AppContext:
         """Factory to create context with all ops wired together.
 
@@ -51,11 +51,11 @@ class AppContext:
             repo_root: Repository root path
             db_path: Path to SQLite database
             tantivy_path: Path to Tantivy index directory
-            coordinator: Optional existing IndexCoordinator (reuses if provided)
+            coordinator: Optional existing IndexCoordinatorEngine (reuses if provided)
         """
         from codeplane.files.ops import FileOps
         from codeplane.git.ops import GitOps
-        from codeplane.index.ops import IndexCoordinator as IC
+        from codeplane.index.ops import IndexCoordinatorEngine as IC
         from codeplane.lint.ops import LintOps
         from codeplane.mcp.session import SessionManager
         from codeplane.mutation.ops import MutationOps

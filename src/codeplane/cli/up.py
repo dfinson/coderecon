@@ -23,7 +23,7 @@ from codeplane.core.progress import (
     animate_text,
     get_console,
 )
-from codeplane.index.ops import IndexCoordinator
+from codeplane.index.ops import IndexCoordinatorEngine
 
 LOGO = r"""
                     ++++++++++++++++++++++
@@ -176,7 +176,7 @@ def up_command(path: Path | None, port: int | None, reindex: bool) -> None:
     db_path, tantivy_path = get_index_paths(repo_root)
 
     # Create coordinator and load existing index
-    coordinator = IndexCoordinator(
+    coordinator = IndexCoordinatorEngine(
         repo_root=repo_root,
         db_path=db_path,
         tantivy_path=tantivy_path,
@@ -192,7 +192,7 @@ def up_command(path: Path | None, port: int | None, reindex: bool) -> None:
                 raise click.ClickException("Failed to build index")
             # Reload paths (may differ after init) and retry
             db_path, tantivy_path = get_index_paths(repo_root)
-            coordinator = IndexCoordinator(
+            coordinator = IndexCoordinatorEngine(
                 repo_root=repo_root,
                 db_path=db_path,
                 tantivy_path=tantivy_path,

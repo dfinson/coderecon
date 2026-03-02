@@ -23,7 +23,7 @@ import pytest
 from codeplane.index._internal.db import Database, create_additional_indexes
 from codeplane.index._internal.indexing import LexicalIndex, StructuralIndexer
 from codeplane.index.models import Context
-from codeplane.index.ops import IndexCoordinator
+from codeplane.index.ops import IndexCoordinatorEngine
 from codeplane.mutation.ops import MutationOps
 from codeplane.refactor.ops import RefactorOps
 
@@ -36,7 +36,7 @@ def rel(path: Path, root: Path) -> str:
 @pytest.fixture
 def test_db(tmp_path: Path) -> Generator[Database, None, None]:
     """Create a test database with schema and context."""
-    # Use a consistent path that IndexCoordinator will use
+    # Use a consistent path that IndexCoordinatorEngine will use
     codeplane_dir = tmp_path / ".codeplane"
     codeplane_dir.mkdir(exist_ok=True)
     db = Database(codeplane_dir / "index.db")
@@ -202,7 +202,7 @@ async def refactor_ops(
     tantivy_path = codeplane_dir / "lexical.tantivy"
 
     # Create coordinator pointing at existing index
-    coordinator = IndexCoordinator(
+    coordinator = IndexCoordinatorEngine(
         repo_root,
         db_path,
         tantivy_path,

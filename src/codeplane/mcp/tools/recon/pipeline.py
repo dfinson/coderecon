@@ -1185,7 +1185,7 @@ def register_tools(mcp: FastMCP, app_ctx: AppContext) -> None:
             None,
             description=(
                 "Optional explicit seed symbol names "
-                "(e.g., ['IndexCoordinator', 'FactQueries']). "
+                "(e.g., ['IndexCoordinatorEngine', 'FactQueries']). "
                 "Treated as high-priority explicit mentions."
             ),
         ),

@@ -17,7 +17,7 @@ from codeplane.daemon.indexer import BackgroundIndexer
 from codeplane.daemon.watcher import FileWatcher
 
 if TYPE_CHECKING:
-    from codeplane.index.ops import IndexCoordinator
+    from codeplane.index.ops import IndexCoordinatorEngine
 
 logger = structlog.get_logger()
 
@@ -32,13 +32,13 @@ class ServerController:
     Orchestrates daemon components.
 
     Components:
-    - IndexCoordinator: Database and search operations
+    - IndexCoordinatorEngine: Database and search operations
     - BackgroundIndexer: Thread pool for CPU-bound indexing
     - FileWatcher: Async filesystem monitoring
     """
 
     repo_root: Path
-    coordinator: IndexCoordinator
+    coordinator: IndexCoordinatorEngine
     server_config: ServerConfig
     timeouts_config: TimeoutsConfig = field(default_factory=TimeoutsConfig)
     indexer_config: IndexerConfig = field(default_factory=IndexerConfig)
@@ -164,7 +164,7 @@ def is_server_running(codeplane_dir: Path) -> bool:
 
 async def run_server(
     repo_root: Path,
-    coordinator: IndexCoordinator,
+    coordinator: IndexCoordinatorEngine,
     config: CodePlaneConfig,
 ) -> None:
     """Run the daemon until shutdown signal."""

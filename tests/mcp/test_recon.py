@@ -68,8 +68,8 @@ class TestTokenizeTask:
         assert "tool" not in terms
 
     def test_camelcase_split(self) -> None:
-        terms = parse_task("IndexCoordinator").keywords
-        assert "indexcoordinator" in terms
+        terms = parse_task("IndexCoordinatorEngine").keywords
+        assert "indexcoordinatorengine" in terms
         # camelCase parts also extracted
         assert "index" in terms
         assert "coordinator" in terms
@@ -108,7 +108,7 @@ class TestTokenizeTask:
         assert terms.count("search") == 1
 
     def test_sorted_by_length_descending(self) -> None:
-        parsed = parse_task("IndexCoordinator search lint")
+        parsed = parse_task("IndexCoordinatorEngine search lint")
         # primary_terms sorted longest first; secondary may follow
         lengths = [len(t) for t in parsed.primary_terms]
         assert lengths == sorted(lengths, reverse=True)
@@ -313,11 +313,11 @@ class TestTaskIntent:
         ("task", "expected"),
         [
             ("fix the bug in search handler", TaskIntent.debug),
-            ("debug the crash in IndexCoordinator", TaskIntent.debug),
+            ("debug the crash in IndexCoordinatorEngine", TaskIntent.debug),
             ("add caching to the search tool", TaskIntent.implement),
             ("implement a new endpoint for users", TaskIntent.implement),
             ("refactor the recon pipeline", TaskIntent.refactor),
-            ("rename IndexCoordinator to Coordinator", TaskIntent.refactor),
+            ("rename IndexCoordinatorEngine to Coordinator", TaskIntent.refactor),
             ("how does the checkpoint tool work", TaskIntent.understand),
             ("explain the search pipeline", TaskIntent.understand),
             ("add tests for the recon tool", TaskIntent.implement),  # "add" -> implement
@@ -334,7 +334,7 @@ class TestTaskIntent:
         assert parsed.intent == TaskIntent.debug
 
     def test_parse_task_unknown_intent(self) -> None:
-        parsed = parse_task("IndexCoordinator")
+        parsed = parse_task("IndexCoordinatorEngine")
         assert parsed.intent == TaskIntent.unknown
 
 

@@ -85,7 +85,7 @@ class TestUpCommand:
 
     @patch("codeplane.daemon.lifecycle.run_server")
     @patch("codeplane.daemon.lifecycle.is_server_running")
-    @patch("codeplane.cli.up.IndexCoordinator")
+    @patch("codeplane.cli.up.IndexCoordinatorEngine")
     def test_given_not_running_when_up_then_starts_server(
         self,
         mock_coordinator_class: MagicMock,
@@ -129,7 +129,7 @@ class TestUpCommand:
 
     @patch("codeplane.daemon.lifecycle.run_server")
     @patch("codeplane.daemon.lifecycle.is_server_running")
-    @patch("codeplane.cli.up.IndexCoordinator")
+    @patch("codeplane.cli.up.IndexCoordinatorEngine")
     @patch("codeplane.cli.up.load_config")
     def test_given_port_option_when_up_then_uses_specified_port(
         self,

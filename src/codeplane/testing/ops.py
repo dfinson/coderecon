@@ -48,7 +48,7 @@ from codeplane.testing.runtime import (
 from codeplane.testing.safe_execution import SafeExecutionConfig, SafeExecutionContext
 
 if TYPE_CHECKING:
-    from codeplane.index.ops import IndexCoordinator
+    from codeplane.index.ops import IndexCoordinatorEngine
 
 
 # =============================================================================
@@ -403,7 +403,7 @@ class TestOps:
     def __init__(
         self,
         repo_root: Path,
-        coordinator: IndexCoordinator,
+        coordinator: IndexCoordinatorEngine,
     ) -> None:
         """Initialize test ops."""
         self._repo_root = repo_root

@@ -282,7 +282,7 @@ class SearchMode:
     PATH = "path"
 
 
-class IndexCoordinator:
+class IndexCoordinatorEngine:
     """
     High-level orchestration with serialization guarantees.
 
@@ -2878,7 +2878,7 @@ class IndexCoordinator:
 
 
 __all__ = [
-    "IndexCoordinator",
+    "IndexCoordinatorEngine",
     "IndexStats",
     "InitResult",
     "SearchMode",

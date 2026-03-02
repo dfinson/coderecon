@@ -13,7 +13,7 @@ from codeplane.lint.models import LintResult, ToolCategory, ToolResult
 from codeplane.lint.tools import LintTool, registry
 
 if TYPE_CHECKING:
-    from codeplane.index.ops import IndexCoordinator
+    from codeplane.index.ops import IndexCoordinatorEngine
 
 
 # Language name to tool language mapping
@@ -71,7 +71,7 @@ class LintOps:
     when no tools are detected or configured.
     """
 
-    def __init__(self, repo_root: Path, coordinator: IndexCoordinator) -> None:
+    def __init__(self, repo_root: Path, coordinator: IndexCoordinatorEngine) -> None:
         self._repo_root = repo_root
         self._coordinator = coordinator
         self._venv_bin: str | None = self._detect_venv_bin()

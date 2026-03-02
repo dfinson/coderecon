@@ -22,7 +22,7 @@ from codeplane.testing.runner_pack import runner_registry
 
 
 def create_mock_coordinator() -> MagicMock:
-    """Create a mock IndexCoordinator for testing."""
+    """Create a mock IndexCoordinatorEngine for testing."""
     coordinator = MagicMock()
     coordinator.get_file_stats = AsyncMock(return_value={"python": 10})
     coordinator.get_indexed_file_count = AsyncMock(return_value=10)

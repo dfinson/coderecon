@@ -11,19 +11,19 @@ import pytest
 
 from codeplane.files.ops import FileOps
 from codeplane.git.ops import GitOps
-from codeplane.index.ops import IndexCoordinator
+from codeplane.index.ops import IndexCoordinatorEngine
 from codeplane.mutation.ops import Edit, MutationOps
 
 pytestmark = pytest.mark.integration
 
 
-def _make_coordinator(repo_path: Path) -> IndexCoordinator:
-    """Create an IndexCoordinator with proper paths."""
+def _make_coordinator(repo_path: Path) -> IndexCoordinatorEngine:
+    """Create an IndexCoordinatorEngine with proper paths."""
     codeplane_dir = repo_path / ".codeplane"
     codeplane_dir.mkdir(exist_ok=True)
     db_path = codeplane_dir / "index.db"
     tantivy_path = codeplane_dir / "tantivy"
-    return IndexCoordinator(repo_path, db_path, tantivy_path)
+    return IndexCoordinatorEngine(repo_path, db_path, tantivy_path)
 
 
 def _noop_progress(indexed: int, total: int, by_ext: dict[str, int], phase: str = "") -> None:

@@ -60,7 +60,7 @@ class TestRestartCommand:
         assert "Not inside a git repository" in result.output
 
     @patch("codeplane.daemon.lifecycle.run_server")
-    @patch("codeplane.cli.up.IndexCoordinator")
+    @patch("codeplane.cli.up.IndexCoordinatorEngine")
     @patch("codeplane.cli.restart.is_server_running")
     def test_given_not_running_when_restart_then_starts_fresh(
         self,
@@ -86,7 +86,7 @@ class TestRestartCommand:
         assert "starting fresh" in result.output.lower()
 
     @patch("codeplane.daemon.lifecycle.run_server")
-    @patch("codeplane.cli.up.IndexCoordinator")
+    @patch("codeplane.cli.up.IndexCoordinatorEngine")
     @patch("codeplane.cli.restart.stop_daemon")
     @patch("codeplane.cli.restart.read_server_info")
     @patch("codeplane.cli.restart.is_server_running")

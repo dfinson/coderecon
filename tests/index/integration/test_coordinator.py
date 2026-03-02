@@ -1,4 +1,4 @@
-"""Integration tests for IndexCoordinator initialization.
+"""Integration tests for IndexCoordinatorEngine initialization.
 
 Tests the full initialization flow:
 Discovery → Authority → Membership → Probe → Router → Index
@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from codeplane.index.ops import (
-    IndexCoordinator,
+    IndexCoordinatorEngine,
     IndexStats,
     InitResult,
     SearchMode,
@@ -25,7 +25,7 @@ def _noop_progress(indexed: int, total: int, files_by_ext: dict[str, int], phase
 
 
 class TestCoordinatorInitialization:
-    """Tests for IndexCoordinator.initialize()."""
+    """Tests for IndexCoordinatorEngine.initialize()."""
 
     @pytest.mark.asyncio
     async def test_initialize_python_project(self, integration_repo: Path, tmp_path: Path) -> None:
@@ -33,7 +33,7 @@ class TestCoordinatorInitialization:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
 
         try:
             result = await coordinator.initialize(on_index_progress=_noop_progress)
@@ -55,7 +55,7 @@ class TestCoordinatorInitialization:
 
         assert not db_path.exists()
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -73,7 +73,7 @@ class TestCoordinatorInitialization:
 
         assert not tantivy_path.exists()
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -89,7 +89,7 @@ class TestCoordinatorInitialization:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
 
         try:
             result = await coordinator.initialize(on_index_progress=_noop_progress)
@@ -108,7 +108,7 @@ class TestCoordinatorInitialization:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
         progress_calls: list[tuple[int, int, dict[str, int], str]] = []
 
         def track_progress(
@@ -142,7 +142,7 @@ class TestCoordinatorInitialization:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
         phases_seen: list[str] = []
 
         def track_phases(
@@ -177,7 +177,7 @@ class TestCoordinatorInitialization:
 
 
 class TestCoordinatorSearch:
-    """Tests for IndexCoordinator search operations."""
+    """Tests for IndexCoordinatorEngine search operations."""
 
     @pytest.mark.asyncio
     async def test_search_text(self, integration_repo: Path, tmp_path: Path) -> None:
@@ -185,7 +185,7 @@ class TestCoordinatorSearch:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -204,7 +204,7 @@ class TestCoordinatorSearch:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -222,7 +222,7 @@ class TestCoordinatorSearch:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -241,7 +241,7 @@ class TestCoordinatorSearch:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -254,7 +254,7 @@ class TestCoordinatorSearch:
 
 
 class TestCoordinatorReindex:
-    """Tests for IndexCoordinator reindex operations."""
+    """Tests for IndexCoordinatorEngine reindex operations."""
 
     @pytest.mark.asyncio
     async def test_reindex_incremental(self, integration_repo: Path, tmp_path: Path) -> None:
@@ -262,7 +262,7 @@ class TestCoordinatorReindex:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -293,7 +293,7 @@ def new_function():
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -315,7 +315,7 @@ def new_func():
 
 
 class TestCoordinatorMonorepo:
-    """Tests for IndexCoordinator with monorepo structure."""
+    """Tests for IndexCoordinatorEngine with monorepo structure."""
 
     @pytest.mark.asyncio
     async def test_initialize_monorepo(self, integration_monorepo: Path, tmp_path: Path) -> None:
@@ -323,7 +323,7 @@ class TestCoordinatorMonorepo:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_monorepo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_monorepo, db_path, tantivy_path)
 
         try:
             result = await coordinator.initialize(on_index_progress=_noop_progress)
@@ -339,7 +339,7 @@ class TestCoordinatorMonorepo:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_monorepo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_monorepo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -405,7 +405,7 @@ class TestCoordinatorCplignore:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(repo_root, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(repo_root, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -470,7 +470,7 @@ class TestCoordinatorCplignore:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(repo_root, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(repo_root, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -527,7 +527,7 @@ class TestCoordinatorCplignore:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(repo_root, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(repo_root, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -564,7 +564,7 @@ class TestCplignoreChangeHandling:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
 
         try:
             # Initialize - generated_code.py should be ignored per .cplignore
@@ -599,7 +599,7 @@ class TestCplignoreChangeHandling:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
 
         try:
             # Initialize - temporary.py should be indexed
@@ -633,7 +633,7 @@ class TestCplignoreChangeHandling:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
 
         try:
             # Initialize
@@ -747,7 +747,7 @@ func SearchHandler() string {
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(multilang_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(multilang_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -770,7 +770,7 @@ func SearchHandler() string {
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(multilang_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(multilang_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -796,7 +796,7 @@ func SearchHandler() string {
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(multilang_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(multilang_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -822,7 +822,7 @@ func SearchHandler() string {
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(multilang_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(multilang_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -843,7 +843,7 @@ func SearchHandler() string {
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(multilang_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(multilang_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -877,7 +877,7 @@ func SearchHandler() string {
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(multilang_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(multilang_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -901,7 +901,7 @@ func SearchHandler() string {
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(multilang_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(multilang_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -924,7 +924,7 @@ func SearchHandler() string {
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(multilang_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(multilang_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -960,7 +960,7 @@ class TestCoordinatorTestTargetIncremental:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -995,7 +995,7 @@ class TestCoordinatorTestTargetIncremental:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -1023,7 +1023,7 @@ class TestCoordinatorTestTargetIncremental:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -1054,7 +1054,7 @@ class TestCoordinatorTestTargetIncremental:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
@@ -1095,7 +1095,7 @@ class TestCoordinatorStaleTantivyRemoval:
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
-        coordinator = IndexCoordinator(integration_repo, db_path, tantivy_path)
+        coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
 
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)

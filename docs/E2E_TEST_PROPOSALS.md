@@ -383,7 +383,7 @@ pytest tests/e2e/ -m e2e --timeout=600
 
 The original proposal described direct API invocation:
 ```python
-coord = IndexCoordinator(repo_path)
+coord = IndexCoordinatorEngine(repo_path)
 result = asyncio.run(coord.initialize())
 ```
 

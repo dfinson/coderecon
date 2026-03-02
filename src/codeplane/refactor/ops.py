@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
-    from codeplane.index.ops import IndexCoordinator
+    from codeplane.index.ops import IndexCoordinatorEngine
     from codeplane.mutation.ops import Edit, MutationDelta, MutationOps
 
 RefactorAction = Literal["rename", "move", "delete", "preview", "apply", "cancel"]
@@ -214,13 +214,13 @@ class RefactorOps:
     def __init__(
         self,
         repo_root: Path,
-        coordinator: IndexCoordinator,
+        coordinator: IndexCoordinatorEngine,
     ) -> None:
         """Initialize refactor ops.
 
         Args:
             repo_root: Repository root path
-            coordinator: IndexCoordinator for symbol lookup
+            coordinator: IndexCoordinatorEngine for symbol lookup
         """
         self._repo_root = repo_root
         self._coordinator = coordinator

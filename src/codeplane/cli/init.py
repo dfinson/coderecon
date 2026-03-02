@@ -572,13 +572,13 @@ def initialize_repo(
         return False
 
     # === Lexical Indexing Phase ===
-    from codeplane.index.ops import IndexCoordinator
+    from codeplane.index.ops import IndexCoordinatorEngine
 
     db_path = index_dir / "index.db"
     tantivy_path = index_dir / "tantivy"
     tantivy_path.mkdir(exist_ok=True)
 
-    coord = IndexCoordinator(
+    coord = IndexCoordinatorEngine(
         repo_root=repo_root,
         db_path=db_path,
         tantivy_path=tantivy_path,

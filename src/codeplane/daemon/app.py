@@ -15,13 +15,13 @@ from codeplane.daemon.routes import create_routes
 
 if TYPE_CHECKING:
     from codeplane.daemon.lifecycle import ServerController
-    from codeplane.index.ops import IndexCoordinator
+    from codeplane.index.ops import IndexCoordinatorEngine
 
 
 def create_app(
     controller: ServerController,
     repo_root: Path,
-    coordinator: IndexCoordinator,
+    coordinator: IndexCoordinatorEngine,
 ) -> Starlette:
     """Create the Starlette application with MCP server mounted."""
     from codeplane.mcp.context import AppContext
