@@ -25,7 +25,7 @@ _LOW_COVERAGE_THRESHOLD = 20  # files below this: percent only
 _FULL_COVERAGE_THRESHOLD = 100  # files at this: omitted
 
 # _compress_ranges_tolerant: bridge gaps up to this many non-instrumented lines
-_GAP_BRIDGE_LIMIT = 3
+_GAP_BRIDGE_LIMIT = 3  # bridge gaps up to this many non-instrumented lines
 
 
 def _normalize_path(path: str) -> str:
