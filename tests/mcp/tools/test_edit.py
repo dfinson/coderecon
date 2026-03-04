@@ -688,7 +688,7 @@ class TestRefactorEditHandler:
     ) -> None:
         """Exceeding batch limit raises MCPError."""
         session = app_ctx.session_manager.get_or_create.return_value
-        session.edits_since_checkpoint = 2  # Already at limit
+        session.edits_since_checkpoint = 4  # At limit (_MAX_EDIT_BATCHES = 4)
 
         register_tools(mcp_app, app_ctx)
         tools = get_tools_sync(mcp_app)

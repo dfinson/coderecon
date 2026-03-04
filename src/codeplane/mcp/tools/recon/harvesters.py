@@ -37,27 +37,60 @@ async def _harvest_file_embedding(
     *,
     top_k: int = 100,
 ) -> list[FileCandidate]:
-    """File-level embedding harvest using Jina v2 base.
+    """Hybrid embedding harvest: per-def for code, per-file for non-code.
 
-    This is the PRIMARY retrieval mechanism for the recon pipeline.
+    Queries both embedding indices:
+    - DefEmbeddingIndex: per-def vectors for code objects → aggregated to
+      file level (max similarity across defs in each file).
+    - FileEmbeddingIndex: per-file vectors for non-code files (config, docs).
+
     Returns FileCandidate objects ranked by similarity.
-
-    The query is the full task text (no multi-view needed — Jina v2 base
-    handles 8192 tokens and captures whole-file semantics).
     """
     coordinator = app_ctx.coordinator
-
-    # Use task text as-is for file-level query (no view engineering)
     query_text = parsed.query_text or parsed.raw
 
+    # File-level scores aggregated from both indices
+    path_best: dict[str, float] = {}
+
+    # 1. Per-def embedding results (code files) → aggregate to file level
+    def_results = coordinator.query_def_embeddings(query_text, top_k=top_k * 2)
+    if def_results:
+        # Need def_uid → file_path mapping
+        from codeplane.index._internal.indexing.graph import FactQueries
+
+        uids = [uid for uid, _ in def_results]
+        uid_sims = dict(def_results)
+
+        with coordinator.db.session() as session:
+            fq = FactQueries(session)
+            for uid in uids:
+                d = fq.get_def(uid)
+                if d is not None:
+                    from codeplane.index.models import File as FileModel
+
+                    frec = session.get(FileModel, d.file_id)
+                    if frec is not None:
+                        sim = uid_sims[uid]
+                        if sim > path_best.get(frec.path, -1.0):
+                            path_best[frec.path] = sim
+
+    # 2. File-level embedding results (non-code files)
     file_results = coordinator.query_file_embeddings(query_text, top_k=top_k)
+    for path, sim in file_results:
+        if sim > path_best.get(path, -1.0):
+            path_best[path] = sim
+
+    # Build candidates sorted by similarity
+    sorted_pairs = sorted(path_best.items(), key=lambda x: -x[1])
 
     candidates: list[FileCandidate] = []
-    for path, sim in file_results:
+    for path, sim in sorted_pairs[:top_k]:
+        if sim <= 0:
+            break
         cand = FileCandidate(
             path=path,
             similarity=sim,
-            combined_score=sim,  # initial score — enriched later
+            combined_score=sim,
             artifact_kind=_classify_artifact(path),
         )
         candidates.append(cand)
@@ -65,7 +98,80 @@ async def _harvest_file_embedding(
     log.debug(
         "recon.harvest.file_embedding",
         count=len(candidates),
+        def_hits=len(def_results) if def_results else 0,
+        file_hits=len(file_results),
         top5=[(c.path, round(c.similarity, 3)) for c in candidates[:5]],
+    )
+    return candidates
+
+
+async def _harvest_def_embedding(
+    app_ctx: AppContext,
+    parsed: ParsedTask,
+    *,
+    top_k: int = 200,
+) -> dict[str, HarvestCandidate]:
+    """Per-def embedding harvest for raw signal collection.
+
+    Returns HarvestCandidate objects keyed by def_uid with embedding
+    similarity as evidence. Used by recon_raw_signals, not the
+    production recon pipeline.
+    """
+    coordinator = app_ctx.coordinator
+    query_text = parsed.query_text or parsed.raw
+    candidates: dict[str, HarvestCandidate] = {}
+
+    # Per-def embedding results (code defs)
+    def_results = coordinator.query_def_embeddings(query_text, top_k=top_k)
+    if def_results:
+        from codeplane.index._internal.indexing.graph import FactQueries
+
+        with coordinator.db.session() as session:
+            fq = FactQueries(session)
+            for uid, sim in def_results:
+                d = fq.get_def(uid)
+                if d is not None:
+                    candidates[uid] = HarvestCandidate(
+                        def_uid=uid,
+                        def_fact=d,
+                        evidence=[
+                            EvidenceRecord(
+                                category="embedding",
+                                detail=f"def embedding sim={sim:.3f}",
+                                score=sim,
+                            )
+                        ],
+                    )
+
+    # File-level embedding results (non-code files) → expand to defs in those files
+    file_results = coordinator.query_file_embeddings(query_text, top_k=top_k)
+    if file_results:
+        from codeplane.index._internal.indexing.graph import FactQueries
+
+        with coordinator.db.session() as session:
+            fq = FactQueries(session)
+            for path, sim in file_results:
+                frec = fq.get_file_by_path(path)
+                if frec is None or frec.id is None:
+                    continue
+                defs_in_file = fq.list_defs_in_file(frec.id, limit=200)
+                for d in defs_in_file:
+                    if d.def_uid not in candidates:
+                        candidates[d.def_uid] = HarvestCandidate(
+                            def_uid=d.def_uid,
+                            def_fact=d,
+                            evidence=[
+                                EvidenceRecord(
+                                    category="embedding",
+                                    detail=f"file embedding sim={sim:.3f} ({path})",
+                                    score=sim,
+                                )
+                            ],
+                        )
+
+    log.debug(
+        "recon.harvest.def_embedding",
+        count=len(candidates),
     )
     return candidates
 

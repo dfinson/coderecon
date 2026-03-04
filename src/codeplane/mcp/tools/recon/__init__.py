@@ -37,6 +37,7 @@ from codeplane.mcp.tools.recon.expansion import (
 
 # --- harvesters ---
 from codeplane.mcp.tools.recon.harvesters import (
+    _harvest_def_embedding,
     _harvest_file_embedding,
 )
 
@@ -78,6 +79,12 @@ from codeplane.mcp.tools.recon.pipeline import (
     register_tools,
 )
 
+# --- raw_signals ---
+from codeplane.mcp.tools.recon.raw_signals import (
+    _raw_signals_pipeline,
+    register_raw_signals_tool,
+)
+
 # --- rrf ---
 from codeplane.mcp.tools.recon.rrf import (
     _enrich_file_candidates,
@@ -113,6 +120,7 @@ __all__ = [
     "_is_test_file",
     "_is_barrel_file",
     # Harvesters
+    "_harvest_def_embedding",
     "_harvest_file_embedding",
     # Merge
     "_enrich_candidates",
@@ -138,4 +146,7 @@ __all__ = [
     # Pipeline
     "_file_centric_pipeline",
     "register_tools",
+    # Raw signals
+    "_raw_signals_pipeline",
+    "register_raw_signals_tool",
 ]

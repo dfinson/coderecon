@@ -56,6 +56,10 @@ from codeplane.index._internal.indexing import (
     resolve_type_traced,
     run_pass_1_5,
 )
+from codeplane.index._internal.indexing.def_embedding import (
+    DefEmbeddingIndex,
+    _is_code_kind,
+)
 from codeplane.index._internal.indexing.file_embedding import FileEmbeddingIndex
 from codeplane.index._internal.parsing import TreeSitterParser
 from codeplane.index._internal.parsing.service import tree_sitter_service
@@ -85,6 +89,7 @@ if TYPE_CHECKING:
         CoverageSourceResult,
         ImportGraphResult,
     )
+    from codeplane.index._internal.indexing.structural import ExtractionResult
     from codeplane.index.models import FileState
 
 
@@ -330,6 +335,7 @@ class IndexCoordinatorEngine:
         # Components (initialized lazily in initialize())
         self._lexical: LexicalIndex | None = None
         self._file_embedding: FileEmbeddingIndex | None = None
+        self._def_embedding: DefEmbeddingIndex | None = None
         self._parser: TreeSitterParser | None = None
         self._router: ContextRouter | None = None
         self._structural: StructuralIndexer | None = None
@@ -381,6 +387,7 @@ class IndexCoordinatorEngine:
         self._parser = tree_sitter_service.parser
         self._lexical = LexicalIndex(self.tantivy_path)
         self._file_embedding = FileEmbeddingIndex(self.repo_root / ".codeplane")
+        self._def_embedding = DefEmbeddingIndex(self.repo_root / ".codeplane")
         self._epoch_manager = EpochManager(self.db, self._lexical)
 
         # Step 3: Discover contexts
@@ -562,6 +569,9 @@ class IndexCoordinatorEngine:
         self._file_embedding = FileEmbeddingIndex(self.repo_root / ".codeplane")
         self._file_embedding.load()
         self._file_embedding.prune_missing(self.repo_root)
+        self._def_embedding = DefEmbeddingIndex(self.repo_root / ".codeplane")
+        self._def_embedding.load()
+        self._def_embedding.prune_missing(self.repo_root)
         self._epoch_manager = EpochManager(self.db, self._lexical)
 
         # Initialize router from existing contexts
@@ -799,14 +809,9 @@ class IndexCoordinatorEngine:
                                 symbols=extraction.symbol_names,
                             )
 
-                            # Stage file for file-level embedding
-                            if self._file_embedding is not None and extraction.content_text:
-                                self._file_embedding.stage_file(
-                                    extraction.file_path,
-                                    extraction.content_text,
-                                    defs=extraction.defs,
-                                    imports=extraction.imports,
-                                )
+                            # Stage embeddings: per-def for code, per-file for non-code
+                            if extraction.content_text:
+                                self._stage_embeddings(extraction)
 
                             if extraction.file_path in existing_set:
                                 files_updated += 1
@@ -833,9 +838,12 @@ class IndexCoordinatorEngine:
                         self._lexical.stage_remove(str(path))
                         files_removed += 1
 
-                    # Stage file-level embedding removals
-                    if self._file_embedding is not None and removed_paths:
-                        self._file_embedding.stage_remove([str(p) for p in removed_paths])
+                    # Stage embedding removals (both indices)
+                    path_strs = [str(p) for p in removed_paths]
+                    if self._file_embedding is not None and path_strs:
+                        self._file_embedding.stage_remove(path_strs)
+                    if self._def_embedding is not None and path_strs:
+                        self._def_embedding.stage_remove_by_path(path_strs)
 
                     # Commit all staged changes atomically
                     self._lexical.commit_staged()
@@ -850,13 +858,18 @@ class IndexCoordinatorEngine:
                     resolve_references(self.db, file_ids=changed_file_ids)
                     resolve_type_traced(self.db, file_ids=changed_file_ids)
 
-                # Commit file-level embeddings (after resolver)
+                # Commit embeddings (both indices, after resolver)
                 with self._tantivy_write_lock:
                     if (
                         self._file_embedding is not None
                         and self._file_embedding.has_staged_changes()
                     ):
                         self._file_embedding.commit_staged()
+                    if (
+                        self._def_embedding is not None
+                        and self._def_embedding.has_staged_changes()
+                    ):
+                        self._def_embedding.commit_staged()
 
                 # Mark successfully indexed files as indexed
                 if changed_file_ids:
@@ -877,9 +890,12 @@ class IndexCoordinatorEngine:
                             self._lexical.stage_remove(str(path))
                         files_removed += 1
 
-                    # Stage file-level embedding removals
-                    if self._file_embedding is not None and removed_paths:
-                        self._file_embedding.stage_remove([str(p) for p in removed_paths])
+                    # Stage embedding removals (both indices)
+                    path_strs_rm = [str(p) for p in removed_paths]
+                    if self._file_embedding is not None and path_strs_rm:
+                        self._file_embedding.stage_remove(path_strs_rm)
+                    if self._def_embedding is not None and path_strs_rm:
+                        self._def_embedding.stage_remove_by_path(path_strs_rm)
 
                     if self._lexical is not None:
                         self._lexical.commit_staged()
@@ -888,6 +904,11 @@ class IndexCoordinatorEngine:
                         and self._file_embedding.has_staged_changes()
                     ):
                         self._file_embedding.commit_staged()
+                    if (
+                        self._def_embedding is not None
+                        and self._def_embedding.has_staged_changes()
+                    ):
+                        self._def_embedding.commit_staged()
                 if self._lexical is not None:
                     self._lexical.reload()
 
@@ -1038,16 +1059,10 @@ class IndexCoordinatorEngine:
                     _extractions=extractions,
                 )
 
-                # Stage file embeddings from extraction data
-                if self._file_embedding is not None:
-                    for extraction in extractions:
-                        if extraction.content_text:
-                            self._file_embedding.stage_file(
-                                extraction.file_path,
-                                extraction.content_text,
-                                defs=extraction.defs,
-                                imports=extraction.imports,
-                            )
+                # Stage embeddings from extraction data
+                for extraction in extractions:
+                    if extraction.content_text:
+                        self._stage_embeddings(extraction)
 
             # Create synthetic import edges from config files to source files.
             from codeplane.index._internal.indexing.config_refs import (
@@ -1068,13 +1083,19 @@ class IndexCoordinatorEngine:
             # Resolve type-traced member accesses (Pass 3 - follows type annotations)
             resolve_type_traced(self.db)
 
-        # Stage file embedding removals for ignored files
-        if to_remove and self._file_embedding is not None:
-            self._file_embedding.stage_remove(list(to_remove))
+        # Stage embedding removals (both indices)
+        if to_remove:
+            rm_list = list(to_remove)
+            if self._file_embedding is not None:
+                self._file_embedding.stage_remove(rm_list)
+            if self._def_embedding is not None:
+                self._def_embedding.stage_remove_by_path(rm_list)
 
-        # Commit file embeddings (additions + removals)
+        # Commit embeddings (both indices)
         if self._file_embedding is not None and self._file_embedding.has_staged_changes():
             self._file_embedding.commit_staged()
+        if self._def_embedding is not None and self._def_embedding.has_staged_changes():
+            self._def_embedding.commit_staged()
 
         # Remove structural facts for removed files
         if to_remove:
@@ -1277,29 +1298,29 @@ class IndexCoordinatorEngine:
                         _extractions=extractions,
                     )
 
-                    # Stage file embeddings from extraction data
-                    if self._file_embedding is not None:
-                        for extraction in extractions:
-                            if extraction.content_text:
-                                self._file_embedding.stage_file(
-                                    extraction.file_path,
-                                    extraction.content_text,
-                                    defs=extraction.defs,
-                                    imports=extraction.imports,
-                                )
+                    # Stage embeddings from extraction data
+                    for extraction in extractions:
+                        if extraction.content_text:
+                            self._stage_embeddings(extraction)
 
                 # Cross-file resolution passes
                 run_pass_1_5(self.db, None)
                 resolve_references(self.db)
                 resolve_type_traced(self.db)
 
-            # Stage file embedding removals
-            if self._file_embedding is not None and to_remove:
-                self._file_embedding.stage_remove(list(to_remove))
+            # Stage embedding removals (both indices)
+            if to_remove:
+                rm_list = list(to_remove)
+                if self._file_embedding is not None:
+                    self._file_embedding.stage_remove(rm_list)
+                if self._def_embedding is not None:
+                    self._def_embedding.stage_remove_by_path(rm_list)
 
-            # Commit file embeddings (additions + removals)
+            # Commit embeddings (both indices)
             if self._file_embedding is not None and self._file_embedding.has_staged_changes():
                 self._file_embedding.commit_staged()
+            if self._def_embedding is not None and self._def_embedding.has_staged_changes():
+                self._def_embedding.commit_staged()
 
             # Remove structural facts for removed files
             if to_remove:
@@ -2627,14 +2648,9 @@ class IndexCoordinatorEngine:
                                 symbols=extraction.symbol_names,
                             )
 
-                            # Stage file for file-level embedding
-                            if self._file_embedding is not None and extraction.content_text:
-                                self._file_embedding.stage_file(
-                                    extraction.file_path,
-                                    extraction.content_text,
-                                    defs=extraction.defs,
-                                    imports=extraction.imports,
-                                )
+                            # Stage embeddings: per-def for code, per-file for non-code
+                            if extraction.content_text:
+                                self._stage_embeddings(extraction)
 
                             count += 1
                             indexed_paths.append(extraction.file_path)
@@ -2684,30 +2700,78 @@ class IndexCoordinatorEngine:
                 on_progress(0, 1, files_by_ext, "resolving_types")
                 resolve_type_traced(self.db, on_progress=pass3_progress)
 
-                # Commit file-level embeddings
-                if self._file_embedding is not None:
-                    staged_count = len(self._file_embedding._staged_files)
-                    if staged_count > 0:
-                        on_progress(0, staged_count, files_by_ext, "computing_embeddings")
+                # Commit embeddings (both indices)
+                _staged_file = (
+                    len(self._file_embedding._staged_files)
+                    if self._file_embedding is not None
+                    else 0
+                )
+                _staged_def = (
+                    len(self._def_embedding._staged_defs)
+                    if self._def_embedding is not None
+                    else 0
+                )
+                staged_count = _staged_file + _staged_def
+                if staged_count > 0:
+                    on_progress(0, staged_count, files_by_ext, "computing_embeddings")
 
-                        def _embed_progress(done: int, total: int) -> None:
-                            on_progress(done, total, files_by_ext, "computing_embeddings")
+                    def _embed_progress(done: int, total: int) -> None:
+                        on_progress(done, total, files_by_ext, "computing_embeddings")
 
-                        embedded = self._file_embedding.commit_staged(
+                    embedded = 0
+                    if self._file_embedding is not None and self._file_embedding.has_staged_changes():
+                        embedded += self._file_embedding.commit_staged(
                             on_progress=_embed_progress,
                         )
-                        on_progress(embedded, embedded, files_by_ext, "embeddings_done")
-                    else:
+                    if self._def_embedding is not None and self._def_embedding.has_staged_changes():
+                        embedded += self._def_embedding.commit_staged(
+                            on_progress=_embed_progress,
+                        )
+                    on_progress(embedded, embedded, files_by_ext, "embeddings_done")
+                else:
+                    if self._file_embedding is not None and self._file_embedding.has_staged_changes():
                         self._file_embedding.commit_staged()
+                    if self._def_embedding is not None and self._def_embedding.has_staged_changes():
+                        self._def_embedding.commit_staged()
 
         return count, indexed_paths, files_by_ext
 
+    def _stage_embeddings(self, extraction: ExtractionResult) -> None:
+        """Route an extraction to the correct embedding index.
+
+        Code files (those with any code-kind defs) → per-def embedding.
+        Non-code files (config, docs, build) → per-file embedding.
+        """
+        has_code = any(_is_code_kind(d.get("kind", "")) for d in extraction.defs)
+        if has_code and self._def_embedding is not None:
+            self._def_embedding.stage_defs(extraction.file_path, extraction.defs)
+        elif not has_code and self._file_embedding is not None:
+            self._file_embedding.stage_file(
+                extraction.file_path,
+                extraction.content_text,
+                defs=extraction.defs,
+                imports=extraction.imports,
+            )
+
     def query_file_embeddings(self, text: str, top_k: int = 50) -> list[tuple[str, float]]:
-        """File-level semantic search using Jina v2 base embeddings.
+        """File-level semantic search for non-code files.
 
         Returns (relative_path, cosine_similarity) pairs ranked by similarity.
-        Used by recon for harvest and prune stages.
+        Only searches the non-code file embedding index (config, docs, build files).
         """
+        if self._file_embedding is None or self._file_embedding.count == 0:
+            return []
+        return self._file_embedding.query(text, top_k=top_k)
+
+    def query_def_embeddings(self, text: str, top_k: int = 200) -> list[tuple[str, float]]:
+        """Per-DefFact semantic search for code objects.
+
+        Returns (def_uid, cosine_similarity) pairs ranked by similarity.
+        Searches the per-def embedding index (functions, classes, methods, etc.).
+        """
+        if self._def_embedding is None or self._def_embedding.count == 0:
+            return []
+        return self._def_embedding.query(text, top_k=top_k)
         if self._file_embedding is None or self._file_embedding.count == 0:
             return []
         return self._file_embedding.query(text, top_k=top_k)
@@ -2717,9 +2781,11 @@ class IndexCoordinatorEngine:
 
         Used before full reindex to avoid duplicate key violations.
         """
-        # Clear file-level embedding index alongside structural facts
+        # Clear both embedding indices alongside structural facts
         if self._file_embedding is not None:
             self._file_embedding.clear()
+        if self._def_embedding is not None:
+            self._def_embedding.clear()
 
         with self.db.session() as session:
             # Clear all fact tables
