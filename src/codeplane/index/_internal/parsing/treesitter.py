@@ -401,8 +401,7 @@ class TreeSitterParser:
     def extract_imports(self, result: ParseResult, file_path: str) -> list[SyntacticImport]:
         """Extract import statements from a parse result.
 
-        Prefers declarative ImportQueryConfig when available; falls back
-        to legacy per-language processors.
+        Uses declarative ImportQueryConfig from the language pack.
 
         Args:
             result: ParseResult from parse()
@@ -412,19 +411,12 @@ class TreeSitterParser:
             List of SyntacticImport objects.
         """
         pack = get_pack(result.language)
-        if pack is None:
+        if pack is None or pack.import_query_config is None:
             return []
 
-        # Prefer declarative config when available
-        if pack.import_query_config is not None:
-            return self._extract_imports_declarative(
-                result.tree, result.root_node, pack.import_query_config, file_path
-            )
-
-        # Fall back to legacy per-language handler
-        if pack.import_query is not None:
-            return self._extract_imports_via_query(result.tree, result.root_node, pack, file_path)
-        return []
+        return self._extract_imports_declarative(
+            result.tree, result.root_node, pack.import_query_config, file_path
+        )
 
     def _extract_imports_declarative(
         self,

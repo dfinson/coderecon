@@ -194,10 +194,7 @@ class LanguagePack:
     # -- Type extraction --
     type_config: TypeExtractionConfig | None = None
 
-    # -- Import extraction (tree-sitter query to find import nodes) --
-    import_query: str | None = None
-
-    # -- Declarative import extraction (replaces import_query + Python handler) --
+    # -- Declarative import extraction --
     import_query_config: ImportQueryConfig | None = None
 
     # -- Declared module detection --
