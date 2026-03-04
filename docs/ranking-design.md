@@ -395,10 +395,11 @@ The same agent, with full solve context still loaded:
 **2a. Ground truth classification:**
 
 - **Edited objects**: Which DefFacts did the agent modify? (Extracted from
-  diffs — deterministic.)
-- **Read-necessary objects**: The agent reviews every file it read and
-  classifies each as "necessary for the solution" vs "explored but
-  unnecessary." This is an LLM judgment call with the full solve context.
+  diffs — deterministic, mapped to DefFacts via the codeplane index.)
+- **Read-necessary objects**: The agent lists files it read that were
+  genuinely necessary to understand or solve the task. This is an LLM
+  judgment call from the reflect prompt. Edited files are excluded
+  (they're tracked separately via diff).
 
 **2b. OK query authoring (3 queries):**
 
@@ -558,7 +559,7 @@ truncate the candidate pool. Returns the raw union.
 | `name` | str | DefFact name |
 | `start_line` | int | Span start |
 | `end_line` | int | Span end |
-| `touch_type` | str | `edited` / `read_necessary` / `read_unnecessary` |
+| `touch_type` | str | `edited` / `read_necessary` |
 
 ### 7.3 `queries`
 
@@ -831,9 +832,8 @@ benchmarking/
 │  │                                              │      │
 │  │  Phase 2: Reflect (GROUND TRUTH — run once)  │      │
 │  │    2a. Classify touched objects               │      │
-│  │        → edited (from diff)                   │      │
+│  │        → edited (from diff, deterministic)    │      │
 │  │        → read-necessary (agent judgment)      │      │
-│  │        → read-unnecessary (agent judgment)    │      │
 │  │    2b. Author 3 OK queries (L0/L1/L2)        │      │
 │  │    2c. Author up to 3 bad queries             │      │
 │  │        (UNSAT/BROAD/AMBIG, skip if unnatural) │      │

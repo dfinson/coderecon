@@ -49,7 +49,7 @@ class TouchedObject:
     name: str
     start_line: int
     end_line: int
-    touch_type: str  # edited | read_necessary | read_unnecessary
+    touch_type: str  # edited | read_necessary
 
 
 @dataclass(frozen=True)

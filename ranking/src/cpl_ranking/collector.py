@@ -1,16 +1,17 @@
 """Data collection orchestrator — ground truth phase.
 
 Drives the stable, run-once portion of §5.3:
-  Phase 1: Solve — coding agent solves task with native tools
-  Phase 2: Reflect — classify touched objects, author queries
+  Phase 1: Solve — coding agent solves task (SOLVE_PROMPT)
+  Phase 2: Reflect — agent produces ground truth (REFLECT_PROMPT)
 
-Output: runs.jsonl, touched_objects.jsonl, queries.jsonl
-These are ground truth — they never change once collected.
+Output per task: one Run + N TouchedObjects + 3-6 Queries, written as
+JSONL to data/{repo_id}/ground_truth/.
 
-The retrieval signal collection (recon_raw_signals) is a separate
-step in ``collect_signals.py`` because it depends on the current
-state of codeplane's harvesters, which we iterate on.
+The retrieval signal collection (recon_raw_signals) is a separate step
+in ``collect_signals.py`` — it depends on the current state of
+codeplane's harvesters and will be re-collected as we iterate.
 
+Prompts are defined in ``prompts.py``.
 See §5 of ranking-design.md.
 """
 
@@ -20,13 +21,19 @@ from __future__ import annotations
 def collect_ground_truth() -> None:
     """Collect stable ground truth for a single task run.
 
-    1. Solve the task (coding agent).
-    2. Extract edited objects from diffs (deterministic).
-    3. Classify read-necessary vs read-unnecessary objects (LLM judgment).
-    4. Author 3 OK queries (L0/L1/L2).
-    5. Author up to 3 non-OK queries (UNSAT/BROAD/AMBIG).
-    6. Write runs.jsonl, touched_objects.jsonl, queries.jsonl.
+    Phase 1 (Solve):
+      1. Send SOLVE_PROMPT with task text to the agent.
+      2. Agent reads files, makes edits, verifies solution.
+      3. Capture git diff → map changed lines to DefFacts via codeplane
+         index → these are the "edited" TouchedObjects (deterministic).
 
-    Does NOT call recon_raw_signals — that is a separate, re-runnable step.
+    Phase 2 (Reflect):
+      4. Send REFLECT_PROMPT in the same session (agent retains context).
+      5. Agent returns JSON matching REFLECT_OUTPUT_SCHEMA:
+         - read_necessary: file paths read that were needed
+         - queries: 3 OK (L0/L1/L2) + up to 3 non-OK
+      6. Map read_necessary file paths to DefFacts → "read_necessary"
+         TouchedObjects.
+      7. Write runs.jsonl, touched_objects.jsonl, queries.jsonl.
     """
     raise NotImplementedError
