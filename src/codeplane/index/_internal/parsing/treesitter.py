@@ -401,8 +401,8 @@ class TreeSitterParser:
     def extract_imports(self, result: ParseResult, file_path: str) -> list[SyntacticImport]:
         """Extract import statements from a parse result.
 
-        Uses tree-sitter queries to find import container nodes, then
-        per-language processors extract SyntacticImport objects.
+        Prefers declarative ImportQueryConfig when available; falls back
+        to legacy per-language processors.
 
         Args:
             result: ParseResult from parse()
@@ -412,63 +412,133 @@ class TreeSitterParser:
             List of SyntacticImport objects.
         """
         pack = get_pack(result.language)
-        if pack is not None and pack.import_query is not None:
+        if pack is None:
+            return []
+
+        # Prefer declarative config when available
+        if pack.import_query_config is not None:
+            return self._extract_imports_declarative(
+                result.tree, result.root_node, pack.import_query_config, file_path
+            )
+
+        # Fall back to legacy per-language handler
+        if pack.import_query is not None:
             return self._extract_imports_via_query(result.tree, result.root_node, pack, file_path)
         return []
 
-    def _extract_imports_via_query(
+    def _extract_imports_declarative(
         self,
         tree: Any,
         root: Any,
-        pack: LanguagePack,
+        config: Any,  # ImportQueryConfig
         file_path: str,
     ) -> list[SyntacticImport]:
-        """Extract imports using a tree-sitter query to find import nodes.
+        """Extract imports using declarative multi-pattern queries.
 
-        The query finds all import container nodes, then a per-language
-        processor extracts SyntacticImport objects from each matched node.
+        Each query pattern captures structured fields directly via named
+        captures (@source, @name, @alias, @node).  The pattern index maps
+        to an import_kind string via ``config.pattern_kinds``.
+
+        This single method replaces ALL per-language ``_process_*_import_node``
+        handlers.
         """
-        assert pack.import_query is not None
         try:
-            query = _TSQuery(tree.language, pack.import_query)
+            query = _TSQuery(tree.language, config.query)
         except Exception:
             return []
         cursor = _TSQueryCursor(query)
         matches: list[tuple[int, dict[str, list[Any]]]] = cursor.matches(root)
 
-        processor = self._get_import_processor(pack.name)
         imports: list[SyntacticImport] = []
-        for _pattern_idx, captures in matches:
-            nodes = captures.get("import_node", [])
-            for node in nodes:
-                imports.extend(processor(node, file_path))
-        return imports
+        for pattern_idx, captures in matches:
+            source_nodes = captures.get(config.source_capture, [])
+            name_nodes = captures.get(config.name_capture, [])
+            alias_nodes = captures.get(config.alias_capture, [])
+            node_list = captures.get("node", [])
+            text_alias: str | None = None  # alias parsed from node text
 
-    def _get_import_processor(self, language: str) -> Any:
-        """Return the per-language import node processor."""
-        _PROCESSORS: dict[str, Any] = {
-            "python": self._process_python_import_node,
-            "javascript": self._process_js_import_node,
-            "typescript": self._process_js_import_node,
-            "tsx": self._process_js_import_node,
-            "go": self._process_go_import_node,
-            "rust": self._process_rust_import_node,
-            "java": self._process_java_import_node,
-            "csharp": self._process_csharp_import_node,
-            "kotlin": self._process_kotlin_import_node,
-            "scala": self._process_scala_import_node,
-            "ruby": self._process_ruby_import_node,
-            "php": self._process_php_import_node,
-            "swift": self._process_swift_import_node,
-            "elixir": self._process_elixir_import_node,
-            "haskell": self._process_haskell_import_node,
-            "ocaml": self._process_ocaml_import_node,
-            "lua": self._process_lua_import_node,
-            "julia": self._process_julia_import_node,
-            "c": self._process_c_import_node,
-            "cpp": self._process_c_import_node,
-        }
-        return _PROCESSORS.get(language, lambda _n, _f: [])
+            # Determine source text
+            source = ""
+            if source_nodes:
+                source = source_nodes[0].text.decode("utf-8") if source_nodes[0].text else ""
+            elif config.source_from_node_text and node_list:
+                # Use the full node text as import source (e.g. Scala, C#)
+                raw = node_list[0].text.decode("utf-8") if node_list[0].text else ""
+                # Strip common prefixes and trailing semicolons
+                for prefix in ("import static ", "import ", "using static ", "using "):
+                    if raw.startswith(prefix):
+                        raw = raw[len(prefix):]
+                        break
+                source = raw.rstrip("; \n\t")
+                # Handle aliased imports (e.g. "MyAlias = System.Collections.X")
+                if " = " in source:
+                    parts = source.split(" = ", 1)
+                    text_alias = parts[0].strip()
+                    source = parts[1].strip()
+            if config.strip_quotes:
+                source = source.strip("'\"`")
+            if config.strip_angle_brackets:
+                source = source.strip("<>").strip("'\"`")
+
+            # Determine imported name
+            name = ""
+            # Check for per-pattern name override first (e.g., "*.go" dot import → "*")
+            if pattern_idx in config.name_overrides:
+                name = config.name_overrides[pattern_idx]
+            elif name_nodes:
+                name = name_nodes[0].text.decode("utf-8") if name_nodes[0].text else ""
+            elif source and config.name_from_source_segment:
+                # Use last path segment (e.g., "path/filepath" → "filepath")
+                name = source.rsplit(config.source_segment_sep, 1)[-1]
+            elif source:
+                name = source
+
+            if not name and not source:
+                continue
+
+            if not name:
+                name = source
+
+            # Determine alias
+            alias: str | None = None
+            if alias_nodes:
+                alias = alias_nodes[0].text.decode("utf-8") if alias_nodes[0].text else None
+            elif text_alias:
+                alias = text_alias
+
+            # Determine line/col from @node or first available capture
+            anchor = None
+            if node_list:
+                anchor = node_list[0]
+            elif source_nodes:
+                anchor = source_nodes[0]
+            elif name_nodes:
+                anchor = name_nodes[0]
+            if anchor is None:
+                continue
+
+            # Determine import_kind
+            kind = config.pattern_kinds.get(pattern_idx, "import")
+            if config.kind_from_capture:
+                fn_nodes = captures.get(config.kind_from_capture, [])
+                if fn_nodes:
+                    fn_name = fn_nodes[0].text.decode("utf-8") if fn_nodes[0].text else ""
+                    kind = config.kind_from_capture_map.get(fn_name, kind)
+
+            imports.append(
+                SyntacticImport(
+                    import_uid=_import_uid(file_path, name, anchor.start_point[0] + 1),
+                    imported_name=name,
+                    alias=alias,
+                    source_literal=source if source else None,
+                    import_kind=kind,
+                    start_line=anchor.start_point[0] + 1,
+                    start_col=anchor.start_point[1],
+                    end_line=anchor.end_point[0] + 1,
+                    end_col=anchor.end_point[1],
+                )
+            )
+        return imports
 
     def extract_declared_module(self, result: ParseResult, file_path: str) -> str | None:
         """Extract the language-level module/package/namespace declaration.
@@ -860,877 +930,226 @@ class TreeSitterParser:
         if node.text:
             text: str = node.text.decode("utf-8")
             return text
-        return ""
 
-    def _process_csharp_import_node(self, node: Any, file_path: str) -> list[SyntacticImport]:
-        """Process a single C# using_directive node found by query.
-
-        Handles three forms:
-        - ``using Namespace;``  -> import_kind = csharp_using
-        - ``using static Type;`` -> import_kind = csharp_using_static
-        - ``using Alias = Namespace.Type;`` -> import_kind = csharp_using, alias set
-        """
-        imports: list[SyntacticImport] = []
-
-        children = node.children
-        has_static = any(c.type == "static" for c in children)
-        has_equals = any(c.type == "=" or (c.text and c.text == b"=") for c in children)
-
-        if has_equals:
-            # Aliased using: using Alias = Namespace.Type;
-            alias_node = None
-            target_node = None
-            found_equals = False
-            for c in children:
-                if c.type == "using":
-                    continue
-                if c.type == ";":
-                    continue
-                if c.type == "=" or (c.text and c.text == b"="):
-                    found_equals = True
-                    continue
-                if not found_equals and c.type == "identifier":
-                    alias_node = c
-                elif found_equals and c.type in (
-                    "qualified_name",
-                    "identifier",
-                    "generic_name",
-                ):
-                    target_node = c
-
-            if alias_node and target_node:
-                alias_text = self._qualified_name_text(alias_node)
-                target_text = self._qualified_name_text(target_node)
-                imports.append(
-                    SyntacticImport(
-                        import_uid=_import_uid(file_path, target_text, node.start_point[0] + 1),
-                        imported_name=target_text,
-                        alias=alias_text,
-                        source_literal=target_text,
-                        import_kind="csharp_using",
-                        start_line=node.start_point[0] + 1,
-                        start_col=node.start_point[1],
-                        end_line=node.end_point[0] + 1,
-                        end_col=node.end_point[1],
-                    )
-                )
-
-        elif has_static:
-            # Static using: using static Namespace.Type;
-            target_node = None
-            for c in children:
-                if c.type in ("qualified_name", "identifier", "generic_name"):
-                    target_node = c
-            if target_node:
-                target_text = self._qualified_name_text(target_node)
-                imports.append(
-                    SyntacticImport(
-                        import_uid=_import_uid(file_path, target_text, node.start_point[0] + 1),
-                        imported_name=target_text,
-                        alias=None,
-                        source_literal=target_text,
-                        import_kind="csharp_using_static",
-                        start_line=node.start_point[0] + 1,
-                        start_col=node.start_point[1],
-                        end_line=node.end_point[0] + 1,
-                        end_col=node.end_point[1],
-                    )
-                )
-
-        else:
-            # Regular namespace using: using Namespace;
-            target_node = None
-            for c in children:
-                if c.type in ("qualified_name", "identifier"):
-                    target_node = c
-                    break
-            if target_node:
-                target_text = self._qualified_name_text(target_node)
-                imports.append(
-                    SyntacticImport(
-                        import_uid=_import_uid(file_path, target_text, node.start_point[0] + 1),
-                        imported_name=target_text,
-                        alias=None,
-                        source_literal=target_text,
-                        import_kind="csharp_using",
-                        start_line=node.start_point[0] + 1,
-                        start_col=node.start_point[1],
-                        end_line=node.end_point[0] + 1,
-                        end_col=node.end_point[1],
-                    )
-                )
-
-        return imports
-
-    def _process_go_import_node(self, node: Any, file_path: str) -> list[SyntacticImport]:
-        """Process a single Go import_spec node found by query."""
-        imports: list[SyntacticImport] = []
-        # node is an import_spec
-        path_node = None
-        alias_node = None
-        is_dot_import = False
-
-        for child in node.children:
-            if child.type == "interpreted_string_literal" or child.type == "raw_string_literal":
-                path_node = child
-            elif child.type == "package_identifier":
-                alias_node = child
-            elif child.type == "dot" or (child.text and child.text == b"."):
-                is_dot_import = True
-            elif child.type == "blank_identifier":
-                alias_node = child
-
-        if path_node:
-            path_text = path_node.text.decode("utf-8").strip('"`') if path_node.text else ""
-            alias_text = None
-            if alias_node and alias_node.text:
-                alias_text = alias_node.text.decode("utf-8")
-            imported_name = "*" if is_dot_import else path_text.split("/")[-1]
-            imports.append(
-                SyntacticImport(
-                    import_uid=_import_uid(file_path, path_text, node.start_point[0] + 1),
-                    imported_name=imported_name,
-                    alias=alias_text if not is_dot_import else None,
-                    source_literal=path_text,
-                    import_kind="go_import",
-                    start_line=node.start_point[0] + 1,
-                    start_col=node.start_point[1],
-                    end_line=node.end_point[0] + 1,
-                    end_col=node.end_point[1],
-                )
-            )
-        return imports
-
-    def _process_rust_import_node(self, node: Any, file_path: str) -> list[SyntacticImport]:
-        """Process a single Rust use_declaration node found by query."""
-        imports: list[SyntacticImport] = []
-
-        def _extract_rust_path(node: Any) -> str:
-            """Extract full path from scoped_identifier or identifier."""
-            if node.type == "identifier":
-                text: str = node.text.decode("utf-8") if node.text else ""
-                return text
-            elif node.type in ("crate", "self", "super"):
-                text = node.text.decode("utf-8") if node.text else node.type
-                return str(text)
-            elif node.type == "scoped_identifier":
-                parts: list[str] = []
-                for child in node.children:
-                    if child.type in ("identifier", "crate", "self", "super", "scoped_identifier"):
-                        parts.append(_extract_rust_path(child))
-                return "::".join(p for p in parts if p)
-            return ""
-
-        def extract_use_tree(node: Any, prefix: str = "") -> list[tuple[str, str | None, bool]]:
-            """Recursively extract (path, alias, is_glob) from use_tree nodes."""
-            results: list[tuple[str, str | None, bool]] = []
-
-            if node.type == "use_as_clause":
-                path_node = None
-                alias_node = None
-                saw_as = False
-                for child in node.children:
-                    if child.type == "as":
-                        saw_as = True
-                    elif child.type in (
-                        "scoped_identifier",
-                        "crate",
-                        "self",
-                        "super",
-                    ):
-                        path_node = child
-                    elif child.type == "identifier":
-                        if saw_as:
-                            alias_node = child
-                        elif path_node is None:
-                            path_node = child
-                if path_node:
-                    path = _extract_rust_path(path_node)
-                    full_path = f"{prefix}::{path}" if prefix else path
-                    alias = (
-                        alias_node.text.decode("utf-8") if alias_node and alias_node.text else None
-                    )
-                    results.append((full_path, alias, False))
-
-            elif node.type == "use_wildcard":
-                for child in node.children:
-                    if child.type == "scoped_identifier":
-                        path = _extract_rust_path(child)
-                        full_path = f"{prefix}::{path}" if prefix else path
-                        results.append((full_path, None, True))
-                if not results:
-                    results.append((prefix, None, True))
-
-            elif node.type == "use_list":
-                for child in node.children:
-                    if child.type in (
-                        "use_as_clause",
-                        "use_wildcard",
-                        "use_list",
-                        "identifier",
-                        "self",
-                    ):
-                        sub_results = extract_use_tree(child, prefix)
-                        results.extend(sub_results)
-
-            elif node.type == "scoped_use_list":
-                scope_prefix = ""
-                use_list = None
-                for child in node.children:
-                    if child.type in ("scoped_identifier", "identifier", "crate", "self", "super"):
-                        scope_prefix = _extract_rust_path(child)
-                    elif child.type == "use_list":
-                        use_list = child
-                if use_list:
-                    full_prefix = f"{prefix}::{scope_prefix}" if prefix else scope_prefix
-                    results.extend(extract_use_tree(use_list, full_prefix))
-
-            elif node.type in ("scoped_identifier", "identifier", "crate", "self", "super"):
-                path = _extract_rust_path(node)
-                full_path = f"{prefix}::{path}" if prefix else path
-                results.append((full_path, None, False))
-
-            return results
-
-        # Process the use_declaration node
-        for child in node.children:
-            if child.type in (
-                "use_as_clause",
-                "use_wildcard",
-                "scoped_use_list",
-                "scoped_identifier",
-                "identifier",
-                "use_list",
-            ):
-                results = extract_use_tree(child)
-                for path, alias, is_glob in results:
-                    imported_name = "*" if is_glob else path.split("::")[-1]
-                    imports.append(
-                        SyntacticImport(
-                            import_uid=_import_uid(file_path, path, node.start_point[0] + 1),
-                            imported_name=imported_name,
-                            alias=alias,
-                            source_literal=path,
-                            import_kind="rust_use",
-                            start_line=node.start_point[0] + 1,
-                            start_col=node.start_point[1],
-                            end_line=node.end_point[0] + 1,
-                            end_col=node.end_point[1],
-                        )
-                    )
-
-        return imports
-
-    def _process_java_import_node(self, node: Any, file_path: str) -> list[SyntacticImport]:
-        """Process a single Java import_declaration node found by query."""
-        imports: list[SyntacticImport] = []
-
-        is_static = False
-        is_wildcard = False
-        path_parts: list[str] = []
-
-        for child in node.children:
-            if child.type == "static":
-                is_static = True
-            elif child.type == "scoped_identifier":
-                path_parts = self._extract_java_scoped_path(child)
-            elif child.type == "identifier":
-                path_parts = [child.text.decode("utf-8") if child.text else ""]
-            elif child.type == "asterisk":
-                is_wildcard = True
-
-        if path_parts:
-            full_path = ".".join(path_parts)
-            imported_name = "*" if is_wildcard else path_parts[-1]
-            import_kind = "java_import_static" if is_static else "java_import"
-
-            imports.append(
-                SyntacticImport(
-                    import_uid=_import_uid(file_path, full_path, node.start_point[0] + 1),
-                    imported_name=imported_name,
-                    alias=None,
-                    source_literal=full_path,
-                    import_kind=import_kind,
-                    start_line=node.start_point[0] + 1,
-                    start_col=node.start_point[1],
-                    end_line=node.end_point[0] + 1,
-                    end_col=node.end_point[1],
-                )
-            )
-
-        return imports
-
-    def _extract_java_scoped_path(self, node: Any) -> list[str]:
-        """Extract path parts from a Java scoped_identifier."""
-        if node.type == "identifier":
-            return [node.text.decode("utf-8") if node.text else ""]
-        parts: list[str] = []
-        for child in node.children:
-            if child.type in ("scoped_identifier", "identifier"):
-                parts.extend(self._extract_java_scoped_path(child))
-        return parts
-
-    def _process_kotlin_import_node(self, node: Any, file_path: str) -> list[SyntacticImport]:
-        """Process a Kotlin import_header node found by query.
-
-        The import_header node directly contains the qualified path, optional
-        alias, and optional wildcard — there is no intermediate 'import' child.
-        """
-        imports: list[SyntacticImport] = []
-        path_text = ""
-        alias_text: str | None = None
-        is_wildcard = False
-
-        for child in node.children:
-            if child.type == "qualified_identifier":
-                parts: list[str] = []
-                for qchild in child.children:
-                    if qchild.type == "identifier" and qchild.text:
-                        parts.append(qchild.text.decode("utf-8"))
-                path_text = ".".join(parts)
-            elif child.type == "identifier":
-                # Single-segment import or the dotted-identifier node
-                if not path_text:
-                    raw = child.text.decode("utf-8") if child.text else ""
-                    # identifier may be a dotted path (simple_identifier children)
-                    sub_parts: list[str] = []
-                    for sc in child.children:
-                        if sc.type == "simple_identifier" and sc.text:
-                            sub_parts.append(sc.text.decode("utf-8"))
-                    path_text = ".".join(sub_parts) if sub_parts else raw
-            elif child.type == "import_alias":
-                for alias_child in child.children:
-                    if alias_child.type == "simple_identifier":
-                        alias_text = alias_child.text.decode("utf-8") if alias_child.text else None
-            elif child.text == b"*":
-                is_wildcard = True
-
-        if path_text:
-            imported_name = "*" if is_wildcard else path_text.split(".")[-1]
-            imports.append(
-                SyntacticImport(
-                    import_uid=_import_uid(file_path, path_text, node.start_point[0] + 1),
-                    imported_name=imported_name,
-                    alias=alias_text,
-                    source_literal=path_text,
-                    import_kind="kotlin_import",
-                    start_line=node.start_point[0] + 1,
-                    start_col=node.start_point[1],
-                    end_line=node.end_point[0] + 1,
-                    end_col=node.end_point[1],
-                )
-            )
-
-        return imports
-
-    def _process_ruby_import_node(self, node: Any, file_path: str) -> list[SyntacticImport]:
-        """Process a single Ruby call node for require/require_relative."""
-        imports: list[SyntacticImport] = []
+    def _process_python_dynamic_node(self, node: Any) -> list[DynamicAccess]:
+        """Process a single Python dynamic-access node found by query."""
+        dynamics: list[DynamicAccess] = []
 
         if node.type == "call":
-            method_node = node.child_by_field_name("method")
-            if method_node and method_node.text:
-                method_name = method_node.text.decode("utf-8")
-                if method_name in ("require", "require_relative"):
+            func_node = node.child_by_field_name("function")
+            if func_node and func_node.type == "identifier":
+                func_name = func_node.text.decode("utf-8") if func_node.text else ""
+                if func_name in ("getattr", "setattr", "hasattr", "delattr"):
                     args_node = node.child_by_field_name("arguments")
+                    literals: list[str] = []
+                    has_dynamic = False
                     if args_node:
-                        for arg in args_node.children:
-                            if arg.type == "string":
-                                content = arg.text.decode("utf-8") if arg.text else ""
-                                if (content.startswith("'") and content.endswith("'")) or (
-                                    content.startswith('"') and content.endswith('"')
-                                ):
-                                    content = content[1:-1]
-
-                                import_kind = (
-                                    "ruby_require_relative"
-                                    if method_name == "require_relative"
-                                    else "ruby_require"
-                                )
-                                imports.append(
-                                    SyntacticImport(
-                                        import_uid=_import_uid(
-                                            file_path, content, node.start_point[0] + 1
-                                        ),
-                                        imported_name=content.split("/")[-1],
-                                        alias=None,
-                                        source_literal=content,
-                                        import_kind=import_kind,
-                                        start_line=node.start_point[0] + 1,
-                                        start_col=node.start_point[1],
-                                        end_line=node.end_point[0] + 1,
-                                        end_col=node.end_point[1],
+                        for i, arg in enumerate(args_node.children):
+                            if i == 1:
+                                if arg.type == "string":
+                                    literal = (
+                                        arg.text.decode("utf-8").strip("'\"") if arg.text else ""
                                     )
-                                )
-                                break
-
-        return imports
-
-    def _process_php_import_node(self, node: Any, file_path: str) -> list[SyntacticImport]:
-        """Process a single PHP namespace_use_declaration node found by query."""
-        imports: list[SyntacticImport] = []
-
-        if node.type == "namespace_use_declaration":
-            for child in node.children:
-                if child.type == "namespace_use_clause":
-                    path_text = ""
-                    alias_text: str | None = None
-
-                    for sub in child.children:
-                        if sub.type == "qualified_name":
-                            path_text = self._extract_php_qualified_name(sub)
-                        elif sub.type == "namespace_aliasing_clause":
-                            for alias_child in sub.children:
-                                if alias_child.type == "name":
-                                    alias_text = (
-                                        alias_child.text.decode("utf-8")
-                                        if alias_child.text
-                                        else None
-                                    )
-
-                    if path_text:
-                        imports.append(
-                            SyntacticImport(
-                                import_uid=_import_uid(
-                                    file_path, path_text, node.start_point[0] + 1
-                                ),
-                                imported_name=path_text.split("\\")[-1],
-                                alias=alias_text,
-                                source_literal=path_text,
-                                import_kind="php_use",
-                                start_line=node.start_point[0] + 1,
-                                start_col=node.start_point[1],
-                                end_line=node.end_point[0] + 1,
-                                end_col=node.end_point[1],
-                            )
-                        )
-
-        return imports
-
-    def _extract_php_qualified_name(self, node: Any) -> str:
-        """Extract qualified name from PHP qualified_name node."""
-        if node.text:
-            text: str = node.text.decode("utf-8")
-            return text
-        parts: list[str] = []
-        for child in node.children:
-            if child.type == "name":
-                parts.append(child.text.decode("utf-8") if child.text else "")
-        return "\\".join(parts)
-
-    def _process_swift_import_node(self, node: Any, file_path: str) -> list[SyntacticImport]:
-        """Process a single Swift import_declaration node found by query."""
-        imports: list[SyntacticImport] = []
-
-        if node.type == "import_declaration":
-            module_parts: list[str] = []
-
-            for child in node.children:
-                if child.type == "identifier":
-                    module_parts.append(child.text.decode("utf-8") if child.text else "")
-                elif child.type == "import_path":
-                    for path_child in child.children:
-                        if path_child.type == "identifier":
-                            module_parts.append(
-                                path_child.text.decode("utf-8") if path_child.text else ""
-                            )
-
-            if module_parts:
-                full_path = ".".join(module_parts)
-                imports.append(
-                    SyntacticImport(
-                        import_uid=_import_uid(file_path, full_path, node.start_point[0] + 1),
-                        imported_name=module_parts[-1],
-                        alias=None,
-                        source_literal=full_path,
-                        import_kind="swift_import",
-                        start_line=node.start_point[0] + 1,
-                        start_col=node.start_point[1],
-                        end_line=node.end_point[0] + 1,
-                        end_col=node.end_point[1],
-                    )
-                )
-
-        return imports
-
-    def _process_scala_import_node(self, node: Any, file_path: str) -> list[SyntacticImport]:
-        """Process a single Scala import_declaration node found by query."""
-        imports: list[SyntacticImport] = []
-
-        def _emit_import(
-            full_path: str,
-            is_wildcard: bool,
-            decl_node: Any,
-        ) -> None:
-            """Create a SyntacticImport from an assembled dotted path."""
-            if is_wildcard:
-                imports.append(
-                    SyntacticImport(
-                        import_uid=_import_uid(
-                            file_path, f"{full_path}.*", decl_node.start_point[0] + 1
-                        ),
-                        imported_name="*",
-                        alias=None,
-                        source_literal=full_path,
-                        import_kind="scala_import",
-                        start_line=decl_node.start_point[0] + 1,
-                        start_col=decl_node.start_point[1],
-                        end_line=decl_node.end_point[0] + 1,
-                        end_col=decl_node.end_point[1],
-                    )
-                )
-            else:
-                imports.append(
-                    SyntacticImport(
-                        import_uid=_import_uid(file_path, full_path, decl_node.start_point[0] + 1),
-                        imported_name=full_path.split(".")[-1],
-                        alias=None,
-                        source_literal=full_path,
-                        import_kind="scala_import",
-                        start_line=decl_node.start_point[0] + 1,
-                        start_col=decl_node.start_point[1],
-                        end_line=decl_node.end_point[0] + 1,
-                        end_col=decl_node.end_point[1],
-                    )
-                )
-
-        def _process_selectors(
-            base_path: str,
-            selectors_node: Any,
-            decl_node: Any,
-        ) -> None:
-            """Process namespace_selectors: import com.foo.{Bar, Baz => B}."""
-            for selector in selectors_node.children:
-                if selector.type == "identifier":
-                    name = selector.text.decode("utf-8") if selector.text else ""
-                    if name:
-                        full_path = f"{base_path}.{name}" if base_path else name
-                        imports.append(
-                            SyntacticImport(
-                                import_uid=_import_uid(
-                                    file_path, full_path, decl_node.start_point[0] + 1
-                                ),
-                                imported_name=name,
-                                alias=None,
-                                source_literal=full_path,
-                                import_kind="scala_import",
-                                start_line=decl_node.start_point[0] + 1,
-                                start_col=decl_node.start_point[1],
-                                end_line=decl_node.end_point[0] + 1,
-                                end_col=decl_node.end_point[1],
-                            )
-                        )
-                elif selector.type == "arrow_renamed_identifier":
-                    idents = [c for c in selector.children if c.type == "identifier"]
-                    if idents:
-                        name = idents[0].text.decode("utf-8") if idents[0].text else ""
-                        alias = (
-                            idents[1].text.decode("utf-8")
-                            if len(idents) > 1 and idents[1].text
-                            else None
-                        )
-                        if name:
-                            full_path = f"{base_path}.{name}" if base_path else name
-                            imports.append(
-                                SyntacticImport(
-                                    import_uid=_import_uid(
-                                        file_path, full_path, decl_node.start_point[0] + 1
-                                    ),
-                                    imported_name=name,
-                                    alias=alias,
-                                    source_literal=full_path,
-                                    import_kind="scala_import",
-                                    start_line=decl_node.start_point[0] + 1,
-                                    start_col=decl_node.start_point[1],
-                                    end_line=decl_node.end_point[0] + 1,
-                                    end_col=decl_node.end_point[1],
-                                )
-                            )
-                elif selector.type == "namespace_wildcard":
-                    _emit_import(base_path, is_wildcard=True, decl_node=decl_node)
-
-        def _process_import_declaration(decl_node: Any) -> None:
-            """Process one import_declaration with potentially comma-separated paths."""
-            groups: list[list[Any]] = []
-            current: list[Any] = []
-            for child in decl_node.children:
-                if child.type == "import":
-                    continue
-                if child.type == ",":
-                    if current:
-                        groups.append(current)
-                    current = []
-                else:
-                    current.append(child)
-            if current:
-                groups.append(current)
-
-            for group in groups:
-                if group and group[-1].type == "namespace_selectors":
-                    parts = [
-                        c.text.decode("utf-8")
-                        for c in group[:-1]
-                        if c.type == "identifier" and c.text
-                    ]
-                    base_path = ".".join(parts)
-                    _process_selectors(base_path, group[-1], decl_node)
-                elif group and group[-1].type == "namespace_wildcard":
-                    parts = [
-                        c.text.decode("utf-8") for c in group if c.type == "identifier" and c.text
-                    ]
-                    full_path = ".".join(parts)
-                    if full_path:
-                        _emit_import(full_path, is_wildcard=True, decl_node=decl_node)
-                else:
-                    parts = [
-                        c.text.decode("utf-8") for c in group if c.type == "identifier" and c.text
-                    ]
-                    full_path = ".".join(parts)
-                    if full_path:
-                        _emit_import(full_path, is_wildcard=False, decl_node=decl_node)
-
-        _process_import_declaration(node)
-        return imports
-
-    def _extract_scala_path(self, node: Any) -> str:
-        """Extract qualified path from Scala stable_identifier or identifier."""
-        if node.type == "identifier":
-            return node.text.decode("utf-8") if node.text else ""
-        parts: list[str] = []
-        for child in node.children:
-            if child.type in ("stable_identifier", "identifier"):
-                parts.append(self._extract_scala_path(child))
-        return ".".join(p for p in parts if p)
-
-    def _extract_scala_base_path(self, node: Any) -> str:
-        """Extract base path before import selectors."""
-        for child in node.children:
-            if child.type in ("stable_identifier", "identifier"):
-                return self._extract_scala_path(child)
-        return ""
-
-    def _process_elixir_import_node(self, node: Any, file_path: str) -> list[SyntacticImport]:
-        """Process a single Elixir call node for import/alias/use/require."""
-        imports: list[SyntacticImport] = []
-
-        if node.type == "call":
-            target = None
-            for child in node.children:
-                if child.type == "identifier":
-                    target = child.text.decode("utf-8") if child.text else ""
-                    break
-                elif child.type == "dot":
-                    break
-
-            if target in ("import", "alias", "use", "require"):
-                args_node = None
-                for child in node.children:
-                    if child.type == "arguments":
-                        args_node = child
-                        break
-
-                if args_node:
-                    module_name = ""
-                    alias_name: str | None = None
-
-                    for arg in args_node.children:
-                        if arg.type == "alias":
-                            module_name = arg.text.decode("utf-8") if arg.text else ""
-                        elif arg.type == "keywords":
-                            for kw in arg.children:
-                                if kw.type == "pair":
-                                    key_node = kw.child_by_field_name("key")
-                                    val_node = kw.child_by_field_name("value")
-                                    if key_node and key_node.text == b"as" and val_node:
-                                        alias_name = (
-                                            val_node.text.decode("utf-8") if val_node.text else None
-                                        )
-
-                    if module_name:
-                        imports.append(
-                            SyntacticImport(
-                                import_uid=_import_uid(
-                                    file_path, module_name, node.start_point[0] + 1
-                                ),
-                                imported_name=module_name.split(".")[-1],
-                                alias=alias_name,
-                                source_literal=module_name,
-                                import_kind="elixir_import",
-                                start_line=node.start_point[0] + 1,
-                                start_col=node.start_point[1],
-                                end_line=node.end_point[0] + 1,
-                                end_col=node.end_point[1],
-                            )
-                        )
-
-        return imports
-
-    def _process_haskell_import_node(self, node: Any, file_path: str) -> list[SyntacticImport]:
-        """Process a single Haskell import node found by query."""
-        imports: list[SyntacticImport] = []
-
-        if node.type == "import":
-            module_name = ""
-            alias_name: str | None = None
-
-            for child in node.children:
-                if child.type == "qualified":
-                    pass
-                elif child.type == "module" or child.type == "module_id":
-                    module_name = child.text.decode("utf-8") if child.text else ""
-                elif child.type == "as":
-                    pass
-                elif child.type == "alias":
-                    alias_name = child.text.decode("utf-8") if child.text else None
-
-            if module_name:
-                imports.append(
-                    SyntacticImport(
-                        import_uid=_import_uid(file_path, module_name, node.start_point[0] + 1),
-                        imported_name=module_name.split(".")[-1],
-                        alias=alias_name,
-                        source_literal=module_name,
-                        import_kind="haskell_import",
-                        start_line=node.start_point[0] + 1,
-                        start_col=node.start_point[1],
-                        end_line=node.end_point[0] + 1,
-                        end_col=node.end_point[1],
-                    )
-                )
-
-        return imports
-
-    def _process_ocaml_import_node(self, node: Any, file_path: str) -> list[SyntacticImport]:
-        """Process a single OCaml open_module or include_module node found by query."""
-        imports: list[SyntacticImport] = []
-
-        if node.type in ("open_module", "include_module"):
-            module_name = ""
-
-            for child in node.children:
-                if (
-                    child.type in ("module_path", "extended_module_path", "constructor_path")
-                    or child.type == "constructor_name"
-                ):
-                    module_name = child.text.decode("utf-8") if child.text else ""
-
-            if module_name:
-                imports.append(
-                    SyntacticImport(
-                        import_uid=_import_uid(file_path, module_name, node.start_point[0] + 1),
-                        imported_name=module_name.split(".")[-1],
-                        alias=None,
-                        source_literal=module_name,
-                        import_kind="ocaml_open",
-                        start_line=node.start_point[0] + 1,
-                        start_col=node.start_point[1],
-                        end_line=node.end_point[0] + 1,
-                        end_col=node.end_point[1],
-                    )
-                )
-
-        return imports
-
-    def _process_lua_import_node(self, node: Any, file_path: str) -> list[SyntacticImport]:
-        """Process a single Lua function_call node for require()."""
-        imports: list[SyntacticImport] = []
-
-        if node.type == "function_call":
-            func_name = ""
-            module_name = ""
-
-            for child in node.children:
-                if child.type == "identifier":
-                    func_name = child.text.decode("utf-8") if child.text else ""
-                    break
-
-            if func_name == "require":
-                for child in node.children:
-                    if child.type == "arguments":
-                        for arg in child.children:
-                            if arg.type == "string":
-                                module_name = arg.text.decode("utf-8") if arg.text else ""
-                                module_name = module_name.strip("'\"")
-                                break
-                    elif child.type == "string":
-                        module_name = child.text.decode("utf-8") if child.text else ""
-                        module_name = module_name.strip("'\"")
-
-                if module_name:
-                    imports.append(
-                        SyntacticImport(
-                            import_uid=_import_uid(file_path, module_name, node.start_point[0] + 1),
-                            imported_name=module_name.split(".")[-1],
-                            alias=None,
-                            source_literal=module_name,
-                            import_kind="lua_require",
+                                    literals.append(literal)
+                                else:
+                                    has_dynamic = True
+                    dynamics.append(
+                        DynamicAccess(
+                            pattern_type="getattr",
                             start_line=node.start_point[0] + 1,
                             start_col=node.start_point[1],
-                            end_line=node.end_point[0] + 1,
-                            end_col=node.end_point[1],
+                            extracted_literals=literals,
+                            has_non_literal_key=has_dynamic,
+                        )
+                    )
+                elif func_name in ("eval", "exec"):
+                    dynamics.append(
+                        DynamicAccess(
+                            pattern_type="eval",
+                            start_line=node.start_point[0] + 1,
+                            start_col=node.start_point[1],
+                            has_non_literal_key=True,
                         )
                     )
 
-        return imports
-
-    def _process_julia_import_node(self, node: Any, file_path: str) -> list[SyntacticImport]:
-        """Process a single Julia import/using statement node found by query."""
-        imports: list[SyntacticImport] = []
-
-        if node.type in ("import_statement", "using_statement"):
-            for child in node.children:
-                if child.type in ("identifier", "selected_import", "scoped_identifier"):
-                    module_name = child.text.decode("utf-8") if child.text else ""
-                    if module_name:
-                        imports.append(
-                            SyntacticImport(
-                                import_uid=_import_uid(
-                                    file_path, module_name, node.start_point[0] + 1
-                                ),
-                                imported_name=module_name.split(".")[-1].split(":")[0],
-                                alias=None,
-                                source_literal=module_name.split(":")[0],
-                                import_kind="julia_using",
-                                start_line=node.start_point[0] + 1,
-                                start_col=node.start_point[1],
-                                end_line=node.end_point[0] + 1,
-                                end_col=node.end_point[1],
-                            )
-                        )
-
-        return imports
-
-    def _process_c_import_node(self, node: Any, file_path: str) -> list[SyntacticImport]:
-        """Process a single C/C++ preproc_include node found by query."""
-        imports: list[SyntacticImport] = []
-
-        if node.type == "preproc_include":
-            header_name = ""
-
-            for child in node.children:
-                if child.type == "string_literal":
-                    header_name = child.text.decode("utf-8") if child.text else ""
-                    header_name = header_name.strip('"')
-                elif child.type == "system_lib_string":
-                    header_name = child.text.decode("utf-8") if child.text else ""
-                    header_name = header_name.strip("<>")
-
-            if header_name:
-                imports.append(
-                    SyntacticImport(
-                        import_uid=_import_uid(file_path, header_name, node.start_point[0] + 1),
-                        imported_name=header_name.split("/")[-1],
-                        alias=None,
-                        source_literal=header_name,
-                        import_kind="c_include",
-                        start_line=node.start_point[0] + 1,
-                        start_col=node.start_point[1],
-                        end_line=node.end_point[0] + 1,
-                        end_col=node.end_point[1],
-                    )
+        elif node.type == "subscript":
+            subscript_node = node.child_by_field_name("subscript")
+            sub_literals: list[str] = []
+            sub_has_dynamic = True
+            if subscript_node and subscript_node.type == "string":
+                literal = (
+                    subscript_node.text.decode("utf-8").strip("'\"") if subscript_node.text else ""
                 )
+                sub_literals.append(literal)
+                sub_has_dynamic = False
+            dynamics.append(
+                DynamicAccess(
+                    pattern_type="bracket_access",
+                    start_line=node.start_point[0] + 1,
+                    start_col=node.start_point[1],
+                    extracted_literals=sub_literals,
+                    has_non_literal_key=sub_has_dynamic,
+                )
+            )
 
-        return imports
+        return dynamics
+
+    def _process_js_dynamic_node(self, node: Any) -> list[DynamicAccess]:
+        """Process a single JS/TS dynamic-access node found by query."""
+        dynamics: list[DynamicAccess] = []
+
+        if node.type == "subscript_expression":
+            index_node = node.child_by_field_name("index")
+            literals: list[str] = []
+            has_dynamic = True
+            if index_node and index_node.type == "string":
+                literal = index_node.text.decode("utf-8").strip("'\"") if index_node.text else ""
+                literals.append(literal)
+                has_dynamic = False
+            dynamics.append(
+                DynamicAccess(
+                    pattern_type="bracket_access",
+                    start_line=node.start_point[0] + 1,
+                    start_col=node.start_point[1],
+                    extracted_literals=literals,
+                    has_non_literal_key=has_dynamic,
+                )
+            )
+
+        elif node.type == "call_expression":
+            func_node = node.child_by_field_name("function")
+            if func_node and func_node.type == "identifier":
+                func_name = func_node.text.decode("utf-8") if func_node.text else ""
+                if func_name == "eval":
+                    dynamics.append(
+                        DynamicAccess(
+                            pattern_type="eval",
+                            start_line=node.start_point[0] + 1,
+                            start_col=node.start_point[1],
+                            has_non_literal_key=True,
+                        )
+                    )
+
+        return dynamics
+
+    def compute_interface_hash(self, symbols: list[SyntacticSymbol]) -> str:
+        """
+        Compute a hash of the public interface of symbols.
+
+        Used for dependency change detection: if a file's interface hash
+        changes, dependents may need to be reindexed.
+
+        Args:
+            symbols: List of symbols from extract_symbols()
+
+        Returns:
+            SHA-256 hash of the interface signature.
+        """
+        # Sort symbols by name for determinism
+        sorted_symbols = sorted(symbols, key=lambda s: (s.kind, s.name, s.line))
+
+        # Build interface string
+        parts: list[str] = []
+        for sym in sorted_symbols:
+            sig = sym.signature or ""
+            parts.append(f"{sym.kind}:{sym.name}:{sig}")
+
+        interface_str = "\n".join(parts)
+        return hashlib.sha256(interface_str.encode()).hexdigest()
+
+    def validate_code_file(self, result: ParseResult) -> ProbeValidation:
+        """
+        Validate a code file for context probing.
+
+        Code families require:
+        - Error nodes < 10% of total nodes
+        - Has meaningful named nodes (not just comments/whitespace)
+
+        Args:
+            result: ParseResult from parse()
+
+        Returns:
+            ProbeValidation indicating if file is valid.
+        """
+        if result.total_nodes == 0:
+            return ProbeValidation(
+                is_valid=False,
+                error_count=0,
+                total_nodes=0,
+                has_meaningful_content=False,
+                error_ratio=0.0,
+            )
+
+        error_ratio = result.error_count / result.total_nodes
+        has_meaningful = self._has_meaningful_nodes(result.root_node)
+
+        # Valid if: error ratio < 10% AND has meaningful content
+        is_valid = error_ratio < 0.10 and has_meaningful
+
+        return ProbeValidation(
+            is_valid=is_valid,
+            error_count=result.error_count,
+            total_nodes=result.total_nodes,
+            has_meaningful_content=has_meaningful,
+            error_ratio=error_ratio,
+        )
+
+    def validate_data_file(self, result: ParseResult) -> ProbeValidation:
+        """
+        Validate a data file for context probing.
+
+        Data families require:
+        - Valid tree (root has children)
+        - Zero ERROR nodes
+
+        Args:
+            result: ParseResult from parse()
+
+        Returns:
+            ProbeValidation indicating if file is valid.
+        """
+        has_content = result.root_node is not None and len(result.root_node.children) > 0
+        is_valid = has_content and result.error_count == 0
+
+        return ProbeValidation(
+            is_valid=is_valid,
+            error_count=result.error_count,
+            total_nodes=result.total_nodes,
+            has_meaningful_content=has_content,
+            error_ratio=(result.error_count / result.total_nodes if result.total_nodes > 0 else 0),
+        )
+
+    def _detect_language_from_ext(self, ext: str) -> str | None:
+        """Detect language from file extension -- delegates to packs."""
+        pack = get_pack_for_ext(ext)
+        return pack.name if pack is not None else None
+
+    def _detect_language_from_filename(self, filename: str) -> str | None:
+        """Detect language from filename -- delegates to packs."""
+        pack = get_pack_for_filename(filename)
+        return pack.name if pack is not None else None
+
+    def _has_meaningful_nodes(self, node: Any) -> bool:
+        """Check if tree has meaningful (non-comment, non-whitespace) nodes."""
+        meaningless_types = {
+            "comment",
+            "line_comment",
+            "block_comment",
+            "ERROR",
+            "MISSING",
+        }
+
+        def check(n: Any) -> bool:
+            if n.is_named and n.type not in meaningless_types:
+                # Has at least one meaningful named node
+                return True
+            return any(check(child) for child in n.children)
+
+        return check(node)
+
+    # ------------------------------------------------------------------
+    # Unified query-based symbol extraction
+    # ------------------------------------------------------------------
 
     def extract_csharp_namespace_types(self, root: Any) -> dict[str, list[str]]:
         """Extract namespace -> type names mapping from a C# AST.
@@ -2143,6 +1562,7 @@ class TreeSitterParser:
     # ------------------------------------------------------------------
     # Unified query-based symbol extraction
     # ------------------------------------------------------------------
+
 
     def _extract_symbols_via_query(
         self,

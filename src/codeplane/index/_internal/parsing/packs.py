@@ -86,6 +86,83 @@ class TypeExtractionConfig:
     reference_indicator: str = ""
 
 
+# -------------------------------------------------------------------------
+# Declarative extraction configs (replace per-language Python handlers)
+# -------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ImportQueryConfig:
+    """Declarative import extraction via multi-pattern tree-sitter queries.
+
+    Each pattern captures structured fields directly:
+      @source  - source module/path
+      @name    - imported symbol name
+      @alias   - local alias (for rename imports)
+      @node    - container node (for line/col)
+
+    ``pattern_kinds`` maps each pattern index to an ``import_kind`` string
+    (e.g., ``{0: "python_import", 1: "python_from"}``).
+
+    The generic handler iterates query matches and constructs
+    ``SyntacticImport`` objects from captures — no per-language Python code
+    is needed.
+    """
+
+    query: str
+    pattern_kinds: dict[int, str]
+    source_capture: str = "source"
+    name_capture: str = "name"
+    alias_capture: str = "alias"
+    strip_quotes: bool = False
+    # Per-pattern overrides: pattern_idx → fixed imported_name
+    name_overrides: dict[int, str] = field(default_factory=dict)
+    # Per-pattern: use last path segment as imported_name (e.g., "path/filepath" → "filepath")
+    name_from_source_segment: bool = False
+    # Separator for splitting source paths into segments (default: "/")
+    source_segment_sep: str = "/"
+    # Also strip angle brackets (for C/C++ system includes)
+    strip_angle_brackets: bool = False
+    # Capture name that holds the function name (e.g., @_fn for require/import)
+    # Used to derive import_kind from function name
+    kind_from_capture: str | None = None
+    # Map function names to import_kinds (e.g., {"require_relative": "ruby_require_relative"})
+    kind_from_capture_map: dict[str, str] = field(default_factory=dict)
+    # For languages where @node.text IS the import text (Scala flat AST)
+    source_from_node_text: bool = False
+
+
+@dataclass(frozen=True)
+class DeclaredModuleQueryConfig:
+    """Declarative module/package declaration extraction.
+
+    Captures ``@module_name`` from the AST.  For languages that derive
+    module identity from the file path (OCaml, Python), set
+    ``use_file_path=True``.
+    """
+
+    query: str = ""
+    module_capture: str = "module_name"
+    use_file_path: bool = False
+
+
+@dataclass(frozen=True)
+class DynamicQueryConfig:
+    """Declarative dynamic-access-pattern extraction.
+
+    Each pattern identifies a different kind of dynamic access.
+    ``pattern_types`` maps pattern index → pattern_type string
+    (e.g., ``{0: "bracket_access", 1: "eval_call"}``).
+
+    Optional ``@literal`` capture extracts string-literal keys from
+    dynamic accesses.
+    """
+
+    query: str
+    pattern_types: dict[int, str]
+    literal_capture: str = "literal"
+
+
 @dataclass(frozen=True)
 class LanguagePack:
     """Complete tree-sitter configuration for a single language."""
@@ -120,13 +197,22 @@ class LanguagePack:
     # -- Import extraction (tree-sitter query to find import nodes) --
     import_query: str | None = None
 
+    # -- Declarative import extraction (replaces import_query + Python handler) --
+    import_query_config: ImportQueryConfig | None = None
+
     # -- Declared module detection --
     declared_module_query: str | None = None
     declared_module_handler: str | None = None
 
+    # -- Declarative module detection (replaces declared_module_query + handler) --
+    declared_module_config: DeclaredModuleQueryConfig | None = None
+
     # -- Dynamic access detection (tree-sitter query to find dynamic nodes) --
     dynamic_query: str | None = None
     dynamic_handler: str | None = None
+
+    # -- Declarative dynamic detection (replaces dynamic_query + handler) --
+    dynamic_config: DynamicQueryConfig | None = None
 
 
 # =========================================================================
@@ -424,10 +510,32 @@ PYTHON_PACK = LanguagePack(
     scope_types=_PYTHON_SCOPES,
     sem_query=_PYTHON_SEM,
     type_config=_PYTHON_TYPES,
-    import_query="""
-        (import_statement) @import_node
-        (import_from_statement) @import_node
-    """,
+    import_query_config=ImportQueryConfig(
+        query="""
+; import X
+(import_statement name: (dotted_name) @source) @node
+; import X as Y
+(import_statement name: (aliased_import name: (dotted_name) @source alias: (identifier) @alias)) @node
+; from X import Y
+(import_from_statement module_name: (dotted_name) @source name: (dotted_name) @name) @node
+; from X import Y as Z
+(import_from_statement module_name: (dotted_name) @source name: (aliased_import name: (dotted_name) @name alias: (identifier) @alias)) @node
+; from .X import Y
+(import_from_statement module_name: (relative_import) @source name: (dotted_name) @name) @node
+; from .X import Y as Z
+(import_from_statement module_name: (relative_import) @source name: (aliased_import name: (dotted_name) @name alias: (identifier) @alias)) @node
+; from X import *
+(import_from_statement module_name: (dotted_name) @source (wildcard_import) @name) @node
+; from .X import *
+(import_from_statement module_name: (relative_import) @source (wildcard_import) @name) @node
+""",
+        pattern_kinds={
+            0: "python_import", 1: "python_import",
+            2: "python_from", 3: "python_from",
+            4: "python_from", 5: "python_from",
+            6: "python_from", 7: "python_from",
+        },
+    ),
     dynamic_query="""
         (call) @dynamic_node
         (subscript) @dynamic_node
@@ -568,10 +676,17 @@ JAVASCRIPT_PACK = LanguagePack(
     scope_types=_JS_SCOPES,
     sem_query=_JS_SEM,
     type_config=_JS_TS_TYPES,
-    import_query="""
-        (import_statement) @import_node
-        (call_expression) @import_node
-    """,
+    import_query_config=ImportQueryConfig(
+        query="""
+(import_statement (import_clause (identifier) @name) source: (string) @source) @node
+(import_statement (import_clause (named_imports (import_specifier !alias name: (identifier) @name))) source: (string) @source) @node
+(import_statement (import_clause (named_imports (import_specifier name: (identifier) @name alias: (identifier) @alias))) source: (string) @source) @node
+(import_statement (import_clause (namespace_import (identifier) @alias)) source: (string) @source) @node
+(variable_declarator name: (identifier) @name value: (call_expression function: (identifier) @_fn arguments: (arguments (string) @source) (#eq? @_fn "require"))) @node
+""",
+        pattern_kinds={0: "js_import", 1: "js_import", 2: "js_import", 3: "js_import", 4: "js_require"},
+        strip_quotes=True,
+    ),
     dynamic_query="""
         (subscript_expression) @dynamic_node
         (call_expression) @dynamic_node
@@ -642,10 +757,17 @@ TYPESCRIPT_PACK = LanguagePack(
     scope_types=_JS_SCOPES,
     sem_query=_TS_SEM,
     type_config=_JS_TS_TYPES,
-    import_query="""
-        (import_statement) @import_node
-        (call_expression) @import_node
-    """,
+    import_query_config=ImportQueryConfig(
+        query="""
+(import_statement (import_clause (identifier) @name) source: (string) @source) @node
+(import_statement (import_clause (named_imports (import_specifier !alias name: (identifier) @name))) source: (string) @source) @node
+(import_statement (import_clause (named_imports (import_specifier name: (identifier) @name alias: (identifier) @alias))) source: (string) @source) @node
+(import_statement (import_clause (namespace_import (identifier) @alias)) source: (string) @source) @node
+(variable_declarator name: (identifier) @name value: (call_expression function: (identifier) @_fn arguments: (arguments (string) @source) (#eq? @_fn "require"))) @node
+""",
+        pattern_kinds={0: "js_import", 1: "js_import", 2: "js_import", 3: "js_import", 4: "js_require"},
+        strip_quotes=True,
+    ),
     dynamic_query="""
         (subscript_expression) @dynamic_node
         (call_expression) @dynamic_node
@@ -665,10 +787,17 @@ TSX_PACK = LanguagePack(
     scope_types=_JS_SCOPES,
     sem_query=_TS_SEM,
     type_config=_JS_TS_TYPES,
-    import_query="""
-        (import_statement) @import_node
-        (call_expression) @import_node
-    """,
+    import_query_config=ImportQueryConfig(
+        query="""
+(import_statement (import_clause (identifier) @name) source: (string) @source) @node
+(import_statement (import_clause (named_imports (import_specifier !alias name: (identifier) @name))) source: (string) @source) @node
+(import_statement (import_clause (named_imports (import_specifier name: (identifier) @name alias: (identifier) @alias))) source: (string) @source) @node
+(import_statement (import_clause (namespace_import (identifier) @alias)) source: (string) @source) @node
+(variable_declarator name: (identifier) @name value: (call_expression function: (identifier) @_fn arguments: (arguments (string) @source) (#eq? @_fn "require"))) @node
+""",
+        pattern_kinds={0: "js_import", 1: "js_import", 2: "js_import", 3: "js_import", 4: "js_require"},
+        strip_quotes=True,
+    ),
     dynamic_query="""
         (subscript_expression) @dynamic_node
         (call_expression) @dynamic_node
@@ -773,9 +902,39 @@ GO_PACK = LanguagePack(
     scope_types=_GO_SCOPES,
     sem_query=_GO_SEM,
     type_config=_GO_TYPES,
-    import_query="""
-        (import_spec) @import_node
-    """,
+    import_query_config=ImportQueryConfig(
+        query="""
+; Aliased import: import fp "path/filepath"
+(import_spec
+  name: (package_identifier) @alias
+  path: (interpreted_string_literal) @source) @node
+
+; Dot import: import . "fmt"
+(import_spec
+  name: (dot)
+  path: (interpreted_string_literal) @source) @node
+
+; Blank import: import _ "net/http/pprof"
+(import_spec
+  name: (blank_identifier) @alias
+  path: (interpreted_string_literal) @source) @node
+
+; Plain import: import "fmt"
+(import_spec
+  !name
+  path: (interpreted_string_literal) @source) @node
+""",
+        pattern_kinds={
+            0: "go_import",
+            1: "go_import",
+            2: "go_import",
+            3: "go_import",
+        },
+        strip_quotes=True,
+        name_from_source_segment=True,
+        source_segment_sep="/",
+        name_overrides={1: "*"},  # dot import → wildcard
+    ),
     declared_module_query="(package_clause) @module_node",
     declared_module_handler="_declared_module_go",
 )
@@ -917,9 +1076,26 @@ RUST_PACK = LanguagePack(
     scope_types=_RUST_SCOPES,
     sem_query=_RUST_SEM,
     type_config=_RUST_TYPES,
-    import_query="""
-        (use_declaration) @import_node
-    """,
+    import_query_config=ImportQueryConfig(
+        query="""
+; use path::name
+(use_declaration argument: (scoped_identifier) @source) @node
+; use path as alias
+(use_declaration argument: (use_as_clause path: (scoped_identifier) @source alias: (identifier) @alias)) @node
+; use path::{item1, item2}
+(use_declaration argument: (scoped_use_list path: (_) @source list: (use_list (identifier) @name))) @node
+; use path::{self}
+(use_declaration argument: (scoped_use_list path: (_) @source list: (use_list (self) @name))) @node
+; use path::*
+(use_declaration argument: (use_wildcard (scoped_identifier) @source)) @node
+; use name (bare identifier)
+(use_declaration argument: (identifier) @name) @node
+""",
+        pattern_kinds={0: "rust_use", 1: "rust_use", 2: "rust_use", 3: "rust_use", 4: "rust_use", 5: "rust_use"},
+        name_overrides={4: "*"},
+        name_from_source_segment=True,
+        source_segment_sep="::",
+    ),
 )
 
 
@@ -1049,9 +1225,15 @@ JAVA_PACK = LanguagePack(
     scope_types=_JAVA_SCOPES,
     sem_query=_JAVA_SEM,
     type_config=_JAVA_TYPES,
-    import_query="""
-        (import_declaration) @import_node
-    """,
+    import_query_config=ImportQueryConfig(
+        query="""
+; import x.y.z;
+(import_declaration (scoped_identifier) @source) @node
+""",
+        pattern_kinds={0: "java_import"},
+        name_from_source_segment=True,
+        source_segment_sep=".",
+    ),
     declared_module_query="(package_declaration) @module_node",
     declared_module_handler="_declared_module_java",
 )
@@ -1202,9 +1384,21 @@ CSHARP_PACK = LanguagePack(
     symbol_config=_CSHARP_SYMBOLS,
     scope_types=_CSHARP_SCOPES,
     type_config=_CSHARP_TYPES,
-    import_query="""
-        (using_directive) @import_node
-    """,
+
+    sem_query="""
+    (invocation_expression function: (identifier) @sem_call)
+    (invocation_expression function: (member_access_expression name: (identifier) @sem_call))
+    (assignment_expression left: (member_access_expression name: (identifier) @sem_field))
+    (return_statement (identifier) @sem_return)
+    (throw_statement (object_creation_expression type: (identifier) @sem_raise))
+""",
+    import_query_config=ImportQueryConfig(
+        query="""
+(using_directive) @node
+""",
+        pattern_kinds={0: "csharp_using"},
+        source_from_node_text=True,
+    ),
     declared_module_handler="_declared_module_csharp",
 )
 
@@ -1309,9 +1503,20 @@ KOTLIN_PACK = LanguagePack(
     symbol_config=_KOTLIN_SYMBOLS,
     scope_types=_KOTLIN_SCOPES,
     type_config=_KOTLIN_TYPES,
-    import_query="""
-        (import) @import_node
-    """,
+
+    sem_query="""
+    (call_expression (identifier) @sem_call)
+    (call_expression (navigation_expression (identifier) @sem_call))
+    (return_expression (identifier) @sem_return)
+    (throw_expression (call_expression (identifier) @sem_raise))
+""",
+    import_query_config=ImportQueryConfig(
+        query="""
+(import (qualified_identifier) @source (identifier) @alias) @node
+(import (qualified_identifier) @source) @node
+""",
+        pattern_kinds={0: "kotlin_import", 1: "kotlin_import"},
+    ),
     declared_module_query="(package_header) @module_node",
     declared_module_handler="_declared_module_kotlin",
 )
@@ -1416,9 +1621,20 @@ SCALA_PACK = LanguagePack(
     symbol_config=_SCALA_SYMBOLS,
     scope_types=_SCALA_SCOPES,
     type_config=_SCALA_TYPES,
-    import_query="""
-        (import_declaration) @import_node
-    """,
+
+    sem_query="""
+    (call_expression function: (identifier) @sem_call)
+    (call_expression function: (field_expression field: (identifier) @sem_call))
+    (assignment_expression left: (field_expression field: (identifier) @sem_field))
+    (return_expression (identifier) @sem_return)
+""",
+    import_query_config=ImportQueryConfig(
+        query="""
+(import_declaration) @node
+""",
+        pattern_kinds={0: "scala_import"},
+        source_from_node_text=True,
+    ),
     declared_module_query="(package_clause) @module_node",
     declared_module_handler="_declared_module_scala",
 )
@@ -1569,10 +1785,24 @@ CPP_PACK = LanguagePack(
     extensions=frozenset({"cpp", "cc", "cxx", "hpp", "hxx", "hh"}),
     symbol_config=_CPP_SYMBOLS,
     scope_types=_C_CPP_SCOPES,
+    sem_query="""
+    (call_expression function: (identifier) @sem_call)
+    (call_expression function: (field_expression field: (field_identifier) @sem_call))
+    (call_expression function: (qualified_identifier name: (identifier) @sem_call))
+    (assignment_expression left: (field_expression field: (field_identifier) @sem_field))
+    (return_statement (identifier) @sem_return)
+    (throw_statement (call_expression function: (identifier) @sem_raise))
+""",
     type_config=_CPP_TYPES,
-    import_query="""
-        (preproc_include) @import_node
-    """,
+    import_query_config=ImportQueryConfig(
+        query="""
+(preproc_include path: (system_lib_string) @source) @node
+(preproc_include path: (string_literal) @source) @node
+""",
+        pattern_kinds={0: "c_include", 1: "c_include"},
+        strip_quotes=True,
+        strip_angle_brackets=True,
+    ),
 )
 
 C_PACK = LanguagePack(
@@ -1585,9 +1815,22 @@ C_PACK = LanguagePack(
     symbol_config=_CPP_SYMBOLS,
     scope_types=_C_CPP_SCOPES,
     type_config=_CPP_TYPES,
-    import_query="""
-        (preproc_include) @import_node
-    """,
+
+    sem_query="""
+    (call_expression function: (identifier) @sem_call)
+    (call_expression function: (field_expression field: (field_identifier) @sem_call))
+    (assignment_expression left: (field_expression field: (field_identifier) @sem_field))
+    (return_statement (identifier) @sem_return)
+""",
+    import_query_config=ImportQueryConfig(
+        query="""
+(preproc_include path: (system_lib_string) @source) @node
+(preproc_include path: (string_literal) @source) @node
+""",
+        pattern_kinds={0: "c_include", 1: "c_include"},
+        strip_quotes=True,
+        strip_angle_brackets=True,
+    ),
 )
 
 
@@ -1668,9 +1911,24 @@ RUBY_PACK = LanguagePack(
     symbol_config=_RUBY_SYMBOLS,
     scope_types=_RUBY_SCOPES,
     type_config=_RUBY_TYPES,
-    import_query="""
-        (call) @import_node
-    """,
+
+    sem_query="""
+    (call method: (identifier) @sem_call)
+    (return (argument_list (identifier) @sem_return))
+""",
+    import_query_config=ImportQueryConfig(
+        query="""
+(call method: (identifier) @_fn arguments: (argument_list (string) @source) (#match? @_fn "^(require|require_relative|load)$")) @node
+""",
+        pattern_kinds={0: "ruby_require"},
+        strip_quotes=True,
+        kind_from_capture="_fn",
+        kind_from_capture_map={
+            "require": "ruby_require",
+            "require_relative": "ruby_require_relative",
+            "load": "ruby_load",
+        },
+    ),
     declared_module_handler="_declared_module_ruby",
 )
 
@@ -1789,9 +2047,21 @@ PHP_PACK = LanguagePack(
     symbol_config=_PHP_SYMBOLS,
     scope_types=_PHP_SCOPES,
     type_config=_PHP_TYPES,
-    import_query="""
-        (namespace_use_declaration) @import_node
-    """,
+
+    sem_query="""
+    (function_call_expression function: (name) @sem_call)
+    (member_call_expression name: (name) @sem_call)
+    (assignment_expression left: (member_access_expression name: (name) @sem_field))
+    (return_statement (name) @sem_return)
+    (throw_expression (object_creation_expression (name) @sem_raise))
+""",
+    import_query_config=ImportQueryConfig(
+        query="""
+(namespace_use_declaration (namespace_use_clause (qualified_name) @source (name) @alias)) @node
+(namespace_use_declaration (namespace_use_clause (qualified_name) @source)) @node
+""",
+        pattern_kinds={0: "php_use", 1: "php_use"},
+    ),
     declared_module_query="(namespace_definition) @module_node",
     declared_module_handler="_declared_module_php",
 )
@@ -1918,9 +2188,17 @@ SWIFT_PACK = LanguagePack(
     symbol_config=_SWIFT_SYMBOLS,
     scope_types=_SWIFT_SCOPES,
     type_config=_SWIFT_TYPES,
-    import_query="""
-        (import_declaration) @import_node
-    """,
+
+    sem_query="""
+    (call_expression (simple_identifier) @sem_call)
+    (call_expression (navigation_expression (navigation_suffix (simple_identifier) @sem_call)))
+""",
+    import_query_config=ImportQueryConfig(
+        query="""
+(import_declaration (identifier) @source) @node
+""",
+        pattern_kinds={0: "swift_import"},
+    ),
 )
 
 
@@ -2048,9 +2326,24 @@ ELIXIR_PACK = LanguagePack(
     symbol_config=_ELIXIR_SYMBOLS,
     scope_types=_ELIXIR_SCOPES,
     type_config=_ELIXIR_TYPES,
-    import_query="""
-        (call) @import_node
-    """,
+
+    sem_query="""
+    (call (identifier) @sem_call)
+    (call (dot (alias) @sem_call))
+""",
+    import_query_config=ImportQueryConfig(
+        query="""
+(call (identifier) @_fn (arguments (alias) @source) (#match? @_fn "^(import|alias|use|require)$")) @node
+""",
+        pattern_kinds={0: "elixir_import"},
+        kind_from_capture="_fn",
+        kind_from_capture_map={
+            "import": "elixir_import",
+            "alias": "elixir_alias",
+            "use": "elixir_use",
+            "require": "elixir_require",
+        },
+    ),
     declared_module_query="""
         (call
             (identifier) @_target
@@ -2153,9 +2446,17 @@ HASKELL_PACK = LanguagePack(
     symbol_config=_HASKELL_SYMBOLS,
     scope_types=_HASKELL_SCOPES,
     type_config=_HASKELL_TYPES,
-    import_query="""
-        (import) @import_node
-    """,
+
+    sem_query="""
+    (apply (variable) @sem_call)
+""",
+    import_query_config=ImportQueryConfig(
+        query="""
+(import (module) @source (module) @alias) @node
+(import (module) @source) @node
+""",
+        pattern_kinds={0: "haskell_import", 1: "haskell_import"},
+    ),
     declared_module_query="""
         (header (module) @module_node)
     """,
@@ -2241,10 +2542,17 @@ OCAML_PACK = LanguagePack(
     symbol_config=_OCAML_SYMBOLS,
     scope_types=_OCAML_SCOPES,
     type_config=_OCAML_TYPES,
-    import_query="""
-        (open_module) @import_node
-        (include_module) @import_node
-    """,
+
+    sem_query="""
+    (application_expression (value_path) @sem_call)
+""",
+    import_query_config=ImportQueryConfig(
+        query="""
+(open_module (module_path) @source) @node
+(include_module (module_path) @source) @node
+""",
+        pattern_kinds={0: "ocaml_open", 1: "ocaml_include"},
+    ),
     declared_module_handler="_declared_module_ocaml",
 )
 
@@ -2298,6 +2606,22 @@ ZIG_PACK = LanguagePack(
     grammar_module="tree_sitter_zig",
     min_version="1.1.0",
     extensions=frozenset({"zig"}),
+    symbol_config=SymbolQueryConfig(
+        query_text="""
+        (function_declaration
+            (identifier) @name) @node
+        (variable_declaration
+            (identifier) @name) @node
+    """,
+        patterns=(
+            SymbolPattern(kind="function"),
+            SymbolPattern(kind="variable"),
+        ),
+        container_types=frozenset({"struct"}),
+    ),
+    sem_query="""
+    (call_expression (identifier) @sem_call)
+""",
     scope_types={
         "function_declaration": "function",
         "container_declaration": "class",
@@ -2367,10 +2691,20 @@ JULIA_PACK = LanguagePack(
     extensions=frozenset({"jl"}),
     symbol_config=_JULIA_SYMBOLS,
     scope_types=_JULIA_SCOPES,
-    import_query="""
-        (import_statement) @import_node
-        (using_statement) @import_node
-    """,
+    sem_query="""
+    (call_expression (identifier) @sem_call)
+    (call_expression (field_expression (identifier) @sem_call))
+    (return_statement (identifier) @sem_return)
+""",
+    import_query_config=ImportQueryConfig(
+        query="""
+(import_statement (identifier) @source) @node
+(import_statement (selected_import (identifier) @source)) @node
+(using_statement (identifier) @source) @node
+(using_statement (selected_import (identifier) @source)) @node
+""",
+        pattern_kinds={0: "julia_import", 1: "julia_import", 2: "julia_using", 3: "julia_using"},
+    ),
     declared_module_query="(module_definition) @module_node",
     declared_module_handler="_declared_module_julia",
 )
@@ -2405,9 +2739,26 @@ LUA_PACK = LanguagePack(
     extensions=frozenset({"lua"}),
     symbol_config=_LUA_SYMBOLS,
     scope_types=_LUA_SCOPES,
-    import_query="""
-        (function_call) @import_node
-    """,
+
+    sem_query="""
+    (function_call (identifier) @sem_call)
+    (function_call (dot_index_expression field: (identifier) @sem_call))
+    (return_statement (expression_list (identifier) @sem_return))
+""",
+    import_query_config=ImportQueryConfig(
+        query="""
+(function_call (identifier) @_fn (arguments (string) @source) (#match? @_fn "^(require|dofile|loadfile)$")) @node
+(variable_declaration (assignment_statement (variable_list (identifier) @name) (expression_list (function_call (identifier) @_fn (arguments (string) @source) (#match? @_fn "^require$"))))) @node
+""",
+        pattern_kinds={0: "lua_require", 1: "lua_require"},
+        strip_quotes=True,
+        kind_from_capture="_fn",
+        kind_from_capture_map={
+            "require": "lua_require",
+            "dofile": "lua_dofile",
+            "loadfile": "lua_loadfile",
+        },
+    ),
 )
 
 
@@ -2526,6 +2877,15 @@ ADA_PACK = LanguagePack(
     grammar_module="tree_sitter_ada",
     min_version="0.1.0",
     extensions=frozenset({"adb", "ads"}),
+    symbol_config=SymbolQueryConfig(
+        query_text="""
+        (subprogram_body
+            (procedure_specification
+                (identifier) @name)) @node
+    """,
+        patterns=(SymbolPattern(kind="procedure"),),
+    ),
+    scope_types={"subprogram_body": "procedure"},
 )
 FORTRAN_PACK = LanguagePack(
     name="fortran",
@@ -2542,6 +2902,19 @@ ODIN_PACK = LanguagePack(
     grammar_module="tree_sitter_odin",
     min_version="1.2.0",
     extensions=frozenset({"odin"}),
+    symbol_config=SymbolQueryConfig(
+        query_text="""
+        (procedure_declaration
+            (identifier) @name) @node
+        (struct_declaration
+            (identifier) @name) @node
+    """,
+        patterns=(
+            SymbolPattern(kind="function"),
+            SymbolPattern(kind="struct"),
+        ),
+    ),
+    scope_types={"procedure": "function"},
 )
 HTML_PACK = LanguagePack(
     name="html",
@@ -2558,6 +2931,14 @@ CSS_PACK = LanguagePack(
     grammar_module="tree_sitter_css",
     min_version="0.23.0",
     extensions=frozenset({"css"}),
+    symbol_config=SymbolQueryConfig(
+        query_text="""
+        (rule_set
+            (selectors) @name) @node
+    """,
+        patterns=(SymbolPattern(kind="rule"),),
+    ),
+    scope_types={"rule_set": "rule", "media_statement": "media"},
 )
 XML_PACK = LanguagePack(
     name="xml",
@@ -2575,6 +2956,16 @@ VERILOG_PACK = LanguagePack(
     grammar_module="tree_sitter_verilog",
     min_version="1.0.0",
     extensions=frozenset({"v", "sv", "vhd", "vhdl"}),
+    symbol_config=SymbolQueryConfig(
+        query_text="""
+        (module_declaration
+            (module_header
+                (module_keyword)
+                (simple_identifier) @name)) @node
+    """,
+        patterns=(SymbolPattern(kind="module"),),
+    ),
+    scope_types={"module_declaration": "module"},
 )
 JSON_PACK = LanguagePack(
     name="json",
@@ -2610,7 +3001,8 @@ HCL_PACK = LanguagePack(
     grammar_module="tree_sitter_hcl",
     min_version="1.0.0",
     extensions=frozenset({"hcl", "tf", "tfvars"}),
-    symbol_config=_HCL_SYMBOLS,
+    symbol_config=_HCL_SYMBOLS,    scope_types={"block": "block", "body": "body"},
+
 )
 SQL_PACK = LanguagePack(
     name="sql",
@@ -2654,7 +3046,8 @@ DOCKERFILE_PACK = LanguagePack(
     grammar_module="tree_sitter_dockerfile",
     min_version="0.2.0",
     filenames=frozenset({"dockerfile"}),
-    symbol_config=_DOCKERFILE_SYMBOLS,
+    symbol_config=_DOCKERFILE_SYMBOLS,    scope_types={"stage": "stage"},
+
 )
 REGEX_PACK = LanguagePack(
     name="regex",
