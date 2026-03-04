@@ -232,9 +232,15 @@ class DefEmbeddingIndex:
 
         Call this before any embed operation to avoid loading the ONNX
         model twice (saves ~15-30s of ONNX compilation).
+
+        Takes the model but uses its OWN batch size (higher than file
+        embedding because def scaffolds are much shorter).
         """
         self._model = model
-        self._batch_size = batch_size
+        # Don't use the caller's batch_size — def scaffolds are ~7× shorter
+        # than file scaffolds so we can batch much more aggressively.
+        # Use the higher of our current batch size or 4× the caller's.
+        self._batch_size = max(self._batch_size, batch_size * 4)
 
     # --- Staging API ---
 
@@ -506,7 +512,13 @@ class DefEmbeddingIndex:
     # --- Internals ---
 
     def _ensure_model(self) -> None:
-        """Lazy-load the embedding model and detect optimal batch size."""
+        """Lazy-load the embedding model and detect optimal batch size.
+
+        Uses a higher base batch size than file embedding because per-def
+        scaffolds are tiny (median ~48 chars / ~14 tokens).  ONNX attention
+        cost scales quadratically with sequence length, so these short texts
+        can use much larger batches without extra memory or time.
+        """
         if self._model is not None:
             return
 
@@ -516,7 +528,10 @@ class DefEmbeddingIndex:
 
         providers = _detect_providers()
         threads = max(1, (os.cpu_count() or 2) // 2)
-        self._batch_size = _detect_batch_size()
+        # Use 4× the file embedding base batch size — def scaffolds are
+        # ~7× shorter than file scaffolds, so quadratic attention cost is
+        # ~50× lower per element.  This makes large batches safe and fast.
+        self._batch_size = _detect_batch_size() * 4
 
         self._model = TextEmbedding(
             model_name=FILE_EMBED_MODEL,
