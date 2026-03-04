@@ -2761,7 +2761,8 @@ class IndexCoordinatorEngine:
         """Commit both embedding indices with model sharing.
 
         Ensures the ONNX model is loaded only once across both indices.
-        Progress callback receives cumulative (done, total) across both.
+        Progress callback receives cumulative (done, grand_total) across
+        both indices — the total never changes mid-stream.
 
         Returns total number of items embedded.
         """
@@ -2773,32 +2774,43 @@ class IndexCoordinatorEngine:
         if not fe_has and not de_has:
             return 0
 
+        # Compute grand total ONCE so progress never jumps
+        fe_count = len(fe._staged_files) if fe_has and fe is not None else 0
+        de_count = (
+            sum(len(v) for v in de._staged_defs.values())
+            if de_has and de is not None
+            else 0
+        )
+        grand_total = fe_count + de_count
+
         embedded = 0
         offset = 0
 
         if fe_has:
             assert fe is not None
             if on_progress is not None:
-                def _fe_progress(done: int, total: int) -> None:
-                    on_progress(done, total)
+                _gt = grand_total
+                def _fe_progress(done: int, total: int) -> None:  # noqa: ARG001
+                    on_progress(done, _gt)
                 embedded += fe.commit_staged(on_progress=_fe_progress)
             else:
                 embedded += fe.commit_staged()
-            offset = embedded
+            offset = fe_count
             # Share model with def embedding
             if de is not None and fe._model is not None and de._model is None:
                 de.set_shared_model(fe._model, fe._batch_size)
 
         if de_has:
             assert de is not None
-            # If file embedding didn't run, ensure def has a model
+            # If file embedding didn't run, share model the other way
             if fe is not None and de._model is not None and fe._model is None:
                 fe._model = de._model
                 fe._batch_size = de._batch_size
             if on_progress is not None:
-                _offset = offset
-                def _de_progress(done: int, total: int) -> None:
-                    on_progress(_offset + done, _offset + total)
+                _off = offset
+                _gt2 = grand_total
+                def _de_progress(done: int, total: int) -> None:  # noqa: ARG001
+                    on_progress(_off + done, _gt2)
                 embedded += de.commit_staged(on_progress=_de_progress)
             else:
                 embedded += de.commit_staged()
