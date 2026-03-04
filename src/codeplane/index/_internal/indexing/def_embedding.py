@@ -227,6 +227,15 @@ class DefEmbeddingIndex:
         self._model: Any = None
         self._batch_size: int = DEF_EMBED_BATCH_SIZE
 
+    def set_shared_model(self, model: Any, batch_size: int) -> None:
+        """Use a shared model instance instead of loading a separate one.
+
+        Call this before any embed operation to avoid loading the ONNX
+        model twice (saves ~15-30s of ONNX compilation).
+        """
+        self._model = model
+        self._batch_size = batch_size
+
     # --- Staging API ---
 
     def stage_defs(

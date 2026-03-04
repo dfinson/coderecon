@@ -860,16 +860,7 @@ class IndexCoordinatorEngine:
 
                 # Commit embeddings (both indices, after resolver)
                 with self._tantivy_write_lock:
-                    if (
-                        self._file_embedding is not None
-                        and self._file_embedding.has_staged_changes()
-                    ):
-                        self._file_embedding.commit_staged()
-                    if (
-                        self._def_embedding is not None
-                        and self._def_embedding.has_staged_changes()
-                    ):
-                        self._def_embedding.commit_staged()
+                    self._commit_embeddings()
 
                 # Mark successfully indexed files as indexed
                 if changed_file_ids:
@@ -899,16 +890,7 @@ class IndexCoordinatorEngine:
 
                     if self._lexical is not None:
                         self._lexical.commit_staged()
-                    if (
-                        self._file_embedding is not None
-                        and self._file_embedding.has_staged_changes()
-                    ):
-                        self._file_embedding.commit_staged()
-                    if (
-                        self._def_embedding is not None
-                        and self._def_embedding.has_staged_changes()
-                    ):
-                        self._def_embedding.commit_staged()
+                    self._commit_embeddings()
                 if self._lexical is not None:
                     self._lexical.reload()
 
@@ -1091,11 +1073,8 @@ class IndexCoordinatorEngine:
             if self._def_embedding is not None:
                 self._def_embedding.stage_remove_by_path(rm_list)
 
-        # Commit embeddings (both indices)
-        if self._file_embedding is not None and self._file_embedding.has_staged_changes():
-            self._file_embedding.commit_staged()
-        if self._def_embedding is not None and self._def_embedding.has_staged_changes():
-            self._def_embedding.commit_staged()
+        # Commit embeddings (both indices, shared model)
+        self._commit_embeddings()
 
         # Remove structural facts for removed files
         if to_remove:
@@ -1316,11 +1295,8 @@ class IndexCoordinatorEngine:
                 if self._def_embedding is not None:
                     self._def_embedding.stage_remove_by_path(rm_list)
 
-            # Commit embeddings (both indices)
-            if self._file_embedding is not None and self._file_embedding.has_staged_changes():
-                self._file_embedding.commit_staged()
-            if self._def_embedding is not None and self._def_embedding.has_staged_changes():
-                self._def_embedding.commit_staged()
+            # Commit embeddings (both indices, shared model)
+            self._commit_embeddings()
 
             # Remove structural facts for removed files
             if to_remove:
@@ -2700,39 +2676,28 @@ class IndexCoordinatorEngine:
                 on_progress(0, 1, files_by_ext, "resolving_types")
                 resolve_type_traced(self.db, on_progress=pass3_progress)
 
-                # Commit embeddings (both indices)
+                # Commit embeddings (both indices, shared model)
                 _staged_file = (
                     len(self._file_embedding._staged_files)
                     if self._file_embedding is not None
                     else 0
                 )
                 _staged_def = (
-                    len(self._def_embedding._staged_defs)
+                    sum(len(v) for v in self._def_embedding._staged_defs.values())
                     if self._def_embedding is not None
                     else 0
                 )
-                staged_count = _staged_file + _staged_def
-                if staged_count > 0:
-                    on_progress(0, staged_count, files_by_ext, "computing_embeddings")
+                staged_total = _staged_file + _staged_def
+                if staged_total > 0:
+                    on_progress(0, staged_total, files_by_ext, "computing_embeddings")
 
                     def _embed_progress(done: int, total: int) -> None:
                         on_progress(done, total, files_by_ext, "computing_embeddings")
 
-                    embedded = 0
-                    if self._file_embedding is not None and self._file_embedding.has_staged_changes():
-                        embedded += self._file_embedding.commit_staged(
-                            on_progress=_embed_progress,
-                        )
-                    if self._def_embedding is not None and self._def_embedding.has_staged_changes():
-                        embedded += self._def_embedding.commit_staged(
-                            on_progress=_embed_progress,
-                        )
-                    on_progress(embedded, embedded, files_by_ext, "embeddings_done")
+                    self._commit_embeddings(on_progress=_embed_progress)
+                    on_progress(staged_total, staged_total, files_by_ext, "embeddings_done")
                 else:
-                    if self._file_embedding is not None and self._file_embedding.has_staged_changes():
-                        self._file_embedding.commit_staged()
-                    if self._def_embedding is not None and self._def_embedding.has_staged_changes():
-                        self._def_embedding.commit_staged()
+                    self._commit_embeddings()
 
         return count, indexed_paths, files_by_ext
 
@@ -2772,9 +2737,73 @@ class IndexCoordinatorEngine:
         if self._def_embedding is None or self._def_embedding.count == 0:
             return []
         return self._def_embedding.query(text, top_k=top_k)
-        if self._file_embedding is None or self._file_embedding.count == 0:
-            return []
-        return self._file_embedding.query(text, top_k=top_k)
+
+    def _share_embedding_model(self) -> None:
+        """Share the ONNX model between file and def embedding indices.
+
+        Avoids loading the same ~67 MB model twice. Whichever index has
+        a loaded model shares it with the other.
+        """
+        fe = self._file_embedding
+        de = self._def_embedding
+        if fe is None or de is None:
+            return
+        if fe._model is not None and de._model is None:
+            de.set_shared_model(fe._model, fe._batch_size)
+        elif de._model is not None and fe._model is None:
+            fe._model = de._model
+            fe._batch_size = de._batch_size
+
+    def _commit_embeddings(
+        self,
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> int:
+        """Commit both embedding indices with model sharing.
+
+        Ensures the ONNX model is loaded only once across both indices.
+        Progress callback receives cumulative (done, total) across both.
+
+        Returns total number of items embedded.
+        """
+        fe = self._file_embedding
+        de = self._def_embedding
+        fe_has = fe is not None and fe.has_staged_changes()
+        de_has = de is not None and de.has_staged_changes()
+
+        if not fe_has and not de_has:
+            return 0
+
+        embedded = 0
+        offset = 0
+
+        if fe_has:
+            assert fe is not None
+            if on_progress is not None:
+                def _fe_progress(done: int, total: int) -> None:
+                    on_progress(done, total)
+                embedded += fe.commit_staged(on_progress=_fe_progress)
+            else:
+                embedded += fe.commit_staged()
+            offset = embedded
+            # Share model with def embedding
+            if de is not None and fe._model is not None and de._model is None:
+                de.set_shared_model(fe._model, fe._batch_size)
+
+        if de_has:
+            assert de is not None
+            # If file embedding didn't run, ensure def has a model
+            if fe is not None and de._model is not None and fe._model is None:
+                fe._model = de._model
+                fe._batch_size = de._batch_size
+            if on_progress is not None:
+                _offset = offset
+                def _de_progress(done: int, total: int) -> None:
+                    on_progress(_offset + done, _offset + total)
+                embedded += de.commit_staged(on_progress=_de_progress)
+            else:
+                embedded += de.commit_staged()
+
+        return embedded
 
     def _clear_all_structural_facts(self) -> None:
         """Clear all structural facts from the database.
