@@ -1,6 +1,8 @@
-# Repo Selection — Summary
+# Repo Selection & Tasks
 
 30 repos across 10 languages, 3 scale tiers each (§5.1 of ranking-design.md).
+Each file contains the repo selection rationale, structure overview, and
+task definitions (narrow/medium/wide) per §5.2.
 
 ## Selection Criteria
 

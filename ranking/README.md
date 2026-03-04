@@ -18,6 +18,8 @@ See `docs/ranking-design.md` in the repo root for the full design.
 ```
 ranking/
 ├── pyproject.toml
+├── repos/                 # 30 repo selection docs + task definitions
+├── clones/                # Cloned repos (gitignored)
 ├── src/cpl_ranking/
 │   ├── schema.py          # §7 dataset table schemas
 │   ├── collector.py       # §5.3 data collection orchestrator
