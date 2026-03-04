@@ -2,7 +2,7 @@
 """Run EVEE benchmark — imports components and invokes evaluator.
 
 Usage:
-    cd benchmarking/cpl_bench
+    cd benchmarking
     python run.py experiments/recon_baseline.yaml
 """
 

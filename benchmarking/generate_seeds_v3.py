@@ -6,7 +6,7 @@ embedding index to cosine-rank v2 candidates against each issue's task descripti
 keeping only the top-K most semantically relevant.
 
 Usage:
-    cd benchmarking/cpl_bench
+    cd benchmarking
     python generate_seeds_v3.py
 
 Requires:

@@ -65,7 +65,7 @@ python -m benchmarking.compute_metrics <trace.json> [--output-dir DIR]
 
 Example: `evee_260_claude-opus-4-6-fast_codeplane_trace.json`
 
-All outputs default to `benchmarking/evee/results/`.
+All outputs default to `benchmarking/results/`.
 
 **Step 3 — Code review** (manual)
 

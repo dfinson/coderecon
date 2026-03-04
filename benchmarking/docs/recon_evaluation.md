@@ -7,7 +7,7 @@ Each issue is a real implementation task with a manually curated ground truth fi
 (established via iterative context gathering: grep, semantic search, file reads).
 
 **Scope**: 24 issues × 3 query levels = 72 queries.
-**Results**: Versioned JSON files in `benchmarking/evee/results/`.
+**Results**: Versioned JSON files in `benchmarking/results/`.
 
 ## Query Rubric
 
@@ -62,7 +62,7 @@ Retrieval quality only. Latency and token counts are tracked separately during A
 
 ## Results Format
 
-Write to `benchmarking/evee/results/recon_v6_{date}.json`.
+Write to `benchmarking/results/recon_v6_{date}.json`.
 See `results/schema.json` for full schema.
 
 ```json
@@ -1125,7 +1125,7 @@ for issue in issues:
 
 ### Output
 
-Write to `benchmarking/evee/results/recon_{pipeline}_{date}.json`.
+Write to `benchmarking/results/recon_{pipeline}_{date}.json`.
 
 ### Flags
 

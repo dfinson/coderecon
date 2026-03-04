@@ -24,7 +24,7 @@ class ReconGroundTruthDataset:
     """Loads recon ground-truth queries from a JSON file.
 
     Ground truth is maintained in ``data/ground_truth.json``
-    (originally derived from ``benchmarking/evee/ReconEveeEvaluation.md``).
+    (originally derived from ``benchmarking/docs/recon_evaluation.md``).
 
     Config args:
         data_path: Path to the ground_truth.json file

@@ -11,28 +11,37 @@ evaluation framework for AI coding tools.
 ## Project Structure
 
 ```
-cpl_bench/
+benchmarking/
 ├── run.py                          # Entry point — registers components, invokes EVEE
+├── setup_and_run.py                # Automated setup: init + daemon + EVEE invocation
 ├── pyproject.toml                  # Package metadata
 ├── models/
 │   ├── recon.py                    # cpl-recon — calls CodePlane recon via MCP
+│   ├── recon_enhanced.py           # cpl-recon-enhanced — recon with per-issue seeds
 │   └── agent_replay.py            # cpl-agent-replay — passes pre-collected traces through
 ├── datasets/
 │   ├── recon_gt.py                 # cpl-recon-gt — loads ground-truth JSON
 │   └── agent_traces.py            # cpl-agent-traces — loads *_trace.json files
 ├── metrics/
 │   ├── retrieval.py                # cpl-retrieval — P/R/F1/noise
-│   ├── tier_alignment.py           # cpl-tier-align — E/C/S tier accuracy
 │   ├── agent_efficiency.py         # cpl-efficiency — turns, tokens, tool calls
 │   └── agent_outcome.py            # cpl-outcome — quality scores from code review
 ├── preprocessing/
+│   ├── extract_trace.py            # Extract trace events from chatreplay exports
+│   ├── compute_metrics.py          # Compute per-session metrics from traces
 │   └── chatreplay_to_traces.py     # Convert VS Code chatreplay exports → trace JSON
 ├── experiments/
 │   ├── recon_baseline.yaml         # Recon evaluation config
+│   ├── recon_enhanced.yaml         # Recon with seeds evaluation config
 │   └── agent_ab.yaml               # Agent A/B comparison config
 ├── data/
 │   ├── ground_truth.json           # 72 records (24 issues × 3 query levels)
+│   ├── enhanced_seeds*.json        # Per-issue seeds for enhanced recon
 │   └── traces/                     # Agent trace files (not committed)
+├── results/                        # Benchmark result data
+├── docs/                           # Evaluation design docs
+│   ├── recon_evaluation.md         # Ground truth + query definitions
+│   └── ab_benchmark_design.md      # A/B experiment design + prompts
 └── vendor/
     └── evee_ms_core-*.whl          # Vendored EVEE wheel
 ```
@@ -50,7 +59,7 @@ cpl_bench/
 Start a CodePlane daemon on the target repo, then:
 
 ```bash
-cd benchmarking/cpl_bench
+cd benchmarking
 
 # Point at the target repo (defaults to ~/wsl-repos/evees/evee_cpl/evee)
 export CPL_BENCH_TARGET_REPO=/path/to/repo
@@ -73,10 +82,10 @@ This calls `recon` for each of the 72 ground-truth queries and measures:
 1. **Collect traces** — Run the same issues with and without CodePlane, export chatreplay:
 
    ```bash
-   python -m benchmarking.cpl_bench.preprocessing.chatreplay_to_traces \
+   python -m benchmarking.preprocessing.chatreplay_to_traces \
        path/to/chatreplay_exports/*.json \
        --repo evee \
-       --output-dir benchmarking/cpl_bench/data/traces
+       --output-dir benchmarking/data/traces
    ```
 
 2. **(Optional) Score outcomes** — Add an `"outcome"` field to each trace JSON with
@@ -86,7 +95,7 @@ This calls `recon` for each of the 72 ground-truth queries and measures:
 3. **Run the benchmark:**
 
    ```bash
-   cd benchmarking/cpl_bench
+   cd benchmarking
    python run.py experiments/agent_ab.yaml
    ```
 

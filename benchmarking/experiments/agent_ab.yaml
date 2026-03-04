@@ -8,12 +8,12 @@
 #      - Run each issue with CodePlane MCP enabled → export chatreplay
 #      - Run each issue without CodePlane (native) → export chatreplay
 #   2. Convert to traces:
-#      python -m benchmarking.cpl_bench.preprocessing.chatreplay_to_traces \
-#        benchmarking/evee/results/*.json --repo evee
+#      python -m benchmarking.preprocessing.chatreplay_to_traces \
+#        benchmarking/results/*.json --repo evee
 #   3. (Optional) Score outcomes manually and add "outcome" field to traces
 #
 # Run:
-#   cd benchmarking/cpl_bench && python run.py experiments/agent_ab.yaml
+#   cd benchmarking && python run.py experiments/agent_ab.yaml
 
 experiment:
   name: cpl-agent-ab

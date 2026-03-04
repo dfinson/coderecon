@@ -1,13 +1,13 @@
 """Convert VS Code Copilot chatreplay exports → EVEE-compatible trace JSON.
 
-Thin wrapper around ``benchmarking.extract_trace`` that writes files in the
+Thin wrapper around ``extract_trace`` that writes files in the
 format expected by ``cpl-agent-traces`` dataset (``*_trace.json``).
 
 Usage:
-    python -m benchmarking.cpl_bench.preprocessing.chatreplay_to_traces \
-        benchmarking/evee/results/*.json \
+    python -m benchmarking.preprocessing.chatreplay_to_traces \
+        benchmarking/results/*.json \
         --repo evee \
-        --output-dir benchmarking/cpl_bench/data/traces
+        --output-dir benchmarking/data/traces
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from benchmarking.extract_trace import (
+from benchmarking.preprocessing.extract_trace import (
     _build_session_name,
     _detect_issue,
     _detect_model,
@@ -74,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("benchmarking/cpl_bench/data/traces"),
+        default=Path("benchmarking/data/traces"),
         help="Output directory for trace files",
     )
     args = parser.parse_args(argv)

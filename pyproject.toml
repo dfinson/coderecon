@@ -108,9 +108,9 @@ target-version = "py312"
 line-length = 100
 src = ["src"]
 extend-exclude = [
-    "benchmarking/cpl_bench/data",
-    "benchmarking/cpl_bench/experiments",
-    "benchmarking/cpl_bench/vendor",
+    "benchmarking/data",
+    "benchmarking/experiments",
+    "benchmarking/vendor",
 ]
 
 [tool.ruff.lint]
@@ -218,7 +218,7 @@ exclude_dirs = ["tests", ".venv", "venv"]
 skips = ["B101"]  # Skip assert_used - we use asserts in tests
 
 [tool.uv.sources]
-evee-ms-core = { path = "benchmarking/cpl_bench/vendor/evee_ms_core-0.4.0-py3-none-any.whl" }
+evee-ms-core = { path = "benchmarking/vendor/evee_ms_core-0.4.0-py3-none-any.whl" }
 
 [dependency-groups]
 dev = [

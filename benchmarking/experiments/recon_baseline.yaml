@@ -8,7 +8,7 @@
 #   2. Set CPL_BENCH_TARGET_REPO env var (default: ~/wsl-repos/evees/evee_cpl/evee)
 #
 # Run:
-#   cd benchmarking/cpl_bench && python run.py experiments/recon_baseline.yaml
+#   cd benchmarking && python run.py experiments/recon_baseline.yaml
 
 experiment:
   name: cpl-recon-baseline
