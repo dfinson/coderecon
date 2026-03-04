@@ -578,7 +578,6 @@ class DefEmbeddingIndex:
 
         sorted_vecs: list[np.ndarray] = []
         embedded = 0
-        gc_counter = 0
         while embedded < total:
             char_len = len(sorted_texts[embedded])
             if char_len < 500:
@@ -595,10 +594,6 @@ class DefEmbeddingIndex:
 
             if on_progress is not None:
                 on_progress(min(embedded, total), total)
-
-            gc_counter += 1
-            if gc_counter % 5 == 0 and embedded < total:
-                gc.collect()
 
         # Restore original order
         inverse = [0] * total

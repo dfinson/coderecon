@@ -169,3 +169,135 @@ SharedArrayBuffer for multi-threaded Mat operations, SIMD.js for
 vectorized image processing, and OffscreenCanvas for rendering.
 Support tree-shaking so users can include only the modules they need.
 Add TypeScript type definitions.
+
+
+---
+
+## Solve Prompt
+
+The following prompt is sent to the agent for each task in this repo.
+`{task_id}` and `{task_text}` are filled per task.
+
+```
+You are working on the repository opencv/opencv, cloned at ranking/clones/opencv/.
+
+The repository is a C++ project. Key source locations:
+
+modules/
+├── core/                    # Core data structures and utilities
+│   ├── include/opencv2/core/
+│   │   ├── mat.hpp          # Mat (image matrix) type
+│   │   ├── types.hpp        # Basic types (Point, Rect, Size)
+│   │   └── utility.hpp      # Utility functions
+│   └── src/
+│       ├── matrix.cpp       # Mat implementation
+│       ├── arithm.cpp       # Arithmetic operations
+│       └── parallel.cpp     # Parallel execution
+├── imgproc/                 # Image processing
+│   └── src/
+│       ├── filter.cpp       # Blur, sharpen, edge detection
+│       ├── color.cpp        # Color space conversion
+│       ├── geometry.cpp     # Geometric transforms
+│       └── histogram.cpp    # Histogram operations
+├── features2d/              # Feature detection and matching
+├── objdetect/               # Object detection
+├── dnn/                     # Deep neural network inference
+│   └── src/
+│       ├── dnn.cpp          # DNN module core
+│       ├── layers/          # Layer implementations (~50 types)
+│       └── onnx/            # ONNX model import
+├── video/                   # Video analysis (optical flow, tracking)
+├── calib3d/                 # Camera calibration, 3D reconstruction
+├── highgui/                 # Display and user interaction
+├── ml/                      # Traditional machine learning
+├── photo/                   # Computational photography
+├── stitching/               # Image stitching
+└── videoio/                 # Video capture and writing
+
+Your task ({task_id}):
+
+{task_text}
+
+Solve this task. Read the code you need, make your edits, and verify
+they work (run: cmake --build . --target test or ctest). When done, say "DONE".
+Do not explain your changes — just make them.
+```
+
+### Task index
+
+  - N1: Fix `cv::resize` INTER_AREA producing artifacts at non-integer scale factors
+  - N2: Add `cv::rotate` support for arbitrary angle rotation
+  - N3: Fix `cv::VideoCapture` memory leak when repeatedly opening/closing
+  - M1: Implement ONNX model quantization support in DNN module
+  - M2: Add GPU memory management for CUDA operations
+  - M3: Implement image augmentation pipeline
+  - M4: Add automatic EXIF orientation handling
+  - W1: Implement zero-copy interop with NumPy/PyTorch/TensorFlow
+  - W2: Add comprehensive video processing pipeline
+  - W3: Implement WebAssembly build with browser-native APIs
+
+
+---
+
+## Solve Prompt
+
+The following prompt is sent to the agent for each task in this repo.
+`{task_id}` and `{task_text}` are filled per task.
+
+```
+You are working on the repository opencv/opencv, cloned at ranking/clones/opencv/.
+
+The repository is a C++ project. Key source locations:
+
+modules/
+├── core/                    # Core data structures and utilities
+│   ├── include/opencv2/core/
+│   │   ├── mat.hpp          # Mat (image matrix) type
+│   │   ├── types.hpp        # Basic types (Point, Rect, Size)
+│   │   └── utility.hpp      # Utility functions
+│   └── src/
+│       ├── matrix.cpp       # Mat implementation
+│       ├── arithm.cpp       # Arithmetic operations
+│       └── parallel.cpp     # Parallel execution
+├── imgproc/                 # Image processing
+│   └── src/
+│       ├── filter.cpp       # Blur, sharpen, edge detection
+│       ├── color.cpp        # Color space conversion
+│       ├── geometry.cpp     # Geometric transforms
+│       └── histogram.cpp    # Histogram operations
+├── features2d/              # Feature detection and matching
+├── objdetect/               # Object detection
+├── dnn/                     # Deep neural network inference
+│   └── src/
+│       ├── dnn.cpp          # DNN module core
+│       ├── layers/          # Layer implementations (~50 types)
+│       └── onnx/            # ONNX model import
+├── video/                   # Video analysis (optical flow, tracking)
+├── calib3d/                 # Camera calibration, 3D reconstruction
+├── highgui/                 # Display and user interaction
+├── ml/                      # Traditional machine learning
+├── photo/                   # Computational photography
+├── stitching/               # Image stitching
+└── videoio/                 # Video capture and writing
+
+Your task ({task_id}):
+
+{task_text}
+
+Solve this task. Read the code you need, make your edits, and verify
+they work (run: cmake --build . --target test or ctest). When done, say "DONE".
+Do not explain your changes — just make them.
+```
+
+### Task index
+
+  - N1: Fix `cv::resize` INTER_AREA producing artifacts at non-integer scale factors
+  - N2: Add `cv::rotate` support for arbitrary angle rotation
+  - N3: Fix `cv::VideoCapture` memory leak when repeatedly opening/closing
+  - M1: Implement ONNX model quantization support in DNN module
+  - M2: Add GPU memory management for CUDA operations
+  - M3: Implement image augmentation pipeline
+  - M4: Add automatic EXIF orientation handling
+  - W1: Implement zero-copy interop with NumPy/PyTorch/TensorFlow
+  - W2: Add comprehensive video processing pipeline
+  - W3: Implement WebAssembly build with browser-native APIs

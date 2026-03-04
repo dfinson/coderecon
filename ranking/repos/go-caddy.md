@@ -129,3 +129,109 @@ handler in the chain, reverse proxy upstream selection, upstream request,
 and response writing. Propagate trace context across reverse proxy
 hops. Add a `tracing` Caddyfile directive and JSON config. Support
 OTLP export (gRPC and HTTP).
+
+
+---
+
+## Solve Prompt
+
+The following prompt is sent to the agent for each task in this repo.
+`{task_id}` and `{task_text}` are filled per task.
+
+```
+You are working on the repository caddyserver/caddy, cloned at ranking/clones/caddy/.
+
+The repository is a Go project. Key source locations:
+
+.
+├── caddy.go             # Core Caddy type, module registry
+├── admin.go             # Admin API server
+├── config.go            # Configuration loading
+├── modules/
+│   ├── caddyhttp/       # HTTP server, handlers, middleware
+│   │   ├── server.go    # HTTP server implementation
+│   │   ├── routes.go    # Route matching
+│   │   ├── reverseproxy/ # Reverse proxy module
+│   │   ├── fileserver/  # Static file serving
+│   │   └── headers/     # Header manipulation
+│   ├── caddytls/        # TLS automation, ACME client
+│   ├── caddyevents/     # Event system
+│   ├── caddypki/        # PKI management
+│   └── logging/         # Structured logging
+├── caddyconfig/         # Caddyfile parser and adapters
+│   ├── caddyfile/       # Caddyfile syntax parser
+│   └── httpcaddyfile/   # HTTP-specific Caddyfile directives
+└── cmd/                 # CLI entry point
+
+Your task ({task_id}):
+
+{task_text}
+
+Solve this task. Read the code you need, make your edits, and verify
+they work (run: go test ./...). When done, say "DONE".
+Do not explain your changes — just make them.
+```
+
+### Task index
+
+  - N1: Fix Caddyfile `handle_path` not stripping prefix on error routes
+  - N2: Add `max_header_size` directive to HTTP server
+  - N3: Fix reverse proxy health check not respecting `tls_server_name`
+  - M1: Implement request rate limiting module
+  - M2: Add WebSocket reverse proxy improvements
+  - M3: Implement on-demand TLS certificate rotation
+  - W1: Add a web-based admin dashboard
+  - W2: Implement request tracing with OpenTelemetry
+
+
+---
+
+## Solve Prompt
+
+The following prompt is sent to the agent for each task in this repo.
+`{task_id}` and `{task_text}` are filled per task.
+
+```
+You are working on the repository caddyserver/caddy, cloned at ranking/clones/caddy/.
+
+The repository is a Go project. Key source locations:
+
+.
+├── caddy.go             # Core Caddy type, module registry
+├── admin.go             # Admin API server
+├── config.go            # Configuration loading
+├── modules/
+│   ├── caddyhttp/       # HTTP server, handlers, middleware
+│   │   ├── server.go    # HTTP server implementation
+│   │   ├── routes.go    # Route matching
+│   │   ├── reverseproxy/ # Reverse proxy module
+│   │   ├── fileserver/  # Static file serving
+│   │   └── headers/     # Header manipulation
+│   ├── caddytls/        # TLS automation, ACME client
+│   ├── caddyevents/     # Event system
+│   ├── caddypki/        # PKI management
+│   └── logging/         # Structured logging
+├── caddyconfig/         # Caddyfile parser and adapters
+│   ├── caddyfile/       # Caddyfile syntax parser
+│   └── httpcaddyfile/   # HTTP-specific Caddyfile directives
+└── cmd/                 # CLI entry point
+
+Your task ({task_id}):
+
+{task_text}
+
+Solve this task. Read the code you need, make your edits, and verify
+they work (run: go test ./...). When done, say "DONE".
+Do not explain your changes — just make them.
+```
+
+### Task index
+
+  - N1: Fix Caddyfile `handle_path` not stripping prefix on error routes
+  - N2: Add `max_header_size` directive to HTTP server
+  - N3: Fix reverse proxy health check not respecting `tls_server_name`
+  - M1: Implement request rate limiting module
+  - M2: Add WebSocket reverse proxy improvements
+  - M3: Implement on-demand TLS certificate rotation
+  - W1: Add a web-based admin dashboard
+  - W2: Implement request tracing with OpenTelemetry

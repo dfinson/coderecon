@@ -146,3 +146,127 @@ generators for primitive types, strings, containers, and custom
 generators via a `Gen<T>` compositional API. On failure, perform
 automatic shrinking to find the minimal failing input. Integrate with
 existing `EXPECT_*` and `ASSERT_*` macros.
+
+
+---
+
+## Solve Prompt
+
+The following prompt is sent to the agent for each task in this repo.
+`{task_id}` and `{task_text}` are filled per task.
+
+```
+You are working on the repository google/googletest, cloned at ranking/clones/googletest/.
+
+The repository is a C++ project. Key source locations:
+
+googletest/
+├── include/gtest/
+│   ├── gtest.h              # Main public header
+│   ├── gtest-param-test.h   # Parameterized tests
+│   ├── gtest-typed-test.h   # Typed tests
+│   ├── gtest-death-test.h   # Death tests
+│   ├── gtest-matchers.h     # Matchers
+│   └── internal/            # Internal implementation headers
+│       ├── gtest-internal.h
+│       ├── gtest-param-util.h
+│       └── gtest-port.h     # Platform abstraction
+├── src/
+│   ├── gtest.cc             # Core framework implementation
+│   ├── gtest-death-test.cc  # Death test implementation
+│   ├── gtest-filepath.cc    # File path utilities
+│   └── gtest-port.cc        # Platform implementations
+
+googlemock/
+├── include/gmock/
+│   ├── gmock.h              # Main mock header
+│   ├── gmock-matchers.h     # Matcher combinators
+│   ├── gmock-actions.h      # Mock actions
+│   ├── gmock-spec-builders.h # Expectation building
+│   └── internal/            # Internal headers
+├── src/
+│   ├── gmock.cc
+│   ├── gmock-matchers.cc
+│   └── gmock-spec-builders.cc
+
+Your task ({task_id}):
+
+{task_text}
+
+Solve this task. Read the code you need, make your edits, and verify
+they work (run: cmake --build . --target test or ctest). When done, say "DONE".
+Do not explain your changes — just make them.
+```
+
+### Task index
+
+  - N1: Fix `EXPECT_THAT` with `ContainerEq` not showing element diff for sets
+  - N2: Add `EXPECT_NEAR` for `std::chrono::duration` types
+  - N3: Fix death test child process inheriting open file descriptors
+  - M1: Implement test fixture parameterization with named cases
+  - M2: Add async test support with timeout
+  - M3: Implement mock call sequence expectations
+  - W1: Add built-in code coverage integration
+  - W2: Implement property-based testing extension
+
+
+---
+
+## Solve Prompt
+
+The following prompt is sent to the agent for each task in this repo.
+`{task_id}` and `{task_text}` are filled per task.
+
+```
+You are working on the repository google/googletest, cloned at ranking/clones/googletest/.
+
+The repository is a C++ project. Key source locations:
+
+googletest/
+├── include/gtest/
+│   ├── gtest.h              # Main public header
+│   ├── gtest-param-test.h   # Parameterized tests
+│   ├── gtest-typed-test.h   # Typed tests
+│   ├── gtest-death-test.h   # Death tests
+│   ├── gtest-matchers.h     # Matchers
+│   └── internal/            # Internal implementation headers
+│       ├── gtest-internal.h
+│       ├── gtest-param-util.h
+│       └── gtest-port.h     # Platform abstraction
+├── src/
+│   ├── gtest.cc             # Core framework implementation
+│   ├── gtest-death-test.cc  # Death test implementation
+│   ├── gtest-filepath.cc    # File path utilities
+│   └── gtest-port.cc        # Platform implementations
+
+googlemock/
+├── include/gmock/
+│   ├── gmock.h              # Main mock header
+│   ├── gmock-matchers.h     # Matcher combinators
+│   ├── gmock-actions.h      # Mock actions
+│   ├── gmock-spec-builders.h # Expectation building
+│   └── internal/            # Internal headers
+├── src/
+│   ├── gmock.cc
+│   ├── gmock-matchers.cc
+│   └── gmock-spec-builders.cc
+
+Your task ({task_id}):
+
+{task_text}
+
+Solve this task. Read the code you need, make your edits, and verify
+they work (run: cmake --build . --target test or ctest). When done, say "DONE".
+Do not explain your changes — just make them.
+```
+
+### Task index
+
+  - N1: Fix `EXPECT_THAT` with `ContainerEq` not showing element diff for sets
+  - N2: Add `EXPECT_NEAR` for `std::chrono::duration` types
+  - N3: Fix death test child process inheriting open file descriptors
+  - M1: Implement test fixture parameterization with named cases
+  - M2: Add async test support with timeout
+  - M3: Implement mock call sequence expectations
+  - W1: Add built-in code coverage integration
+  - W2: Implement property-based testing extension

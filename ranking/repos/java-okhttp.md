@@ -142,3 +142,113 @@ handshake durations, DNS resolution times, request durations
 through a `MetricsListener` interface and provide a JMX MBean
 implementation. Add a diagnostic `dump()` method that produces a
 human-readable report of all connection pool state.
+
+
+---
+
+## Solve Prompt
+
+The following prompt is sent to the agent for each task in this repo.
+`{task_id}` and `{task_text}` are filled per task.
+
+```
+You are working on the repository square/okhttp, cloned at ranking/clones/okhttp/.
+
+The repository is a Java (Kotlin) project. Key source locations:
+
+okhttp/src/main/kotlin/okhttp3/
+├── OkHttpClient.kt       # Main client entry point
+├── Call.kt                # HTTP call abstraction
+├── Request.kt / Response.kt  # Request/response models
+├── internal/
+│   ├── connection/        # Connection pool, route selection
+│   │   ├── RealConnectionPool.kt
+│   │   ├── RouteSelector.kt
+│   │   └── Exchange.kt
+│   ├── http/              # HTTP protocol handling
+│   │   ├── RealInterceptorChain.kt
+│   │   ├── RetryAndFollowUpInterceptor.kt
+│   │   └── CallServerInterceptor.kt
+│   ├── http2/             # HTTP/2 framing
+│   ├── cache/             # Disk cache
+│   ├── tls/               # TLS, certificate pinning
+│   ├── ws/                # WebSocket implementation
+│   └── platform/          # Platform-specific (JDK, Android)
+├── Interceptor.kt         # Interceptor interface
+├── Cache.kt               # Cache API
+└── CookieJar.kt           # Cookie handling
+
+Your task ({task_id}):
+
+{task_text}
+
+Solve this task. Read the code you need, make your edits, and verify
+they work (run: run the project's test suite). When done, say "DONE".
+Do not explain your changes — just make them.
+```
+
+### Task index
+
+  - N1: Fix connection pool eviction race under high concurrency
+  - N2: Add `DNS-over-HTTPS` cache TTL support
+  - N3: Fix `EventListener.callEnd` not called on cancelled calls
+  - M1: Implement automatic retry with exponential backoff
+  - M2: Add HTTP/3 (QUIC) transport support
+  - M3: Implement response body decompression pipeline
+  - W1: Add comprehensive request/response logging interceptor
+  - W2: Implement connection health monitoring dashboard
+
+
+---
+
+## Solve Prompt
+
+The following prompt is sent to the agent for each task in this repo.
+`{task_id}` and `{task_text}` are filled per task.
+
+```
+You are working on the repository square/okhttp, cloned at ranking/clones/okhttp/.
+
+The repository is a Java (Kotlin) project. Key source locations:
+
+okhttp/src/main/kotlin/okhttp3/
+├── OkHttpClient.kt       # Main client entry point
+├── Call.kt                # HTTP call abstraction
+├── Request.kt / Response.kt  # Request/response models
+├── internal/
+│   ├── connection/        # Connection pool, route selection
+│   │   ├── RealConnectionPool.kt
+│   │   ├── RouteSelector.kt
+│   │   └── Exchange.kt
+│   ├── http/              # HTTP protocol handling
+│   │   ├── RealInterceptorChain.kt
+│   │   ├── RetryAndFollowUpInterceptor.kt
+│   │   └── CallServerInterceptor.kt
+│   ├── http2/             # HTTP/2 framing
+│   ├── cache/             # Disk cache
+│   ├── tls/               # TLS, certificate pinning
+│   ├── ws/                # WebSocket implementation
+│   └── platform/          # Platform-specific (JDK, Android)
+├── Interceptor.kt         # Interceptor interface
+├── Cache.kt               # Cache API
+└── CookieJar.kt           # Cookie handling
+
+Your task ({task_id}):
+
+{task_text}
+
+Solve this task. Read the code you need, make your edits, and verify
+they work (run: run the project's test suite). When done, say "DONE".
+Do not explain your changes — just make them.
+```
+
+### Task index
+
+  - N1: Fix connection pool eviction race under high concurrency
+  - N2: Add `DNS-over-HTTPS` cache TTL support
+  - N3: Fix `EventListener.callEnd` not called on cancelled calls
+  - M1: Implement automatic retry with exponential backoff
+  - M2: Add HTTP/3 (QUIC) transport support
+  - M3: Implement response body decompression pipeline
+  - W1: Add comprehensive request/response logging interceptor
+  - W2: Implement connection health monitoring dashboard
