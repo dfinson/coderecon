@@ -562,28 +562,50 @@ class DefEmbeddingIndex:
     ) -> np.ndarray:
         """Embed a batch of texts, return L2-normalized float16 matrix.
 
-        Unlike file embedding, per-def scaffolds are uniformly short
-        (median ~48 chars / ~14 tokens, 99.9% under 500 chars).
-        No length sorting or adaptive batching needed — a single
-        fastembed call with a large batch_size handles everything
-        efficiently.
+        Uses the same adaptive batching strategy as file embedding:
+        texts sorted by length, short texts use larger batches (ONNX
+        attention cost is quadratic in sequence length).
         """
         if not texts:
             return np.empty((0, FILE_EMBED_DIM), dtype=np.float16)
 
         total = len(texts)
-        batch_size = max(getattr(self, "_batch_size", DEF_EMBED_BATCH_SIZE), 256)
+        base_batch = getattr(self, "_batch_size", DEF_EMBED_BATCH_SIZE)
 
-        # Single fastembed call — it handles internal batching, tokenization,
-        # and ONNX inference.  No manual loop, no gc.collect() overhead.
-        all_vecs: list[np.ndarray] = []
-        for vec in self._model.embed(texts, batch_size=batch_size):
-            all_vecs.append(vec)
-            if on_progress is not None and len(all_vecs) % 500 == 0:
-                on_progress(len(all_vecs), total)
+        # Sort by length → similar-length texts batch together → less padding
+        order = sorted(range(total), key=lambda i: len(texts[i]))
+        sorted_texts = [texts[i] for i in order]
 
-        if on_progress is not None:
-            on_progress(total, total)
+        sorted_vecs: list[np.ndarray] = []
+        embedded = 0
+        gc_counter = 0
+        while embedded < total:
+            char_len = len(sorted_texts[embedded])
+            if char_len < 500:
+                batch_size = base_batch * 4
+            elif char_len < 1200:
+                batch_size = base_batch * 2
+            else:
+                batch_size = base_batch
+
+            batch = sorted_texts[embedded : embedded + batch_size]
+            vecs = list(self._model.embed(batch, batch_size=len(batch)))
+            sorted_vecs.extend(vecs)
+            embedded += len(batch)
+
+            if on_progress is not None:
+                on_progress(min(embedded, total), total)
+
+            gc_counter += 1
+            if gc_counter % 5 == 0 and embedded < total:
+                gc.collect()
+
+        # Restore original order
+        inverse = [0] * total
+        for new_pos, orig_pos in enumerate(order):
+            inverse[orig_pos] = new_pos
+
+        all_vecs = [sorted_vecs[inverse[i]] for i in range(total)]
 
         matrix = np.array(all_vecs, dtype=np.float32)
         norms = np.linalg.norm(matrix, axis=1, keepdims=True)
