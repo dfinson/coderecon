@@ -102,26 +102,6 @@ Add `.isBranded()` type guard and `.unbrand()` to strip the brand.
 Document the difference between `.brand()` (type-level only) and
 `.refine()` (runtime checks).
 
-## Wide
-
-### W1: Add schema versioning and migration
-
-Implement a system for evolving schemas over time. Add `.version(n)` to
-tag a schema version, and a `migrate(oldSchema, newSchema, transformer)`
-function that converts data validated against an older schema version to
-the new format. Support chaining migrations across multiple versions
-(v1 → v2 → v3). Include a `parseWithMigration()` method that automatically
-applies the migration chain.
-
-### W2: Implement form integration layer
-
-Add a `@zod/forms` subpackage that bridges Zod schemas to HTML form
-handling. Generate form field metadata (labels, placeholders, input types,
-validation rules) from Zod schemas. Support client-side validation that
-mirrors server-side Zod validation. Provide adapters for React Hook Form
-and Formik. Include support for multi-step forms where each step
-validates a subset of the schema.
-
 ### N4: Fix `.default()` not working with `.transform()`
 
 When chaining `.default(value).transform(fn)`, the default value is not
