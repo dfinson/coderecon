@@ -519,7 +519,7 @@ async def _harvest_graph(
                 existing.graph_seed_rank = seed_rank
             if not any(e.category == "graph" for e in existing.evidence):
                 existing.evidence.append(
-                    EvidenceRecord(category="graph", detail=detail, score=quality)
+                    EvidenceRecord(category="graph", detail=detail, score=1.0)
                 )
             continue
         if uid in candidates:
@@ -532,7 +532,7 @@ async def _harvest_graph(
             from_graph=True,
             graph_edge_type=edge_type,
             graph_seed_rank=seed_rank,
-            evidence=[EvidenceRecord(category="graph", detail=detail, score=quality)],
+            evidence=[EvidenceRecord(category="graph", detail=detail, score=1.0)],
         )
 
     log.debug(
