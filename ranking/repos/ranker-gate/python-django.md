@@ -61,16 +61,22 @@ django/
 ### N1: Fix `QuerySet.union()` ignoring `order_by()` on SQLite
 
 When using `QuerySet.union()` followed by `.order_by()`, the ORDER BY
-clause is silently dropped on SQLite backends. The SQL compiler for SQLite
-wraps unioned queries in a subquery that loses the outer ordering. Fix the
-SQLite compiler to preserve the ORDER BY clause on unioned querysets.
+clause is silently dropped on SQLite backends. The `SQLCompiler` in
+`django/db/models/sql/compiler.py` checks `supports_slicing_ordering_in_compound`
+(from `django/db/backends/base/features.py`, default `False`) and strips
+ORDER BY from compound subqueries. Fix the compiler's compound query
+assembly to preserve the outer ORDER BY clause on unioned querysets.
 
-### N2: Add `violation_error_code` to UniqueConstraint
+### N2: Fix `UniqueConstraint.validate()` not respecting `exclude` for expression-based constraints
 
-The `CheckConstraint` class supports `violation_error_code` to customize
-the validation error code raised when the constraint is violated, but
-`UniqueConstraint` does not. Add `violation_error_code` support to
-`UniqueConstraint` with the same semantics as `CheckConstraint`.
+The `UniqueConstraint.validate()` method in `django/db/models/constraints.py`
+accepts an `exclude` parameter to skip certain fields during validation,
+but when the constraint uses expressions (e.g., `Lower('name')`) instead
+of plain `fields`, the `exclude` check only compares against raw field
+names and never matches the expression's source field. Fix `validate()`
+to resolve expression references against `exclude` so that
+`instance.full_clean(exclude=['name'])` correctly skips a
+`UniqueConstraint(Lower('name'), name='...')` constraint.
 
 ### N3: Fix admin search with `__` lookups on JSONField
 
@@ -87,12 +93,16 @@ Using `F('json_field__key') + 1` in an `update()` call raises
 as valid expressions for arithmetic. Fix the expression compiler to
 support arithmetic on JSON key transforms for PostgreSQL and SQLite.
 
-### N5: Add `db_comment` parameter to model fields
+### N5: Fix `GeneratedField` not included in `dumpdata` serialization
 
-Table-level comments are supported via `Meta.db_table_comment`, but
-individual field-level database comments are not. Add a `db_comment`
-parameter to all field types that generates `COMMENT ON COLUMN` in
-migrations for PostgreSQL and MySQL.
+The `GeneratedField` class in `django/db/models/fields/generated.py`
+sets `serialize=False` by default, so `dumpdata` and
+`django/core/serializers/base.py` skip it entirely. When fixtures are
+loaded back via `loaddata`, the generated column value is lost and the
+database must recompute it — but some backends don't recompute on
+INSERT. Add a `serialize` option to `GeneratedField.__init__()` that
+defaults to `True` for `STORED` generated columns, and update
+`Serializer.serialize()` in the base serializer to include them.
 
 ### N6: Fix `prefetch_related` generating duplicate queries with `to_attr`
 
@@ -110,12 +120,16 @@ The manifest storage post-processor hashes filenames referenced in CSS
 as part of the filename. Fix the CSS pattern to strip query strings
 before resolving the referenced file.
 
-### N8: Add `natural_key` support for `loaddata` with forward references
+### N8: Fix `CompositePrimaryKey` fields not supported in admin `search_fields`
 
-When loading fixtures via `loaddata` that use `natural_key()`, forward
-references between models fail because the referenced object doesn't
-exist yet. Add deferred natural key resolution that retries unresolved
-references after all objects in the fixture are loaded.
+The `CompositePrimaryKey` field in `django/db/models/fields/composite.py`
+cannot be used in `ModelAdmin.search_fields`. When the admin's
+`get_search_results()` method in `django/contrib/admin/options.py`
+iterates `search_fields` and encounters `'pk'`, it resolves to the
+`CompositePrimaryKey` field, which has no `get_lookup('icontains')`
+support and raises `FieldError`. Fix `construct_search()` inside
+`get_search_results()` to detect `CompositePrimaryKey` and expand
+it into separate searches on each component field.
 
 ### N9: Fix `assertNumQueries` count wrong with `atomic()` savepoints
 
@@ -159,22 +173,33 @@ permissions in the admin that can be controlled by the permission system.
 This requires changes to `ModelAdmin` field rendering, form generation,
 and the admin change view.
 
-### M4: Implement query cost estimation
+### M4: Add structured output parsing for `QuerySet.explain()`
 
-Add a `QuerySet.explain()` method that returns the database query plan
-with cost estimates. Support all major backends (PostgreSQL EXPLAIN ANALYZE,
-MySQL EXPLAIN, SQLite EXPLAIN QUERY PLAN). Parse the output into a
-structured format with estimated row counts, index usage, and cost
-numbers. Add a developer mode that logs slow queries with their
-explain output.
+The existing `QuerySet.explain()` method in `django/db/models/query.py`
+returns a raw text string from the database. Add an `output='structured'`
+option that parses the plan into a Python data structure. For PostgreSQL,
+parse the JSON output of `EXPLAIN (FORMAT JSON)` into dataclasses with
+estimated rows, actual rows, cost, and index usage. For SQLite, parse
+`EXPLAIN QUERY PLAN` detail strings. Add this to the SQL compiler in
+`django/db/models/sql/compiler.py` and the backend-specific `explain`
+implementations in `django/db/backends/*/operations.py`. Include a
+middleware that auto-logs parsed explain output for queries exceeding
+a configurable duration threshold.
 
-### M5: Implement database connection health checking
+### M5: Add connection pool metrics and management command
 
-Add automatic connection health checks. Before reusing a persistent
-database connection, verify it's still alive with a lightweight query
-(SELECT 1). Support configurable health check interval to avoid checking
-on every request. Add connection pool statistics (active, idle, stale)
-accessible via a management command.
+Django has connection health checking via `CONN_HEALTH_CHECKS` in
+`django/db/backends/base/base.py` and PostgreSQL connection pooling
+via `psycopg_pool.ConnectionPool` in `django/db/backends/postgresql/base.py`,
+but there is no way to inspect pool state at runtime. Add a
+`dbconnstats` management command in `django/core/management/commands/`
+that reports per-alias pool statistics (active, idle, stale, total
+connections, health check pass/fail counts). Wire it into the
+`BaseDatabaseWrapper` class with a `get_connection_stats()` method
+that each backend overrides. For PostgreSQL, read from
+`ConnectionPool.get_stats()`. For SQLite, report single-connection state.
+Also add a `django/core/checks/database.py` system check that warns
+when `CONN_HEALTH_CHECKS` is disabled but `CONN_MAX_AGE` is set.
 
 ### M6: Add full-text search for SQLite backend
 
@@ -290,14 +315,20 @@ feature-based request routing. Include an admin interface for managing
 flags and a management command for flag lifecycle. Store flags in
 database with cache layer.
 
-### W9: Implement distributed task queue as contrib
+### W9: Add database-backed task backend with worker and admin integration
 
-Add `django.contrib.tasks` — a lightweight task queue built on Django's
-ORM. Define tasks as decorated functions, schedule them immediately or
-with delay, group them in chains/chords. Workers consume from the
-database queue. Support task priorities, retry policies, dead-letter
-queues, and result storage. Include admin views for queue monitoring.
-This crosses the ORM, management commands, admin, and signals.
+Django already has a `django.tasks` module with `Task`, `TaskResult`,
+`BaseTaskBackend`, and `ImmediateBackend`/`DummyBackend` in
+`django/tasks/backends/`. Add a new `DatabaseBackend` in
+`django/tasks/backends/database.py` that stores enqueued tasks in a
+model table, with a `runworker` management command that polls and
+executes tasks. Implement retry policies (max retries, backoff),
+dead-letter handling for permanently failed tasks, and
+task chaining (`Task.then()`). Add an admin `ModelAdmin` in
+`django/contrib/admin/` for browsing queued/running/failed tasks with
+filters by status, queue name, and priority. Wire task lifecycle into
+`django.tasks.signals`. This crosses the ORM (new models and migrations),
+management commands, admin interface, and the existing task framework.
 
 ### W10: Add comprehensive observability integration
 

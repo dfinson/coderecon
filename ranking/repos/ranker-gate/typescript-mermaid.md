@@ -34,10 +34,12 @@ packages/mermaid/src/
 │   ├── pie/             # Pie chart subsystem
 │   ├── er/              # ER diagram subsystem
 │   ├── git/             # Git graph diagram
-│   └── ...              # ~15 diagram types total
-├── rendering/           # D3-based rendering infrastructure
-├── config/              # Configuration and theming
-├── utils/               # Shared utilities
+│   └── ...              # ~25+ diagram types total
+├── rendering-util/      # D3-based rendering utilities
+├── config.ts            # Configuration module
+├── defaultConfig.ts     # Default configuration values
+├── utils.ts             # Shared utilities
+├── utils/               # Additional utility modules
 ├── mermaidAPI.ts        # Public API
 └── mermaid.ts           # Entry point
 ```
@@ -94,12 +96,15 @@ box clips the text instead of expanding to fit. The box width is
 calculated from the first line only. Fix the note renderer to compute
 width from the longest line in the note.
 
-### N6: Add `autonumber` reset syntax to sequence diagrams
+### N6: Fix ER diagram attribute column misalignment with varying type lengths
 
-Sequence diagrams support `autonumber` for message numbering but provide
-no way to reset the counter mid-diagram. Add `autonumber off` (stop
-numbering) and `autonumber restart` (reset to 1) directives. Update the
-parser and renderer to handle the new keywords.
+In ER diagrams, the `drawAttributes` function in `erRenderer.js` positions
+attribute type, name, key, and comment text nodes row by row independently.
+When an entity has attributes with significantly different type name lengths
+(e.g., `varchar(255)` vs `int`), the name column is not vertically aligned
+because each row offsets the name text relative to its own type text width.
+Fix `drawAttributes` to pre-compute the maximum width for each column across
+all attributes and use those widths for consistent column positioning.
 
 ### N7: Fix pie chart legend overlapping the chart on small viewports
 
@@ -116,20 +121,23 @@ parentheses are truncated at the first special character. The parser
 treats these characters as syntax delimiters. Fix the state diagram
 parser to support escaped or quoted transition labels.
 
-### N9: Add color customization for individual flowchart nodes
+### N9: Fix Kanban card label overflow beyond column boundary
 
-Add per-node styling syntax to flowcharts:
-`A[Label]:::customClass` where `customClass` is defined in the diagram
-or theme. Currently only global theme colors apply. Fix the flowchart
-renderer to apply per-node CSS classes.
+In the Kanban diagram renderer (`kanbanRenderer.ts`), card item nodes are
+created via `insertNode` without constraining their width to the parent
+column. When a card's label text is longer than the column width, the
+rendered node extends beyond the column's right edge and overlaps adjacent
+columns. Fix the renderer to set a maximum width on item nodes relative
+to the computed column width before calling `insertNode`.
 
-### N10: Fix Git graph displaying branch names in wrong order
+### N10: Fix git graph commit labels overlapping on closely spaced commits
 
-In the git graph diagram, branch names in the legend appear in creation
-order rather than the order they appear in the diagram definition.
-When branches are defined in a specific order for clarity, the legend
-doesn't respect that order. Fix the legend renderer to use definition
-order.
+In the git graph renderer (`gitGraphRenderer.ts`), the `drawCommitLabel`
+function positions commit message labels horizontally below each commit
+point. When commits on the same branch are closely spaced, labels overlap
+because the positioning does not account for adjacent label widths. Fix
+the label positioning to detect bounding box collisions between adjacent
+commit labels and stagger them vertically when overlap occurs.
 
 ## Medium
 
@@ -142,13 +150,16 @@ distinct style (bold border or different color). Add a `criticalPath`
 theme configuration option. Include tests for various dependency graph
 topologies.
 
-### M2: Add interactive click handlers to diagram elements
+### M2: Add xychart axis gridline customization
 
-Implement a click handler system that allows diagram authors to attach
-click callbacks or navigation URLs to diagram elements. Support
-`click nodeId callback "tooltip"` syntax across flowcharts, class
-diagrams, and state diagrams. The SVG output should include proper
-cursor styling and ARIA attributes. Sanitize URLs to prevent XSS.
+The xychart diagram renders axes with default gridlines that use hardcoded
+styles. Add configuration properties for gridline appearance: `showGridLines`
+(boolean, per axis), `gridLineColor`, `gridLineDashArray`, and
+`gridLineWidth`. These properties should be configurable via the diagram
+definition syntax and the theme. Requires updates to the xychart chart
+builder components in `chartBuilder/`, `xychartDb.ts` for configuration
+storage, and `xychartRenderer.ts` to apply the configured styles during
+D3 axis rendering.
 
 ### M3: Implement diagram diff visualization
 
@@ -181,13 +192,15 @@ sequence diagrams, and class diagrams. Handle node labels, edge
 relationships, and styling. This enables round-tripping between visual
 editing and text editing.
 
-### M7: Add timeline diagram type
+### M7: Add radar diagram custom axis scale ranges
 
-Implement a new timeline diagram type for visualizing chronological
-events. Support horizontal and vertical layouts, event grouping by
-category, date-based positioning (auto-spaced by time intervals),
-milestone markers, and period spans (events that span a time range).
-Includes parser, data model, and D3-based renderer.
+The radar diagram (`diagrams/radar/`) renders axes with auto-scaled values
+derived from data bounds. Add per-axis configuration for minimum, maximum,
+and step values via syntax like `axis "Speed" min 0 max 100 step 20`.
+When custom scales are specified, the renderer should use the given range
+and draw tick marks at the specified intervals instead of auto-fitting.
+Requires changes to the parser (`parser.ts`), database (`db.ts`), type
+definitions (`types.ts`), and renderer (`renderer.ts`).
 
 ### M8: Add diagram export to multiple formats
 
@@ -205,13 +218,15 @@ error is encountered, skip to the next valid statement and continue
 parsing. Render the valid portions of the diagram and highlight the
 error locations with inline error indicators.
 
-### M10: Add sequence diagram parallel execution blocks
+### M10: Add quadrant-chart per-quadrant color and label customization
 
-Implement `par` / `and` / `end` syntax in sequence diagrams for
-visualizing parallel message flows. Parallel blocks should be rendered
-with a labeled frame showing "par" at the top, with each parallel flow
-separated by a horizontal dashed line labeled "and". Support nested
-parallel blocks.
+The quadrant chart renders four quadrants with uniform styling from the
+theme. Add syntax for customizing individual quadrant background colors
+and label font styles (e.g., `quadrant-1 color #ff0000 font-size 14`).
+Support gradient fills between adjacent quadrants. Requires changes to
+`quadrantBuilder.ts` for style configuration, `quadrantDb.ts` for
+parsing and storing per-quadrant styles, the parser for new syntax rules,
+and `quadrantRenderer.ts` to apply custom colors and fonts during rendering.
 
 ## Wide
 

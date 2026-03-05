@@ -22,23 +22,32 @@
 ## Structure overview
 
 ```
-src/
-├── ZodError.ts          # Error types and formatting
-├── types.ts             # Core schema types (ZodString, ZodNumber, ZodObject, etc.)
-├── helpers/             # Utility types and functions
-│   ├── parseUtil.ts     # Parse context and issue handling
-│   ├── typeAliases.ts   # Shared type aliases
-│   └── util.ts          # General utilities
-├── locales/             # Error message localization
-├── external.ts          # Public API re-exports
-└── index.ts             # Entry point
+packages/zod/src/
+├── v3/                        # Zod v3 (stable)
+│   ├── ZodError.ts            # Error types and formatting
+│   ├── types.ts               # Core schema types (ZodString, ZodNumber, ZodObject, etc.)
+│   ├── errors.ts              # Default error map
+│   ├── helpers/               # Utility types and functions
+│   │   ├── parseUtil.ts       # Parse context and issue handling
+│   │   ├── partialUtil.ts     # Deep partial type utilities
+│   │   ├── typeAliases.ts     # Shared type aliases
+│   │   └── util.ts            # General utilities
+│   ├── external.ts            # Public API re-exports
+│   ├── standard-schema.ts     # Standard schema interop
+│   └── index.ts               # Entry point
+├── v4/                        # Zod v4
+│   ├── core/                  # Core schemas, parse, checks, errors, JSON schema, registries
+│   ├── classic/               # Classic API layer (compat, coerce, from-json-schema)
+│   ├── mini/                  # Minimal API layer
+│   └── locales/               # Error message localization (~50 languages)
+└── index.ts                   # Root entry point
 ```
 
 ## Scale indicators
 
-- ~30 TypeScript source files
-- ~12K lines of code
-- Flat module structure, single conceptual domain
+- ~60 TypeScript source files (v3 + v4)
+- ~15K lines of code
+- Monorepo with v3 and v4 under `packages/zod/`
 - Zero runtime dependencies
 
 ---
@@ -57,13 +66,15 @@ as required. The transform wrapper loses the `isOptional()` flag during
 the partial conversion. Fix `.partial()` to preserve optionality through
 transform chains.
 
-### N2: Add `.readonly()` modifier for object schemas
+### N2: Fix `deepPartialify` not unwrapping `ZodDefault` before recursing
 
-Add a `.readonly()` method to `ZodObject` that produces a TypeScript type
-with all properties marked as `readonly`. The runtime behavior should be
-identical (no Object.freeze), but the inferred type should use
-`Readonly<T>`. Support nesting: `.readonly()` on an object with nested
-objects should make all levels readonly.
+The `deepPartialify` helper in `types.ts` handles `ZodObject`, `ZodArray`,
+`ZodOptional`, `ZodNullable`, and `ZodTuple` but has no branch for
+`ZodDefault`. When a nested object field is wrapped with `.default({})`,
+calling `.deepPartial()` on the parent stops recursion at the `ZodDefault`
+layer and the inner object's properties remain required. Add a `ZodDefault`
+branch to `deepPartialify` that calls `removeDefault()` and recurses into
+the unwrapped inner schema.
 
 ### N3: Fix error path for discriminated union with nested objects
 
@@ -89,13 +100,15 @@ creates a fresh internal definition without copying the description
 property from the inner schema. The description should propagate
 through optional, nullable, and default wrappers.
 
-### N6: Accept `readonly` tuple arrays in `z.enum()`
+### N6: Fix `ZodObject.merge()` silently discarding `description` and `errorMap`
 
-`z.enum()` requires a mutable tuple type but TypeScript `as const`
-assertions produce `readonly` tuples. Passing a `readonly` array
-causes a type error at the call site. Widen the type signature to
-accept `Readonly` tuple types so that `z.enum(["a", "b"] as const)`
-compiles without a manual cast.
+When merging two `ZodObject` schemas where the incoming schema has a
+`.describe()` annotation or a custom `errorMap`, the resulting merged
+schema drops these properties. The `merge()` method in `types.ts`
+constructs a new `ZodObject` with only `unknownKeys`, `catchall`,
+`shape`, and `typeName` but omits `description` and `errorMap` from
+either definition. Fix `merge()` to propagate the incoming schema's
+metadata fields.
 
 ### N7: Fix `z.preprocess()` not forwarding preprocessed value to refinements
 
@@ -114,13 +127,14 @@ schema does not accept `undefined`, validation should fail for each
 sparse index with a clear path indicating the missing position rather
 than silently coercing the hole.
 
-### N9: Add `.duration()` string validator for ISO 8601 durations
+### N9: Fix `ZodLiteral` equality check failing for `NaN` literal values
 
-Add `z.string().duration()` that validates ISO 8601 duration strings
-such as `P1Y2M3DT4H5M6S`. Reject malformed patterns including missing
-`P` prefix, time components without `T` separator, and negative values.
-Add the corresponding error code to the `ZodIssueCode` enum and a
-default error message in the locale file.
+`ZodLiteral._parse()` uses strict equality (`!==`) to compare the input
+against the stored literal value. Since `NaN !== NaN` in JavaScript,
+`z.literal(NaN)` always rejects `NaN` inputs even though the value
+matches the schema intent. Fix the comparison in `ZodLiteral._parse()`
+in `types.ts` to use `Object.is()` so that `NaN` literal schemas
+correctly accept `NaN` inputs.
 
 ### N10: Fix `.pipe()` producing incorrect inferred output type with transforms
 
@@ -132,32 +146,38 @@ the inferred type matches the final transform output.
 
 ## Medium
 
-### M1: Implement async refinements with `.superRefine()`
+### M1: Add closest-match error surfacing to `ZodUnion` validation failures
 
-The current `.refine()` and `.superRefine()` methods only support synchronous
-validation functions. Implement async variants (`.refineAsync()` already
-exists but `.superRefine()` doesn't have an async path). Async refinements
-should run in parallel where possible, collect all errors before returning,
-and work with `.safeParseAsync()`. Update the parse pipeline to detect
-when async refinements are present and require `.parseAsync()`.
+When none of a `ZodUnion`'s branches match, it currently collects errors
+from every member schema into a single `invalid_union` issue, which
+overwhelms users when the union has many branches. Implement a scoring
+heuristic in `ZodUnion._parse()` that identifies the branch whose
+validation progressed furthest (fewest or latest-path issues) and
+surfaces only that branch's errors. Add a `closest_match` option to the
+union definition, a new `invalid_union_closest` code in `ZodIssueCode`
+in `ZodError.ts`, and a default message in `errors.ts`.
 
-### M2: Add JSON Schema generation
+### M2: Add size constraint methods to `ZodMap`
 
-Implement a `.toJsonSchema()` method on all Zod schema types that produces
-a valid JSON Schema (draft-2020-12) representation. Handle string formats,
-numeric constraints, object properties, arrays (tuple and variable-length),
-unions (including discriminated unions), enums, and recursive schemas
-(using `$ref`). Add configuration for custom format mappings and
-additional keywords.
+`ZodSet` supports `.min()`, `.max()`, `.size()`, and `.nonempty()` with
+`minSize`/`maxSize` fields in its definition, but `ZodMap` has no size
+constraints at all. Add `minSize` and `maxSize` optional fields to
+`ZodMapDef`, implement size checks in `ZodMap._parse()` using the
+existing `too_small`/`too_big` issue codes, and add chainable `.min()`,
+`.max()`, `.size()`, and `.nonempty()` methods mirroring the `ZodSet`
+API. Update the `map` type in the size-related issue type unions in
+`ZodError.ts` and add default error messages in `errors.ts`.
 
-### M3: Implement branded types with runtime validation
+### M3: Add multi-key discriminator support to `ZodDiscriminatedUnion`
 
-Add a `.brand<B>()` method that creates a branded type — a type that is
-assignable only from validated values, not from plain literals. The
-branded type should carry a phantom brand in the TypeScript type system.
-Add `.isBranded()` type guard and `.unbrand()` to strip the brand.
-Document the difference between `.brand()` (type-level only) and
-`.refine()` (runtime checks).
+The current `ZodDiscriminatedUnion` accepts only a single `discriminator`
+string key. Add support for an array of discriminator keys so that
+multi-field discrimination works (e.g., discriminating on both `type`
+and `version`). Update the `getDiscriminator()` helper to resolve
+compound keys, modify the discriminator map construction in
+`ZodDiscriminatedUnion.create()` to build a nested lookup, and adjust
+`_parse()` to match on all keys. Add an error for partial discriminator
+matches in `ZodError.ts` and a default message in `errors.ts`.
 
 ### M4: Implement conditional schema selection with `z.switch()`
 
@@ -208,25 +228,29 @@ property names mapped to their schema descriptors. For `ZodUnion` and
 `SchemaDescriptor` type hierarchy that allows programmatic analysis of
 any schema's structure without relying on internal properties.
 
-### M9: Add `z.templateLiteral()` for template string validation
+### M9: Add constraint methods to `ZodSymbol`
 
-Implement a new schema type that validates strings against TypeScript
-template literal patterns. `z.templateLiteral([z.literal("user-"),
-z.number()])` should validate strings like `"user-42"` and infer the
-type as `` `user-${number}` ``. Support embedding string, number, and
-literal schemas as template segments. Parse by matching segments
-left-to-right and validating each extracted substring against its
-corresponding schema.
+`ZodSymbol` currently only validates that the input has type `symbol`
+with no further constraints. Add `.hasDescription(desc)` that validates
+`Symbol.description` matches a given string, `.oneOf(symbols)` that
+restricts to a specific set of well-known symbols, and `.global(key)`
+that validates the input equals `Symbol.for(key)`. Update the
+`ZodSymbolDef` interface in `types.ts` with a checks array, add parse
+logic mirroring the check-iteration pattern used by `ZodString`, and
+add a new `invalid_symbol` issue code in `ZodError.ts` with a default
+message in `errors.ts`.
 
-### M10: Extend the `z.coerce` namespace with missing primitive types
+### M10: Add coercion failure detail tracking to `ZodError`
 
-Add `z.coerce.bigint()` that coerces string and number inputs to
-`BigInt`, failing on non-integer numbers and non-numeric strings. Add
-configurable coercion options to existing schemas: `z.coerce.number({
-nanToZero: true })` that maps `NaN` to `0`, and `z.coerce.string({
-nullToEmpty: true })` that maps `null` to the empty string. Update the
-type definitions, add coercion-specific error codes, and add default
-messages in the locale file.
+When a coerced schema like `z.coerce.number()` receives a non-numeric
+string, the error says "Expected number, received string" — the original
+pre-coercion value is lost. Add an `invalid_coercion` variant to
+`ZodIssueCode` in `ZodError.ts` that carries the original raw value and
+the target coercion type. Update the coercion branches in `ZodString`,
+`ZodNumber`, `ZodBigInt`, `ZodBoolean`, and `ZodDate` in `types.ts` to
+emit this issue code instead of `invalid_type` when coercion fails. Add
+a default message in `errors.ts` and update `helpers/parseUtil.ts` to
+include the raw value in the issue context.
 
 ## Wide
 

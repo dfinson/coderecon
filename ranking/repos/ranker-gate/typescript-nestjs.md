@@ -65,13 +65,15 @@ Add the full module → module → ... → module chain to the error message
 so developers can immediately identify which module imports create the
 cycle.
 
-### N2: Add `@Version()` decorator for controller method versioning
+### N2: Fix `ParseEnumPipe.isEnum()` including reverse-mapped keys for numeric enums
 
-NestJS supports URI versioning at the controller level but individual
-methods cannot override the controller's version. Add a `@Version()`
-method decorator that overrides the controller-level version for a
-specific endpoint. The decorator should work with all versioning
-strategies (URI, header, media type).
+The `ParseEnumPipe` in `packages/common/pipes/parse-enum.pipe.ts`
+validates input using `Object.keys(enumType).map(item =>
+enumType[item])`. For numeric TypeScript enums, `Object.keys()` returns
+both the string keys and the numeric reverse-mapped values. The mapped
+values then include both the numeric values and the original string
+keys, so `isEnum()` accepts values it should reject. Fix `isEnum()` to
+filter out reverse-mapped entries when validating numeric enums.
 
 ### N3: Fix `@UseInterceptors()` ordering with global interceptors
 
@@ -112,12 +114,14 @@ target module is a dynamic module (created via `register()` or
 dependencies." The forward reference resolver does not handle the
 `DynamicModule` wrapper. Fix the resolver to unwrap dynamic modules.
 
-### N8: Add `@Header()` decorator for response header setting
+### N8: Fix `DefaultValuePipe` not applying default when value is empty string
 
-Controllers can read request headers with `@Headers()` but cannot
-declaratively set response headers. Add `@Header('X-Custom', 'value')`
-method decorator that sets response headers before the response is sent.
-Support dynamic values via a factory function.
+The `DefaultValuePipe` in `packages/common/pipes/default-value.pipe.ts`
+only applies the default when the value is `null`, `undefined`, or
+`NaN`. When a query parameter is present but empty (e.g., `?name=`),
+the pipe passes through the empty string `""` instead of the default
+value. Add an `includeEmptyStrings` option that treats empty strings as
+missing values and applies the default.
 
 ### N9: Fix `ExceptionFilter` not catching errors from async guards
 
@@ -126,40 +130,57 @@ When an async guard throws an error, the exception filter registered via
 happens before the filter chain is established. Fix the execution
 context to wrap guard execution in the exception filter chain.
 
-### N10: Fix `@Param()` type coercion not working with `ParseIntPipe` on optional params
+### N10: Fix `SseStream` not forwarding `Last-Event-ID` to reconnecting clients
 
-When a route parameter is optional (`/:id?`) and `ParseIntPipe` is
-applied, absent parameters cause the pipe to throw instead of allowing
-`undefined` through. Fix `ParseIntPipe` to respect optional parameter
-semantics.
+The SSE implementation in `RouterResponseController`
+(`packages/core/router/router-response-controller.ts`) handles SSE
+streaming via `SseStream` (`packages/core/router/sse-stream.ts`) but
+does not read the `Last-Event-ID` header from reconnecting clients.
+When a client reconnects after a network interruption, the handler
+receives no information about which events were already delivered. Fix
+the SSE setup to extract `Last-Event-ID` from the incoming request and
+expose it to the observable factory so handlers can resume from the
+correct event.
 
 ## Medium
 
-### M1: Implement request-scoped caching
+### M1: Add provider dependency cycle visualization to `GraphInspector`
 
-The current `CacheModule` uses a single shared cache store that doesn't
-distinguish between requests. Implement request-scoped caching that
-supports per-request cache keys (incorporating user identity, locale,
-etc.). Add a `@CacheScope()` decorator to mark which request properties
-contribute to the cache key. Support TTL and invalidation through the
-existing cache manager interface.
+The `GraphInspector` in `packages/core/inspector/graph-inspector.ts`
+builds a serialized dependency graph (`SerializedGraph`) from the DI
+container but does not detect or visualize provider-level dependency
+cycles. When a `CircularDependencyException` is thrown from
+`packages/core/errors/exceptions/circular-dependency.exception.ts`,
+developers see only a text message without structural context. Extend
+`GraphInspector.inspectModules()` to detect cycles in the serialized
+graph edges and annotate them. Add a `getCycles()` method to
+`SerializedGraph` that returns all detected cycles as ordered paths of
+provider tokens and module names.
 
-### M2: Add health check aggregation for microservice architectures
+### M2: Add graceful shutdown timeout for microservice server transports
 
-Extend `@nestjs/terminus` health checks to support aggregating health
-status from downstream microservices. When a service depends on other
-NestJS microservices, the health check should recursively query their
-health endpoints and aggregate the results into a tree. Add
-timeout and circuit-breaker protection for downstream health checks.
+The abstract `Server` class in `packages/microservices/server/server.ts`
+defines a `close()` method that each transport implements (e.g.,
+`ServerTCP`, `ServerRedis`, `ServerKafka`), but there is no configurable
+shutdown timeout. When `close()` is called, in-flight message handlers
+may never complete, leaving the process hanging. Add a configurable
+`shutdownTimeout` option to the `Server` base class. When the timeout
+expires during `close()`, force-disconnect the transport and log a
+warning. Implement the timeout in `ServerTCP`, `ServerRedis`, and
+`ServerKafka`.
 
-### M3: Implement typed event emitter with DI integration
+### M3: Add request-scoped provider lazy initialization to the DI container
 
-The current `EventEmitter2` integration lacks TypeScript type safety
-for event payloads. Implement a typed event system where event names
-are mapped to payload types via a registry interface. Events should
-be injectable as dependencies. Add support for async event handlers
-with configurable concurrency limits. Include dead letter handling
-for failed event processing.
+The `Injector` in `packages/core/injector/injector.ts` eagerly creates
+request-scoped provider instances when a request enters the pipeline,
+even if those providers are never used during that request. For
+applications with many request-scoped providers, this adds unnecessary
+overhead. Add a `lazy: true` option to `@Injectable({ scope:
+Scope.REQUEST, lazy: true })` that defers instantiation until the
+provider is first accessed. Implement lazy proxies in the
+`InstanceWrapper` (`packages/core/injector/instance-wrapper.ts`) and
+update the `ModuleRef.resolve()` method
+(`packages/core/injector/module-ref.ts`) to support lazy resolution.
 
 ### M4: Add OpenTelemetry auto-instrumentation
 
@@ -169,29 +190,48 @@ interceptor chains, and provider method calls. Propagate trace context
 through the DI container. Add a `@Span()` decorator for custom spans.
 Support both HTTP and microservice transports.
 
-### M5: Implement database migration management module
+### M5: Add exclude patterns to `MiddlewareModule` route matching
 
-Add `@nestjs/migrations` that provides a Nest-native database migration
-system. Support migration generation from entity diff, up/down
-execution, migration locking for concurrent deployments, dry-run mode,
-and a CLI for migration commands. Integrate with TypeORM and Sequelize
-entity definitions.
+The `MiddlewareModule` in `packages/core/middleware/middleware-module.ts`
+applies middleware using route configurations from the
+`MiddlewareBuilder`. The `RouteInfoPathExtractor`
+(`packages/core/middleware/route-info-path-extractor.ts`) resolves route
+paths but the exclude patterns configured via
+`MiddlewareConsumer.exclude()` use simple string matching in
+`RoutesMapper` (`packages/core/middleware/routes-mapper.ts`). Routes
+with path parameters (e.g., `/users/:id`) in the exclude list don't
+match against actual parameterized requests. Fix the exclude matching
+to use path-to-regexp pattern matching consistent with the router,
+affecting `RoutesMapper`, `RouteInfoPathExtractor`, and
+`MiddlewareModule`.
 
-### M6: Add config validation with typed schemas
+### M6: Add per-transport serialization configuration for microservice clients
 
-Enhance `ConfigModule` with Zod/Joi schema validation at startup. When
-config validation fails, provide clear error messages listing which
-environment variables are missing or invalid. Support nested config
-namespaces, default values, and typed config getters that return the
-validated type.
+The `ClientProxy` base class in
+`packages/microservices/client/client-proxy.ts` accepts a single
+`serializer` and `deserializer` for all message patterns. When a
+microservice communicates with multiple remote services that use
+different serialization formats (e.g., JSON for some patterns,
+MessagePack for others), there is no way to configure per-pattern
+serialization. Add pattern-based serializer resolution to `ClientProxy`
+and update the concrete clients (`ClientTCP` in
+`packages/microservices/client/client-tcp.ts`, `ClientRedis` in
+`packages/microservices/client/client-redis.ts`, `ClientNats` in
+`packages/microservices/client/client-nats.ts`) to route messages
+through the appropriate serializer based on the message pattern.
 
-### M7: Implement API rate limiting with distributed state
+### M7: Add execution context metadata to REPL debug output
 
-Add `@nestjs/throttler` improvements: sliding window algorithm (replacing
-fixed window), distributed rate limiting via Redis with atomic operations,
-per-user rate limits (not just per-IP), rate limit categories (different
-limits for authenticated vs anonymous), and a dashboard endpoint showing
-current rate limit states.
+The REPL module (`packages/core/repl/`) provides `debug()` and
+`methods()` native functions for introspection, but the debug output
+from `ReplContext` (`packages/core/repl/repl-context.ts`) only shows
+provider and controller names without execution metadata. Extend the
+`debugRegistry` to include each provider's scope
+(`DEFAULT`/`REQUEST`/`TRANSIENT`), registered lifecycle hooks
+(`onModuleInit`, `onModuleDestroy`, etc.), and applied enhancers
+(guards, interceptors, pipes). Update the `DebugReplFn` in
+`packages/core/repl/native-functions/` to format and display this
+information.
 
 ### M8: Add request context propagation across async boundaries
 
@@ -200,19 +240,35 @@ async operations using `AsyncLocalStorage`. The context should be
 available in all services, repositories, and event handlers spawned
 during request processing, without explicit parameter passing.
 
-### M9: Implement CQRS event replay and projections
+### M9: Add `TestingModuleBuilder.overrideInterceptor()` for test isolation
 
-Add event replay capability to the CQRS module. Store events in an event
-store (database-backed), support replaying events from a specific
-timestamp to rebuild projections, add transaction-scoped event publishing,
-and implement snapshot support for long event streams.
+The `TestingModuleBuilder` in
+`packages/testing/testing-module.builder.ts` supports
+`overrideProvider()` and `overrideModule()` for test isolation, but
+there is no dedicated API for overriding interceptors. Developers must
+use `overrideProvider()` with the interceptor class token, which doesn't
+work for globally registered interceptors set via
+`app.useGlobalInterceptors()`. Add
+`overrideInterceptor(type).useClass(mock)` and
+`overrideGuard(type).useClass(mock)` methods to `TestingModuleBuilder`.
+Update `TestingModule` (`packages/testing/testing-module.ts`) and
+`TestingInjector` (`packages/testing/testing-injector.ts`) to intercept
+global enhancer registration.
 
-### M10: Add API documentation generation with examples
+### M10: Add `DiscoveryService` method-level metadata scanning
 
-Extend `@nestjs/swagger` to auto-generate request/response examples from
-DTOs. Infer example values from `class-validator` decorators (e.g.,
-`@IsEmail()` → `"user@example.com"`). Support custom examples via
-decorator. Add API playground with editable request bodies.
+The `DiscoveryService` in
+`packages/core/discovery/discovery-service.ts` discovers providers and
+controllers by class-level metadata using
+`DiscoverableMetaHostCollection`, but has no built-in support for
+discovering method-level decorators across all controllers. Scanning
+method metadata requires manually iterating controllers and using
+`MetadataScanner` (`packages/core/metadata-scanner.ts`). Add
+`getMethodsByDecorator(decorator)` to `DiscoveryService` that returns
+all methods across all controllers decorated with a given
+`DiscoverableDecorator`, including the parent `InstanceWrapper`, method
+key, and metadata value. Integrate with the existing
+`DiscoverableMetaHostCollection` for efficient lookups.
 
 ## Wide
 
@@ -225,14 +281,24 @@ and middleware into the host's module tree. Handle version conflicts,
 shared dependencies, and graceful degradation when remote modules are
 unavailable.
 
-### W2: Add first-class multi-database support
+### W2: Add unified error serialization across HTTP, WebSocket, and microservice contexts
 
-Implement native support for applications that connect to multiple
-databases simultaneously. Each module should be able to declare which
-database connection it uses. Add a `@Database('name')` decorator for
-providers. Support cross-database transactions where possible. Update
-the TypeORM, Mongoose, and Sequelize integrations to support named
-connections. Add test utilities for multi-database test isolation.
+Error handling is implemented separately in each execution context:
+`ExceptionsHandler` for HTTP (`packages/core/exceptions/`),
+`WsExceptionsHandler` for WebSockets
+(`packages/websockets/exceptions/ws-exceptions-handler.ts`), and
+`RpcExceptionsHandler` for microservices
+(`packages/microservices/exceptions/rpc-exceptions-handler.ts`). Each
+uses different error shapes, serialization formats, and exception filter
+chains. Implement a shared `ErrorSerializationStrategy` interface that
+normalizes error responses across all contexts. Add a configurable error
+serializer to the `ApplicationConfig`
+(`packages/core/application-config.ts`) that HTTP, WS, and RPC
+exception handlers all consume. Support consistent error codes,
+structured error metadata, and stack trace filtering across
+`ExternalExceptionsHandler`
+(`packages/core/exceptions/external-exceptions-handler.ts`),
+`WsExceptionsHandler`, and `RpcExceptionsHandler`.
 
 ### W3: Migrate microservice transports to a unified streaming API
 
@@ -297,11 +363,20 @@ tenant-aware repository injection, and admin APIs for tenant lifecycle
 management. Support tenant-aware migrations and cross-tenant queries
 for admin operations.
 
-### W10: Implement GraphQL federation gateway
+### W10: Add cross-platform versioning support for WebSocket gateways and microservice handlers
 
-Add `@nestjs/graphql-federation` that implements Apollo Federation v2.
-Support `@key`, `@requires`, `@provides`, and `@external` directives.
-Implement a gateway that composes schemas from multiple NestJS
-microservices, routes queries to the appropriate subgraph, and handles
-entity resolution across subgraphs. Include dev tools for schema
-composition validation and query planning visualization.
+The versioning system (URI, header, media type, custom via
+`VersioningType` in `packages/common/enums/version-type.enum.ts`) only
+works for HTTP routes through `RoutePathFactory`
+(`packages/core/router/route-path-factory.ts`) and `RouterExplorer`
+(`packages/core/router/router-explorer.ts`). WebSocket gateways
+(`packages/websockets/web-sockets-controller.ts`,
+`packages/websockets/gateway-metadata-explorer.ts`) and microservice
+message handlers (`packages/microservices/server/server.ts`,
+`packages/microservices/context/rpc-context-creator.ts`) have no
+versioning support. Extend the `@Version()` decorator
+(`packages/common/decorators/core/version.decorator.ts`) to work on
+gateway `@SubscribeMessage()` handlers and microservice
+`@MessagePattern()` handlers. Implement version-aware message routing
+in `WebSocketsController` and the `Server` base class, with version
+extraction from message metadata or headers.
