@@ -22,6 +22,8 @@ def create_app(
     controller: ServerController,
     repo_root: Path,
     coordinator: IndexCoordinatorEngine,
+    *,
+    dev_mode: bool = False,
 ) -> Starlette:
     """Create the Starlette application with MCP server mounted."""
     from codeplane.mcp.context import AppContext
@@ -42,7 +44,7 @@ def create_app(
         tantivy_path=codeplane_dir / "tantivy",
         coordinator=coordinator,
     )
-    mcp = create_mcp_server(context)
+    mcp = create_mcp_server(context, dev_mode=dev_mode)
     mcp_app = mcp.http_app(path="/mcp", transport="streamable-http")
     routes.append(Mount("/", app=mcp_app))
 

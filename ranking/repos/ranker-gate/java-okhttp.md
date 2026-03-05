@@ -25,7 +25,7 @@
 ## Structure overview
 
 ```
-okhttp/src/main/kotlin/okhttp3/
+okhttp/src/commonJvmAndroid/kotlin/okhttp3/
 ├── OkHttpClient.kt       # Main client entry point
 ├── Call.kt                # HTTP call abstraction
 ├── Request.kt / Response.kt  # Request/response models

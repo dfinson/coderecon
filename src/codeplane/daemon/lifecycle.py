@@ -166,6 +166,8 @@ async def run_server(
     repo_root: Path,
     coordinator: IndexCoordinatorEngine,
     config: CodePlaneConfig,
+    *,
+    dev_mode: bool = False,
 ) -> None:
     """Run the daemon until shutdown signal."""
     from codeplane.daemon.app import create_app
@@ -190,7 +192,7 @@ async def run_server(
         indexer_config=config.indexer,
     )
 
-    app = create_app(controller, repo_root, coordinator)
+    app = create_app(controller, repo_root, coordinator, dev_mode=dev_mode)
 
     # Configure uvicorn with graceful shutdown
     uvicorn_config = uvicorn.Config(

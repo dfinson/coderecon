@@ -86,7 +86,7 @@ def _enrich_tool_descriptions(mcp: "FastMCP") -> None:
             enriched_count += 1
 
 
-def create_mcp_server(context: "AppContext") -> "FastMCP":
+def create_mcp_server(context: "AppContext", *, dev_mode: bool = False) -> "FastMCP":
     """Create FastMCP server with all tools wired to context.
 
     Args:
@@ -131,7 +131,7 @@ def create_mcp_server(context: "AppContext") -> "FastMCP":
     checkpoint.register_tools(mcp, context)
     diff.register_tools(mcp, context)
     edit.register_tools(mcp, context)
-    recon.register_tools(mcp, context)
+    recon.register_tools(mcp, context, dev_mode=dev_mode)
     refactor.register_tools(mcp, context)
     introspection.register_tools(mcp, context)
 

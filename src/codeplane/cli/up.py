@@ -111,7 +111,12 @@ def _print_banner(
     is_flag=True,
     help="Wipe and rebuild the entire index from scratch",
 )
-def up_command(path: Path | None, port: int | None, reindex: bool) -> None:
+@click.option(
+    "--dev-mode",
+    is_flag=True,
+    help="Enable development tools (recon_raw_signals endpoint)",
+)
+def up_command(path: Path | None, port: int | None, reindex: bool, dev_mode: bool) -> None:
     """Start the CodePlane server for this repository.
 
     If already running, reports the existing instance. Runs in foreground.
@@ -238,7 +243,7 @@ def up_command(path: Path | None, port: int | None, reindex: bool) -> None:
     sys.unraisablehook = _suppress_event_loop_closed
 
     try:
-        asyncio.run(run_server(repo_root, coordinator, config))
+        asyncio.run(run_server(repo_root, coordinator, config, dev_mode=dev_mode))
     except KeyboardInterrupt:
         click.echo("\nStopped")
     finally:

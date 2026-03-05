@@ -104,13 +104,13 @@ Removing entries from the `Set` returned by `JsonObject.entrySet()` correctly re
 
 When `Gson.fromJson(Reader, Type)` encounters a `JsonSyntaxException` partway through parsing, it propagates the exception without closing the provided `Reader`. Callers using try-with-resources on the `Gson` call itself have no opportunity to close the reader. Fix the method to close the reader in all exceptional paths.
 
-### N9: Fix `@Expose` not inherited from superclass fields
+### N9: Fix `LazilyParsedNumber.equals()` not comparing values numerically
 
-When a class enables `excludeFieldsWithoutExposeAnnotation()` and extends a superclass whose fields are annotated with `@Expose`, the superclass fields are excluded because the annotation lookup does not walk the class hierarchy. Fix `Excluder` to check inherited annotations on fields declared in parent classes.
+`LazilyParsedNumber.equals()` compares the underlying string representation directly, so `new LazilyParsedNumber("1.0").equals(new LazilyParsedNumber("1.00"))` returns `false`. This is inconsistent with `JsonPrimitive.equals()`, which uses `BigDecimal.compareTo()` to treat scale-different decimals as equal. When Gson parses a JSON number, it stores it internally as a `LazilyParsedNumber`, so calling `getAsNumber().equals(other.getAsNumber())` on two primitives with the same logical value but different text can return `false`. Fix `LazilyParsedNumber.equals()` to compare numerically via `BigDecimal.compareTo()` and update `hashCode()` to use a scale-independent representation.
 
-### N10: Fix `JsonPrimitive.equals()` inconsistency for `BigDecimal` values
+### N10: Fix `JsonPrimitive.getAsInt()` silently truncating out-of-range values
 
-`new JsonPrimitive(new BigDecimal("1.0")).equals(new JsonPrimitive(new BigDecimal("1.00")))` returns `false` because `BigDecimal.equals()` considers scale. This contradicts JSON semantics where `1.0` and `1.00` are the same number. Fix `JsonPrimitive.equals()` to use `compareTo()` instead of `equals()` for `BigDecimal` comparisons.
+`JsonPrimitive.getAsInt()` delegates to `getAsNumber().intValue()`, which silently narrows `long` or `BigDecimal` values that exceed `Integer.MAX_VALUE` or fall below `Integer.MIN_VALUE`. For example, `new JsonPrimitive(3_000_000_000L).getAsInt()` returns a truncated negative number with no error. This contrasts with `JsonReader.nextInt()`, which validates the cast and throws `NumberFormatException` on overflow. Fix `getAsInt()` (and similarly `getAsShort()` and `getAsByte()`) in `JsonPrimitive` to detect overflow and throw `NumberFormatException` when the value cannot be represented in the target type.
 
 ## Medium
 

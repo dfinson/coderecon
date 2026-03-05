@@ -1139,13 +1139,14 @@ def _check_recon_gate(
 # ===================================================================
 
 
-def register_tools(mcp: FastMCP, app_ctx: AppContext) -> None:
+def register_tools(mcp: FastMCP, app_ctx: AppContext, *, dev_mode: bool = False) -> None:
     """Register recon tools with FastMCP server."""
 
-    # Register raw signals endpoint for ranking training data collection
-    from codeplane.mcp.tools.recon.raw_signals import register_raw_signals_tool
+    # Register raw signals endpoint only in dev mode (ranking training)
+    if dev_mode:
+        from codeplane.mcp.tools.recon.raw_signals import register_raw_signals_tool
 
-    register_raw_signals_tool(mcp, app_ctx)
+        register_raw_signals_tool(mcp, app_ctx)
 
     @mcp.tool(
         annotations={
