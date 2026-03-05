@@ -26,30 +26,34 @@
 ## Structure overview
 
 ```
-spring-boot-project/
-├── spring-boot/                         # Core classes
-│   └── src/main/java/org/springframework/boot/
-│       ├── SpringApplication.java       # Application bootstrap
-│       ├── context/                     # ApplicationContext setup
-│       ├── env/                         # Environment, property sources
-│       ├── web/                         # Embedded server support
-│       ├── logging/                     # Logging system abstraction
-│       └── diagnostics/                 # Failure analysis
-├── spring-boot-autoconfigure/           # Auto-configuration engine
-│   └── src/main/java/.../autoconfigure/
-│       ├── web/                         # Web auto-config (servlet, reactive)
-│       ├── data/                        # Data source auto-config (JPA, Mongo, Redis)
-│       ├── security/                    # Security auto-config
-│       ├── cache/                       # Cache auto-config
-│       └── ...                          # 100+ technology auto-configs
-├── spring-boot-actuator/                # Production-ready features
-│   └── src/.../actuator/
-│       ├── health/                      # Health indicators
-│       ├── metrics/                     # Micrometer metrics
-│       └── endpoint/                    # Management endpoints
-├── spring-boot-test/                    # Test framework
-├── spring-boot-devtools/                # Hot reload, LiveReload
-└── spring-boot-docker-compose/          # Docker Compose integration
+├── core/
+│   ├── spring-boot/                         # Core classes
+│   │   └── src/main/java/org/springframework/boot/
+│   │       ├── SpringApplication.java       # Application bootstrap
+│   │       ├── context/                     # ApplicationContext setup, property binding
+│   │       ├── env/                         # Environment, property sources
+│   │       ├── logging/                     # Logging system abstraction (Logback, Log4j2)
+│   │       └── diagnostics/                 # Failure analysis
+│   ├── spring-boot-autoconfigure/           # Auto-configuration engine + conditions
+│   │   └── src/main/java/.../autoconfigure/
+│   │       └── condition/                   # @ConditionalOn* annotations
+│   ├── spring-boot-test/                    # Test framework
+│   ├── spring-boot-test-autoconfigure/      # Test auto-configuration slices
+│   ├── spring-boot-docker-compose/          # Docker Compose integration
+│   └── spring-boot-properties-migrator/     # Property migration reporting
+├── module/
+│   ├── spring-boot-actuator/                # Actuator endpoints (info, beans, logging)
+│   ├── spring-boot-actuator-autoconfigure/  # Actuator auto-configuration
+│   ├── spring-boot-health/                  # Health indicators and contributors
+│   ├── spring-boot-micrometer-metrics/      # Micrometer metrics + MetricsEndpoint
+│   ├── spring-boot-tomcat/                  # Embedded Tomcat support
+│   ├── spring-boot-jetty/                   # Embedded Jetty support
+│   ├── spring-boot-web-server/              # WebServerFactory abstraction
+│   ├── spring-boot-webtestclient/           # WebTestClient auto-configuration
+│   ├── spring-boot-devtools/                # Hot reload, LiveReload
+│   ├── spring-boot-kafka/                   # Kafka auto-configuration
+│   ├── spring-boot-r2dbc/                   # R2DBC auto-configuration
+│   └── ...                                  # 100+ technology modules
 ```
 
 ## Scale indicators
@@ -116,7 +120,9 @@ When using `@SpringBootTest(webEnvironment = RANDOM_PORT)` with a
 reactive application, the `WebTestClient` bean is sometimes created
 with port 0 instead of the actual assigned port because the
 `ReactiveWebServerApplicationContext` hasn't finished initialization.
-Fix the lazy resolution of the port in `WebTestClientContextCustomizer`.
+Fix the lazy port resolution in `WebTestClientAutoConfiguration` and
+`SpringBootWebTestClientBuilderCustomizer` in the
+`spring-boot-webtestclient` module.
 
 ### N7: Fix `@ConditionalOnProperty` not supporting relaxed binding for enum values
 
@@ -139,9 +145,10 @@ tag values and add a configurable cardinality limit.
 The graceful shutdown implementation for embedded Jetty correctly
 waits for in-flight HTTP requests but does not track active WebSocket
 connections. WebSocket sessions are terminated immediately when the
-shutdown signal arrives. Fix `JettyGracefulShutdown` to register a
-`WebSocketPolicy` listener that delays shutdown until active WebSocket
-sessions close or the timeout expires.
+shutdown signal arrives. Fix the `GracefulShutdown` class in
+`module/spring-boot-jetty` and its integration with `JettyWebServer`
+to register a shutdown handler that delays completion until active
+WebSocket sessions close or the timeout expires.
 
 ### N10: Fix `spring-boot-devtools` restart not clearing ThreadLocal state
 
@@ -163,14 +170,18 @@ for conditional bean registration, `@FeatureFlag` injectable annotation,
 and an actuator endpoint for listing/toggling flags. Support percentage
 rollouts and user-targeted flags.
 
-### M2: Add virtual thread auto-configuration for Tomcat
+### M2: Add auto-configuration for HTTP client retry policies
 
-Add auto-configuration that detects Java 21+ and configures Tomcat
-to use virtual threads for request handling. Replace the platform
-thread executor with a virtual thread executor. Add a configuration
-property `server.tomcat.threads.virtual=true` (default false). Include
-metrics for virtual thread utilization. Ensure compatibility with
-thread-local-dependent Spring features (transactions, security context).
+Add auto-configuration for configurable retry policies in the
+`spring-boot-http-client` module. The module already provides
+`HttpClientSettings` and request factory builders
+(`ReactorClientHttpRequestFactoryBuilder`, `JdkHttpClientBuilder`,
+`JettyClientHttpRequestFactoryBuilder`) but has no retry support.
+Add properties under `spring.http.client.retry.*` for max-attempts,
+backoff-delay, retryable status codes, and timeout-per-attempt.
+Create a `RetryableClientHttpRequestFactoryDecorator` that wraps
+configured factories with retry logic. Register Micrometer metrics
+for retry count and timeout events.
 
 ### M3: Implement startup time analysis actuator
 
@@ -190,15 +201,18 @@ resource bundles included, and estimated image size breakdown by
 package. Output as JSON and HTML. Integrate into the
 `spring-boot-maven-plugin` and `spring-boot-gradle-plugin`.
 
-### M5: Add structured logging auto-configuration
+### M5: Add Quartz scheduler metrics and health auto-configuration
 
-Implement auto-configuration for structured (JSON) log output. Detect
-popular JSON encoders (Logback `LogstashEncoder`, Log4j2 `JsonLayout`)
-on the classpath and configure them automatically. Add a
-`logging.structured.format` property supporting `logstash`, `ecs`,
-and `gelf` formats. Include MDC enrichment for Spring-specific fields
-(application name, active profiles, instance ID). Provide a
-`StructuredLoggingCustomizer` SPI for adding custom fields.
+Add auto-configuration to the `spring-boot-quartz` module that
+exports Quartz scheduler metrics to Micrometer. The module already
+has `QuartzEndpoint`, `QuartzProperties`, and `QuartzAutoConfiguration`
+but no metrics integration. Create a `QuartzMeterBinder` that reads
+from the Quartz `Scheduler` API and reports active job count, trigger
+fire counts, misfire counts, job execution duration histograms, and
+thread pool utilization. Add a health indicator that reports DOWN
+when the scheduler is in standby or has been shut down. Include
+auto-configuration class `QuartzMetricsAutoConfiguration` conditional
+on Micrometer and Quartz being on the classpath.
 
 ### M6: Implement configuration property migration actuator
 
@@ -229,25 +243,31 @@ context. Support custom topic provisioning via `@KafkaTest(topics=...)`.
 Include a `KafkaTestUtils` helper for consuming and asserting messages.
 Register appropriate auto-configuration exclusions and filters.
 
-### M9: Add conditional auto-configuration for R2DBC connection pooling
+### M9: Add Pulsar dead letter topic auto-configuration with monitoring
 
-Implement auto-configuration that detects `r2dbc-pool` on the classpath
-and wraps the `ConnectionFactory` with `ConnectionPool`. Expose
-properties under `spring.r2dbc.pool.*` for initial size, max size,
-max idle time, validation query, and acquire timeout. Add health
-indicators for pool utilization and a metrics binder that reports
-pool statistics to Micrometer. Handle cleanup on context shutdown
-to avoid connection leaks.
+Add auto-configuration to the `spring-boot-pulsar` module for dead
+letter topic (DLT) handling. The module already has
+`PulsarAutoConfiguration`, `PulsarProperties`, and
+`PulsarContainerFactoryCustomizer` but no DLT support. Add
+properties under `spring.pulsar.consumer.dead-letter-policy.*` for
+max-redeliver-count, dead-letter-topic name pattern, and retry-letter
+topic. Create auto-configuration that applies `DeadLetterPolicy`
+to Pulsar consumer builders. Add a health indicator that monitors
+DLT message backlog depth and an actuator endpoint listing DLT
+message counts per subscription.
 
-### M10: Add build info and Git commit details to actuator info endpoint
+### M10: Add WebSocket session tracking and metrics auto-configuration
 
-Extend the `/actuator/info` endpoint to automatically expose build
-metadata (artifact, group, version, build time) from
-`META-INF/build-info.properties` and Git details (branch, commit ID,
-commit time, dirty flag) from `git.properties`. Add auto-configuration
-that generates `BuildInfoContributor` and `GitInfoContributor` beans.
-Support filtering sensitive fields via `management.info.git.mode`
-(simple vs full) and add a custom `InfoContributor` SPI.
+Add auto-configuration to the `spring-boot-websocket` module for
+WebSocket session tracking and metrics. The module already has
+`WebSocketMessagingAutoConfiguration` but no observability support.
+Create a `WebSocketMetricsAutoConfiguration` that registers a
+`WebSocketHandlerDecorator` tracking active session count, message
+rates (inbound/outbound), message sizes, and session duration
+histograms via Micrometer. Add an actuator endpoint that lists
+active WebSocket sessions with their remote address, connection
+time, and message counts. Include a health indicator that reports
+DOWN when active sessions exceed a configurable threshold.
 
 ## Wide
 
