@@ -34,11 +34,11 @@
 │   ├── cli/             # CLI utilities (colors, human-readable output)
 │   ├── ignore/          # .gitignore-style file filtering + directory walking
 │   └── globset/         # Glob pattern matching
-├── src/
+├── crates/core/
 │   ├── main.rs          # CLI entry point
-│   ├── app.rs           # Argument parsing and config
-│   ├── args.rs          # Argument processing
-│   └── search.rs        # Search coordinator
+│   ├── flags/           # Argument parsing, config, and completion
+│   ├── search.rs        # Search coordinator
+│   └── haystack.rs      # File target abstraction
 └── tests/               # Integration tests
 ```
 
@@ -65,13 +65,15 @@ increments per line touched by the match instead of per match occurrence.
 Fix the multiline match counter in the searcher crate to count actual
 match occurrences.
 
-### N2: Add `--max-columns-preview` to show truncated line prefix
+### N2: Fix `ban::check` false negative for multi-range character classes
 
-When `--max-columns` truncates a long line, the output shows
-`[Omitted long matching line]` with no content preview. Add a
-`--max-columns-preview` flag that shows the first N characters of the
-truncated line followed by `...` instead of the generic omission
-message.
+The `ban::check` function in `crates/regex/src/ban.rs` detects when a
+regex pattern can match a banned byte (typically `\n` for line-by-line
+search). However, it only checks character classes whose total range
+length is exactly 1, skipping multi-element classes. A pattern like
+`[\x00-\x01]` passes the ban check even though `\x00` is matchable.
+Fix the check to detect banned bytes in any character class range,
+regardless of total class size.
 
 ### N3: Fix `.rgignore` not loaded from `$HOME` on Windows
 
@@ -96,12 +98,15 @@ output is always 0 for matches that span multiple lines. The column
 calculator only handles single-line matches. Fix column reporting for
 multiline match starts.
 
-### N6: Add `--stats` flag to show match statistics summary
+### N6: Fix `normalize_path` in globset to handle UNC path prefixes
 
-Add a `--stats` flag that prints a summary after search: total files
-searched, files with matches, total matches, total lines matched,
-bytes processed, and elapsed time. Similar to grep's `--count` but
-aggregate across all files.
+The `normalize_path` function in `crates/globset/src/pathutil.rs`
+replaces all backslash separators with forward slashes on Windows.
+However, UNC paths (`\\server\share`) become `//server/share` after
+normalization. The resulting double-slash prefix causes glob patterns
+with absolute paths to fail matching. Fix `normalize_path` to detect
+UNC path prefixes and preserve them correctly during separator
+normalization.
 
 ### N7: Fix PCRE2 JIT stack overflow on complex patterns with large files
 
@@ -110,11 +115,14 @@ When using the PCRE2 regex engine (`-P`) with complex patterns
 compiled code overflows its default stack. Add configurable JIT stack
 size via `--pcre2-jit-stack` and increase the default size.
 
-### N8: Add `--type-add` for defining custom file types at runtime
+### N8: Fix hyperlink URLs not percent-encoding special characters in paths
 
-Currently custom file types can only be defined in config files. Add
-`--type-add 'proto:*.proto'` command-line flag for defining custom
-file types in a single invocation without modifying config files.
+The hyperlink writer in `crates/printer/src/hyperlink/mod.rs`
+interpolates file paths directly into OSC-8 hyperlink URLs. Paths
+containing spaces, `#`, `?`, or `%` produce invalid URLs that
+terminal emulators cannot open. Fix the hyperlink path interpolation
+to percent-encode reserved characters per RFC 3986, preserving `/`
+as the path separator.
 
 ### N9: Fix binary file detection false positive on UTF-16 files
 
@@ -142,14 +150,16 @@ and numbered capture groups. This requires changes to the regex crate
 integration, the printer crate (for preview output), and CLI argument
 validation.
 
-### M2: Add JSON output for structured consumption
+### M2: Implement file type detection by shebang line
 
-Implement a `--json` output format that emits one JSON object per
-match with fields: file path, line number, column range, matched text,
-context lines (before/after), and byte offset. The JSON printer should
-handle binary file detection, encoding issues, and streaming output
-(one JSON object per line, not a single array). Add tests for
-round-tripping JSON output.
+Extend the file type matching in `crates/ignore/src/types.rs` to detect
+file types by inspecting the shebang (`#!`) line of files. A file
+without a `.py` extension but with `#!/usr/bin/env python3` should
+match the `python` file type when `--type python` is used. This
+requires adding shebang-based matching to the `Types` matcher alongside
+extension matching, reading the first line of each file during
+traversal in `crates/ignore/src/walk.rs`, and adding a
+`--type-shebang` toggle flag in the CLI.
 
 ### M3: Implement parallel directory traversal with work stealing
 
@@ -160,21 +170,28 @@ of the directory tree and steals work from other threads' queues when
 idle. This should improve performance on network filesystems and
 repositories with many directories at the same depth.
 
-### M4: Implement search within compressed files
+### M4: Implement per-file search timeout
 
-Add `--search-zip` support for searching inside compressed files:
-gzip, bzip2, xz, and zstd. Decompress on-the-fly without extracting
-to disk. Show results with the archive path prefix. Support
-`--search-tar` for tar archives (with or without compression). Handle
-memory limits for decompressed content.
+Add a `--timeout <duration>` flag that limits the time spent searching
+each individual file. If a file's search exceeds the timeout (due to
+a pathological regex or very large file), skip the file and report it
+via stderr. This requires adding timeout tracking in
+`crates/searcher/src/searcher/core.rs` (check elapsed time in the
+search loop), propagating the timeout through the line-by-line and
+multiline search paths in `crates/searcher/src/searcher/glue.rs`,
+adding a timeout error variant to `crates/searcher/src/sink.rs`, and
+registering the CLI flag.
 
-### M5: Add `--pre` processor for custom file transformations
+### M5: Implement result grouping by directory or file type
 
-Implement `--pre <command>` that pipes each file through an external
-command before searching. The command receives the file content on
-stdin and outputs transformed content on stdout. Useful for searching
-in binary formats (PDF, docx) via external converters. Support
-configurable timeout and process pool for parallelism.
+Add `--group-by <mode>` with values `none`, `directory`, and `type`
+that groups search results under shared headers. In `directory` mode,
+results are collected and printed under their parent directory path.
+In `type` mode, results are grouped by the matched file type
+(e.g., `rust`, `python`). This requires buffering results in
+`crates/core/search.rs`, adding group header rendering in
+`crates/printer/src/standard.rs`, and integrating with the file type
+definitions from `crates/ignore/src/types.rs`.
 
 ### M6: Implement incremental search with file modification tracking
 

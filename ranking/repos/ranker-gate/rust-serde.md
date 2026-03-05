@@ -87,12 +87,16 @@ When a JSON field is explicitly `null` and the struct field has
 should be used when the field is either absent or `null`. Fix the
 deserialize implementation for defaulted fields.
 
-### N5: Add `#[serde(alias)]` support for enum variant names
+### N5: Add `i128`/`u128` variants to the `Content` buffer enum
 
-`#[serde(alias = "name")]` works on struct fields but not on enum
-variants. Add alias support for externally-tagged, internally-tagged,
-and adjacently-tagged enum variants so multiple names can deserialize
-to the same variant.
+The `Content` enum in `serde_core/src/private/content.rs` is used to
+buffer values for internally-tagged and untagged enum deserialization.
+It has variants for `I8` through `I64` and `U8` through `U64` but
+lacks `I128` and `U128`. The `TagOrContentVisitor` in
+`serde/src/private/de.rs` explicitly documents this gap: "Cannot
+capture ... `i128` and `u128`". Add the missing variants to `Content`
+and update `ContentVisitor`, `ContentDeserializer`, and
+`content_unexpected` to handle them.
 
 ### N6: Fix `#[serde(bound = "")]` not clearing derive-inferred bounds
 
@@ -122,30 +126,44 @@ requires the module to handle the `Option` wrapper itself. Add
 automatic `Option` unwrapping so the `with` module only needs to
 handle `T`, and `None` → skip / `null` is handled by serde.
 
-### N10: Add `#[serde(rename_all_fields)]` for enum variants with named fields
+### N10: Improve untagged enum deserialization error messages
 
-`rename_all` applies to variant names but not to the fields within
-variants. Add `rename_all_fields = "camelCase"` at the enum level
-that applies the rename rule to all fields in all variants.
+When all variants of a `#[serde(untagged)]` enum fail to match, the
+generated code in `serde_derive/src/de/enum_untagged.rs` emits a
+generic "data did not match any variant of untagged enum" error,
+discarding per-variant failure details. There is a TODO comment
+(lines 34–38) noting this limitation. Collect the error from each
+variant deserialization attempt and combine them into the final error
+message so users can diagnose which variant was closest to matching.
 
 ## Medium
 
-### M1: Implement `#[serde(tag = "...", content = "...")]` for enums with newtype variants
+### M1: Extend `#[serde(default)]` to enum variants with named fields
 
-The adjacently-tagged representation (`#[serde(tag = "t", content = "c")]`)
-currently requires all variants to have named fields or be
-unit variants. Add support for newtype variants (e.g., `Variant(String)`)
-in adjacently-tagged enums. The content should be serialized as the
-inner type directly under the content key.
+Currently `#[serde(default)]` can only be applied at the struct
+container level or on individual fields (see
+`serde_derive/src/internals/attr.rs` lines 372–388 where it emits
+"can only be used on structs"). Add support for `#[serde(default)]`
+on enum variants with named fields so that missing fields within a
+variant use `Default::default()` during deserialization. This requires
+changes in `serde_derive/src/internals/attr.rs` (variant-level default
+parsing), `serde_derive/src/de/struct_.rs` (default generation for
+variant fields), and `serde_derive/src/internals/check.rs`
+(validation for the new usage).
 
-### M2: Add compile-time validation of serde attributes
+### M2: Implement `deserialize_in_place` for enum types
 
-Currently, many serde attribute errors are only caught at runtime (e.g.,
-`rename_all` with an invalid case convention, conflicting attributes).
-Add compile-time validation in `serde_derive` that checks for: invalid
-`rename_all` values, conflicting attributes (`skip_serializing` with
-`serialize_with`), `flatten` on non-map types, and `tag` on non-enum
-types. Emit clear `compile_error!` messages with suggested fixes.
+`deserialize_in_place` allows deserializing into an existing value
+without allocating a new one. The derive macro already generates
+`deserialize_in_place` for structs and tuples, but
+`serde_derive/src/de.rs` lines 358–360 explicitly return `None` for
+`Data::Enum`. Implement `deserialize_in_place` for enums by checking
+whether the existing variant matches the incoming tag and reusing the
+existing allocation when the variant matches. This touches
+`serde_derive/src/de.rs` (entry point), the per-representation
+modules `de/enum_externally.rs`, `de/enum_internally.rs`,
+`de/enum_adjacently.rs`, and the `Deserialize` trait definition in
+`serde_core/src/de/mod.rs`.
 
 ### M3: Implement `#[serde(transparent)]` for enums
 
@@ -162,13 +180,19 @@ for top-level fields but fails for fields in nested structs or enum
 variants. Extend the borrow mechanism to propagate lifetime constraints
 through nested structures, allowing borrowed references at any depth.
 
-### M5: Add human-readable vs compact serialization format selection
+### M5: Propagate map length hints through `#[serde(flatten)]` serialization
 
-Implement `Serializer::is_human_readable()` support throughout serde.
-When serializing to a human-readable format (JSON, TOML), use
-user-friendly representations (e.g., `Duration` as `"2h30m"`). When
-serializing to a compact format (bincode, CBOR), use efficient
-representations. The format detection should be automatic.
+When a struct contains `#[serde(flatten)]` fields, the derive-generated
+`Serialize` impl in `serde_derive/src/ser.rs` (line 388) calls
+`serialize_map` with `None` as the length hint because the number of
+entries contributed by flattened fields is unknown at codegen time.
+Implement a length-hint strategy: track the count of non-flattened
+fields at compile time and add a runtime `size_hint` query on the
+flattened field's serialization. Combine these into an accurate `len`
+parameter for `serialize_map`. This requires changes in
+`serde_derive/src/ser.rs` (struct and variant serialization) and
+`serde/src/private/ser.rs` (`FlatMapSerializer` at line 1003 and
+`FlatMapSerializeStruct`).
 
 ### M6: Implement `#[serde(validate)]` for post-deserialization validation
 
@@ -179,13 +203,18 @@ validation (`#[serde(validate = "check_range")]` on individual fields)
 that runs after the field is deserialized but before the struct is
 constructed.
 
-### M7: Add derive support for `Serialize`/`Deserialize` on foreign types
+### M7: Support `#[serde(getter)]` on enum variants for remote types
 
-Implement `#[serde(remote)]` improvements: support remote types with
-private fields (via accessor functions), remote enum types, and remote
-types with generics. Add `#[serde(transparent)]` support for newtypes
-wrapping remote types. Currently `remote` requires the remote type to
-have all public fields.
+`#[serde(getter = "...")]` enables serialization of remote types
+with private fields by calling an accessor function instead of
+accessing the field directly. However,
+`serde_derive/src/internals/check.rs` (lines 82–87) blocks getters
+in enums: "#[serde(getter = \"...\")]\nis not allowed in an enum".
+Lift this restriction for enums that use `#[serde(remote = "...")]`
+so that each variant's fields can use getters. This requires changes
+in `serde_derive/src/internals/check.rs` (relax validation),
+`serde_derive/src/ser.rs` (line 1281, getter codegen for enum
+variants), and `serde_derive/src/de.rs` (remote enum handling).
 
 ### M8: Implement content-type-aware serialization
 
@@ -204,13 +233,20 @@ remaining map. Implement a buffered flattening strategy that reads the
 map once into an intermediate buffer, then distributes keys to the
 appropriate flattened fields.
 
-### M10: Implement exhaustive enum deserialization errors
+### M10: Add `#[serde(expecting)]` support for enum variants and struct fields
 
-When deserializing an enum fails because the tag value doesn't match
-any variant, the error message shows "unknown variant X" but doesn't
-list the valid variants. Add a `expected_variants` method to the
-`Visitor` for enums that includes all valid variant names in the error
-message. Support `#[serde(rename)]` names in the expected list.
+Currently `#[serde(expecting = "...")]` can only be applied at the
+container level (see `serde_derive/src/internals/attr.rs` line 173,
+489–491). Extend the attribute to enum variants and individual struct
+fields so that each variant or field visitor can produce a custom
+`expecting` message on type mismatch. This requires adding `expecting`
+parsing to `Variant` and `Field` attribute blocks in
+`serde_derive/src/internals/attr.rs`, threading the custom message
+into generated `Visitor::expecting` implementations in
+`serde_derive/src/de/struct_.rs` and `serde_derive/src/de/identifier.rs`,
+and updating `serde_derive/src/internals/check.rs` to validate that
+`expecting` on a field is only used with types that have a custom
+visitor.
 
 ## Wide
 
@@ -289,15 +325,23 @@ the `Serializer` trait) when the output format is known at compile
 time. Requires proc macro architecture changes and conditional
 compilation support.
 
-### W9: Implement serde testing utilities
+### W9: Implement field-level lifetime tracking for zero-copy deserialization diagnostics
 
-Add a `serde_test` crate with comprehensive testing tools: assert
-round-trip serialization (`assert_ser_deser_eq`), test against specific
-token streams (`assert_tokens`), property-based testing for
-`Serialize`/`Deserialize` pairs, format compatibility testing (verify
-output is valid JSON/TOML/YAML), and golden file testing. Include a
-test derive macro that generates tests automatically. Crosses test
-infrastructure, token representation, and format validation.
+Currently `#[serde(borrow)]` requires manual annotation on fields
+that should borrow from the deserializer input. Add automatic borrow
+detection: have the derive macro analyse field types to determine
+which can borrow from the deserializer (`&'de str`, `&'de [u8]`,
+`Cow<'de, str>`, etc.) and which cannot. When a type could borrow
+but lacks `#[serde(borrow)]`, emit a compile-time suggestion. When
+`#[serde(borrow)]` is on a type that cannot borrow, emit a warning.
+This requires changes in `serde_derive/src/internals/attr.rs` (borrow
+analysis metadata, lines 1046–1058), `serde_derive/src/bound.rs`
+(lifetime parameter analysis for borrow inference),
+`serde_derive/src/de.rs` (borrowed lifetime tracking, lines 283–296),
+`serde_derive/src/de/struct_.rs` (struct field borrow propagation),
+`serde_derive/src/de/tuple.rs` (tuple field borrow propagation),
+`serde_derive/src/internals/check.rs` (borrow validation), and
+`serde_core/src/de/mod.rs` (lifetime bound documentation).
 
 ### W10: Add serde ecosystem interop layer
 

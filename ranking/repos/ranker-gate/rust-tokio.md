@@ -40,8 +40,8 @@ tokio/src/
 │   ├── udp.rs           # UDP socket
 │   └── unix/            # Unix domain sockets
 ├── io/                  # Async I/O traits and utilities
-│   ├── read.rs          # AsyncRead
-│   ├── write.rs         # AsyncWrite
+│   ├── async_read.rs    # AsyncRead
+│   ├── async_write.rs   # AsyncWrite
 │   └── util/            # BufReader, BufWriter, copy, etc.
 ├── sync/                # Synchronization primitives
 │   ├── mutex.rs         # Async Mutex
@@ -80,13 +80,16 @@ unnecessary churn in consumers that use `changed().await` in a loop.
 Fix the watch channel to only wake receivers on actual value change,
 and provide a separate `closed()` future for detecting sender drop.
 
-### N2: Add `timeout_at` for `Instant`-based deadlines
+### N2: Fix `tokio::sync::Notify` permit loss on waiter cancellation
 
-`tokio::time::timeout` accepts a `Duration`, but there's no ergonomic
-way to set a deadline at a specific `Instant`. Add `tokio::time::timeout_at`
-that combines an `Instant` deadline with a future. This is a thin wrapper
-but important for composing timeouts in protocol implementations where
-the deadline is computed once and shared across multiple operations.
+When multiple tasks wait on `tokio::sync::Notify` using `notified().await`
+and `notify_one()` is called, cancellation of the selected waiter (e.g.,
+via `tokio::select!`) can consume the notification without waking any task.
+The waiter node is removed from the linked list on drop, but the stored
+permit has already been consumed and is not returned to the `Notify` state
+machine. Fix the waiter's drop logic in `notify.rs` to re-dispatch the
+permit to the next waiter in the list when the notification was delivered
+but not observed.
 
 ### N3: Fix `TcpListener::accept` not respecting runtime shutdown
 
@@ -214,15 +217,17 @@ the case where shrinking the buffer would discard messages that some slow
 receivers haven't consumed yet by returning an error instead of dropping
 data. Add backpressure signaling so senders are aware of resize-in-progress.
 
-### M7: Add async-aware `RwLock` upgrade and downgrade
+### M7: Implement `RwLockReadGuard::upgrade` for atomic read-to-write transition
 
-The `tokio::sync::RwLock` supports separate read and write guards but does
-not allow upgrading a read guard to a write guard or downgrading in the
-other direction. Implement `RwLockReadGuard::upgrade()` that atomically
-transitions from a shared lock to an exclusive lock without releasing and
-re-acquiring, and `RwLockWriteGuard::downgrade()` for the reverse. Handle
-the case where multiple readers attempt to upgrade simultaneously by
-returning an error to all but one.
+The `tokio::sync::RwLock` supports `RwLockWriteGuard::downgrade()` to
+atomically transition from an exclusive lock to a shared lock, but
+provides no corresponding `upgrade()` to go from a shared lock to an
+exclusive lock without releasing and re-acquiring. Implement
+`RwLockReadGuard::upgrade()` that atomically transitions a read guard to
+a write guard. If multiple readers attempt to upgrade simultaneously,
+return an error to all but the first to prevent deadlock. Add
+`OwnedRwLockReadGuard::upgrade()` for the owned variant. Implement a
+`try_upgrade()` that returns immediately if the upgrade cannot proceed.
 
 ### M8: Implement per-task resource usage tracking
 
@@ -256,14 +261,20 @@ pressure signals, so the entire pipeline stalls together. Add a
 
 ## Wide
 
-### W1: Implement io_uring backend for Linux
+### W1: Implement thread-per-core runtime mode
 
-Add an io_uring-based I/O driver as an alternative to the epoll driver
-on Linux. This affects the I/O driver, file operations, networking
-(TCP accept, read, write), and timer implementation. The io_uring
-backend should be selectable at runtime via a builder option. Implement
-buffer ring support for zero-copy reads. Maintain the existing epoll
-backend as the default.
+Add a thread-per-core scheduling mode to the Tokio runtime where each
+worker thread has its own independent task queue, I/O driver, and timer
+wheel with no work stealing between threads. Tasks are pinned to the
+thread that spawned them and cannot migrate. This affects the scheduler
+(`runtime/scheduler/`), the I/O driver initialization (`runtime/io/`),
+the timer subsystem (`runtime/time/`), the runtime builder
+(`runtime/builder.rs`), task spawning (`task/spawn.rs`), blocking pool
+dispatch (`runtime/blocking/`), and the metrics system
+(`runtime/metrics/`). Provide a `Builder::thread_per_core()` method and
+a `spawn_on_current()` variant that guarantees the task runs on the
+calling worker. Fall back to the multi-thread scheduler's behavior for
+`spawn_blocking`.
 
 ### W2: Add WASM/WASI runtime support
 
