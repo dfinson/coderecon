@@ -185,13 +185,11 @@ async def _harvest_term_match(
     app_ctx: AppContext,
     parsed: ParsedTask,
 ) -> dict[str, HarvestCandidate]:
-    """Harvester B: DefFact term matching via SQL LIKE with IDF weighting.
+    """Harvester B: DefFact term matching via SQL LIKE.
 
-    Terms that match many definitions get lower weight (low IDF), while
-    specific terms that match few definitions get higher weight.
+    Returns all matching defs with raw match counts.
+    No IDF pre-computation — the ranker learns its own weighting.
     """
-    import math
-
     from codeplane.index._internal.indexing.graph import FactQueries
 
     coordinator = app_ctx.coordinator
@@ -204,9 +202,11 @@ async def _harvest_term_match(
     with coordinator.db.session() as session:
         fq = FactQueries(session)
         for term in all_terms:
-            matching_defs = fq.find_defs_matching_term(term, limit=200)
-            # IDF weight: rare terms score higher, ubiquitous terms score lower
-            idf = 1.0 / math.log1p(len(matching_defs)) if matching_defs else 0.0
+            matching_defs = fq.find_defs_matching_term(term)
+            n_matches = len(matching_defs)
+            # Keep IDF for production RRF compat
+            import math
+            idf = 1.0 / math.log1p(n_matches) if n_matches else 0.0
             for d in matching_defs:
                 uid = d.def_uid
                 if uid not in candidates:
@@ -215,10 +215,16 @@ async def _harvest_term_match(
                         def_fact=d,
                         from_term_match=True,
                         term_idf_score=idf,
+                        term_match_count=1,
+                        term_total_matches=n_matches,
                     )
                 else:
                     candidates[uid].from_term_match = True
                     candidates[uid].term_idf_score += idf
+                    candidates[uid].term_match_count += 1
+                    candidates[uid].term_total_matches = max(
+                        candidates[uid].term_total_matches, n_matches
+                    )
                     if candidates[uid].def_fact is None:
                         candidates[uid].def_fact = d
                 candidates[uid].matched_terms.add(term)
@@ -257,7 +263,7 @@ async def _harvest_lexical(
     coordinator = app_ctx.coordinator
     candidates: dict[str, HarvestCandidate] = {}
 
-    terms = parsed.primary_terms[:16]  # Use more terms; Tantivy handles multi-term well
+    terms = parsed.primary_terms + parsed.secondary_terms
     if not terms:
         return candidates
 
@@ -265,7 +271,7 @@ async def _harvest_lexical(
         return candidates
 
     query = " ".join(terms)
-    search_results = coordinator._lexical.search(query, limit=500)
+    search_results = coordinator._lexical.search(query, limit=5000)
 
     if not search_results.results:
         return candidates
@@ -281,7 +287,7 @@ async def _harvest_lexical(
     with coordinator.db.session() as session:
         fq = FactQueries(session)
 
-        for file_path, lines in list(file_hits.items())[:50]:
+        for file_path, lines in file_hits.items():
             frec = fq.get_file_by_path(file_path)
             if frec is None or frec.id is None:
                 continue
@@ -349,7 +355,6 @@ async def _harvest_explicit(
 
     # D0: Auto-seed names (inferred, lower confidence)
     #     from_explicit=False — they won't get the explicit RRF boost.
-    #     score=0.5 — weaker evidence than agent-provided seeds.
     #     Still enter merged pool so graph harvester can expand from them.
     if auto_seeds:
         for name in auto_seeds:
@@ -360,6 +365,7 @@ async def _harvest_explicit(
                     def_fact=d,
                     from_explicit=False,
                     from_term_match=True,  # counts as a term-match signal
+                    symbol_source="auto_seed",
                     evidence=[
                         EvidenceRecord(
                             category="auto_seed",
@@ -378,6 +384,7 @@ async def _harvest_explicit(
                     def_uid=d.def_uid,
                     def_fact=d,
                     from_explicit=True,
+                    symbol_source="agent_seed",
                     evidence=[
                         EvidenceRecord(
                             category="explicit",
@@ -395,18 +402,14 @@ async def _harvest_explicit(
                 frec = fq.get_file_by_path(epath)
                 if frec is None or frec.id is None:
                     continue
-                defs_in = fq.list_defs_in_file(frec.id, limit=50)
-                def_scored = []
+                defs_in = fq.list_defs_in_file(frec.id, limit=200)
                 for d in defs_in:
-                    hub = min(fq.count_callers(d.def_uid), 30)
-                    def_scored.append((d, hub))
-                def_scored.sort(key=lambda x: (-x[1], x[0].def_uid))
-                for d, _hub in def_scored[:5]:
                     if d.def_uid not in candidates:
                         candidates[d.def_uid] = HarvestCandidate(
                             def_uid=d.def_uid,
                             def_fact=d,
                             from_explicit=True,
+                            symbol_source="path_mention",
                             evidence=[
                                 EvidenceRecord(
                                     category="explicit",
@@ -417,6 +420,8 @@ async def _harvest_explicit(
                         )
                     else:
                         candidates[d.def_uid].from_explicit = True
+                        if candidates[d.def_uid].symbol_source is None:
+                            candidates[d.def_uid].symbol_source = "path_mention"
 
     # D3: Index-validated symbol extraction from task text.
     #
@@ -438,6 +443,7 @@ async def _harvest_explicit(
                     def_uid=d.def_uid,
                     def_fact=d,
                     from_explicit=True,
+                    symbol_source="task_extracted",
                     evidence=[
                         EvidenceRecord(
                             category="explicit",
@@ -469,15 +475,6 @@ from codeplane.mcp.tools.recon.merge import (  # noqa: E402
 # Harvester E: Graph walk (structural adjacency from top candidates)
 # ===================================================================
 
-# Edge weights for graph quality scoring — callee > caller > sibling.
-# Quality = edge_weight / seed_rank, so seed #1 callee = 1.0, seed #2 caller = 0.425, etc.
-_EDGE_WEIGHT_CALLEE = 1.0
-_EDGE_WEIGHT_CALLER = 0.85
-_EDGE_WEIGHT_SIBLING = 0.7
-
-# Single performance budget — how many graph-discovered candidates to keep.
-_GRAPH_BUDGET = 60
-
 
 async def _harvest_graph(
     app_ctx: AppContext,
@@ -486,16 +483,11 @@ async def _harvest_graph(
 ) -> dict[str, HarvestCandidate]:
     """Harvester E: Walk 1-hop graph edges from top merged candidates.
 
-    Takes the strongest merged candidates (by evidence count and embedding
-    similarity) as graph seeds, then discovers structurally adjacent defs
-    via callees, callers (as references), and same-file siblings.
+    Takes seeds (candidates found by ≥2 retrievers or explicitly mentioned),
+    discovers structurally adjacent defs via callees, callers, and siblings.
 
-    All discovered edges compete in a single ranked pool scored by
-    edge_type × (1 / seed_position).  The top ``_GRAPH_BUDGET`` edges
-    are kept — no per-category caps.  High-degree hub symbols naturally
-    produce many low-quality edges that fall below the cutoff.
-
-    Runs AFTER merge of A-D harvesters but BEFORE enrichment and filtering.
+    Emits raw edge type and seed rank per candidate. No quality scoring,
+    no budget cap — the ranker learns relevance from data.
     """
     from codeplane.index._internal.indexing.graph import FactQueries
 
@@ -505,12 +497,11 @@ async def _harvest_graph(
     if not merged:
         return candidates
 
-    # Select graph seeds: top candidates by evidence axes + embedding sim
     seed_uids = _select_graph_seeds(merged)
     if not seed_uids:
         return candidates
 
-    # Resolve DefFacts for seeds that need them
+    # Resolve DefFacts for seeds
     seeds_with_facts: list[tuple[str, HarvestCandidate]] = []
     with coordinator.db.session() as session:
         fq = FactQueries(session)
@@ -526,8 +517,8 @@ async def _harvest_graph(
     if not seeds_with_facts:
         return candidates
 
-    # Collect all edges into one ranked pool: (def_uid, def_fact, quality, edge_type, detail)
-    EdgeInfo = tuple[str, object, float, str, str]  # uid, DefFact|None, quality, type, detail
+    # Collect all edges: (def_uid, def_fact, edge_type, seed_rank, detail)
+    EdgeInfo = tuple[str, object, str, int, str]
     raw_edges: list[EdgeInfo] = []
 
     with coordinator.db.session() as session:
@@ -538,29 +529,23 @@ async def _harvest_graph(
             seed_def = seed_cand.def_fact
             assert seed_def is not None
 
-            # (a) Callees: defs referenced within this seed's body
+            # (a) Callees
             callees = fq.list_callees_in_scope(
                 seed_def.file_id,
                 seed_def.start_line,
                 seed_def.end_line,
-                limit=30,
+                limit=200,
             )
             for callee in callees:
                 if callee.def_uid == seed_uid:
                     continue
-                quality = _EDGE_WEIGHT_CALLEE / seed_idx
-                raw_edges.append(
-                    (
-                        callee.def_uid,
-                        callee,
-                        quality,
-                        "graph",
-                        f"callee of {seed_def.name}",
-                    )
-                )
+                raw_edges.append((
+                    callee.def_uid, callee, "callee", seed_idx,
+                    f"callee of {seed_def.name}",
+                ))
 
-            # (b) Callers: defs that reference this seed (via RefFact)
-            refs = fq.list_refs_by_def_uid(seed_uid, limit=30)
+            # (b) Callers
+            refs = fq.list_refs_by_def_uid(seed_uid, limit=200)
             caller_file_ids: set[int] = set()
             for ref in refs:
                 if ref.file_id == seed_def.file_id:
@@ -574,71 +559,65 @@ async def _harvest_graph(
                         ref.start_line is not None
                         and cd.start_line <= ref.start_line <= cd.end_line
                     ):
-                        quality = _EDGE_WEIGHT_CALLER / seed_idx
-                        raw_edges.append(
-                            (
-                                cd.def_uid,
-                                cd,
-                                quality,
-                                "graph",
-                                f"caller of {seed_def.name}",
-                            )
-                        )
+                        raw_edges.append((
+                            cd.def_uid, cd, "caller", seed_idx,
+                            f"caller of {seed_def.name}",
+                        ))
                         break
 
-            # (c) Same-file siblings: other key defs in seed's file
+            # (c) Same-file siblings
             frec = session.get(FileModel, seed_def.file_id)
             if frec is not None and frec.id is not None:
-                sibling_defs = fq.list_defs_in_file(frec.id, limit=50)
+                sibling_defs = fq.list_defs_in_file(frec.id, limit=200)
                 for sd in sibling_defs:
                     if sd.def_uid == seed_uid:
                         continue
                     if sd.kind not in ("function", "method", "class"):
                         continue
-                    quality = _EDGE_WEIGHT_SIBLING / seed_idx
-                    raw_edges.append(
-                        (
-                            sd.def_uid,
-                            sd,
-                            quality,
-                            "graph",
-                            f"sibling of {seed_def.name} in {frec.path}",
-                        )
-                    )
+                    raw_edges.append((
+                        sd.def_uid, sd, "sibling", seed_idx,
+                        f"sibling of {seed_def.name} in {frec.path}",
+                    ))
 
-    # Deduplicate: keep max quality per uid
+    # Deduplicate: per uid, keep lowest seed_rank (closest to top seed)
     best_edges: dict[str, EdgeInfo] = {}
     for edge in raw_edges:
         uid = edge[0]
-        if uid not in best_edges or edge[2] > best_edges[uid][2]:
+        if uid not in best_edges or edge[3] < best_edges[uid][3]:
             best_edges[uid] = edge
 
-    # Sort by quality, take top BUDGET
-    ranked = sorted(best_edges.values(), key=lambda e: -e[2])[:_GRAPH_BUDGET]
+    # Compute production-compat graph_quality from edge type and seed rank
+    _EDGE_COMPAT = {"callee": 1.0, "caller": 0.85, "sibling": 0.7}
 
-    # Convert to HarvestCandidate or reinforce merged
-    for uid, def_fact, quality, category, detail in ranked:
+    for uid, (_, def_fact, edge_type, seed_rank, detail) in best_edges.items():
+        quality = _EDGE_COMPAT.get(edge_type, 0.5) / seed_rank
+
         if uid in merged:
             existing = merged[uid]
             existing.from_graph = True
             existing.graph_quality = max(existing.graph_quality, quality)
-            # Only add evidence once
+            if existing.graph_edge_type is None:
+                existing.graph_edge_type = edge_type
+                existing.graph_seed_rank = seed_rank
             if not any(e.category == "graph" for e in existing.evidence):
                 existing.evidence.append(
-                    EvidenceRecord(category=category, detail=detail, score=quality)
+                    EvidenceRecord(category="graph", detail=detail, score=quality)
                 )
             continue
         if uid in candidates:
-            # Keep the higher quality
             if quality > candidates[uid].graph_quality:
                 candidates[uid].graph_quality = quality
+                candidates[uid].graph_edge_type = edge_type
+                candidates[uid].graph_seed_rank = seed_rank
             continue
         candidates[uid] = HarvestCandidate(
             def_uid=uid,
             def_fact=def_fact,  # type: ignore[arg-type]
             from_graph=True,
             graph_quality=quality,
-            evidence=[EvidenceRecord(category=category, detail=detail, score=quality)],
+            graph_edge_type=edge_type,
+            graph_seed_rank=seed_rank,
+            evidence=[EvidenceRecord(category="graph", detail=detail, score=quality)],
         )
 
     log.debug(
@@ -652,12 +631,6 @@ async def _harvest_graph(
 # ===================================================================
 # Harvester F: Import-chain discovery (dependency + dependent tracing)
 # ===================================================================
-
-# Budget constants for import harvester
-_IMPORT_MAX_SEEDS = 15
-_IMPORT_MAX_DEPS_PER_SEED = 10  # Forward imports (dependencies)
-_IMPORT_MAX_DEPENDENTS_PER_SEED = 8  # Reverse imports (files importing seed)
-_IMPORT_MAX_TOTAL = 80
 
 
 async def _harvest_imports(
@@ -692,7 +665,7 @@ async def _harvest_imports(
         return candidates
 
     # Select seeds: top candidates by score (reuse graph-seed logic)
-    seed_uids = _select_graph_seeds(merged)[:_IMPORT_MAX_SEEDS]
+    seed_uids = _select_graph_seeds(merged)
     if not seed_uids:
         return candidates
 
@@ -726,9 +699,7 @@ async def _harvest_imports(
         # (a) Forward deps: files imported by seed files
         seen_import_fids: set[int] = set()
         for fid in seed_file_ids:
-            if len(candidates) >= _IMPORT_MAX_TOTAL:
-                break
-            imports = fq.list_imports(fid, limit=_IMPORT_MAX_DEPS_PER_SEED)
+            imports = fq.list_imports(fid, limit=200)
             for imp in imports:
                 if not imp.resolved_path:
                     continue
@@ -747,7 +718,7 @@ async def _harvest_imports(
                     detail=f"imported by {seed_file_paths.get(fid, '?')}",
                     score=0.45,
                     graph_quality=0.5,
-                    limit=5,
+                    import_direction="forward",
                 )
 
         # (b) Reverse deps: files that import seed files
@@ -760,9 +731,7 @@ async def _harvest_imports(
                 .distinct()
             )
             reverse_fids = list(session.exec(reverse_stmt).all())
-            for rfid in reverse_fids[: _IMPORT_MAX_DEPENDENTS_PER_SEED * len(seed_file_ids)]:
-                if len(candidates) >= _IMPORT_MAX_TOTAL:
-                    break
+            for rfid in reverse_fids:
                 if rfid in seed_file_ids:
                     continue
                 rfile = session.get(FileModel, rfid)
@@ -777,7 +746,7 @@ async def _harvest_imports(
                     detail=f"imports a seed file ({rfile.path})",
                     score=0.40,
                     graph_quality=0.4,
-                    limit=3,
+                    import_direction="reverse",
                 )
 
         # (c) __init__.py barrels + conftest.py in seed directories
@@ -805,13 +774,11 @@ async def _harvest_imports(
                     detail=f"package init/conftest in {dir_path}",
                     score=0.35,
                     graph_quality=0.3,
-                    limit=3,
+                    import_direction="barrel",
                 )
 
         # (d) Test file pattern matching
         for seed_path in seed_paths_set:
-            if len(candidates) >= _IMPORT_MAX_TOTAL:
-                break
             test_paths = _infer_test_paths(seed_path)
             for tp in test_paths:
                 tf = fq.get_file_by_path(tp)
@@ -825,7 +792,7 @@ async def _harvest_imports(
                         detail=f"test file for {seed_path}",
                         score=0.35,
                         graph_quality=0.35,
-                        limit=3,
+                        import_direction="test_pair",
                     )
 
     log.debug(

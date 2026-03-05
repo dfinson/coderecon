@@ -1009,3 +1009,185 @@ Every numeric boundary in this system is either:
 
 No arbitrary constants in model definitions, feature computations, label
 definitions, selection criteria, or training procedures.
+
+---
+
+## 13. ML Design Principles
+
+### 13.1 No Artificial Caps in Retrievers
+
+Every retriever returns its **full natural result set**. No `top_k`, no
+`limit=`, no budget caps. The candidate pool is the raw union of all
+retriever outputs. The ranker learns what matters from data — it does not
+need pre-filtered inputs.
+
+| Retriever | Current cap (to remove) | New behavior |
+|-----------|------------------------|--------------|
+| Embedding | `top_k=200` | All defs with cosine similarity > 0 |
+| Term match | `limit=200` per term | All matching defs |
+| Lexical | 50 files, `primary_terms[:16]` | All Tantivy hits using all terms (primary + secondary) |
+| Graph | `_GRAPH_BUDGET=60` | Full 1-hop walk from all seeds |
+| Explicit | 5 defs per mentioned file | All defs in mentioned files |
+| Import | `_IMPORT_MAX_TOTAL=80` | All forward + reverse import edges |
+
+### 13.2 No Hardcoded Scores — Raw Signals Only
+
+Harvesters emit raw measurements, not pre-scored evidence. The ranker
+learns the value of each signal from training data.
+
+**Removed:**
+- Graph edge weights (`_EDGE_WEIGHT_CALLEE=1.0`, `_EDGE_WEIGHT_CALLER=0.85`,
+  `_EDGE_WEIGHT_SIBLING=0.7`)
+- Graph quality formula (`quality = weight / seed_idx`)
+- Explicit evidence scores (1.0, 0.7, 0.5 for different symbol sources)
+- Import harvester scores (0.45, 0.40, 0.35, 0.35)
+- IDF pre-computation in term match harvester
+- Graph seed selection scoring (`evidence_axes * 2.0 + 2.0 if explicit`)
+
+**Replaced with categorical features:**
+- `graph_edge_type`: `callee` / `caller` / `sibling` (or `None`)
+- `graph_seed_rank`: ordinal position of the seed in the merged pool
+- `symbol_source`: `agent_seed` / `auto_seed` / `task_extracted` /
+  `path_mention` (or `None`)
+- `import_direction`: `forward` / `reverse` / `barrel` / `test_pair`
+  (or `None`)
+- `term_match_count`: raw number of query terms matching this def's name
+- `term_total_matches`: how many defs matched each term (ranker can
+  compute its own IDF if useful)
+
+### 13.3 Per-Candidate Feature Set
+
+```
+# Identity
+def_uid, path, kind, name, lexical_path
+
+# Span
+start_line, end_line, object_size_lines
+
+# Path features
+file_ext, parent_dir, path_depth
+
+# Structural metadata from index
+has_docstring, has_decorators, has_return_type
+hub_score, is_test
+signature_text        # raw signature string
+namespace             # package/namespace (Java/C#/Go/etc)
+nesting_depth         # depth in lexical_path (count of '.')
+has_parent_scope      # whether nested inside another def
+
+# Per-retriever raw signals (None if retriever didn't find this def)
+emb_score             # raw cosine similarity
+emb_rank              # rank within embedding results
+
+term_match_count      # number of query terms that matched this def's name
+term_total_matches    # total defs matched per term (IDF denominator)
+
+lex_hit_count         # raw Tantivy hit count mapped to this def
+
+graph_edge_type       # callee/caller/sibling or None
+graph_seed_rank       # position of the seed in merged pool
+
+symbol_source         # agent_seed/auto_seed/task_extracted/path_mention or None
+
+import_direction      # forward/reverse/barrel/test_pair or None
+
+retriever_hits        # count of retrievers that found this def (0-6)
+```
+
+### 13.4 Binary Relevance Output
+
+The system is a **context retrieval** tool. The agent decides what to edit.
+The system surfaces the full working set.
+
+**Training label:** binary `relevant` (1) vs `irrelevant` (0). A def is
+relevant if it was edited OR read-necessary.
+
+**Training objective:** NDCG with graded gain (edited=3, read_necessary=2,
+irrelevant=0) for richer learning signal. But the output is a single
+ranked list with no edit/read distinction.
+
+**Output to agent:** ranked defs grouped by file. No "edit first" /
+"read before edit" split.
+
+### 13.5 Non-Code File Handling
+
+Non-code files (YAML, TOML, Markdown, Makefile, dotfiles) only have
+**file-level embeddings**. Their synthetic defs (`pair`, `key`, `table`,
+`heading`, `target`) enter the candidate pool via file-embedding expansion
+— the file's cosine similarity is assigned to each of its defs.
+
+After ranking, defs group back to files. Non-code defs group to their
+parent non-code files. No parallel retrieval channel. The ranker sees
+these defs alongside code defs — it learns relevance patterns from
+`kind=pair/key/heading/etc` and absent `signature_text`.
+
+### 13.6 Tier Assignment from Ranker Scores
+
+After cutoff returns N defs, group by parent file:
+
+- File contains a def in **top third** of returned set → `FULL_FILE`
+- File contains a def in **middle third** → `SCAFFOLD`
+- File contains a def in **bottom third** → `SUMMARY`
+
+Non-code files tiered identically. No special path.
+
+### 13.7 Post-Ranking Test Co-Retrieval
+
+After ranker + cutoff produce the working set:
+
+1. For each source file in the set, find test files that import it
+   (existing import-graph edges).
+2. Add those tests at the source file's tier or one below.
+
+This is structural (real import edges), not heuristic. No scoring.
+
+### 13.8 Seeds and Pins
+
+- **Injection:** keep. Seeds/pins add candidates to the pool before
+  ranking.
+- **Score boosting:** removed. No `pin_floor`, no `anchor_floor`. The
+  ranker scores everything equally.
+- **As features:** `symbol_source=agent_seed` tells the ranker how the
+  candidate entered the pool.
+- **Gate signal:** gate features include `has_agent_seeds` and
+  `agent_seed_count`.
+
+### 13.9 Graph Seed Selection
+
+Seeds for graph walk = all candidates found by ≥2 retrievers, plus all
+explicit mentions. No scoring formula, no cap. If the resulting seed
+set is large, batch the DB queries.
+
+### 13.10 Training and Shipment Sequence
+
+1. Data collection (all 50 repos, all tasks)
+2. Gate training (all 50 repos' queries with gate labels)
+3. Gate ships (wired into heuristic pipeline)
+4. Ranker training (all 50 repos, OK queries, NDCG with graded labels)
+5. Ranker NDCG validated on held-out data
+6. Cutoff training (K-fold across all 50 repos, 7,500 rows)
+7. Full pipeline ships (gate + ranker + cutoff replaces heuristic recon)
+
+### 13.11 Evaluation Metrics
+
+Report **per query type** (Q_SEMANTIC, Q_LEXICAL, Q_IDENTIFIER,
+Q_STRUCTURAL, Q_NAVIGATIONAL):
+
+- F1 of returned set vs ground truth (binary relevant)
+- Precision, recall
+- NDCG of ranked list
+- Empty-result rate, returned-set size, noise ratio
+
+### 13.12 Dead Code Removal
+
+Remove from codebase before training data collection:
+
+- `DefFact.qualified_name` column (always NULL, never populated)
+- All hardcoded evidence scores in harvesters
+- `primary_terms[:16]` restriction in lexical harvester
+- IDF pre-computation in term match harvester
+- Graph edge weight constants and quality formula
+- Graph budget cap (`_GRAPH_BUDGET`)
+- All artificial `limit=` / `top_k=` parameters on harvester queries
+- Import harvester hardcoded scores
+- Graph seed scoring formula (`evidence_axes * 2.0 + ...`)

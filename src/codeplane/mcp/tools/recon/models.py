@@ -516,8 +516,16 @@ class HarvestCandidate:
     # Harvester-specific scores
     matched_terms: set[str] = field(default_factory=set)
     lexical_hit_count: int = 0
-    term_idf_score: float = 0.0  # IDF-weighted term relevance
-    graph_quality: float = 0.0  # Graded edge quality (0-1)
+    term_idf_score: float = 0.0  # IDF-weighted term relevance (used by production RRF)
+    graph_quality: float = 0.0  # Graded edge quality (used by production RRF)
+
+    # Raw signal fields for ranking model training
+    term_match_count: int = 0  # Raw count of query terms matching this def's name
+    term_total_matches: int = 0  # How many defs matched each term (IDF denominator)
+    graph_edge_type: str | None = None  # callee/caller/sibling or None
+    graph_seed_rank: int | None = None  # Position of the seed in merged pool
+    symbol_source: str | None = None  # agent_seed/auto_seed/task_extracted/path_mention or None
+    import_direction: str | None = None  # forward/reverse/barrel/test_pair or None
 
     # Structured evidence trail
     evidence: list[EvidenceRecord] = field(default_factory=list)

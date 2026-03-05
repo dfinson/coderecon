@@ -1,0 +1,383 @@
+# clap-rs/clap
+
+| Field | Value |
+|-------|-------|
+| **URL** | https://github.com/clap-rs/clap |
+| **License** | MIT OR Apache-2.0 |
+| **Language** | Rust |
+| **Scale** | Large |
+| **Category** | CLI argument parser |
+| **Set** | Cutoff |
+
+## Why this repo
+
+- **Well-structured**: Multi-crate workspace with clear separation:
+  `clap_builder` (core argument parsing and help/error formatting),
+  `clap_derive` (proc-macro for `#[derive(Parser)]`), `clap_complete`
+  (shell completion generation), and `clap_lex` (low-level argv lexing).
+  Each crate has focused responsibilities with minimal cross-coupling.
+- **Rich history**: 14K+ stars, 5K+ commits. The dominant Rust CLI
+  parsing library, used by ripgrep, bat, fd, cargo, and thousands of
+  other Rust tools. PRs cover parser edge cases, derive macro
+  improvements, completion engines, and error formatting.
+- **Permissive**: Dual-licensed MIT OR Apache-2.0.
+
+## Structure overview
+
+```
+clap/
+├── clap_builder/
+│   └── src/
+│       ├── lib.rs                 # Re-exports, top-level API
+│       ├── builder/
+│       │   ├── command.rs         # Command struct — name, args, subcommands, settings
+│       │   ├── arg.rs             # Arg struct — flags, options, positionals, value hints
+│       │   ├── arg_group.rs       # ArgGroup — mutually exclusive / co-occurring args
+│       │   ├── value_parser.rs    # ValueParser — typed parsing of flag values
+│       │   ├── styled_str.rs      # Styled terminal strings for help/error output
+│       │   └── action.rs          # ArgAction — Set, SetTrue, Count, Append, Help, Version
+│       ├── parser/
+│       │   ├── parser.rs          # Core argument parser — matches argv to Arg definitions
+│       │   ├── arg_matcher.rs     # ArgMatcher — tracks which args have been matched
+│       │   ├── matches.rs         # ArgMatches — query results after parsing
+│       │   └── validator.rs       # Post-parse validation — required args, conflicts, groups
+│       ├── output/
+│       │   ├── help.rs            # Help message generation — long/short help formatting
+│       │   ├── help_template.rs   # Customizable help templates
+│       │   └── usage.rs           # Usage string generation
+│       ├── error/
+│       │   ├── mod.rs             # Error type and ErrorKind enum
+│       │   └── format.rs          # Error message formatting and context rendering
+│       └── util/
+│           └── id.rs              # Id type for interning arg/group names
+├── clap_derive/
+│   └── src/
+│       ├── lib.rs                 # Proc-macro entry points — derive(Parser, Args, Subcommand, ValueEnum)
+│       ├── derives/
+│       │   ├── parser.rs          # Parser derive — top-level struct → Command
+│       │   ├── args.rs            # Args derive — struct fields → Arg definitions
+│       │   ├── subcommand.rs      # Subcommand derive — enum variants → subcommands
+│       │   └── value_enum.rs      # ValueEnum derive — enum → string value mapping
+│       └── attrs.rs               # Attribute parsing — #[arg(...)], #[command(...)]
+├── clap_complete/
+│   └── src/
+│       ├── lib.rs                 # Shell completion generation entry point
+│       ├── shells/
+│       │   ├── bash.rs            # Bash completion script generation
+│       │   ├── zsh.rs             # Zsh completion script generation
+│       │   ├── fish.rs            # Fish completion script generation
+│       │   ├── powershell.rs      # PowerShell completion script generation
+│       │   └── elvish.rs          # Elvish completion script generation
+│       ├── dynamic/
+│       │   └── completer.rs       # Dynamic (runtime) completion engine
+│       └── aot/                   # Ahead-of-time completion generation
+│           └── generator.rs       # Generator trait and generate() function
+├── clap_lex/
+│   └── src/
+│       └── lib.rs                 # Low-level argv lexer — OsStr splitting, -- handling, short/long flag parsing
+└── examples/
+    ├── derive_ref/                # Derive-style examples
+    └── tutorial_builder/          # Builder-style examples
+```
+
+## Scale indicators
+
+- ~50 Rust source files across 4 crates
+- ~25K lines of code (builder crate alone is ~15K)
+- Workspace layout with clear crate boundaries
+- Dependencies: minimal for core (just `clap_lex`); `syn`/`quote`/`proc-macro2` for derive
+
+---
+
+## Tasks
+
+30 tasks (10 narrow, 10 medium, 10 wide).
+
+## Narrow
+
+### N1: Fix ArgMatches::get_one panicking when a default value has an incompatible type
+
+When `Arg::default_value("true")` is set on a `bool` arg that uses
+`value_parser!(bool)`, calling `matches.get_one::<bool>()` panics at
+the downcast because the default is stored as a raw `OsString` rather
+than a parsed `bool`. Fix `parser/arg_matcher.rs` to run the
+`ValueParser` on default values before storing them in `ArgMatches`.
+
+### N2: Fix usage string not showing mutual exclusion between arg groups
+
+When two `ArgGroup`s are marked mutually exclusive, the usage string
+generated by `output/usage.rs` lists both groups' args without
+indicating they are alternatives. Fix the usage renderer to wrap
+mutually exclusive groups in `( A | B )` syntax.
+
+### N3: Fix help output misaligning long flag descriptions when terminal is narrow
+
+When the terminal width is small (e.g., 40 columns), long flag names
+cause the description column to wrap incorrectly, producing jagged
+output. Fix the column-width calculation in `output/help.rs` to
+properly account for flag name length and fall back to stacked layout
+when space is insufficient.
+
+### N4: Fix derive macro not respecting #[arg(value_name = "...")] on positional args
+
+When `#[arg(value_name = "FILE")]` is placed on a positional argument
+in a derive struct, the generated code ignores `value_name` and uses
+the field name instead. Fix `clap_derive/src/derives/args.rs` to emit
+the `Arg::value_name()` call when the attribute is present.
+
+### N5: Fix error format not including the invalid value when ValueParser fails
+
+When a custom `ValueParser` returns an error for an invalid value, the
+formatted error message shows the flag name but omits the actual value
+the user provided. Fix `error/format.rs` to include the invalid value
+in the `InvalidValue` error context.
+
+### N6: Fix clap_lex not handling equals sign in short flag clusters
+
+Passing `-abc=val` where `-c` takes a value doesn't correctly split
+the equals sign from the flag cluster. The lexer in `clap_lex/src/lib.rs`
+treats `=val` as part of the last short flag's value but fails to
+strip the `=` prefix. Fix the short-flag cluster iteration to handle
+inline `=` values.
+
+### N7: Fix fish completion escaping backslashes in description strings
+
+When a command or arg description contains a backslash (e.g.,
+`"use \n for newline"`), the fish completion script in
+`clap_complete/src/shells/fish.rs` emits an unescaped backslash that
+fish interprets as an escape sequence. Fix the fish generator to
+double-escape backslashes in description strings.
+
+### N8: Fix Command::display_name not propagating to subcommand error messages
+
+When `Command::display_name("my-tool")` is set on the root command,
+subcommand errors still show the binary name from argv[0] instead of
+the display name. Fix error context assembly in `error/mod.rs` to use
+`display_name` if set, walking up the command tree.
+
+### N9: Fix ArgAction::Count overflow silently wrapping on u8 boundary
+
+When using `ArgAction::Count` with the default `u8` storage, passing a
+flag more than 255 times causes a silent overflow to 0. Fix the
+counting logic in `parser/parser.rs` to saturate at `u8::MAX` instead
+of wrapping.
+
+### N10: Fix styled_str not resetting color when nested styles are applied
+
+When `StyledStr` applies a bold+color style followed by a nested color
+change, the reset sequence only clears the inner style, leaving the
+terminal in a partially styled state. Fix `builder/styled_str.rs` to
+track style nesting depth and emit a full reset when returning to the
+base level.
+
+## Medium
+
+### M1: Implement value hint-driven shell completions for common types
+
+Add rich runtime completions driven by `ValueHint`: `FilePath` triggers
+filesystem completion, `Url` suggests common schemes, `EmailAddress`
+completes from system contacts, `Hostname` reads `/etc/hosts`.
+Requires changes to all five shell generators in `clap_complete/src/shells/`,
+the `ValueHint` enum in `clap_builder`, the dynamic completer, and
+integration tests per shell.
+
+### M2: Add ArgGroup conflict diagnostics with visualization
+
+When a user violates an arg group constraint (required-together,
+mutually-exclusive), the error message is generic. Implement rich
+diagnostics that name the conflicting group, list all member args, show
+which args were provided vs. missing, and render an ASCII-art diagram
+of the group relationships. Changes span `error/format.rs`,
+`builder/arg_group.rs`, `parser/validator.rs`, and the help template
+system.
+
+### M3: Implement derive macro support for flattening external crate args
+
+Add `#[command(flatten_external = "some_crate::Options")]` that can
+flatten arg structs defined in external crates without requiring them to
+derive `Args`. Generate a runtime adapter that reads the external
+struct's fields via a registry trait. Changes span `clap_derive/src/derives/args.rs`,
+a new trait in `clap_builder`, attribute parsing in `attrs.rs`, code
+generation templates, and cross-crate integration tests.
+
+### M4: Add typo suggestions for unknown subcommands and flags
+
+When a user types an unrecognized subcommand or flag, suggest the
+closest valid options using edit distance. Show up to 3 suggestions
+sorted by distance. Requires a string-distance function, candidate
+collection from the `Command` tree and arg list, integration into
+error construction in `error/mod.rs`, formatting in `error/format.rs`,
+and a config knob to disable suggestions.
+
+### M5: Implement environment variable fallback with precedence documentation
+
+Add `Arg::env("VAR_NAME")` support that reads from the environment when
+the flag is not provided on the command line, with clear precedence:
+CLI > env > default. Show the env var name in help output. Requires
+changes to `builder/arg.rs`, `parser/parser.rs` for env lookup during
+parsing, `output/help.rs` to display `[env: VAR_NAME=current]`, and
+`error/format.rs` to indicate when a value came from an env var.
+
+### M6: Add custom error formatting with user-defined templates
+
+Implement `Command::error_template(tmpl)` that lets users define error
+message layout using a template string (similar to help templates).
+Support placeholders for error kind, invalid value, valid values, usage,
+and suggestion. Requires a template parser in `error/`, integration with
+`Error::format()`, fallback to default formatting, and validation that
+template placeholders are valid.
+
+### M7: Implement completion script auto-installation
+
+Add a `clap_complete::install()` function that detects the user's shell,
+writes the completion script to the appropriate config directory
+(`~/.bash_completion.d/`, `~/.config/fish/completions/`, etc.), and
+prints instructions for sourcing. Support `--dry-run` to preview.
+Requires shell detection logic, platform-specific path resolution,
+file writing with permission handling, existing-file backup, and
+integration with `clap_complete`'s generator system.
+
+### M8: Add subcommand aliases with visibility control
+
+Implement `Command::visible_alias("ci")` and `Command::hidden_alias("commit-interactive")`
+to support multiple names for subcommands with control over whether
+they appear in help. Visible aliases should show in help and completion;
+hidden aliases should parse silently. Requires changes to
+`builder/command.rs`, the parser for alias resolution, help rendering,
+completion generators, and error suggestions.
+
+### M9: Implement value validation with custom error messages
+
+Add `Arg::value_parser(RangedU64ValueParser::new().range(1..=100))` style
+validators that produce structured errors on failure. Support composing
+validators (e.g., range + regex), custom error messages per validator,
+and integration with derive via `#[arg(value_parser = ...)]`. Changes
+span `builder/value_parser.rs`, error construction, derive codegen in
+`clap_derive`, and the help system to show valid ranges.
+
+### M10: Add shell-agnostic completion testing framework
+
+Implement a `clap_complete::testing::CompletionTester` that simulates
+completion requests for any shell backend and returns structured
+results. Support testing positional completions, flag-value completions,
+subcommand completions, and description formatting. Requires a new
+testing module in `clap_complete`, internal refactoring to separate
+output from logic, mock filesystem for path completions, and example
+tests.
+
+## Wide
+
+### W1: Implement a command versioning and deprecation lifecycle
+
+Add version-aware command and arg metadata: `Arg::since("2.0")`,
+`Arg::deprecated_since("3.0", "use --format instead")`,
+`Command::removed_in("4.0")`. At runtime, compare against the app
+version to warn or error. Generate migration guides listing changes
+between versions. Changes span `builder/command.rs`, `builder/arg.rs`,
+the parser for warning emission, error formatting, help rendering,
+derive macro attribute handling, completion generators to mark
+deprecated items, and a new migration-guide output module.
+
+### W2: Add async command execution with tokio integration
+
+Implement `Command::execute_async()` and derive support for
+`#[command(async)]` that runs `RunE` as an async function on a tokio
+runtime. Support graceful shutdown via `CancellationToken`, async
+`PreRunE`/`PostRunE` hooks, and timeout enforcement per command.
+Changes span the command execution pipeline, a new async module in
+`clap_builder`, derive codegen for async trait methods, context
+propagation, error handling for `JoinError`, and the testing framework
+for async command tests.
+
+### W3: Implement a plugin system for dynamically discovered subcommands
+
+Add plugin discovery from: (a) binaries on `$PATH` matching a naming
+convention (e.g., `myapp-plugin-*`), (b) a plugin directory, and (c)
+dynamically loaded `.so`/`.dylib` libraries. Support plugin metadata
+(version, description, expected clap version), conflict detection, and
+a built-in `plugin list` subcommand. Changes span command resolution
+in `builder/command.rs`, a new plugin module, completion support for
+plugin commands, help formatting for plugin sections, derive integration
+for plugin traits, and security considerations for dynamic loading.
+
+### W4: Implement a TUI-based interactive mode for missing arguments
+
+When required arguments are missing, instead of printing an error, enter
+an interactive TUI mode that prompts for each missing argument with
+type-appropriate widgets: text input for strings, selection list for
+`ValueEnum`, file picker for `ValueHint::FilePath`, toggle for bools,
+and spinner for numbers. Show validation inline and a final summary
+before execution. Changes span the command execution pipeline, a new
+`interactive` module, `ValueHint` and `ValueEnum` introspection,
+terminal raw-mode handling, derive integration for prompt customization,
+and a testing harness for TUI simulation.
+
+### W5: Add comprehensive man page and markdown documentation generation
+
+Rewrite the documentation generator to produce high-quality man pages
+(with proper `.TH`, `.SH` sections, cross-references), markdown with
+front-matter for static site generators, and a JSON schema describing
+the full CLI interface. Support custom templates, multi-level command
+trees with a table-of-contents index page, example rendering, exit-code
+documentation, and environment variable sections. Changes span a new
+`clap_doc` crate, template engine integration, command tree traversal,
+arg introspection, the derive macro for doc attributes, and output
+format abstraction.
+
+### W6: Implement distributed completion with server-client architecture
+
+Add a completion server mode where a long-running daemon caches the
+command tree and provides completions over a Unix socket or TCP, enabling
+instant completions for complex CLIs with expensive initialization.
+Support lazy subcommand loading, result caching with invalidation,
+multiple concurrent shells, and graceful degradation to static
+completions. Changes span a new `clap_complete_server` crate, the
+shell generators for client-mode scripts, a daemon process module,
+IPC protocol definition, the dynamic completer, and integration tests
+with simulated shells.
+
+### W7: Add OpenTelemetry instrumentation across the CLI lifecycle
+
+Instrument the full parse-validate-execute lifecycle with OpenTelemetry:
+trace spans for arg parsing, validation, hook execution, and command
+invocation. Emit metrics for parse duration, error frequency, flag usage
+statistics, and subcommand popularity. Support configurable exporters
+(stdout, OTLP, Jaeger). Changes span the parser, validator, command
+execution pipeline, a new telemetry module in `clap_builder`, derive
+integration for span attributes, `clap_complete` instrumentation, and
+conditional compilation to keep telemetry optional.
+
+### W8: Implement first-class configuration file integration
+
+Build a config-file system that automatically binds args to keys in
+TOML/YAML/JSON config files. Support per-subcommand config sections,
+config-file discovery (XDG, `--config` flag, env var), precedence
+(CLI > env > config > default), config file generation from the command
+tree, and validation of config-file contents against the arg schema.
+Changes span `builder/arg.rs` for config key metadata, a new config
+module, the parser for config-source fallback, `output/help.rs` to show
+config keys, derive attributes for config mapping, and a config-file
+generator utility.
+
+### W9: Implement multi-language help and error message localization
+
+Add i18n support across all user-facing strings: help labels ("Usage:",
+"Arguments:", "Options:"), error messages, suggestion text, completion
+instructions, and value-enum descriptions. Use Rust's `fluent` crate
+for message formatting with locale negotiation from `$LANG`/`$LC_ALL`.
+Support user-provided translations for command descriptions via derive
+attributes. Changes span `output/help.rs`, `output/usage.rs`,
+`error/format.rs`, `builder/styled_str.rs`, the derive macro for i18n
+attributes, completion generators, and a message catalog build system.
+
+### W10: Implement a compatibility layer for migrating from structopt and clap v2
+
+Build a compatibility shim that allows codebases using structopt or
+clap v2 APIs to compile against clap v4 with minimal changes. Map
+structopt's `#[structopt(...)]` attributes to clap derive equivalents,
+translate clap v2 builder patterns (`Arg::with_name().required(true)`)
+to v4 API (`Arg::new().required(true)`), emit deprecation warnings for
+translated APIs, and provide a migration tool that rewrites source
+code. Changes span a new `clap_compat` crate, proc-macro re-exports,
+API adapters in `clap_builder`, a source-rewriting tool, and
+comprehensive test suites covering both legacy APIs.

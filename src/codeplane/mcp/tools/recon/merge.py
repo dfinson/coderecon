@@ -173,18 +173,16 @@ async def _enrich_candidates(
 def _select_graph_seeds(
     merged: dict[str, HarvestCandidate],
 ) -> list[str]:
-    """Select the best candidates from merged pool to use as graph seeds.
+    """Select candidates to use as graph seeds.
 
-    Returns up to 15 seeds.  Prioritizes candidates with multiple
-    evidence axes and explicit mentions.
+    Seeds = all candidates found by ≥2 retrievers, plus all explicit
+    mentions. No scoring formula, no cap.
     """
-    scored: list[tuple[str, float]] = []
+    seeds: list[str] = []
     for uid, cand in merged.items():
-        score = cand.evidence_axes * 2.0 + (2.0 if cand.from_explicit else 0.0)
-        scored.append((uid, score))
-
-    scored.sort(key=lambda x: -x[1])
-    return [uid for uid, _ in scored[:15]]
+        if cand.from_explicit or cand.evidence_axes >= 2:
+            seeds.append(uid)
+    return seeds
 
 
 def _add_file_defs_as_candidates(
@@ -197,9 +195,9 @@ def _add_file_defs_as_candidates(
     detail: str,
     score: float,
     graph_quality: float = 0.0,
-    limit: int = 5,
+    import_direction: str | None = None,
 ) -> None:
-    """Add top defs from a file as import-discovered candidates."""
+    """Add defs from a file as import-discovered candidates."""
     from codeplane.index._internal.indexing.graph import FactQueries as _FQ
 
     fq_typed: _FQ = fq  # type: ignore[assignment]
@@ -207,17 +205,16 @@ def _add_file_defs_as_candidates(
     if file_id is None:
         return
 
-    defs = fq_typed.list_defs_in_file(file_id, limit=50)
-    important = [d for d in defs if d.kind in ("function", "method", "class", "module")]
-    rest = [d for d in defs if d.kind not in ("function", "method", "class", "module")]
-    selected = (important + rest)[:limit]
+    defs = fq_typed.list_defs_in_file(file_id, limit=200)
 
-    for d in selected:
+    for d in defs:
         if d.def_uid in merged:
             existing = merged[d.def_uid]
             if not existing.from_graph:
                 existing.from_graph = True
                 existing.graph_quality = max(existing.graph_quality, graph_quality)
+                if existing.import_direction is None:
+                    existing.import_direction = import_direction
                 existing.evidence.append(
                     EvidenceRecord(category=category, detail=detail, score=score)
                 )
@@ -226,12 +223,15 @@ def _add_file_defs_as_candidates(
             candidates[d.def_uid].graph_quality = max(
                 candidates[d.def_uid].graph_quality, graph_quality
             )
+            if candidates[d.def_uid].import_direction is None:
+                candidates[d.def_uid].import_direction = import_direction
             continue
         candidates[d.def_uid] = HarvestCandidate(
             def_uid=d.def_uid,
             def_fact=d,
             from_graph=True,
             graph_quality=graph_quality,
+            import_direction=import_direction,
             evidence=[EvidenceRecord(category=category, detail=detail, score=score)],
         )
 

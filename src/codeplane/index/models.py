@@ -582,7 +582,6 @@ class DefFact(SQLModel, table=True):
     unit_id: int = Field(foreign_key="contexts.id", index=True)
     kind: str = Field(index=True)  # function, class, method, variable, etc.
     name: str = Field(index=True)  # Simple name
-    qualified_name: str | None = None  # Full path (e.g., module.Class.method)
     lexical_path: str = Field(index=True)  # Syntactic nesting path for identity
     namespace: str | None = Field(
         default=None, index=True

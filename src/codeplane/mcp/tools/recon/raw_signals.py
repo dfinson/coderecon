@@ -85,43 +85,12 @@ async def _raw_signals_pipeline(
                 emb_scores[uid] = ev.score
                 break
 
-    # Term match scores
-    term_scores: dict[str, float] = {
-        uid: cand.term_idf_score for uid, cand in merged.items() if cand.term_idf_score > 0
-    }
-
-    # Lexical scores
-    lex_scores: dict[str, float] = {
-        uid: float(cand.lexical_hit_count) for uid, cand in merged.items() if cand.lexical_hit_count > 0
-    }
-
-    # Graph scores
-    graph_scores: dict[str, float] = {
-        uid: cand.graph_quality for uid, cand in merged.items() if cand.graph_quality > 0
-    }
-
-    # Symbol/explicit scores
-    symbol_scores: dict[str, float] = {}
-    for uid, cand in merged.items():
-        if cand.from_explicit:
-            # Use max evidence score from explicit category
-            max_score = 0.0
-            for ev in cand.evidence:
-                if ev.category in ("explicit", "auto_seed"):
-                    max_score = max(max_score, ev.score)
-            if max_score > 0:
-                symbol_scores[uid] = max_score
-
-    # Compute ranks per retriever
+    # Compute ranks for embedding only (other signals use categorical features)
     def _compute_ranks(scores: dict[str, float]) -> dict[str, int]:
         sorted_uids = sorted(scores.keys(), key=lambda u: -scores[u])
         return {uid: rank for rank, uid in enumerate(sorted_uids, 1)}
 
     emb_ranks = _compute_ranks(emb_scores)
-    term_ranks = _compute_ranks(term_scores)
-    lex_ranks = _compute_ranks(lex_scores)
-    graph_ranks = _compute_ranks(graph_scores)
-    symbol_ranks = _compute_ranks(symbol_scores)
 
     # Build candidate list
     candidates_out: list[dict[str, Any]] = []
@@ -130,34 +99,66 @@ async def _raw_signals_pipeline(
             continue
 
         d = cand.def_fact
+
+        # Count retrievers that found this def
         retriever_hits = sum([
             uid in emb_scores,
-            uid in term_scores,
-            uid in lex_scores,
-            uid in graph_scores,
-            uid in symbol_scores,
+            cand.from_term_match,
+            cand.from_lexical,
+            cand.from_graph,
+            cand.from_explicit,
+            cand.import_direction is not None,
         ])
 
+        # Path tokenization
+        path_parts = cand.file_path.rsplit("/", 1)
+        parent_dir = path_parts[0] if len(path_parts) > 1 else ""
+        path_depth = cand.file_path.count("/")
+
+        # Nesting depth from lexical_path
+        nesting_depth = d.lexical_path.count(".") if d.lexical_path else 0
+
         candidates_out.append({
+            # Identity
             "def_uid": uid,
             "path": cand.file_path,
             "kind": d.kind,
             "name": d.name,
+            "lexical_path": d.lexical_path,
+            # Span
             "start_line": d.start_line,
             "end_line": d.end_line,
             "object_size_lines": d.end_line - d.start_line + 1,
+            # Path features
             "file_ext": "." + cand.file_path.rsplit(".", 1)[-1] if "." in cand.file_path else "",
-            # Per-retriever scores (None if retriever didn't find this def)
+            "parent_dir": parent_dir,
+            "path_depth": path_depth,
+            # Structural metadata from index
+            "has_docstring": d.docstring is not None and len(d.docstring) > 0,
+            "has_decorators": d.decorators_json is not None and d.decorators_json != "[]",
+            "has_return_type": d.return_type is not None,
+            "signature_text": d.signature_text,
+            "namespace": d.namespace,
+            "nesting_depth": nesting_depth,
+            "has_parent_scope": nesting_depth > 0,
+            "hub_score": cand.hub_score,
+            "is_test": cand.is_test,
+            # Embedding signal (continuous)
             "emb_score": emb_scores.get(uid),
             "emb_rank": emb_ranks.get(uid),
-            "lex_score": lex_scores.get(uid),
-            "lex_rank": lex_ranks.get(uid),
-            "term_score": term_scores.get(uid),
-            "term_rank": term_ranks.get(uid),
-            "graph_score": graph_scores.get(uid),
-            "graph_rank": graph_ranks.get(uid),
-            "symbol_score": symbol_scores.get(uid),
-            "symbol_rank": symbol_ranks.get(uid),
+            # Term match signal (raw counts)
+            "term_match_count": cand.term_match_count if cand.from_term_match else None,
+            "term_total_matches": cand.term_total_matches if cand.from_term_match else None,
+            # Lexical signal (raw count)
+            "lex_hit_count": cand.lexical_hit_count if cand.from_lexical else None,
+            # Graph signal (categorical)
+            "graph_edge_type": cand.graph_edge_type,
+            "graph_seed_rank": cand.graph_seed_rank,
+            # Symbol/explicit signal (categorical)
+            "symbol_source": cand.symbol_source,
+            # Import signal (categorical)
+            "import_direction": cand.import_direction,
+            # Retriever agreement
             "retriever_hits": retriever_hits,
         })
 
