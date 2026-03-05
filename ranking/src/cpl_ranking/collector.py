@@ -69,6 +69,7 @@ def collect_ground_truth(
     runs: list[dict[str, Any]] = []
     touched: list[dict[str, Any]] = []
     queries: list[dict[str, Any]] = []
+    audit_records: list[dict[str, Any]] = []
     unmatched: list[dict[str, str]] = []
 
     for tf in task_files:
@@ -83,26 +84,49 @@ def collect_ground_truth(
             "task_text": task["task_text"],
         })
 
-        # Resolve relevant_defs
-        for rd in task.get("relevant_defs", []):
-            resolved = _resolve_def(cur, rd["path"], rd["name"], rd["kind"])
-            if resolved is None:
-                unmatched.append({
-                    "task_id": task_id,
+        # Resolve two-tier ground truth
+        for tier_key, tier_label in [
+            ("minimum_sufficient_defs", "minimum"),
+            ("thrash_preventing_defs", "thrash_preventing"),
+        ]:
+            for rd in task.get(tier_key, []):
+                resolved = _resolve_def(cur, rd["path"], rd["name"], rd["kind"])
+                if resolved is None:
+                    unmatched.append({
+                        "task_id": task_id,
+                        "tier": tier_label,
+                        "path": rd["path"],
+                        "name": rd["name"],
+                        "kind": rd["kind"],
+                    })
+                    continue
+                touched.append({
+                    "run_id": run_id,
+                    "def_uid": resolved["def_uid"],
                     "path": rd["path"],
-                    "name": rd["name"],
                     "kind": rd["kind"],
+                    "name": rd["name"],
+                    "start_line": resolved["start_line"],
+                    "end_line": resolved["end_line"],
+                    "tier": tier_label,
                 })
-                continue
-            touched.append({
-                "run_id": run_id,
-                "def_uid": resolved["def_uid"],
-                "path": rd["path"],
-                "kind": rd["kind"],
-                "name": rd["name"],
-                "start_line": resolved["start_line"],
-                "end_line": resolved["end_line"],
-            })
+
+        # Collect audit record
+        audit_records.append({
+            "run_id": run_id,
+            "task_id": task_id,
+            "diff": task.get("diff", ""),
+            "solve_notes": task.get("solve_notes", ""),
+            "confidence": task.get("confidence", "unknown"),
+            "excluded_defs": task.get("excluded_defs", []),
+            "justifications": {
+                tier_key: [
+                    {"path": d["path"], "name": d["name"], "reason": d.get("reason", "")}
+                    for d in task.get(tier_key, [])
+                ]
+                for tier_key in ("minimum_sufficient_defs", "thrash_preventing_defs")
+            },
+        })
 
         # Process queries
         for qi, q in enumerate(task.get("queries", [])):
@@ -126,10 +150,21 @@ def collect_ground_truth(
     _write_jsonl(out_dir / "touched_objects.jsonl", touched)
     _write_jsonl(out_dir / "queries.jsonl", queries)
 
+    # Write audit records for third-agent auditing
+    audit_dir = data_dir / "audit"
+    audit_dir.mkdir(parents=True, exist_ok=True)
+    _write_jsonl(audit_dir / "audit_records.jsonl", audit_records)
+
+    # Tier breakdown
+    n_minimum = sum(1 for t in touched if t["tier"] == "minimum")
+    n_thrash = sum(1 for t in touched if t["tier"] == "thrash_preventing")
+
     summary = {
         "repo_id": repo_id,
         "tasks": len(runs),
-        "relevant_defs": len(touched),
+        "relevant_defs_total": len(touched),
+        "minimum_sufficient": n_minimum,
+        "thrash_preventing": n_thrash,
         "queries": len(queries),
         "unmatched": len(unmatched),
         "unmatched_rate": len(unmatched) / max(len(touched) + len(unmatched), 1),

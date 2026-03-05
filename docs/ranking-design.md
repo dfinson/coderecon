@@ -254,11 +254,41 @@ For EACH task in the file:
   {
     "task_id": "N1",
     "task_text": "<full task description from the md file>",
-    "relevant_defs": [
-      {"path": "<repo-relative path>", "name": "<def name>", "kind": "<kind>"}
+    "diff": "<raw git diff output>",
+    "solve_notes": "<1-3 sentence narrative of what you did and why>",
+    "confidence": "high",
+    "minimum_sufficient_defs": [
+      {
+        "path": "<repo-relative path>",
+        "name": "<def name>",
+        "kind": "<kind>",
+        "reason": "edited: <what changed>" or "read: <why a human needs this>"
+      }
+    ],
+    "thrash_preventing_defs": [
+      {
+        "path": "<repo-relative path>",
+        "name": "<def name>",
+        "kind": "<kind>",
+        "reason": "read: <why seeing this upfront prevents re-searching>"
+      }
+    ],
+    "excluded_defs": [
+      {
+        "path": "<repo-relative path>",
+        "name": "<def name>",
+        "kind": "<kind>",
+        "reason": "<why this was opened but not needed>"
+      }
     ],
     "queries": [
-      {"query_type": "Q_SEMANTIC", "query_text": "...", "seeds": [], "pins": []},
+      {
+        "query_type": "Q_SEMANTIC",
+        "query_text": "...",
+        "seeds": [],
+        "pins": [],
+        "justification": "<why this query + these seeds/pins>"
+      },
       ...
     ]
   }
@@ -266,20 +296,47 @@ For EACH task in the file:
   FIELD DEFINITIONS:
 
   task_id: The heading ID from the md file (N1, M1, W2, etc.)
-
   task_text: The full task description text, verbatim.
+  diff: The raw git diff output from your solution.
+  solve_notes: 1-3 sentences explaining what you did and why.
+  confidence: Your confidence in the ground truth completeness.
+    "high" = certain nothing is missing or extra.
+    "medium" = mostly confident but one or two defs might be wrong.
+    "low" = unsure, task was complex with many dependencies.
 
-  relevant_defs: Every function, method, class, or definition that was
-  RELEVANT to solving this task. This includes:
-    - Defs you EDITED (changed their code)
-    - Defs you READ because understanding them was necessary to make
-      the correct change (contracts, interfaces, callers, base classes,
-      related config)
+  TWO-TIER GROUND TRUTH:
 
-  Do NOT include:
+  minimum_sufficient_defs: The minimum set of defs a COMPETENT HUMAN
+  DEVELOPER would need to see to implement the correct solution.
+  If you removed any def from this list, a skilled developer could
+  not complete the task correctly without finding it themselves.
+  Includes:
+    - Every def you EDITED (reason starts with "edited:")
+    - Every def you absolutely HAD to read for correctness
+      (contracts, interfaces, type signatures you relied on)
+
+  thrash_preventing_defs: ADDITIONAL defs (beyond minimum_sufficient)
+  that an AI CODING AGENT would need to see upfront to avoid making
+  unnecessary search/read calls during implementation. These are defs
+  where:
+    - Not seeing them would cause the agent to make wrong assumptions
+      and then backtrack
+    - The agent would proactively search for them out of caution
+    - Understanding them prevents a wrong turn even if a human
+      wouldn't need to check
+
+  Think: "what context would I need upfront so I could implement
+  the solution WITHOUT making any additional search or read calls?"
+  The union of minimum_sufficient + thrash_preventing is that set.
+
+  Do NOT include in either list:
     - Defs you opened and immediately closed without using
     - Defs you skimmed out of curiosity but didn't need
-    - Entire files — list specific defs, not "everything in file X"
+    - Entire files — list specific defs
+
+  excluded_defs: Defs you opened during solving but consciously
+  excluded from both lists. Include the reason. This lets an auditor
+  verify you considered and rejected them (not that you forgot them).
 
   Each entry has:
     - path: repo-relative file path (e.g. "src/auth/middleware.py")
@@ -287,16 +344,17 @@ For EACH task in the file:
     - kind: one of: function, method, class, struct, interface, trait,
       enum, variable, constant, module, property, pair, key, table,
       target, heading
+    - reason: why this def is in this category
 
   If you edited a method inside a class, list the METHOD. Only list
-  the parent class if you also needed its class-level code (class
-  variables, __init__, decorators, etc.).
+  the parent class if you also needed its class-level code.
 
-  WHY THIS MATTERS: This list becomes the ground truth label for
-  training a ranking model. Every def you list will be labeled
-  "relevant." Every def you omit will be labeled "irrelevant." If
-  you include junk, the model learns to surface junk. If you miss
-  something genuinely needed, the model learns to miss it. Be precise.
+  WHY THIS MATTERS: minimum_sufficient_defs becomes the recall floor
+  — if the model misses any of these, that's a hard failure.
+  thrash_preventing_defs becomes the training target — the model
+  learns to return this larger set to prevent agent thrash.
+  If you include junk, the model learns to surface junk. If you miss
+  something, the model learns to miss it. Be precise.
 
   SEED AND PIN RULES:
   - seeds: symbol names from the code you touched. Pick the 1-4 MOST
@@ -361,6 +419,11 @@ For EACH task in the file:
     seeds: 2-4 central symbol names
     pins: 2-4 key file paths
 
+  Each query MUST include a "justification" field: a brief
+  explanation of why this query text + these seeds/pins would lead
+  to the relevant code. This lets an auditor verify the query is
+  well-formed and the seeds/pins are pre-implementation knowledge.
+
   NON-OK QUERIES (optional — only those that arise naturally):
 
   UNSAT (up to 2): Factually wrong assumption. seeds: [] pins: []
@@ -370,12 +433,19 @@ For EACH task in the file:
 
   STEP 3 — VALIDATE (second pass, AFTER writing the JSON)
   Re-read your JSON file and verify:
-    1. relevant_defs: Every def you genuinely needed? Nothing you
-       only glanced at? Check your diff — every changed def should
-       appear. Then: what did you READ to make the change? Those too.
-    2. queries: Each follows its REQUIRED/FORBIDDEN rules?
-    3. seeds/pins: What you'd know BEFORE solving, not after?
-    4. Completeness: Exactly 8 OK queries? Exact query_type strings?
+    1. diff cross-check: every function/method/class in the diff
+       appears in minimum_sufficient_defs with reason "edited:..."
+    2. minimum_sufficient: would a skilled human fail without any
+       of these? If not, move it to thrash_preventing or remove.
+    3. thrash_preventing: would an AI agent search for this if not
+       given upfront? If not, remove it.
+    4. excluded: did you open defs that aren't in either list?
+       Add them to excluded_defs with reason.
+    5. queries: each follows REQUIRED/FORBIDDEN rules? Each has
+       a justification?
+    6. seeds/pins: pre-implementation knowledge, not hindsight?
+    7. completeness: exactly 8 OK queries? Exact query_type strings?
+    8. solve_notes and confidence filled in?
 
   Fix any issues before moving to the next task.
 
@@ -385,10 +455,14 @@ Work through every task sequentially. After all tasks, say
 
 **Post-processing** (automated):
 
-1. For each `(path, name, kind)` in `relevant_defs`: look up in
-   codeplane index → resolve `def_uid`, `start_line`, `end_line`.
+1. For each def in `minimum_sufficient_defs` and `thrash_preventing_defs`:
+   look up `(path, name, kind)` in codeplane index → resolve `def_uid`.
 2. If no match: flag for review (should be <2%).
-3. Assemble `runs.jsonl`, `touched_objects.jsonl`, `queries.jsonl`.
+3. Write `touched_objects.jsonl` with `tier` field (`minimum` or `thrash_preventing`).
+   The ranker trains on the union (both tiers = relevant).
+4. Write `audit/` with `diff`, `justification`, `excluded_defs`,
+   `confidence`, `solve_notes` for third-agent auditing.
+5. Assemble `runs.jsonl`, `queries.jsonl`.
 
 #### Phase 3: Retrieval Signal Collection (Re-runnable)
 
@@ -421,6 +495,8 @@ Join with ground truth → `label_relevant` per candidate (binary).
 ### 5.2 `touched_objects`
 
 One row per relevant def per task. Absence = irrelevant.
+Two tiers: `minimum` (human-necessary) and `thrash_preventing`
+(agent-necessary). The ranker trains on the union of both.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -428,6 +504,10 @@ One row per relevant def per task. Absence = irrelevant.
 | `def_uid` | str | DefFact stable identity |
 | `path` | str | File path |
 | `kind` | str | DefFact kind |
+| `name` | str | DefFact name |
+| `start_line` | int | Span start |
+| `end_line` | int | Span end |
+| `tier` | str | `minimum` or `thrash_preventing` |
 | `name` | str | DefFact name |
 | `start_line` | int | Span start |
 | `end_line` | int | Span end |

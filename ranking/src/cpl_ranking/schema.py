@@ -35,8 +35,8 @@ class Run:
 class TouchedObject:
     """§5.2 — a relevant DefFact for a task.
 
-    Presence means relevant. Absence means irrelevant.
-    No edit/read distinction.
+    Two tiers: minimum (human-necessary) and thrash_preventing
+    (agent-necessary). Ranker trains on the union.
     """
 
     run_id: str
@@ -46,6 +46,7 @@ class TouchedObject:
     name: str
     start_line: int
     end_line: int
+    tier: str = "minimum"  # "minimum" or "thrash_preventing"
 
 
 @dataclass(frozen=True)
