@@ -63,7 +63,7 @@ spring-boot-project/
 
 ## Tasks
 
-10 tasks (3 narrow, 4 medium, 3 wide) for the Java application framework.
+30 tasks (10 narrow, 10 medium, 10 wide) for the Java application framework.
 
 ## Narrow
 
@@ -160,3 +160,200 @@ per test thread, parallel-safe mock bean injection, per-test database
 state (using test containers or schema-per-thread), and parallel-safe
 `@DynamicPropertySource`. Add a test execution listener that detects
 and reports context leaks across threads.
+
+### N4: Fix property binding failure for records with single-arg constructors
+
+When binding configuration properties to Java records using
+`@ConfigurationProperties`, the binder incorrectly treats a record
+with a single component as a scalar value rather than a composite.
+This causes `BindException` when the record component is itself a
+complex type. Fix the `JavaBeanBinder` and `ValueObjectBinder` to
+correctly detect record types regardless of component count.
+
+### N5: Fix Logback auto-configuration ignoring custom appender patterns in native image
+
+When running as a GraalVM native image, the Logback auto-configuration
+ignores custom `logging.pattern.console` and `logging.pattern.file`
+properties because the pattern resolver is initialized before the
+environment is fully populated. Fix the initialization ordering in
+`LoggingApplicationListener` so that custom patterns are available
+when `LogbackLoggingSystem` configures its appenders.
+
+### N6: Fix `@SpringBootTest` random port not propagated to `WebTestClient`
+
+When using `@SpringBootTest(webEnvironment = RANDOM_PORT)` with a
+reactive application, the `WebTestClient` bean is sometimes created
+with port 0 instead of the actual assigned port because the
+`ReactiveWebServerApplicationContext` hasn't finished initialization.
+Fix the lazy resolution of the port in `WebTestClientContextCustomizer`.
+
+### N7: Fix `@ConditionalOnProperty` not supporting relaxed binding for enum values
+
+`@ConditionalOnProperty(havingValue = "ALWAYS")` fails to match
+when the actual property value is `always` or `Always`. The condition
+evaluator uses exact string comparison instead of the relaxed binding
+rules used elsewhere. Fix `OnPropertyCondition` to apply case-insensitive
+matching for enum-like property values.
+
+### N8: Fix actuator metrics endpoint OOM with high-cardinality tags
+
+The `/actuator/metrics/{metricName}` endpoint loads all tag values
+into memory when listing available tags. For metrics with high-cardinality
+tags (e.g., URI paths), this causes `OutOfMemoryError`. Fix the
+`MetricsEndpoint` to apply pagination or streaming when enumerating
+tag values and add a configurable cardinality limit.
+
+### N9: Fix embedded Jetty graceful shutdown not draining WebSocket connections
+
+The graceful shutdown implementation for embedded Jetty correctly
+waits for in-flight HTTP requests but does not track active WebSocket
+connections. WebSocket sessions are terminated immediately when the
+shutdown signal arrives. Fix `JettyGracefulShutdown` to register a
+`WebSocketPolicy` listener that delays shutdown until active WebSocket
+sessions close or the timeout expires.
+
+### N10: Fix `spring-boot-devtools` restart not clearing ThreadLocal state
+
+When devtools triggers a restart, thread-local variables from the
+previous classloader generation are not cleared because the restart
+only replaces the application classloader, not the threads themselves.
+This causes class cast exceptions and stale security contexts. Fix
+RestartClassLoader to identify and clear known thread-local holders
+on restart.
+
+### M5: Add structured logging auto-configuration
+
+Implement auto-configuration for structured (JSON) log output. Detect
+popular JSON encoders (Logback `LogstashEncoder`, Log4j2 `JsonLayout`)
+on the classpath and configure them automatically. Add a
+`logging.structured.format` property supporting `logstash`, `ecs`,
+and `gelf` formats. Include MDC enrichment for Spring-specific fields
+(application name, active profiles, instance ID). Provide a
+`StructuredLoggingCustomizer` SPI for adding custom fields.
+
+### M6: Implement configuration property migration actuator
+
+Add an actuator endpoint that detects uses of deprecated configuration
+properties in the running application and reports migration guidance.
+Scan bound property sources against `additional-spring-configuration-metadata.json`
+deprecation entries. Show for each deprecated property: the current
+value, the replacement property name, the version it was deprecated,
+and whether a value has already been set for the replacement. Add
+suggestions for `application.properties` rewrites.
+
+### M7: Add auto-configuration for connection pool health diagnostics
+
+Add auto-configuration that exposes connection pool health for all
+configured data sources (HikariCP, Tomcat DBCP, DBCP2). Create health
+indicators that report active/idle/pending connections, pool
+utilization percentage, and connection wait time. Add pool-specific
+metrics to the Micrometer registry. Detect connection leaks by
+tracking unreturned connections past a configurable threshold and
+logging stack traces of the borrowing thread.
+
+### M8: Implement `@SpringBootTest` slice for Kafka
+
+Add a `@KafkaTest` test slice that auto-configures an embedded Kafka
+broker, producer and consumer factories, `KafkaTemplate`, and
+`@KafkaListener` infrastructure without loading the full application
+context. Support custom topic provisioning via `@KafkaTest(topics=...)`.
+Include a `KafkaTestUtils` helper for consuming and asserting messages.
+Register appropriate auto-configuration exclusions and filters.
+
+### M9: Add conditional auto-configuration for R2DBC connection pooling
+
+Implement auto-configuration that detects `r2dbc-pool` on the classpath
+and wraps the `ConnectionFactory` with `ConnectionPool`. Expose
+properties under `spring.r2dbc.pool.*` for initial size, max size,
+max idle time, validation query, and acquire timeout. Add health
+indicators for pool utilization and a metrics binder that reports
+pool statistics to Micrometer. Handle cleanup on context shutdown
+to avoid connection leaks.
+
+### M10: Add build info and Git commit details to actuator info endpoint
+
+Extend the `/actuator/info` endpoint to automatically expose build
+metadata (artifact, group, version, build time) from
+`META-INF/build-info.properties` and Git details (branch, commit ID,
+commit time, dirty flag) from `git.properties`. Add auto-configuration
+that generates `BuildInfoContributor` and `GitInfoContributor` beans.
+Support filtering sensitive fields via `management.info.git.mode`
+(simple vs full) and add a custom `InfoContributor` SPI.
+
+### W4: Implement configuration property documentation generator
+
+Build a system that generates comprehensive configuration documentation
+from all auto-configuration modules. Scan `@ConfigurationProperties`
+classes across all modules, extract type information, default values,
+deprecation notices, and Javadoc descriptions. Produce outputs in
+AsciiDoc, Markdown, and a searchable HTML page. Cross-reference each
+property to the auto-configuration class and condition that activates
+it. Integrate as a Gradle task and Maven goal. Support incremental
+generation detecting only changed modules.
+
+### W5: Add Spring Boot application dependency graph visualizer
+
+Implement a system that analyzes bean definitions, auto-configuration
+conditions, and property bindings to produce an interactive dependency
+graph. Show which auto-configuration classes are active vs excluded
+and why (listing matched and unmatched conditions). Visualize bean
+dependency chains and highlight circular references. Provide an
+actuator endpoint returning the graph as JSON and a web UI rendered
+via a separate starter. Support exporting to DOT format for external
+graph tools.
+
+### W6: Implement zero-downtime configuration reload
+
+Add support for reloading externalized configuration without
+restarting the application. Watch `application.properties`, config
+server sources, and Kubernetes ConfigMap mounts for changes. When
+changes are detected, re-bind `@ConfigurationProperties` beans,
+refresh conditional beans affected by changed properties, and
+publish `ConfigurationChangedEvent`. Add an actuator endpoint for
+manual reload. Implement safety checks that validate new values
+before applying and roll back on binding errors.
+
+### W7: Implement cross-cutting retry and circuit breaker auto-configuration
+
+Add auto-configuration that integrates Resilience4j with Spring Boot
+across all connection-oriented subsystems. Auto-wrap `RestTemplate`,
+`WebClient`, JDBC `DataSource`, R2DBC `ConnectionFactory`, Redis
+`LettuceConnectionFactory`, and Kafka producer/consumer with retry
+and circuit breaker decorators. Expose per-integration configuration
+under `spring.resilience4j.*`. Add actuator endpoints showing circuit
+breaker state, retry counts, and failure rates. Include health
+indicators that report OPEN circuit breakers as DOWN.
+
+### W8: Add multi-tenancy support across data and web layers
+
+Implement multi-tenancy auto-configuration spanning data isolation,
+web request routing, and security context. Support schema-per-tenant
+and database-per-tenant strategies for JPA, JDBC, and R2DBC. Route
+tenant identification from HTTP headers, JWT claims, or subdomain.
+Add tenant-aware cache namespacing, message queue partitioning, and
+scheduled task scoping. Provide a `TenantContext` API, an actuator
+endpoint listing active tenants, and a test utility for specifying
+tenant in `@SpringBootTest`.
+
+### W9: Overhaul embedded server abstraction for HTTP/3 and QUIC
+
+Extend the embedded server abstraction (`WebServerFactory` hierarchy)
+to support HTTP/3 over QUIC. Add HTTP/3 support for embedded Tomcat
+(via a QUIC connector), Jetty (via `http3-server`), and Netty (via
+`quiche` or `s2n-quic` bindings). Introduce configuration properties
+under `server.http3.*` for enabling QUIC, setting alt-svc headers,
+configuring UDP port, and TLS 1.3-only certificate material. Update
+`WebTestClient` and `TestRestTemplate` to optionally use HTTP/3.
+Add actuator metrics for QUIC connection counts and stream utilization.
+
+### W10: Implement end-to-end integration test framework for multi-module projects
+
+Create a test framework that spins up multiple Spring Boot applications
+in a single test JVM for integration testing across microservices.
+Support declaring application topology in `@IntegrationTest(apps=...)`
+with automatic port assignment and service discovery wiring. Manage
+shared infrastructure (databases, message brokers) via Testcontainers.
+Provide a `ServiceClient` abstraction that routes inter-service calls
+within the JVM. Add assertions for distributed tracing spans,
+message delivery, and eventual consistency. Integrate with
+`spring-boot-test` context caching for fast re-execution.

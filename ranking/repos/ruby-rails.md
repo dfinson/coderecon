@@ -158,3 +158,192 @@ logic (database fixtures, integration test helpers, system test drivers,
 mailer assertions) into a backend-agnostic layer that both Minitest
 and RSpec adapters use. Update all generators to produce tests for
 the configured backend. Support running mixed test suites.
+
+### N4: Fix `ActionController::Live` SSE stream not flushing headers immediately
+
+When using `ActionController::Live` with `SSE`, the response headers
+are not sent to the client until the first `stream.write` call. This
+means clients cannot detect the content type or establish the SSE
+connection until data arrives. Fix the `Live::Response` to flush
+headers as soon as the streaming thread starts, before any writes.
+
+### N5: Fix `ActiveRecord::Migration#change` reversibility for `remove_column` with type
+
+When `remove_column :users, :age, :integer` is used inside a `change`
+migration, the reversal fails because the column type information is
+lost during rollback. The `CommandRecorder` does not capture the column
+type argument for `remove_column`. Fix it so rollback correctly calls
+`add_column` with the original type and options.
+
+### N6: Fix `ActiveSupport::Cache::MemoryStore` race condition on `#fetch`
+
+Under concurrent requests, `MemoryStore#fetch` can execute the block
+multiple times for the same key when the cache entry expires. The
+current implementation checks existence and writes without holding a
+lock across both operations. Add a per-key mutex to ensure the block
+executes exactly once per expiry cycle.
+
+### N7: Fix `ActionView::Template` digest cache not invalidating on partial rename
+
+When a partial is renamed (e.g., `_form.html.erb` to `_edit_form.html.erb`),
+templates that reference the old partial name continue using the stale
+digest from the template digest cache. The `Digestor` dependency tracker
+does not detect that the referenced partial no longer exists. Fix the
+cache invalidation to detect missing partials and force a recompute.
+
+### N8: Fix `ActiveRecord::Enum` not raising on conflicting method definitions
+
+When an enum declares a value that conflicts with an existing model
+method (e.g., `enum status: [:new]` shadowing `Object#new`), no warning
+is raised and the model silently breaks. Add a conflict check in
+`enum` that raises `ArgumentError` listing the conflicting methods
+before they are defined.
+
+### N9: Fix `ActionMailer::Preview` not rendering multipart emails correctly
+
+When previewing a multipart email (text + HTML) in the Rails mailer
+preview UI, only the HTML part is displayed and there is no way to
+toggle to the plain-text part. Fix the mailer preview controller and
+its view template to add a format switcher that lets developers view
+each MIME part independently.
+
+### N10: Fix `ActiveStorage::Variant` not applying transformations in declared order
+
+When multiple transformations are chained on a variant (e.g.,
+`blob.variant(resize_to_limit: [100, 100], rotate: 90)`), the
+transformations are applied in hash key insertion order, which may
+differ across Ruby versions. Fix `ActiveStorage::Transformers::ImageProcessingTransformer`
+to use an ordered list so transformations apply in the developer's
+declared order.
+
+### M5: Add multi-database automatic role switching
+
+Extend `ActiveRecord::DatabaseConfigurations` to automatically switch
+between a primary (writer) and replica (reader) database based on
+request method. GET/HEAD requests should use the replica after a
+configurable delay following the last write. Add connection pooling
+per role, health checks that fall back to the primary when the
+replica is unavailable, and instrumentation events for role switches.
+
+### M6: Implement Action View component slots
+
+Add a slot-based content projection API to `ActionView::Base` so that
+view components can declare named slots (`header`, `body`, `footer`)
+and callers can fill them from the rendering template. Support default
+slot content, required slots with helpful error messages, and slot
+enumeration for repeated content. Integrate with the existing
+`content_for` / `yield` mechanism without breaking backward
+compatibility.
+
+### M7: Add Active Record query result caching with automatic invalidation
+
+Implement a query-level cache in `ActiveRecord::Relation` that stores
+result sets keyed by the SQL and bind parameters. Automatically
+invalidate cached results when any `INSERT`, `UPDATE`, or `DELETE`
+touches the cached table, using `ActiveSupport::Notifications`
+instrumentation. Support cache backends (memory, Redis) and
+per-model opt-in via `cache_queries ttl: 30.seconds`.
+
+### M8: Implement Action Cable channel authorization
+
+Add an authorization layer to Action Cable channels so that
+`reject` can be called based on fine-grained policies, not just
+in `subscribed`. Support `authorize_action :speak, :moderate`
+per channel action, policy objects that receive the current user
+and channel params, and denial callbacks that send structured
+rejection messages to the client. Add test helpers to assert
+authorization outcomes.
+
+### M9: Add Active Job middleware stack
+
+Implement a middleware stack for Active Job, similar to Rack middleware
+for HTTP. Each middleware wraps job execution and can modify arguments,
+log context, add retry logic, or enforce rate limits. Support
+per-queue and per-job-class middleware configuration.
+Add built-in middlewares for logging, unique-job deduplication,
+and execution timeout.
+
+### M10: Add `ActionDispatch::Routing` constraint groups
+
+Extend the routing DSL to support named constraint groups that can
+be applied to multiple routes declaratively. Support composable
+constraints (e.g., `authenticated & admin`), constraints that
+set request attributes (like `current_tenant`), and lazy
+evaluation that skips constraint checks when previous constraints
+already matched. Add integration test helpers to assert constraint
+evaluation order.
+
+### W4: Implement full-stack multi-tenancy support
+
+Add tenant isolation across Active Record, Action Cable, Active Job,
+and Active Storage. Support schema-based (PostgreSQL schemas) and
+row-based (`tenant_id` column) strategies. Automatically scope
+queries, job execution, cable subscriptions, and blob URLs to the
+current tenant set via `Current.tenant`. Add middleware that
+resolves tenant from subdomain or header. Include migration
+generators for tenant-aware tables and a test helper to switch
+tenants in tests.
+
+### W5: Add GraphQL layer alongside REST
+
+Implement `ActionGraphQL`, a new framework component that generates
+a GraphQL schema from Active Record models and their associations.
+Support queries, mutations, subscriptions (via Action Cable), field
+authorization, N+1 prevention via dataloader, cursor-based
+pagination, and schema stitching for multi-engine apps. Add a
+generator (`rails g graphql:model Post`), a development-mode
+schema explorer, and integration test helpers for GraphQL queries.
+
+### W6: Implement zero-downtime deployment primitives
+
+Add a `ActiveRecord::Migration::Safe` module that wraps dangerous
+migration operations (adding a column with a default, renaming a
+column, adding an index non-concurrently) with safe multi-step
+alternatives. Integrate with a deployment health check endpoint
+in `ActionDispatch`. Add connection draining to `ActionCable`,
+graceful shutdown to `ActiveJob` workers, and a `rails deploy:check`
+command that validates migration safety, pending jobs, and
+active cable connections before cutover.
+
+### W7: Add real-time collaboration engine
+
+Implement `ActionSync`, a new framework component that adds
+Operational Transformation or CRDT-based real-time document
+collaboration. Integrate with Active Record for persistence,
+Action Cable for transport, Active Storage for binary assets
+in documents, and Action Text for rich-text fields. Support
+cursor presence, conflict resolution, undo/redo per client,
+and offline buffering with sync-on-reconnect.
+
+### W8: Implement cross-framework observability pipeline
+
+Add structured tracing, metrics, and logging across all Rails
+frameworks. Instrument Active Record queries, Action Controller
+request handling, Action View rendering, Active Job execution,
+and Action Cable message delivery with OpenTelemetry-compatible
+spans. Add a `Rails::Telemetry` configuration that supports
+multiple exporters (OTLP, Prometheus, Datadog). Include
+request-scoped correlation IDs that propagate through background
+jobs and cable broadcasts.
+
+### W9: Implement Progressive Web App support
+
+Add PWA support spanning multiple frameworks: a service worker
+generator in Action View that caches assets and API responses,
+offline fallback pages, push notification integration through
+Action Mailer's delivery infrastructure, a web app manifest
+generator, background sync via Active Job for offline form
+submissions, and an install prompt helper. Update the asset
+pipeline to produce precache manifests and update `rails new`
+templates with PWA-ready defaults.
+
+### W10: Add end-to-end type checking with RBS integration
+
+Integrate RBS type signatures across all Rails frameworks. Generate
+RBS files for Active Record models from database schema, for
+controller actions from route definitions, and for view helpers
+from their method signatures. Add a `rails types:generate` command
+that produces a complete RBS type definition for the application.
+Support type-checked `params`, association return types, and
+scope chain types. Add CI integration that runs `steep check`
+as part of `rails test`.

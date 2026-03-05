@@ -59,7 +59,7 @@ lib/jekyll/
 
 ## Tasks
 
-8 tasks (3 narrow, 3 medium, 2 wide) for the Ruby static site generator.
+30 tasks (10 narrow, 10 medium, 10 wide) for the Ruby static site generator.
 
 ## Narrow
 
@@ -133,3 +133,215 @@ without cross-page data dependencies) and render them in parallel
 using Ruby threads or processes. Cache rendered page fragments keyed
 by content hash + dependency hash. Support a local build cache
 directory and remote cache (for CI). Add a `--jobs=N` flag.
+
+### N4: Fix `permalink` template variables not URL-encoded
+
+When a document's title contains special characters (e.g., `C++ Guide`),
+the permalink template `:title` placeholder inserts the raw string
+without URL-encoding, producing broken paths like `/posts/C++ Guide/`.
+Fix the permalink URL builder in `lib/jekyll/url.rb` to properly encode
+reserved URI characters in interpolated template variables while
+preserving `/` separators.
+
+### N5: Fix `excerpt_separator` not respected in collection documents
+
+The `excerpt_separator` front matter key works correctly for posts but
+is ignored for documents in custom collections. The `Document#extract_excerpt`
+method only applies separator-based splitting when the collection is
+`posts`. Fix it to respect `excerpt_separator` for all collections that
+have `output: true`.
+
+### N6: Fix timezone handling in `date_to_xmlschema` filter
+
+The `date_to_xmlschema` Liquid filter produces incorrect offsets for
+dates during DST transitions when the site's `timezone` config differs
+from the system timezone. The filter converts to the site timezone
+after formatting instead of before. Fix the filter in `lib/jekyll/filters.rb`
+to apply the timezone conversion before producing the ISO 8601 string.
+
+### N7: Fix `--watch` missing new files in deeply nested directories
+
+The file watcher detects changes to existing files in nested subdirectories
+but does not pick up newly created files more than two levels deep
+(e.g., `_posts/2026/03/new-post.md`). The directory watch registration
+in `lib/jekyll/watcher.rb` does not recursively add watchers for new
+subdirectories. Fix it to register watches on newly created directories.
+
+### N8: Fix Markdown converter not preserving `{:target}` attribute syntax
+
+The Kramdown Markdown converter strips inline attribute lists (IALs)
+like `{:target="_blank"}` on links when `input: GFM` mode is enabled.
+The GFM parser's link handling bypasses the IAL attachment step. Fix the
+converter configuration in `lib/jekyll/converters/markdown/kramdown_parser.rb`
+to preserve IAL processing in GFM mode.
+
+### N9: Fix `site.static_files` not updated on delete during `--watch`
+
+When a static file is deleted while `jekyll serve --watch` is running,
+it remains in the `site.static_files` array and the old file persists
+in `_site/`. The watcher's remove handler does not clean up the
+`StaticFile` entry from the site's tracked list. Fix the watcher
+callback to remove deleted static files from the site object.
+
+### N10: Fix `jsonify` filter producing invalid JSON for `nil` values in hashes
+
+The `jsonify` Liquid filter serializes Ruby `nil` values in nested hashes
+as empty strings instead of JSON `null`. The custom serializer in
+`filters.rb` converts values to strings before JSON encoding. Fix it
+to pass `nil` through as `null` in the JSON output.
+
+### M4: Add content validation framework
+
+Implement a validation system that checks content integrity before
+building. Support configurable validators in `_config.yml`: required
+front matter fields per collection, broken internal link detection
+(cross-referencing `site.pages` and `site.documents`), image reference
+validation against `site.static_files`, and schema validation for
+`_data/` files against JSON Schema definitions in `_schemas/`. Report
+all errors with file and line numbers before the build proceeds.
+
+### M5: Implement draft workflow with preview URLs
+
+Add a draft management workflow beyond the current `_drafts/` folder.
+Support draft statuses (`draft`, `review`, `scheduled`) in front matter.
+Add a `jekyll serve --drafts` mode that serves drafts at predictable
+preview URLs with a configurable token prefix (e.g., `/preview/TOKEN/post-slug`).
+Implement scheduled publishing where posts with `status: scheduled` and
+a future `date` are automatically moved from `_drafts/` to `_posts/`
+by a `jekyll publish --scheduled` command.
+
+### M6: Add structured logging with build profiling
+
+Replace Jekyll's ad-hoc `$stdout` logging with a structured logger
+supporting log levels, JSON output format, and build profiling. Track
+time spent in each pipeline phase (read, generate, render, write) and
+per-converter/generator timing. Add a `--profile` flag that outputs a
+build performance report showing the slowest pages, converters, and
+generators. Store profiling data in `.jekyll-cache/profile.json` for
+trend analysis across builds.
+
+### M7: Implement collection-level pagination
+
+Extend the pagination generator beyond posts to support paginating any
+collection with `output: true`. Add a `paginate_collection` config key
+per collection and a `{% paginate collection_name %}` Liquid tag. Support
+custom sort orders (`date`, `title`, alphabetical by any front matter
+field), configurable page size per collection, and generate pagination
+metadata (`paginator.total_pages`, `paginator.previous_page_path`, etc.)
+scoped to each collection.
+
+### M8: Add front matter cascade system
+
+Implement a cascading front matter defaults system that goes beyond the
+current `defaults` config. Support `_defaults.yml` files placed in any
+directory that apply front matter values to all content in that directory
+and its children, with deeper files overriding shallower ones. Support
+glob patterns for selective application (e.g., `applies_to: "*.md"`)
+and conditional defaults based on other front matter values (e.g.,
+`when: { layout: "post" }`).
+
+### M9: Implement content embedding and transclusion
+
+Add support for embedding content from one page or document inside
+another. Implement a `{% render_content page_path %}` Liquid tag that
+renders another page's content inline (after Markdown conversion but
+without layout wrapping). Support section-level transclusion with named
+anchors (`{% render_content "guide.md#installation" %}`). Track
+transclusion dependencies for incremental builds and detect circular
+references with a clear error message.
+
+### M10: Add SEO metadata generation system
+
+Implement automatic SEO metadata generation integrated into the build
+pipeline. Generate `<meta>` tags (description, Open Graph, Twitter Card)
+from front matter and content analysis. Auto-generate `sitemap.xml` with
+`lastmod` from git commit dates, `robots.txt` from config, and
+structured data (JSON-LD) for articles, breadcrumbs, and FAQ pages.
+Support per-page overrides via front matter and a global `_seo.yml`
+configuration file for defaults.
+
+### W3: Add theme inheritance and override system
+
+Implement a multi-level theme inheritance system. A site can specify a
+`parent_theme` in its theme gemspec, creating a chain of fallback
+directories for layouts, includes, assets, and sass. Override resolution
+walks the chain from site → theme → parent_theme for each requested
+file. Add a `jekyll theme:diff` command that shows which theme files
+are overridden locally. Support theme configuration namespacing so
+parent and child themes can define independent config blocks.
+
+### W4: Implement real-time collaborative preview server
+
+Extend the development server with real-time collaboration features.
+Add WebSocket-based live preview that pushes incremental DOM diffs
+instead of full page reloads. Implement a split-pane editor view
+served at `/_editor/` that shows the Markdown source alongside the
+rendered preview with synchronized scrolling. Support multiple
+simultaneous browser connections with shared navigation state and
+a visual indicator showing which content file is being edited.
+
+### W5: Add content migration framework
+
+Implement a pluggable content migration system for importing from other
+platforms. Add a `jekyll migrate` command with provider adapters for
+WordPress (XML export), Ghost (JSON), Hugo (content directory), and
+generic RSS/Atom feeds. Each adapter maps source content to Jekyll's
+collection/front-matter structure, downloads and rewrites image
+references to local paths, converts platform-specific shortcodes to
+Liquid equivalents, and generates a migration report with warnings for
+unmapped features.
+
+### W6: Implement dependency-aware smart rebuild
+
+Replace the current incremental build with a full dependency graph system.
+Track dependencies at the Liquid template level: which variables, includes,
+layouts, data files, and collection queries each page uses. On file change,
+walk the dependency graph to identify the minimal set of pages requiring
+re-render. Persist the dependency graph in `.jekyll-cache/deps.msgpack`.
+Support `--explain` flag to print why each page was or was not rebuilt.
+Handle layout chain invalidation and data file fan-out correctly.
+
+### W7: Add multi-format output pipeline
+
+Extend Jekyll to generate multiple output formats from the same source
+content. Support `output_formats: [html, pdf, epub, amp]` in config.
+Each format has a dedicated converter chain and layout set (e.g.,
+`_layouts/post.pdf.html` for PDF rendering via WeasyPrint). Add a
+format-aware permalink system that generates `/post/title/` for HTML
+and `/post/title.pdf` for PDF. Implement an `{% if format == "amp" %}`
+Liquid variable for format-conditional template logic. Run format
+pipelines in parallel.
+
+### W8: Implement plugin sandboxing and dependency resolution
+
+Add a plugin isolation system where each plugin runs in a controlled
+environment with declared capabilities. Plugins declare dependencies
+and required hooks in a `plugin.yml` manifest. The plugin manager
+resolves load order from the dependency DAG, detects conflicts
+(two plugins hooking the same phase with incompatible priorities),
+and provides a restricted API surface per plugin (e.g., a generator
+plugin cannot access the server subsystem). Add `jekyll plugin:check`
+to validate plugin compatibility before build.
+
+### W9: Add incremental deployment with content diff
+
+Implement a `jekyll deploy` command that syncs only changed files to
+a remote destination. Compute a content manifest (path → SHA-256)
+for the built site and compare against the previously deployed manifest.
+Support deployment targets: S3 (with CloudFront invalidation), SFTP,
+rsync, and GitHub Pages API. Add `--dry-run` to preview changes,
+`--rollback` to restore the previous manifest, and a deployment
+log recording what was pushed and when. Handle deleted files and
+redirects for moved content.
+
+### W10: Implement visual regression testing for themes
+
+Add a `jekyll test:visual` command that renders representative pages
+from each layout and compares them against baseline screenshots.
+Integrate a headless browser (via Ferrum or Selenium) for screenshot
+capture. Support responsive breakpoints (mobile, tablet, desktop),
+configurable similarity thresholds, and diff image generation
+highlighting changed regions. Store baselines in `_test/visual/baselines/`
+and generate an HTML report at `_test/visual/report.html` with
+side-by-side comparisons. Run as part of theme CI to catch unintended
+style regressions.

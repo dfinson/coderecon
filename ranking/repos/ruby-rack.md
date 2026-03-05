@@ -55,7 +55,7 @@ lib/rack/
 
 ## Tasks
 
-8 tasks (3 narrow, 3 medium, 2 wide) for the Ruby HTTP server interface.
+30 tasks (10 narrow, 10 medium, 10 wide) for the Ruby HTTP server interface.
 
 ## Narrow
 
@@ -130,3 +130,217 @@ Implement a suite of security middleware as a cohesive package:
 and `Rack::RequestSanitizer` (input sanitization with configurable
 rules). Each middleware should be usable independently or as a bundle
 via `Rack::SecureHeaders` that applies sensible defaults.
+
+### N4: Fix `Rack::Multipart` boundary detection failing on mixed-case Content-Type
+
+`Rack::Multipart` extracts the boundary parameter from the `Content-Type`
+header using a case-sensitive match, causing multipart parsing to fail
+when clients send `Boundary=` instead of `boundary=`. Fix the boundary
+extraction regex in `multipart/parser.rb` to be case-insensitive per
+RFC 2046 Section 5.1.
+
+### N5: Add `REQUEST_METHOD` validation in `Rack::Request`
+
+`Rack::Request#request_method` returns whatever string the server places
+in the env hash without validation. Invalid methods like empty strings
+or methods containing whitespace can propagate into routing and logging.
+Add validation in `Rack::Request` to reject malformed method strings
+with a `Rack::InvalidRequestError` and return a 400 response.
+
+### N6: Fix `Rack::Deflater` double-compressing pre-compressed responses
+
+When an upstream middleware or application sets `Content-Encoding: gzip`
+on a response, `Rack::Deflater` still attempts to compress the body,
+producing a double-encoded response that clients cannot decode. Add a
+check in `Rack::Deflater#call` to skip compression when the response
+already has a `Content-Encoding` header.
+
+### N7: Add `Rack::Response#delete_cookie` support for partitioned cookies
+
+The CHIPS proposal introduces a `Partitioned` attribute for cookies.
+`Rack::Response#delete_cookie` does not include `Partitioned` in the
+expiration cookie, so partitioned cookies are never actually cleared.
+Update `delete_cookie` in `response.rb` to carry over the `Partitioned`
+attribute when it was present in the original `Set-Cookie`.
+
+### N8: Fix `Rack::Utils.best_q_match` returning wrong match for equal quality values
+
+When multiple `Accept` entries have identical quality values,
+`best_q_match` in `utils.rb` returns the last match instead of the
+most specific one (per RFC 7231 Section 5.3.2 precedence rules). Fix
+the tie-breaking logic to prefer entries with more specific media type
+parameters and longer type strings.
+
+### N9: Add `Rack::Request#forwarded_authority` to parse RFC 7239 `Forwarded` header
+
+`Rack::Request` supports `X-Forwarded-Host` and `X-Forwarded-Proto` but
+does not parse the standardized `Forwarded` header from RFC 7239.
+Add `#forwarded_authority` and `#forwarded_proto` methods to
+`request.rb` that extract `host=` and `proto=` directives from the
+`Forwarded` header, preferring it over the `X-Forwarded-*` variants
+when both are present.
+
+### N10: Fix `Rack::Session::Cookie` ignoring `max_age` when `expires` is also set
+
+When both `:max_age` and `:expires` options are passed to the cookie
+session store, `max_age` is silently ignored because the options hash
+merge in `session/cookie.rb` lets `expires` overwrite it. Per RFC 6265,
+`Max-Age` takes precedence. Fix the cookie serialization to emit both
+attributes and ensure `Max-Age` is preferred by compliant clients.
+
+### M4: Implement conditional GET support across the middleware stack
+
+Add `Rack::ConditionalGet` middleware that handles `If-None-Match` and
+`If-Modified-Since` headers by comparing against `ETag` and
+`Last-Modified` response headers. Return a 304 Not Modified with an
+empty body when conditions match. Support weak ETag comparison
+semantics. Integrate with `Rack::ETag` so that ETags generated in the
+same request cycle are available for conditional checks without
+buffering the response twice.
+
+### M5: Add multipart upload progress tracking
+
+Extend `Rack::Multipart::Parser` to support upload progress callbacks.
+Add a `rack.multipart.progress` env key that accepts a callable
+receiving `(bytes_received, content_length)` during parsing. Implement
+a companion `Rack::UploadProgress` middleware that stores progress
+per upload (keyed by a client-provided upload ID) in a thread-safe
+store and exposes a JSON endpoint for polling progress status.
+
+### M6: Implement `Rack::HostAuthorization` middleware for DNS rebinding protection
+
+Add middleware that validates the `Host` header against a configurable
+allowlist of permitted hostnames and IP addresses. Support wildcard
+subdomains (`.example.com`), regular expression patterns, and a
+configurable response for blocked requests (default 403). Parse and
+validate both the `Host` header and the `X-Forwarded-Host` header.
+Log blocked requests with the offending host value for monitoring.
+
+### M7: Add `Rack::Builder` support for conditional middleware insertion
+
+Extend `Rack::Builder` DSL in `builder.rb` to support `use_if` and
+`use_unless` directives that conditionally insert middleware based on
+a predicate. The predicate receives the env hash at request time and
+the middleware is only invoked when the condition is met. Support
+both block and lambda predicates. Ensure conditional middleware
+preserves the middleware stack order and works correctly with `map`
+blocks.
+
+### M8: Implement request body validation middleware
+
+Add `Rack::BodyValidator` middleware that validates request bodies
+against declared schemas. Support JSON Schema validation for
+`application/json` bodies and parameter constraints for form-encoded
+bodies. Return 422 Unprocessable Entity with structured error details
+when validation fails. Allow per-path schema configuration via a
+block DSL. Skip validation for GET, HEAD, and OPTIONS requests.
+
+### M9: Add `Rack::Session::Pool` expiration and size limits
+
+The in-memory session pool grows without bound and sessions never
+expire. Add configurable `max_sessions` (evict LRU when exceeded),
+`expire_after` (seconds until a session is considered stale), and
+periodic reaping via a background thread. Track session access times
+for LRU ordering. Add `#stats` method returning current pool size,
+hit rate, and eviction count for monitoring.
+
+### M10: Implement `Rack::MockRequest` support for streaming responses
+
+`Rack::MockRequest` in `mock/request.rb` buffers the entire response
+body before returning, making it impossible to test streaming endpoints
+or Server-Sent Events. Add `#stream` mode that returns an
+`Enumerator`-based response where each chunk can be consumed
+individually. Support timeout configuration for slow streams. Add
+assertion helpers for verifying chunk order, timing, and content type
+in streaming responses.
+
+### W3: Add middleware profiling and instrumentation framework
+
+Implement `Rack::Instrumentation` that wraps every middleware in the
+stack with timing and execution tracking. Record per-middleware wall
+time, allocations, and call count. Expose metrics via a mountable
+Rack app at a configurable path (`/_rack/profile`). Support
+ActiveSupport::Notifications-compatible event publishing so external
+APM tools can subscribe. Add a `Rack::Instrumentation::Tracer` that
+generates request-scoped waterfall timelines showing middleware
+execution order and duration.
+
+### W4: Implement reloadable middleware stack for development mode
+
+Add `Rack::ReloadableBuilder` that watches `config.ru` and middleware
+source files for changes, then rebuilds the middleware stack without
+restarting the server process. Use `Listen` gem integration (optional
+dependency) or polling-based file watching. Maintain in-flight request
+safety by draining active requests before swapping the stack. Add
+a development overlay page showing the current middleware stack order
+and configuration, accessible at `/_rack/middleware`.
+
+### W5: Add comprehensive multipart streaming parser with disk spooling
+
+Rewrite `Rack::Multipart::Parser` to support true streaming parsing
+that never buffers more than a configurable amount of data in memory.
+Spool file uploads to temporary files after a size threshold. Support
+resumable uploads via `Content-Range` on individual parts. Add
+per-part callbacks for headers, data chunks, and completion. Implement
+configurable per-part and total size limits with early rejection.
+Ensure the parser handles malformed boundaries and truncated uploads
+gracefully with descriptive error messages.
+
+### W6: Implement a test harness for middleware composition
+
+Add `Rack::Testing` module with a DSL for writing integration tests
+against composed middleware stacks. Support building isolated test
+stacks with `Rack::Testing.stack { use Middleware; run app }`. Add
+request factories for common scenarios (JSON API, form submission,
+multipart upload, WebSocket upgrade). Implement response matchers
+for status codes, headers, body content, and cookie state. Add
+session inspection helpers and a request recorder that captures
+all requests passing through the stack for assertion.
+
+### W7: Add WebSocket handshake and framing support
+
+Implement `Rack::WebSocket` module that handles the HTTP/1.1 upgrade
+handshake for WebSocket connections. Parse the `Upgrade: websocket`
+and `Sec-WebSocket-Key` headers, compute the accept hash per RFC 6455,
+and return the 101 Switching Protocols response. Add a frame parser
+and serializer supporting text, binary, ping, pong, and close frames.
+Implement `Rack::WebSocket::Handler` as a base class with `on_open`,
+`on_message`, `on_close` callbacks. Add mock WebSocket client for
+testing in `mock/websocket.rb`.
+
+### W8: Implement content negotiation middleware with variant support
+
+Add `Rack::ContentNegotiation` middleware that performs full HTTP
+content negotiation per RFC 7231. Support `Accept` (media type),
+`Accept-Language`, `Accept-Encoding`, and `Accept-Charset` headers.
+Allow applications to register response variants (JSON, XML, HTML,
+MessagePack) with quality factors. Add a transparent variant
+selection mechanism that routes to the best representation. Implement
+`Vary` header management to ensure correct caching. Support
+`406 Not Acceptable` responses with a list of available variants.
+
+### W9: Add request replay and recording middleware for debugging
+
+Implement `Rack::Recorder` middleware that captures full request and
+response cycles (method, path, headers, body, timing) to a
+configurable store (file, Redis, or in-memory). Add `Rack::Replayer`
+that reads recorded sessions and replays them against the application,
+comparing responses for regression detection. Support request
+anonymization (strip authorization headers, mask PII fields). Add
+filtering by path pattern, status code, and time range. Implement
+a mountable Rack app for browsing and replaying recorded requests
+via a web interface.
+
+### W10: Implement cascading error handling with rescue middleware
+
+Add `Rack::Rescue` middleware that catches exceptions raised by
+downstream middleware and applications, mapping them to appropriate
+HTTP responses. Support a registry of exception-to-status mappings
+(e.g., `ArgumentError` to 400, `NotFoundError` to 404). Render
+error responses in the format matching the request `Accept` header
+(HTML with stack trace in development, JSON error object in API
+mode). Add error callback hooks for external reporting. Implement
+`Rack::Rescue::ShowExceptions` for development that renders an
+interactive debugger page with source context, request details,
+and environment inspection. Support error grouping and rate-limited
+logging to prevent log flooding from repeated errors.
