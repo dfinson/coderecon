@@ -61,7 +61,7 @@
 
 ## Tasks
 
-10 tasks (3 narrow, 4 medium, 3 wide) for the self-hosted Git service.
+30 tasks (10 narrow, 10 medium, 10 wide).
 
 ## Narrow
 
@@ -85,74 +85,6 @@ When a webhook delivery fails and is retried, the retry uses POST
 regardless of what method was configured for the webhook. The original
 HTTP method is not persisted in the webhook delivery record. Fix the
 retry logic to use the configured HTTP method.
-
-## Medium
-
-### M1: Implement issue templates with YAML frontmatter
-
-Add support for issue templates defined in `.gitea/ISSUE_TEMPLATE/`
-with YAML frontmatter for metadata (title prefix, labels, assignees,
-projects). Support template types: bug report, feature request, and
-custom. Render the template form in the "New Issue" UI with typed
-form fields (text input, textarea, dropdown, checkboxes) defined
-in the YAML. Validate required fields before submission.
-
-### M2: Add code owners with required reviews
-
-Implement a CODEOWNERS file (`.gitea/CODEOWNERS`) that maps file
-patterns to responsible teams or users. When a PR modifies files
-matching a pattern, automatically request reviews from the code
-owners. Add a "code owner approval required" branch protection rule
-that blocks merging until at least one code owner approves. Show
-code owner status on the PR files changed view.
-
-### M3: Implement repository archival with read-only mode
-
-Add a "repository archive" feature that puts a repository into a
-read-only state — no new pushes, PRs, or issues, but all existing
-content remains accessible. Show an "archived" banner on the
-repository page. Allow un-archiving by the repository owner. Update
-the API, webhooks, and repository listing/search to respect archive
-status.
-
-### M4: Add CI/CD pipeline status badges
-
-Implement status badge generation for Gitea Actions pipelines.
-Provide badge URLs in Markdown and HTML formats showing the current
-status (passing/failing/running) of a specified workflow. Support
-branch-specific badges. Cache badge SVGs with appropriate TTL.
-Add a "Get badge" UI in the repository Actions settings.
-
-## Wide
-
-### W1: Implement project boards with Kanban and table views
-
-Add project management boards that span across repositories within
-an organization. Support Kanban view (draggable cards between columns)
-and table view (sortable/filterable list). Cards can be issues or
-PRs from any repository in the organization. Support custom fields
-(status, priority, size), swimlanes by assignee or label, and WIP
-limits per column. Add API endpoints for all project board operations.
-
-### W2: Add full-text code search with syntax-aware indexing
-
-Implement a code search feature that indexes repository contents
-with syntax awareness. Support exact matches, regex, and symbol
-search. Use the existing bleve indexer infrastructure but add
-language-specific tokenization (camelCase splitting, identifier
-extraction). Show results with syntax-highlighted context. Support
-searching across all repositories the user has access to. Add
-search filters for language, file path, and repository.
-
-### W3: Implement SSO with SAML 2.0 support
-
-Add SAML 2.0 identity provider integration alongside the existing
-OAuth2 and LDAP authentication sources. Implement SP-initiated and
-IdP-initiated SSO flows. Support SAML attribute mapping to Gitea
-user fields (email, username, groups → teams). Add JIT (just-in-time)
-provisioning that creates Gitea accounts on first SAML login. Implement
-single logout (SLO). Add admin UI for SAML configuration with
-metadata import/export.
 
 ### N4: Fix milestone progress percentage rounding to zero for 1-2 issues
 
@@ -205,6 +137,43 @@ truncation can split a multi-byte character. This produces invalid
 UTF-8 in the email subject. Fix the truncation to respect unicode
 codepoint boundaries.
 
+## Medium
+
+### M1: Implement issue templates with YAML frontmatter
+
+Add support for issue templates defined in `.gitea/ISSUE_TEMPLATE/`
+with YAML frontmatter for metadata (title prefix, labels, assignees,
+projects). Support template types: bug report, feature request, and
+custom. Render the template form in the "New Issue" UI with typed
+form fields (text input, textarea, dropdown, checkboxes) defined
+in the YAML. Validate required fields before submission.
+
+### M2: Add code owners with required reviews
+
+Implement a CODEOWNERS file (`.gitea/CODEOWNERS`) that maps file
+patterns to responsible teams or users. When a PR modifies files
+matching a pattern, automatically request reviews from the code
+owners. Add a "code owner approval required" branch protection rule
+that blocks merging until at least one code owner approves. Show
+code owner status on the PR files changed view.
+
+### M3: Implement repository archival with read-only mode
+
+Add a "repository archive" feature that puts a repository into a
+read-only state — no new pushes, PRs, or issues, but all existing
+content remains accessible. Show an "archived" banner on the
+repository page. Allow un-archiving by the repository owner. Update
+the API, webhooks, and repository listing/search to respect archive
+status.
+
+### M4: Add CI/CD pipeline status badges
+
+Implement status badge generation for Gitea Actions pipelines.
+Provide badge URLs in Markdown and HTML formats showing the current
+status (passing/failing/running) of a specified workflow. Support
+branch-specific badges. Cache badge SVGs with appropriate TTL.
+Add a "Get badge" UI in the repository Actions settings.
+
 ### M5: Implement pull request review approval rules
 
 Add configurable approval rules beyond the existing simple "N approvals
@@ -248,6 +217,37 @@ Implement a blame view that shows per-line commit attribution alongside
 the source code, similar to GitHub's blame view. Show commit SHA,
 author, and date for each line group. Support navigating to the commit
 that last changed a specific line. Handle blame across renames.
+
+## Wide
+
+### W1: Implement project boards with Kanban and table views
+
+Add project management boards that span across repositories within
+an organization. Support Kanban view (draggable cards between columns)
+and table view (sortable/filterable list). Cards can be issues or
+PRs from any repository in the organization. Support custom fields
+(status, priority, size), swimlanes by assignee or label, and WIP
+limits per column. Add API endpoints for all project board operations.
+
+### W2: Add full-text code search with syntax-aware indexing
+
+Implement a code search feature that indexes repository contents
+with syntax awareness. Support exact matches, regex, and symbol
+search. Use the existing bleve indexer infrastructure but add
+language-specific tokenization (camelCase splitting, identifier
+extraction). Show results with syntax-highlighted context. Support
+searching across all repositories the user has access to. Add
+search filters for language, file path, and repository.
+
+### W3: Implement SSO with SAML 2.0 support
+
+Add SAML 2.0 identity provider integration alongside the existing
+OAuth2 and LDAP authentication sources. Implement SP-initiated and
+IdP-initiated SSO flows. Support SAML attribute mapping to Gitea
+user fields (email, username, groups → teams). Add JIT (just-in-time)
+provisioning that creates Gitea accounts on first SAML login. Implement
+single logout (SLO). Add admin UI for SAML configuration with
+metadata import/export.
 
 ### W4: Add container registry support
 

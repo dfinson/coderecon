@@ -53,7 +53,7 @@ packages/mermaid/src/
 
 ## Tasks
 
-8 tasks (3 narrow, 3 medium, 2 wide) for the TypeScript diagram generation engine.
+30 tasks (10 narrow, 10 medium, 10 wide).
 
 ## Narrow
 
@@ -79,53 +79,6 @@ with the line itself when the line is short or nearly vertical. The
 label positioning algorithm does not account for line angle. Fix the
 label placement to offset labels perpendicular to the line direction
 so they are always readable.
-
-## Medium
-
-### M1: Implement Gantt chart critical path highlighting
-
-Add automatic critical path detection and highlighting to Gantt charts.
-The critical path (longest dependency chain determining project duration)
-should be calculated from task dependencies and highlighted with a
-distinct style (bold border or different color). Add a `criticalPath`
-theme configuration option. Include tests for various dependency graph
-topologies.
-
-### M2: Add interactive click handlers to diagram elements
-
-Implement a click handler system that allows diagram authors to attach
-click callbacks or navigation URLs to diagram elements. Support
-`click nodeId callback "tooltip"` syntax across flowcharts, class
-diagrams, and state diagrams. The SVG output should include proper
-cursor styling and ARIA attributes. Sanitize URLs to prevent XSS.
-
-### M3: Implement diagram diff visualization
-
-Add a "diff mode" that takes two versions of the same diagram definition
-and renders a single diagram showing additions (green), deletions (red),
-and modifications (yellow). This requires parsing both versions, computing
-a structural diff of the diagram elements, and rendering the merged
-result with diff annotations.
-
-## Wide
-
-### W1: Add accessibility support across all diagram types
-
-Implement comprehensive accessibility for all diagram types. Generate
-ARIA labels for all SVG elements, add a text-based alternative description
-auto-generated from the diagram definition, support keyboard navigation
-between diagram elements, and add screen reader announcements for
-interactive elements. Each diagram type needs its own accessibility
-strategy based on its semantic content.
-
-### W2: Implement a diagram type plugin system
-
-Refactor the diagram type registration to support third-party diagram
-types as plugins. Extract the common diagram lifecycle (parse → layout →
-render → interact) into a plugin API. Each diagram type should register
-its parser grammar, renderer, theme handler, and accessibility provider
-through the plugin interface. Migrate at least two existing diagram
-types (pie, git) to use the plugin API as proof of the pattern.
 
 ### N4: Fix entity names with underscores breaking ER diagram rendering
 
@@ -177,6 +130,33 @@ order rather than the order they appear in the diagram definition.
 When branches are defined in a specific order for clarity, the legend
 doesn't respect that order. Fix the legend renderer to use definition
 order.
+
+## Medium
+
+### M1: Implement Gantt chart critical path highlighting
+
+Add automatic critical path detection and highlighting to Gantt charts.
+The critical path (longest dependency chain determining project duration)
+should be calculated from task dependencies and highlighted with a
+distinct style (bold border or different color). Add a `criticalPath`
+theme configuration option. Include tests for various dependency graph
+topologies.
+
+### M2: Add interactive click handlers to diagram elements
+
+Implement a click handler system that allows diagram authors to attach
+click callbacks or navigation URLs to diagram elements. Support
+`click nodeId callback "tooltip"` syntax across flowcharts, class
+diagrams, and state diagrams. The SVG output should include proper
+cursor styling and ARIA attributes. Sanitize URLs to prevent XSS.
+
+### M3: Implement diagram diff visualization
+
+Add a "diff mode" that takes two versions of the same diagram definition
+and renders a single diagram showing additions (green), deletions (red),
+and modifications (yellow). This requires parsing both versions, computing
+a structural diff of the diagram elements, and rendering the merged
+result with diff annotations.
 
 ### M4: Implement mindmap auto-layout improvements
 
@@ -232,6 +212,26 @@ visualizing parallel message flows. Parallel blocks should be rendered
 with a labeled frame showing "par" at the top, with each parallel flow
 separated by a horizontal dashed line labeled "and". Support nested
 parallel blocks.
+
+## Wide
+
+### W1: Add accessibility support across all diagram types
+
+Implement comprehensive accessibility for all diagram types. Generate
+ARIA labels for all SVG elements, add a text-based alternative description
+auto-generated from the diagram definition, support keyboard navigation
+between diagram elements, and add screen reader announcements for
+interactive elements. Each diagram type needs its own accessibility
+strategy based on its semantic content.
+
+### W2: Implement a diagram type plugin system
+
+Refactor the diagram type registration to support third-party diagram
+types as plugins. Extract the common diagram lifecycle (parse → layout →
+render → interact) into a plugin API. Each diagram type should register
+its parser grammar, renderer, theme handler, and accessibility provider
+through the plugin interface. Migrate at least two existing diagram
+types (pie, git) to use the plugin API as proof of the pattern.
 
 ### W3: Add real-time collaborative editing
 

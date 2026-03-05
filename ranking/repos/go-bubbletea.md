@@ -48,7 +48,7 @@
 
 ## Tasks
 
-8 tasks (3 narrow, 3 medium, 2 wide) for the Go terminal UI framework.
+30 tasks (10 narrow, 10 medium, 10 wide).
 
 ## Narrow
 
@@ -74,55 +74,6 @@ When using the alt screen buffer with mouse support enabled, mouse click
 coordinates are reported relative to the visible viewport but the program
 interprets them relative to the scrollback buffer origin. Fix the mouse
 coordinate translation to account for the alt screen offset.
-
-## Medium
-
-### M1: Implement focus management for composite models
-
-Add a focus management system for applications that compose multiple
-interactive sub-models (e.g., a form with multiple text inputs). Provide
-`FocusNext`, `FocusPrev` commands and a `Focusable` interface that
-models can implement. Tab and Shift-Tab should navigate between focusable
-sub-models. Track which sub-model has focus and only forward key events
-to the focused model.
-
-### M2: Add built-in animation support
-
-Implement an animation framework that allows smooth transitions between
-visual states. Add an `Animate(from, to, duration, easing)` command that
-emits interpolated `TickMsg` values over time. Include common easing
-functions (linear, ease-in, ease-out, ease-in-out). Support concurrent
-animations with independent timers. The animation system should be
-composable with existing `tea.Cmd` patterns.
-
-### M3: Implement terminal capability detection
-
-Add automatic detection of terminal capabilities (true color support,
-Unicode width, mouse protocol, alt screen, bracketed paste) at program
-startup. Surface the detected capabilities through a `TerminalInfo`
-message sent before `Init`. Use the capabilities to automatically
-select the best mouse protocol and color mode instead of requiring
-manual configuration.
-
-## Wide
-
-### W1: Add accessible screen reader output
-
-Implement a screen reader compatibility layer that runs alongside the
-visual renderer. Maintain a logical model of the UI content and emit
-OS-specific accessibility announcements when the content changes.
-Support NVDA/JAWS on Windows via MSAA, VoiceOver on macOS via
-NSAccessibility, and Orca on Linux via AT-SPI. Add `aria-live`
-equivalent semantics for dynamic content regions.
-
-### W2: Implement a layout engine inspired by CSS Flexbox
-
-Add a layout system that handles the spatial arrangement of sub-models
-within a container. Support flex direction (row/column), wrapping,
-alignment (start/center/end/space-between), and flex-grow/shrink
-properties. The layout engine should run during the View phase, taking
-the terminal width/height and producing positioned render regions
-for each child. Integrate with the existing Lipgloss styling.
 
 ### N4: Fix `tea.Quit` not flushing pending output before exit
 
@@ -172,6 +123,35 @@ On macOS Terminal.app, mouse wheel up/down events are reported with
 inverted direction compared to iTerm2 and other terminals. The mouse
 event parser uses the wrong bit for direction detection in the SGR
 mouse protocol. Fix the mouse parser to handle Terminal.app's encoding.
+
+## Medium
+
+### M1: Implement focus management for composite models
+
+Add a focus management system for applications that compose multiple
+interactive sub-models (e.g., a form with multiple text inputs). Provide
+`FocusNext`, `FocusPrev` commands and a `Focusable` interface that
+models can implement. Tab and Shift-Tab should navigate between focusable
+sub-models. Track which sub-model has focus and only forward key events
+to the focused model.
+
+### M2: Add built-in animation support
+
+Implement an animation framework that allows smooth transitions between
+visual states. Add an `Animate(from, to, duration, easing)` command that
+emits interpolated `TickMsg` values over time. Include common easing
+functions (linear, ease-in, ease-out, ease-in-out). Support concurrent
+animations with independent timers. The animation system should be
+composable with existing `tea.Cmd` patterns.
+
+### M3: Implement terminal capability detection
+
+Add automatic detection of terminal capabilities (true color support,
+Unicode width, mouse protocol, alt screen, bracketed paste) at program
+startup. Surface the detected capabilities through a `TerminalInfo`
+message sent before `Init`. Use the capabilities to automatically
+select the best mouse protocol and color mode instead of requiring
+manual configuration.
 
 ### M4: Implement text input component with history
 
@@ -223,6 +203,26 @@ Add a `split.Model` that divides the terminal into two panes
 (horizontal or vertical) with a draggable divider. Support minimum
 pane sizes, keyboard-based resize (Alt+arrows), collapsed pane state,
 and nested splits. Each pane renders an independent `tea.Model`.
+
+## Wide
+
+### W1: Add accessible screen reader output
+
+Implement a screen reader compatibility layer that runs alongside the
+visual renderer. Maintain a logical model of the UI content and emit
+OS-specific accessibility announcements when the content changes.
+Support NVDA/JAWS on Windows via MSAA, VoiceOver on macOS via
+NSAccessibility, and Orca on Linux via AT-SPI. Add `aria-live`
+equivalent semantics for dynamic content regions.
+
+### W2: Implement a layout engine inspired by CSS Flexbox
+
+Add a layout system that handles the spatial arrangement of sub-models
+within a container. Support flex direction (row/column), wrapping,
+alignment (start/center/end/space-between), and flex-grow/shrink
+properties. The layout engine should run during the View phase, taking
+the terminal width/height and producing positioned render regions
+for each child. Integrate with the existing Lipgloss styling.
 
 ### W3: Implement remote TUI serving over SSH
 

@@ -45,7 +45,7 @@ src/
 
 ## Tasks
 
-8 tasks (3 narrow, 3 medium, 2 wide) for the TypeScript schema validation library.
+30 tasks (10 narrow, 10 medium, 10 wide) for the TypeScript schema validation library.
 
 ## Narrow
 
@@ -72,6 +72,63 @@ the error path does not include the discriminator key's value. The error
 message says "Invalid input" without indicating which branch of the union
 failed. Include the matched discriminator value in the error path so
 users can identify which variant had the validation failure.
+
+### N4: Fix `.catch()` fallback not invoked during async parsing
+
+When using `.catch(fallback)` on a schema that contains async
+refinements, the catch handler is not triggered on validation failure.
+The async parse path in `ZodCatch` does not check for the catch wrapper
+after awaiting inner validation. Fix the async branch to apply the
+fallback value when the inner schema rejects.
+
+### N5: Fix `.describe()` metadata dropped by `.optional()` wrapper
+
+Calling `.describe("label")` on a schema and then wrapping it with
+`.optional()` discards the description. The `ZodOptional` constructor
+creates a fresh internal definition without copying the description
+property from the inner schema. The description should propagate
+through optional, nullable, and default wrappers.
+
+### N6: Accept `readonly` tuple arrays in `z.enum()`
+
+`z.enum()` requires a mutable tuple type but TypeScript `as const`
+assertions produce `readonly` tuples. Passing a `readonly` array
+causes a type error at the call site. Widen the type signature to
+accept `Readonly` tuple types so that `z.enum(["a", "b"] as const)`
+compiles without a manual cast.
+
+### N7: Fix `z.preprocess()` not forwarding preprocessed value to refinements
+
+When `.superRefine()` is chained after `z.preprocess()`, the refinement
+callback receives the original raw input instead of the preprocessed
+value. The preprocess step stores the transformed value but the
+refinement context still references the raw input. Fix the parse
+pipeline to thread the preprocessed value through subsequent
+refinement steps.
+
+### N8: Fix sparse array holes silently passing `ZodArray` validation
+
+When validating a sparse JavaScript array like `[1, , 3]`, `ZodArray`
+iterates holes as `undefined` without raising an issue. If the element
+schema does not accept `undefined`, validation should fail for each
+sparse index with a clear path indicating the missing position rather
+than silently coercing the hole.
+
+### N9: Add `.duration()` string validator for ISO 8601 durations
+
+Add `z.string().duration()` that validates ISO 8601 duration strings
+such as `P1Y2M3DT4H5M6S`. Reject malformed patterns including missing
+`P` prefix, time components without `T` separator, and negative values.
+Add the corresponding error code to the `ZodIssueCode` enum and a
+default error message in the locale file.
+
+### N10: Fix `.pipe()` producing incorrect inferred output type with transforms
+
+When using `.pipe()` to chain two schemas where both apply transforms,
+`z.infer<>` resolves to the input type of the second schema rather than
+its output type. The `ZodPipeline` generic parameters do not propagate
+the second schema's output correctly. Fix the type-level plumbing so
+the inferred type matches the final transform output.
 
 ## Medium
 
@@ -102,113 +159,76 @@ Add `.isBranded()` type guard and `.unbrand()` to strip the brand.
 Document the difference between `.brand()` (type-level only) and
 `.refine()` (runtime checks).
 
-### N4: Fix `.default()` not working with `.transform()`
+### M4: Implement conditional schema selection with `z.switch()`
 
-When chaining `.default(value).transform(fn)`, the default value is not
-passed through the transform function on parse. If the input is
-`undefined`, the default is set but the transform is skipped. Fix the
-parse pipeline to run transforms on default values.
+Add `z.switch(discriminatorKey, { value1: schema1, value2: schema2,
+default: fallbackSchema })` as an ergonomic alternative to
+`z.discriminatedUnion()`. Support a `default` branch for unmatched
+discriminator values, type-safe exhaustiveness checking when no default
+is provided, and nested switches. Infer the output type as the union of
+all branch output types. Implement a `ZodSwitch` class with parse logic
+that indexes branches by discriminator value for constant-time lookup.
 
-### N5: Fix `.describe()` metadata lost after `.optional()`
+### M5: Add dependent field validation on object schemas
 
-When calling `.describe("help text").optional()`, the description
-metadata set by `.describe()` is not carried forward to the new
-optional schema. The optional wrapper creates a fresh schema without
-copying the description. Fix `.optional()` to preserve description
-metadata.
+Implement `.refineFields()` on `ZodObject` that accepts validation
+functions referencing multiple properties simultaneously. Support use
+cases like ensuring `endDate` is after `startDate`, or `confirmPassword`
+matches `password`. The method should attach errors to specific field
+paths using the existing issue context. Support both synchronous and
+async validators, and compose with per-field refinements already on the
+schema.
 
-### N6: Add `.regex()` method for `ZodString` with named captures
+### M6: Implement recursive schema type inference without manual annotation
 
-`z.string().regex()` validates against a pattern but doesn't expose
-named capture groups. Add support for extracting named captures:
-`.regex(/(?<year>\d{4})-(?<month>\d{2})/)` should produce a typed
-output with `year` and `month` fields when using `.transform()`.
+`z.lazy()` requires a manual type annotation because TypeScript cannot
+infer recursive types from callbacks. Implement a `z.recursive()`
+builder that uses a proxy-based pattern to achieve automatic type
+inference for self-referential schemas. The builder should accept a
+function receiving a reference to the schema being defined and return a
+fully typed schema without requiring an explicit interface declaration
+or a type parameter.
 
-### N7: Fix `z.discriminatedUnion()` error messages showing wrong variant
+### M7: Add per-schema custom error maps
 
-When validation fails in a discriminated union and the discriminator
-value matches a variant, but a field in that variant fails, the error
-message includes candidate variants that don't match the discriminator.
-Filter error messages to only show the matched discriminant branch.
+Currently error maps are global via `z.setErrorMap()` or per-parse-call.
+Add `.errorMap(map)` as a chainable method on any schema that overrides
+error messages for that schema's issues. Instance-level maps should
+take precedence over the global map, compose when schemas are nested
+inside objects or unions, and merge when multiple error maps are applied
+at different levels of the same schema chain.
 
-### N8: Fix `.catch()` not working with async schemas
+### M8: Implement schema introspection API
 
-When using `.catch(fallback)` with a schema that contains async
-refinements, the catch handler is not invoked on validation failure.
-The async parse path doesn't check for catch handlers. Fix
-`.safeParseAsync()` to respect `.catch()` handlers.
+Add an `.introspect()` method on all schema types returning a normalized
+descriptor object. For `ZodString`, include active checks (min, max,
+regex, email, url, etc.) with their parameters. For `ZodObject`, include
+property names mapped to their schema descriptors. For `ZodUnion` and
+`ZodDiscriminatedUnion`, include member schemas. Define a
+`SchemaDescriptor` type hierarchy that allows programmatic analysis of
+any schema's structure without relying on internal properties.
 
-### N9: Add `.ip()` validator for both IPv4 and IPv6 addresses
+### M9: Add `z.templateLiteral()` for template string validation
 
-Add `z.string().ip()` that validates IPv4 and IPv6 addresses. Support
-`z.string().ip({ version: "v4" })` and `z.string().ip({ version: "v6" })`
-for version-specific validation. Include CIDR notation support with
-`z.string().cidr()`.
+Implement a new schema type that validates strings against TypeScript
+template literal patterns. `z.templateLiteral([z.literal("user-"),
+z.number()])` should validate strings like `"user-42"` and infer the
+type as `` `user-${number}` ``. Support embedding string, number, and
+literal schemas as template segments. Parse by matching segments
+left-to-right and validating each extracted substring against its
+corresponding schema.
 
-### N10: Fix `z.preprocess()` losing type inference with generic functions
+### M10: Extend the `z.coerce` namespace with missing primitive types
 
-When `z.preprocess()` receives a generic preprocessing function, the
-TypeScript type inference falls back to `unknown` instead of preserving
-the input type. The preprocess signature doesn't forward generic type
-parameters. Fix the type signature to preserve generics through
-preprocessing.
+Add `z.coerce.bigint()` that coerces string and number inputs to
+`BigInt`, failing on non-integer numbers and non-numeric strings. Add
+configurable coercion options to existing schemas: `z.coerce.number({
+nanToZero: true })` that maps `NaN` to `0`, and `z.coerce.string({
+nullToEmpty: true })` that maps `null` to the empty string. Update the
+type definitions, add coercion-specific error codes, and add default
+messages in the locale file.
 
-### M4: Implement schema diffing and migration
-
-Add `z.diff(schemaA, schemaB)` that computes a structural diff between
-two schemas: added fields, removed fields, changed types, changed
-constraints. Return a structured diff object. Add `z.migrate(data,
-diff)` that transforms data validated against `schemaA` to conform to
-`schemaB` using the diff plus user-provided transforms for breaking
-changes.
-
-### M5: Add OpenAPI 3.1 schema generation
-
-Implement `.toOpenAPI()` on all schema types that produces valid
-OpenAPI 3.1 schema. Handle discriminated unions (using `discriminator`
-keyword), nullable types, `format` annotations for strings (email,
-uuid, uri, date-time), numeric constraints (`minimum`, `maximum`,
-`multipleOf`), and recursive schemas via `$ref`.
-
-### M6: Implement tree-shakeable modular imports
-
-Split Zod into modular entry points so bundlers can tree-shake unused
-schema types. `import { z } from "zod"` imports everything (backward
-compatible); `import { string, object } from "zod/schemas"` imports
-only those types. This requires restructuring the module graph, moving
-each schema type to its own file, and updating the export structure.
-
-### M7: Add runtime type narrowing with `z.is()` and `z.assert()`
-
-Add `z.is<T>(schema, value): value is T` type guard that returns
-`true`/`false` without throwing. Add `z.assert<T>(schema, value): asserts
-value is T` for assertion-style checking. Both should work in
-conditional expressions and narrow the TypeScript type without
-`parse()`/`safeParse()` overhead for already-validated data.
-
-### M8: Implement `z.discriminatedUnion()` auto-detection
-
-Add `z.smartUnion()` that analyzes the member schemas and automatically
-detects the discriminant field (the field with literal types that
-distinguishes variants). If no discriminant exists, fall back to
-regular union behavior. This removes the need to manually specify
-the discriminator key.
-
-### M9: Add serialization schema support
-
-Add `.toJSON()` and `z.fromJSON()` that define how a schema's validated
-output is serialized and deserialized. Support custom serializers for
-dates (`Date` → ISO string), bigints, Maps, Sets, and other
-non-JSON-native types. Add `.serialize(data)` and `.deserialize(json)`
-methods that use the schema's serialization rules.
-
-### M10: Implement form validation integration
-
-Add `z.toFormRules(schema)` that generates validation rules compatible
-with HTML5 constraint validation (pattern, minlength, maxlength, min,
-max, required). Return a structured object that form libraries (React
-Hook Form, Formik) can consume directly. Support per-field error
-message extraction from Zod errors.
+## Wide
 
 ### W1: Add schema versioning and migration system
 
@@ -231,71 +251,86 @@ handling, and type inference systems.
 
 ### W3: Implement schema-driven mock data generation
 
-Add `z.mock(schema)` that generates random valid data matching any Zod
-schema. Support seed-based deterministic generation, custom generators
-per type, relationship-aware generation (foreign key references between
-schemas), and edge-case generation (empty strings, boundary numbers,
-deeply nested objects). This requires analyzing all schema types'
-constraints, building generators for each type, and composing them.
+Add `z.mock(schema)` that generates random valid data for any Zod
+schema. Respect constraints: min/max for strings and numbers, regex
+patterns for string checks, enum value sets, array length bounds, and
+object shapes including optional fields. Support seeded deterministic
+output, edge-case modes that produce boundary values and maximum
+nesting depths, and custom generators per schema type. Requires
+analyzing internal constraint representations across all schema classes
+in the types module and building composable generator functions.
 
 ### W4: Add streaming validation for large datasets
 
-Implement `z.stream(schema)` that validates items in a streaming
-fashion (e.g., JSONL files, API paginated results). Support per-item
-validation with error collection, partial result emission, backpressure,
-and configurable error thresholds (stop after N errors). Work with
-Node.js Readable streams and async iterables. Changes span the parse
-pipeline, error accumulation, and add a streaming module.
+Implement `z.stream(schema)` that validates elements from async
+iterables and Node.js Readable streams one at a time. Support
+configurable error thresholds allowing fail-fast or continue-after-N
+modes, partial result emission via async generator, backpressure
+handling, and progress callbacks. Introduce a `ZodStream` class that
+integrates with the existing parse pipeline. Output a typed async
+iterable of validated items alongside an accumulated error report.
 
-### W5: Implement schema-to-TypeScript code generation
+### W5: Add comprehensive internationalization for error messages
 
-Add a `zod-codegen` companion package that takes a Zod schema (defined
-at runtime or from a JSON Schema input) and generates TypeScript source
-code with the equivalent `z.*` definitions plus inferred types. Support
-round-tripping: schema → codegen → import → equivalent schema. Handle
-recursive types, discriminated unions, and custom refinements.
+Replace the single-locale error map with a full internationalization
+system. Support pluralization rules, message templates with
+interpolation placeholders like `{minimum}` and `{type}`, per-schema
+message overrides via i18n keys, and locale fallback chains. Bundle
+translations for major locales including English, Spanish, French,
+German, Chinese, Japanese, Korean, and Portuguese. Changes span error
+creation in the parse utilities, the error map system, `ZodError`
+formatting, and the locales module.
 
-### W6: Add database schema inference and generation
+### W6: Implement OpenAPI 3.1 bidirectional conversion
 
-Implement `zod-sql` that bridges Zod schemas to database tables. From
-a Zod object schema, generate CREATE TABLE SQL, migration scripts, and
-ORM model definitions (for Prisma, Drizzle, Kysely). Support column
-types inferred from Zod types, constraints from refinements (min/max →
-CHECK), and relationships from nested schemas. This requires type
-mapping, SQL generation, and ORM-specific output formatting.
+Add `z.toOpenAPI(schema)` that produces valid OpenAPI 3.1 schema
+objects with support for discriminated unions mapped to the
+`discriminator` keyword, nullable types, string formats like email and
+uuid, numeric constraints, and `$ref` for recursive schemas. Add
+`z.fromOpenAPI(spec)` that parses an OpenAPI 3.1 schema and produces
+equivalent Zod schemas. Handle `allOf`/`oneOf`/`anyOf` composition,
+reference resolution, and OpenAPI-specific extensions.
 
-### W7: Implement protocol buffer interop
+### W7: Implement protocol buffer interoperability
 
-Add `zod-proto` that converts between Zod schemas and Protocol Buffer
-definitions. Generate `.proto` files from Zod schemas with appropriate
-proto3 types, and generate Zod schemas from existing `.proto` files.
-Handle repeated fields, oneof (→ discriminated union), maps,
-well-known types (Timestamp, Duration), and nested messages. This
-requires proto file parsing, type mapping, and schema generation.
+Add bidirectional conversion between Zod schemas and Protocol Buffer
+definitions. Generate `.proto` files from Zod schemas with proto3
+scalar types, message nesting, repeated fields from arrays, oneof from
+discriminated unions, and map types from records. Parse existing
+`.proto` files and produce equivalent Zod schemas. Handle well-known
+types such as `google.protobuf.Timestamp` mapped to date schemas and
+`Duration` mapped to number schemas. Requires a proto definition
+parser, a type mapping layer, and code generators in both directions.
 
-### W8: Add E2E contract testing framework
+### W8: Add schema-driven TypeScript code generation
 
-Implement a contract testing system where API producers define schemas
-and consumers validate against them. Add `z.contract(name, reqSchema,
-resSchema)` that creates a named contract. Provide test utilities that
-verify both sides conform: producer tests validate responses match the
-contract, consumer tests validate requests match. Support versioned
-contracts and breaking change detection.
+Implement a code generator that takes a runtime Zod schema and emits
+TypeScript source with equivalent `z.*` definitions and exported
+inferred types. Support round-tripping so that generated code imports
+and produces a schema structurally equivalent to the original. Handle
+recursive types via `z.lazy()`, discriminated unions, refinements
+emitted as comments preserving the original function source, transforms,
+defaults, and branded types. Requires schema introspection, TypeScript
+AST construction, and import resolution.
 
-### W9: Implement schema-driven form builder for React
+### W9: Implement end-to-end API contract testing framework
 
-Add `@zod/react-form` that generates complete React form components
-from Zod schemas. Infer input types from schema types (string → text
-input, number → number input, enum → select, boolean → checkbox,
-array → repeatable group). Support custom renderers, validation
-integration, error display, conditional fields, and multi-step wizards.
-Requires JSX generation, React hook integration, and Zod type analysis.
+Build a contract testing system where API endpoints are described by
+Zod request and response schemas. `z.contract("createUser", { request:
+reqSchema, response: resSchema })` defines a named contract. Provide
+test utilities for producers that validate actual responses against the
+contract and consumers that validate outgoing requests. Support
+versioned contracts with breaking-change detection, a contract
+registry, and diff reporting. Integrate with the error formatting
+system for clear mismatch diagnostics.
 
-### W10: Add internationalization for error messages
+### W10: Add schema-aware deep equality and structural diff
 
-Implement a comprehensive i18n system for Zod error messages. Support
-locale-aware error formatters, pluralization rules, message templates
-with interpolation (e.g., "Must be at least {min} characters"), and
-per-schema custom messages with i18n keys. Include built-in translations
-for common locales (en, es, fr, de, zh, ja). Changes span the error
-system, issue creation, error formatting, and add a locale module.
+Implement `z.equal(schema, a, b)` that compares two values according
+to the schema's type semantics: strip extra properties the schema would
+discard, compare `Date` objects by value, handle `NaN` equality for
+number schemas, compare `Set` and `Map` by contents, and recurse into
+nested object schemas. Add `z.diff(schema, a, b)` returning a
+structured list of differences with paths. This crosses every schema
+type in the types module, adds comparison logic per type class, and
+introduces new utility functions in the helpers module.

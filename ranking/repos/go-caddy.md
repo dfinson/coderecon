@@ -56,7 +56,7 @@
 
 ## Tasks
 
-8 tasks (3 narrow, 3 medium, 2 wide) for the Go web server.
+30 tasks (10 narrow, 10 medium, 10 wide).
 
 ## Narrow
 
@@ -82,53 +82,6 @@ the active health check sends requests without the configured SNI value.
 The health check TLS handshake uses the upstream's IP address as the
 server name, causing certificate verification failures. Fix the health
 checker to use the configured `tls_server_name`.
-
-## Medium
-
-### M1: Implement request rate limiting module
-
-Add a `rate_limit` HTTP handler module that supports per-client (by IP)
-and per-route token bucket rate limiting. Support configurable burst
-size, refill rate, and distributed rate limiting via a shared storage
-interface (with an embedded implementation for single-instance). Return
-proper `429` responses with `Retry-After` headers. Add Caddyfile
-shortcut syntax.
-
-### M2: Add WebSocket reverse proxy improvements
-
-Implement WebSocket-specific features in the reverse proxy module:
-connection timeout (separate from HTTP timeout), ping/pong health
-monitoring for idle connections, automatic reconnection on upstream
-failure, and WebSocket compression (permessage-deflate) negotiation
-passthrough. Add per-connection metrics to the Prometheus endpoint.
-
-### M3: Implement on-demand TLS certificate rotation
-
-Add support for on-demand TLS certificate rotation that doesn't require
-a server restart. When a certificate is about to expire, the ACME client
-should obtain a new certificate and hot-swap it into the TLS config
-without dropping any active connections. Add logging and metrics for
-certificate rotation events.
-
-## Wide
-
-### W1: Add a web-based admin dashboard
-
-Implement a web UI for Caddy's admin API. The dashboard should display
-the current configuration, active sites, TLS certificate status,
-upstream health for reverse proxies, request metrics, and access logs.
-Support live configuration editing with validation and rollback.
-The UI should be a single embedded module served from the admin
-endpoint.
-
-### W2: Implement request tracing with OpenTelemetry
-
-Add native OpenTelemetry support across the request lifecycle. Create
-spans for the listener accept, TLS handshake, route matching, each
-handler in the chain, reverse proxy upstream selection, upstream request,
-and response writing. Propagate trace context across reverse proxy
-hops. Add a `tracing` Caddyfile directive and JSON config. Support
-OTLP export (gRPC and HTTP).
 
 ### N4: Fix `respond` directive not setting Content-Type for JSON bodies
 
@@ -179,6 +132,33 @@ username comparison is not constant-time, leaking timing information
 about valid usernames. Fix the auth handler to use constant-time
 comparison for both username and password verification.
 
+## Medium
+
+### M1: Implement request rate limiting module
+
+Add a `rate_limit` HTTP handler module that supports per-client (by IP)
+and per-route token bucket rate limiting. Support configurable burst
+size, refill rate, and distributed rate limiting via a shared storage
+interface (with an embedded implementation for single-instance). Return
+proper `429` responses with `Retry-After` headers. Add Caddyfile
+shortcut syntax.
+
+### M2: Add WebSocket reverse proxy improvements
+
+Implement WebSocket-specific features in the reverse proxy module:
+connection timeout (separate from HTTP timeout), ping/pong health
+monitoring for idle connections, automatic reconnection on upstream
+failure, and WebSocket compression (permessage-deflate) negotiation
+passthrough. Add per-connection metrics to the Prometheus endpoint.
+
+### M3: Implement on-demand TLS certificate rotation
+
+Add support for on-demand TLS certificate rotation that doesn't require
+a server restart. When a certificate is about to expire, the ACME client
+should obtain a new certificate and hot-swap it into the TLS config
+without dropping any active connections. Add logging and metrics for
+certificate rotation events.
+
 ### M4: Implement request body buffering with size limits
 
 Add a `request_body` directive that controls request body handling:
@@ -228,6 +208,26 @@ Add reverse proxy upstream discovery from external sources: DNS SRV
 records, Consul service catalog, and static file. Upstreams are
 refreshed periodically (configurable interval). Support health-aware
 discovery where unhealthy upstreams are excluded from the refresh result.
+
+## Wide
+
+### W1: Add a web-based admin dashboard
+
+Implement a web UI for Caddy's admin API. The dashboard should display
+the current configuration, active sites, TLS certificate status,
+upstream health for reverse proxies, request metrics, and access logs.
+Support live configuration editing with validation and rollback.
+The UI should be a single embedded module served from the admin
+endpoint.
+
+### W2: Implement request tracing with OpenTelemetry
+
+Add native OpenTelemetry support across the request lifecycle. Create
+spans for the listener accept, TLS handshake, route matching, each
+handler in the chain, reverse proxy upstream selection, upstream request,
+and response writing. Propagate trace context across reverse proxy
+hops. Add a `tracing` Caddyfile directive and JSON config. Support
+OTLP export (gRPC and HTTP).
 
 ### W3: Add Prometheus metrics and Grafana dashboard
 

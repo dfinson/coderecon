@@ -53,7 +53,7 @@ packages/
 
 ## Tasks
 
-10 tasks (3 narrow, 4 medium, 3 wide) for the TypeScript enterprise server-side framework.
+30 tasks (10 narrow, 10 medium, 10 wide).
 
 ## Narrow
 
@@ -80,71 +80,6 @@ registered, the execution order is inconsistent — global interceptors
 sometimes run after method-level ones depending on module initialization
 order. Fix the interceptor chain to guarantee that global interceptors
 always wrap method-level interceptors (global runs first/outermost).
-
-## Medium
-
-### M1: Implement request-scoped caching
-
-The current `CacheModule` uses a single shared cache store that doesn't
-distinguish between requests. Implement request-scoped caching that
-supports per-request cache keys (incorporating user identity, locale,
-etc.). Add a `@CacheScope()` decorator to mark which request properties
-contribute to the cache key. Support TTL and invalidation through the
-existing cache manager interface.
-
-### M2: Add health check aggregation for microservice architectures
-
-Extend `@nestjs/terminus` health checks to support aggregating health
-status from downstream microservices. When a service depends on other
-NestJS microservices, the health check should recursively query their
-health endpoints and aggregate the results into a tree. Add
-timeout and circuit-breaker protection for downstream health checks.
-
-### M3: Implement typed event emitter with DI integration
-
-The current `EventEmitter2` integration lacks TypeScript type safety
-for event payloads. Implement a typed event system where event names
-are mapped to payload types via a registry interface. Events should
-be injectable as dependencies. Add support for async event handlers
-with configurable concurrency limits. Include dead letter handling
-for failed event processing.
-
-### M4: Add OpenTelemetry auto-instrumentation
-
-Implement automatic OpenTelemetry tracing for NestJS applications.
-Create spans for HTTP requests, guard execution, pipe validation,
-interceptor chains, and provider method calls. Propagate trace context
-through the DI container. Add a `@Span()` decorator for custom spans.
-Support both HTTP and microservice transports.
-
-## Wide
-
-### W1: Implement module federation for micro-frontends
-
-Add support for dynamic module loading from remote NestJS applications
-at runtime. A host application should be able to discover and load
-modules from remote services, merging their controllers, providers,
-and middleware into the host's module tree. Handle version conflicts,
-shared dependencies, and graceful degradation when remote modules are
-unavailable.
-
-### W2: Add first-class multi-database support
-
-Implement native support for applications that connect to multiple
-databases simultaneously. Each module should be able to declare which
-database connection it uses. Add a `@Database('name')` decorator for
-providers. Support cross-database transactions where possible. Update
-the TypeORM, Mongoose, and Sequelize integrations to support named
-connections. Add test utilities for multi-database test isolation.
-
-### W3: Migrate microservice transports to a unified streaming API
-
-Refactor all microservice transport implementations (TCP, Redis, NATS,
-MQTT, gRPC, Kafka, RabbitMQ) to share a common streaming abstraction
-layer. Currently each transport has its own connection management,
-serialization, and error handling. Extract these into a shared transport
-SDK so that adding new transports requires implementing only the
-protocol-specific parts.
 
 ### N4: Fix `@Injectable()` scope not inherited by child classes
 
@@ -198,6 +133,42 @@ applied, absent parameters cause the pipe to throw instead of allowing
 `undefined` through. Fix `ParseIntPipe` to respect optional parameter
 semantics.
 
+## Medium
+
+### M1: Implement request-scoped caching
+
+The current `CacheModule` uses a single shared cache store that doesn't
+distinguish between requests. Implement request-scoped caching that
+supports per-request cache keys (incorporating user identity, locale,
+etc.). Add a `@CacheScope()` decorator to mark which request properties
+contribute to the cache key. Support TTL and invalidation through the
+existing cache manager interface.
+
+### M2: Add health check aggregation for microservice architectures
+
+Extend `@nestjs/terminus` health checks to support aggregating health
+status from downstream microservices. When a service depends on other
+NestJS microservices, the health check should recursively query their
+health endpoints and aggregate the results into a tree. Add
+timeout and circuit-breaker protection for downstream health checks.
+
+### M3: Implement typed event emitter with DI integration
+
+The current `EventEmitter2` integration lacks TypeScript type safety
+for event payloads. Implement a typed event system where event names
+are mapped to payload types via a registry interface. Events should
+be injectable as dependencies. Add support for async event handlers
+with configurable concurrency limits. Include dead letter handling
+for failed event processing.
+
+### M4: Add OpenTelemetry auto-instrumentation
+
+Implement automatic OpenTelemetry tracing for NestJS applications.
+Create spans for HTTP requests, guard execution, pipe validation,
+interceptor chains, and provider method calls. Propagate trace context
+through the DI container. Add a `@Span()` decorator for custom spans.
+Support both HTTP and microservice transports.
+
 ### M5: Implement database migration management module
 
 Add `@nestjs/migrations` that provides a Nest-native database migration
@@ -242,6 +213,35 @@ Extend `@nestjs/swagger` to auto-generate request/response examples from
 DTOs. Infer example values from `class-validator` decorators (e.g.,
 `@IsEmail()` → `"user@example.com"`). Support custom examples via
 decorator. Add API playground with editable request bodies.
+
+## Wide
+
+### W1: Implement module federation for micro-frontends
+
+Add support for dynamic module loading from remote NestJS applications
+at runtime. A host application should be able to discover and load
+modules from remote services, merging their controllers, providers,
+and middleware into the host's module tree. Handle version conflicts,
+shared dependencies, and graceful degradation when remote modules are
+unavailable.
+
+### W2: Add first-class multi-database support
+
+Implement native support for applications that connect to multiple
+databases simultaneously. Each module should be able to declare which
+database connection it uses. Add a `@Database('name')` decorator for
+providers. Support cross-database transactions where possible. Update
+the TypeORM, Mongoose, and Sequelize integrations to support named
+connections. Add test utilities for multi-database test isolation.
+
+### W3: Migrate microservice transports to a unified streaming API
+
+Refactor all microservice transport implementations (TCP, Redis, NATS,
+MQTT, gRPC, Kafka, RabbitMQ) to share a common streaming abstraction
+layer. Currently each transport has its own connection management,
+serialization, and error handling. Extract these into a shared transport
+SDK so that adding new transports requires implementing only the
+protocol-specific parts.
 
 ### W4: Implement module hot-reloading for development
 
