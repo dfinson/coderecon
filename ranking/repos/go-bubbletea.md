@@ -123,3 +123,176 @@ alignment (start/center/end/space-between), and flex-grow/shrink
 properties. The layout engine should run during the View phase, taking
 the terminal width/height and producing positioned render regions
 for each child. Integrate with the existing Lipgloss styling.
+
+### N4: Fix `tea.Quit` not flushing pending output before exit
+
+When a model returns `tea.Quit`, any pending `View()` output in the
+renderer buffer is discarded. The last frame before exit is never
+displayed. Fix the shutdown sequence to flush the renderer buffer
+before closing the program.
+
+### N5: Fix alt screen restoration leaving terminal in raw mode
+
+When the program panics while the alt screen is active, the terminal
+is left in raw mode because the cleanup handler doesn't run. Add a
+panic recovery handler that restores the terminal state before
+re-panicking.
+
+### N6: Add `tea.Tick` with custom ID for cancellable timers
+
+The current `tea.Tick` returns a `Cmd` with no way to cancel it. Add
+`tea.TickWithID(duration, id)` that returns a cancellable tick. Add
+`tea.CancelTick(id)` to cancel a pending tick by ID.
+
+### N7: Fix pasted text containing escape sequences interpreted as key events
+
+When bracketed paste mode is enabled and the pasted text contains
+ANSI escape sequences (e.g., colored text from a terminal), the paste
+handler interprets them as key events instead of literal characters.
+Fix the paste handler to treat all characters within the bracketed
+paste markers as literal text.
+
+### N8: Add `tea.Println` for output outside the TUI rendering area
+
+There's no way to print non-TUI output (debug messages, log lines)
+without corrupting the rendered view. Add `tea.Println(msg)` that
+outputs text above the TUI render area, scrolling the output region
+while keeping the TUI fixed at the bottom.
+
+### N9: Fix `tea.EnterAltScreen` not working when called from `Init()`
+
+When a model returns `tea.EnterAltScreen` from `Init()`, the alt
+screen is not entered because the renderer hasn't started yet. The
+command is processed before the terminal is ready. Fix the startup
+sequence to defer alt screen commands until after renderer initialization.
+
+### N10: Fix mouse wheel events reporting wrong direction on macOS Terminal.app
+
+On macOS Terminal.app, mouse wheel up/down events are reported with
+inverted direction compared to iTerm2 and other terminals. The mouse
+event parser uses the wrong bit for direction detection in the SGR
+mouse protocol. Fix the mouse parser to handle Terminal.app's encoding.
+
+### M4: Implement text input component with history
+
+Add a reusable `textinput.Model` with command history (up/down arrow
+to navigate previous inputs), history persistence to disk, history
+search (Ctrl-R fuzzy search), and max history length configuration.
+Support multi-line input with Shift-Enter for newlines.
+
+### M5: Add table component with sorting and filtering
+
+Implement a `table.Model` component for rendering tabular data with
+column headers, sortable columns (click header to sort), filterable
+rows (type to filter), scrollable body, resizable columns, and
+customizable cell rendering. Support keyboard navigation between cells.
+
+### M6: Implement progress bar with ETA estimation
+
+Add a `progress.Model` component that shows a progress bar with
+percentage, elapsed time, ETA (estimated time of arrival), and
+throughput rate. Support configurable bar characters, color gradients,
+and indeterminate mode (pulsing animation for unknown total).
+
+### M7: Add file browser component
+
+Implement a `filebrowser.Model` for navigating the filesystem.
+Show directories and files with icons/indicators, support directory
+traversal (Enter to open, Backspace to go up), file type filtering,
+hidden file toggling, and filepath output on selection. Support
+both single file and multi-file selection modes.
+
+### M8: Implement modal dialog system
+
+Add a modal overlay system where a `modal.Model` renders on top of
+the underlying view. Support configurable positioning (center, top,
+bottom), backdrop dimming, focus trapping (key events only go to the
+modal), stacked modals, and dismiss on Escape. The modal should work
+with any inner `tea.Model`.
+
+### M9: Add form component with validation
+
+Implement a `form.Model` that composes multiple input fields (text,
+select, checkbox, date) into a form with tab navigation between fields,
+per-field validation with inline error messages, submit/cancel actions,
+and dirty-state tracking. Support required fields and custom validators.
+
+### M10: Implement split-pane layout with drag-to-resize
+
+Add a `split.Model` that divides the terminal into two panes
+(horizontal or vertical) with a draggable divider. Support minimum
+pane sizes, keyboard-based resize (Alt+arrows), collapsed pane state,
+and nested splits. Each pane renders an independent `tea.Model`.
+
+### W3: Implement remote TUI serving over SSH
+
+Add the ability to serve a Bubbletea application over SSH using the
+Wish library integration. An SSH server hosts the TUI, and each SSH
+connection gets its own program instance. Support per-session state,
+shared state between sessions, terminal capability negotiation per
+client, and graceful disconnection handling. Changes span the program
+runner, renderer, input handling, and add an SSH server module.
+
+### W4: Add application state persistence and restore
+
+Implement state snapshot and restore for Bubbletea applications. On
+exit, serialize the model state to disk. On restart, restore from the
+saved state. Support configurable state serialization (JSON, msgpack),
+selective state persistence (mark which fields to persist via tags),
+and state migration between versions. Changes span the model
+interface, program lifecycle, and add a persistence module.
+
+### W5: Implement headless testing framework
+
+Add a testing framework for Bubbletea applications that runs programs
+without a real terminal. Provide `teatest.New(model)` that creates a
+headless program, `Send(msg)` for injecting messages, `WaitFor(condition)`
+for assertion, and `Output()` for capturing rendered frames. Support
+simulating key input sequences, mouse events, and window resize.
+Changes span the program runner, renderer, and add a test module.
+
+### W6: Add theme system with runtime switching
+
+Implement a theming system that decouples visual styling from model
+logic. Define themes as structured style collections (colors, borders,
+padding). Support runtime theme switching (light/dark mode toggle),
+theme inheritance (base theme + overrides), and theme loading from
+TOML/YAML config files. Integrate with Lipgloss for style application.
+Changes span all components, rendering, and add a theme module.
+
+### W7: Implement multi-window TUI framework
+
+Add support for running multiple independent TUI windows within a
+single program. Each window has its own model, update loop, and render
+area. Windows can be tiled (non-overlapping layout) or floating
+(overlapping with z-order). Support window creation, destruction,
+focus switching, and inter-window messaging. This requires a window
+manager, layout coordinator, and input routing layer.
+
+### W8: Add internationalization support
+
+Implement i18n for Bubbletea components. Support locale-aware string
+formatting (dates, numbers, currencies), right-to-left text rendering
+for Arabic/Hebrew, locale-based keyboard shortcuts, and translation
+loading from message files. All built-in components (spinner, progress,
+text input) should respect the active locale. Changes span the
+renderer, all built-in components, and add a locale module.
+
+### W9: Implement terminal multiplexer integration
+
+Add integration with tmux/screen that allows Bubbletea programs to
+manage terminal multiplexer sessions. Create and switch between tmux
+panes from within the TUI, run commands in multiplexer panes, capture
+pane output, and display multiplexer status. Support both tmux and
+screen protocols. Changes span the program runner, add a multiplexer
+abstraction, and a command execution module.
+
+### W10: Add plugin system for extensible components
+
+Implement a plugin architecture that allows third-party Go packages to
+register custom components, key bindings, and commands with a
+Bubbletea application. Plugins declare their models, init commands,
+and key maps through a registration interface. Support plugin lifecycle
+management, configuration, and sandboxed message handling. Changes span
+the program runner, key handling, model composition, and add a plugin
+registry.

@@ -153,3 +153,166 @@ user fields (email, username, groups → teams). Add JIT (just-in-time)
 provisioning that creates Gitea accounts on first SAML login. Implement
 single logout (SLO). Add admin UI for SAML configuration with
 metadata import/export.
+
+### N4: Fix milestone progress percentage rounding to zero for 1-2 issues
+
+When a milestone has only 1 or 2 issues and one is closed, the progress
+bar shows 0% because integer division truncates the percentage. Fix the
+milestone progress calculation to use proper rounding for small issue
+counts.
+
+### N5: Add `Closes #N` auto-linking in commit messages for wiki pages
+
+Commit messages on repository code support auto-closing issues via
+`Closes #123`, but commits via the wiki editor do not trigger issue
+auto-close. Fix the wiki commit handler to parse and process issue
+close keywords.
+
+### N6: Fix user profile heatmap showing wrong day for timezone edge cases
+
+The contribution heatmap on user profiles shows the wrong day for
+contributions made near midnight in timezones far from UTC. The
+server-side date grouping uses UTC without adjusting for the user's
+configured timezone. Fix the heatmap query to group by the user's
+local date.
+
+### N7: Fix repository transfer not updating webhook delivery URLs
+
+When a repository is transferred to a new owner, webhooks configured
+with repository-relative URLs still point to the old owner's URL path.
+The transfer operation does not update webhook URLs. Fix repository
+transfer to update webhook URLs or mark them for review.
+
+### N8: Add "Copy commit SHA" button on the commit detail page
+
+The commit detail page shows the full SHA but has no clipboard button.
+Add a click-to-copy button next to the commit SHA, consistent with
+the existing copy buttons on the repository clone URL and branch name.
+
+### N9: Fix LFS file edit in web editor creating corrupt LFS pointer
+
+When editing an LFS-tracked file through Gitea's web editor, the saved
+content is written directly to the repository instead of going through
+the LFS pipeline. The result is a non-LFS file that looks like a
+corrupt LFS pointer. Fix the web editor to route LFS file saves
+through the LFS storage backend.
+
+### N10: Fix email notification subject truncating unicode characters mid-codepoint
+
+When an issue title contains multi-byte unicode characters and the
+subject is truncated to fit the email subject length limit, the
+truncation can split a multi-byte character. This produces invalid
+UTF-8 in the email subject. Fix the truncation to respect unicode
+codepoint boundaries.
+
+### M5: Implement pull request review approval rules
+
+Add configurable approval rules beyond the existing simple "N approvals
+required." Support rules like: at least one approval from each team in
+a list, approval from the code owner of each changed path, dismissal
+of stale approvals on new pushes, and blocking reviews that prevent
+merge until resolved.
+
+### M6: Add repository dependency graph visualization
+
+Implement a dependency graph page that visualizes package dependencies
+declared in the repository's manifest files (go.mod, package.json,
+Gemfile, requirements.txt, etc.). Show a DAG of direct and transitive
+dependencies. Highlight known security vulnerabilities. Link to the
+dependency's repository if hosted on the same Gitea instance.
+
+### M7: Implement branch comparison view
+
+Add a `/compare/branch_a...branch_b` page that shows the diff between
+two branches, including changed files count, lines added/removed, and
+commit list. Support swapping comparison direction. Include a "Create
+Pull Request" button pre-filled with the compared branches.
+
+### M8: Add actions workflow dispatch with inputs
+
+Implement manual workflow dispatch for Gitea Actions. Support the
+`workflow_dispatch` event with configurable input fields (string,
+choice, boolean) defined in the workflow YAML. Add a "Run workflow"
+button in the Actions tab that shows a form for the inputs.
+
+### M9: Implement repository archive download with format selection
+
+Add `/archive/{ref}.{format}` endpoint supporting zip, tar.gz, and
+tar.bz2 formats. Cache generated archives for frequently requested
+refs. Support subdirectory archives (`/archive/{ref}/{path}.zip`).
+Add download buttons to the repository web UI.
+
+### M10: Add Git blame with inline annotations
+
+Implement a blame view that shows per-line commit attribution alongside
+the source code, similar to GitHub's blame view. Show commit SHA,
+author, and date for each line group. Support navigating to the commit
+that last changed a specific line. Handle blame across renames.
+
+### W4: Add container registry support
+
+Implement a Docker/OCI container registry as part of Gitea's package
+infrastructure. Support image push/pull, tag listing, image manifest
+inspection, vulnerability scanning integration, and garbage collection
+of untagged layers. Add authentication via Gitea's existing auth system.
+Integrate with the repository's Actions for automated builds. Changes
+span the package registry, HTTP routing, storage backend, and auth
+systems.
+
+### W5: Implement repository insights and analytics
+
+Add a repository analytics page showing: commit activity over time,
+active contributors chart, code frequency (additions/deletions per
+week), pull request merge time distribution, issue resolution time
+trends, and code language breakdown over time. Store aggregate metrics
+in a time-series table. Include an API for programmatic access.
+Changes span models, services, routers, and add scheduled aggregation
+workers.
+
+### W6: Add federated repository interaction via ActivityPub
+
+Implement ActivityPub federation so users on one Gitea instance can
+star, fork, and open issues/PRs on repositories hosted on a different
+Gitea instance. Implement the Actor model for users and repositories,
+Activity types for git operations, and inbox/outbox endpoints.
+Handle authentication across instances. Changes span the user model,
+repository model, API routing, notification system, and add a
+federation module.
+
+### W7: Implement Gitea Actions with reusable workflows
+
+Add support for reusable workflows in Gitea Actions: a workflow can
+call another workflow in the same or a different repository via
+`uses: owner/repo/.gitea/workflows/reusable.yaml@ref`. Support input
+parameters, output values, secrets passing, and nested workflow calls.
+Includes workflow resolution, input validation, output propagation,
+and the runner protocol changes.
+
+### W8: Add advanced code search with code navigation
+
+Implement code search with IDE-like features: go-to-definition from
+search results, find-all-references in the repository, symbol search
+across repositories in an organization, and search within specific
+language constructs (search only in function bodies, or only in
+comments). Uses the bleve indexer with language-aware tokenization.
+Changes span the indexer, search API, web UI, and add a code
+navigation module.
+
+### W9: Implement organization-level security policies
+
+Add organization-level security settings that cascade to all member
+repositories: required branch protection rules, mandatory code review
+policies, required CI checks, allowed merge strategies, secret
+scanning rules, and dependency vulnerability policies. Organization
+admins configure policies; repository admins cannot weaken them.
+Changes span organization models, repository settings, branch
+protection, and the admin UI.
+
+### W10: Add built-in CI/CD with pipeline visualization
+
+Extend Gitea Actions with a visual pipeline editor and live execution
+visualization. Show a DAG of jobs with status indicators, live log
+streaming per job, artifact browsing, and pipeline-level metrics.
+Support matrix builds with visual expansion. Add pipeline templates
+for common language/framework combinations. Changes span the Actions
+runner, web UI, API, and storage for logs and artifacts.
