@@ -65,20 +65,26 @@ request URL is dropped. Per RFC 7231, if the redirect target does not
 include a fragment, the fragment from the original request should be
 preserved. Fix the redirect middleware to carry forward the fragment.
 
-### N2: Add `connect_timeout` separate from `timeout`
+### N2: Fix `PrepareBodyMiddleware` not adding `Content-Length: 0` for empty-body PUT requests
 
-Currently `timeout` applies to the entire request lifecycle. Add a
-separate `connect_timeout` option that limits only the TCP connection
-phase. This allows setting a short connection timeout (2s) with a
-longer transfer timeout (60s) for large downloads. Pass the value
-through to cURL's `CURLOPT_CONNECTTIMEOUT`.
+`PrepareBodyMiddleware` returns early when `getBody()->getSize() === 0`,
+skipping all header preparation. For PUT and PATCH requests with
+intentionally empty bodies, this means no `Content-Length: 0` header
+is sent, causing some HTTP servers to hang waiting for body data.
+Per RFC 7230, requests with a body semantic should include
+`Content-Length: 0` when the body is empty. Fix the middleware to
+only skip header preparation for methods without body semantics
+(GET, HEAD).
 
-### N3: Fix `MockHandler` not resetting request history on reuse
+### N3: Fix `FileCookieJar::load` not validating cookie data before constructing `SetCookie`
 
-When a `MockHandler` is reused across multiple test methods, the
-request history from previous tests leaks into subsequent tests. The
-history array is never cleared. Add a `reset()` method to
-`MockHandler` and clear history between test invocations.
+`FileCookieJar::load()` reads JSON from a file and passes each array
+element directly to `new SetCookie($cookie)` without validating that
+the element contains the required `Name` field. If the cookie file is
+manually edited or corrupted with entries missing the `Name` key,
+this causes an unhandled error deep in `SetCookie` rather than a
+clear message at load time. Validate each cookie array entry in
+`load()` and skip malformed entries instead of crashing.
 
 ### N4: Fix `CookieJar` not respecting `Max-Age` over `Expires` header
 
@@ -88,13 +94,15 @@ attributes, RFC 6265 mandates that `Max-Age` takes precedence.
 causing incorrect expiration decisions when both are present. Fix
 the precedence logic in `SetCookie` so `Max-Age` wins.
 
-### N5: Fix `HandlerStack` `remove()` not updating resolved handler cache
+### N5: Fix `HandlerStack` allowing duplicate middleware names on `push()`
 
-After calling `HandlerStack::remove()` to remove a middleware by
-name, subsequent requests still execute the removed middleware
-because the compiled handler pipeline is cached. The `remove()`
-method should invalidate the cached handler so the next request
-recompiles the stack without the removed middleware.
+`HandlerStack::push()` does not verify uniqueness of the middleware
+name parameter, so multiple middleware can be registered with the
+same name. This causes `before()` and `after()` (which call
+`findByName()`) to only locate the first match, while `remove()`
+deletes all entries with that name — both producing surprising
+behavior. Throw an `InvalidArgumentException` when a duplicate
+non-empty name is passed to `push()` or `unshift()`.
 
 ### N6: Add `source_address` option to bind requests to a local IP
 
@@ -112,30 +120,34 @@ down time spent on individual redirect hops. When
 per-hop timing in `TransferStats` so callers can see where latency
 accumulates across redirects.
 
-### N8: Fix `CurlMultiHandler` tick loop ignoring `select_timeout`
+### N8: Fix `CurlMultiHandler::__destruct` discarding in-flight requests without rejection
 
-`CurlMultiHandler` uses `curl_multi_select()` in its tick loop
-but hard-codes the select timeout to 1 second, ignoring any
-user-provided `select_timeout` option. Pass the configured
-`select_timeout` (defaulting to 1.0) to `curl_multi_select()` so
-users can tune the polling interval for latency-sensitive workloads.
+`CurlMultiHandler::__destruct()` calls `curl_multi_close()` but does
+not reject the promises of any in-flight async requests. If the
+handler is garbage-collected while requests are still pending, those
+requests silently disappear without triggering rejection callbacks
+or `on_stats` handlers. Drain all active handles in the `$delays`
+and active queues, and reject their promises with a
+`ConnectException` before closing the multi handle.
 
-### N9: Add `on_stats` callback support to `StreamHandler`
+### N9: Add custom date format support to `MessageFormatter` template placeholders
 
-The `on_stats` request option fires a callback with
-`TransferStats` after a transfer completes, but only the cURL
-handlers populate it. When using `StreamHandler`, the callback
-is silently never called. Collect timing data from PHP stream
-operations and invoke the `on_stats` callback in `StreamHandler`.
+`MessageFormatter` supports `{date_common_log}` and `{date_iso_8601}`
+but provides no way to specify an arbitrary date format. Users who
+need Unix timestamps, RFC 2822, or other formats must subclass the
+formatter. Add support for a `{date_FORMAT}` pattern in the template
+where the string after `date_` is passed directly to `\gmdate()`,
+e.g., `{date_U}` for Unix timestamp or `{date_Y-m-d}` for ISO date.
 
-### N10: Fix `RetryMiddleware` doubling delay on non-retryable responses
+### N10: Fix `Pool` not validating `concurrency` option type
 
-When `RetryMiddleware` receives a response that the decider
-callback says should not be retried, it still calculates and
-logs the exponential backoff delay before discarding it. This
-causes misleading debug output. Skip delay computation entirely
-when the decider returns false, and only calculate it on an
-actual retry.
+`Pool`'s constructor reads `$config['concurrency']` and defaults it
+to 25, but does not validate the type or value. Passing a string
+(e.g., `'5'`), zero, or a negative number produces undefined behavior
+in `EachPromise`, which interprets non-positive concurrency as
+unlimited. Add validation in `Pool::__construct()` that ensures
+`concurrency` is a positive integer, throwing an
+`InvalidArgumentException` for invalid values.
 
 ## Medium
 

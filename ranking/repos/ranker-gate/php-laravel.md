@@ -76,12 +76,15 @@ integers (1/0), not as JSON true/false. The SQLite query grammar does
 not convert PHP booleans to SQLite-compatible JSON boolean values.
 Fix the SQLite grammar's JSON contains compilation.
 
-### N2: Add `withSum` and `withAvg` eager loading aggregate methods
+### N2: Fix `MorphTo` eager loading not applying global scopes on related models
 
-`withCount` is available for eager-loading relationship counts, but
-there's no equivalent for sum and average. Add `withSum('relationship', 'column')` and `withAvg('relationship', 'column')` to Eloquent's query
-builder that add a subquery for the aggregate value. The result should
-be accessible as `$model->relationship_sum_column`.
+When using `MorphTo::with()` to eager-load a polymorphic relationship,
+global scopes on the related models (such as `SoftDeletes` on some
+morph targets) are not applied to the eager-loading query. This causes
+soft-deleted records to appear in morphTo eager-load results even
+though direct queries on those models correctly exclude them. Fix
+`MorphTo::getResultsByType()` to apply the target model's global
+scopes when building the eager-loading query.
 
 ### N3: Fix `Route::fallback` not triggered for OPTIONS requests
 
@@ -116,21 +119,25 @@ the input is `['data' => [['email' => 'a@b.com'], null, ['email' => '']]]`,
 index 1 is silently ignored. Fix the validation rule compilation to
 treat null array elements as present but failing validation.
 
-### N7: Fix Artisan `schedule:list` not showing timezone-adjusted times
+### N7: Fix `RedisStore::flush` not respecting cache prefix
 
-`schedule:list` always shows scheduled times in UTC regardless of the
-application's configured timezone or the individual event's
-`->timezone('America/New_York')` setting. Fix the console command to
-display the next due time in each event's configured timezone, falling
-back to `app.timezone`.
+`Cache::store('redis')->flush()` calls Redis `FLUSHDB`, which
+deletes all keys in the current database — including keys belonging
+to other applications sharing the same Redis database. The flush
+operation should only delete keys matching the configured
+`cache.prefix`. Use `SCAN` with the prefix pattern and `DEL` in
+batches instead of `FLUSHDB` to scope the flush to the
+application's cache keys only.
 
-### N8: Fix `HasManyThrough` not supporting soft deletes on intermediate model
+### N8: Fix `Validator::sometimes` not resolving wildcard context for sibling fields
 
-When the intermediate model in a `HasManyThrough` relationship uses
-`SoftDeletes`, the query does not add a `whereNull('intermediate.deleted_at')`
-constraint. This causes rows through soft-deleted intermediates to
-appear in results. Fix `HasManyThrough` to check for the `SoftDeletes`
-trait on the intermediate model and apply the constraint automatically.
+When using `$validator->sometimes('items.*.price', 'required',
+fn($input) => ...)`, the callback receives the entire top-level
+input array rather than the current wildcard element. This makes it
+impossible to write conditions referencing sibling fields (e.g.,
+checking `type === 'physical'` for the same item). Fix `sometimes()`
+to pass the current array element scope when the rule path contains
+wildcards, allowing the callback to evaluate sibling fields.
 
 ### N9: Fix `Blade::component` alias registration failing for nested directories
 
@@ -149,31 +156,44 @@ the sent mailable so attachment assertions work correctly.
 
 ## Medium
 
-### M1: Implement model attribute encryption
+### M1: Implement Eloquent model versioning with change history
 
-Add built-in attribute encryption for Eloquent models. A `$encrypted`
-property on the model lists columns that should be encrypted at rest.
-Use `APP_KEY` with AES-256-GCM encryption. Encrypt on `setAttribute`,
-decrypt on `getAttribute`. Support querying encrypted columns with
-deterministic encryption mode (same plaintext → same ciphertext) for
-equality searches. Add migration helper to encrypt existing data.
+Add a `HasVersions` trait that automatically records a snapshot of
+model attributes in a `model_versions` table on every update.
+Each version stores the changed attributes, the authenticated
+user who made the change, and a timestamp. Add
+`$model->versions()` to retrieve the history,
+`$model->revertTo($versionId)` to restore a previous state, and
+`$model->diff($versionId)` to compare two versions. Add a
+migration generator `php artisan make:version-table` and integrate
+with Eloquent events (`updating`, `updated`) to capture changes
+automatically.
 
-### M2: Add queue job batching with progress tracking
+### M2: Add queue job chaining with shared state propagation
 
-Enhance `Bus::batch()` with per-batch progress tracking: percentage
-complete, estimated time remaining, jobs succeeded/failed/pending. Add
-a `BatchProgress` event that fires on each job completion. Surface
-progress through an API endpoint and a Blade component for real-time
-UI updates. Support nested batches (a batch within a batch) with
-aggregated progress.
+Extend `Bus::chain()` to support a shared state bag that passes
+data between jobs in the chain. Each job can read values set by
+its predecessor via `$this->chainState->get('key')` and write
+values for the next job via `$this->chainState->set('key', $val)`.
+Persist chain state in the queue payload so it survives worker
+restarts. Add `ChainState` as a serializable value object. Support
+conditional branching where a job can skip the next N jobs in the
+chain based on state. Integrate with `PendingChain`, `Dispatcher`,
+and the queue `CallQueuedHandler`.
 
-### M3: Implement database query builder macro system
+### M3: Implement Eloquent query result caching with automatic invalidation
 
-Add a macro system to the database query builder that allows registering
-custom query methods. `Builder::macro('active', fn ($q) => $q->where('active', true))` should add `->active()` to all query builders.
-Support per-connection macros, macros with parameters, and macro
-chaining. Add built-in macros for common patterns: `whereNotNull`,
-`orWhereNot`, `orderByDesc`.
+Add `User::where('active', true)->remember(60)->get()` that caches
+query results for the given number of seconds using the configured
+cache store. Generate cache keys from the SQL query and bindings.
+Add automatic cache invalidation when the model fires `created`,
+`updated`, or `deleted` events by clearing cached queries that
+reference the model's table. Support `rememberForever()` and
+`dontRemember()` overrides. Add a `config/database.php` option
+to enable/disable query caching per connection. Implement in a
+`CachesQueries` trait used by both `Query\Builder` and
+`Eloquent\Builder`, integrate with `Cache\Repository` and
+the Eloquent event dispatcher.
 
 ### M4: Add rate limiting improvements with sliding window
 
@@ -184,23 +204,33 @@ algorithm. Add per-route rate limit configuration via route middleware:
 Add Redis-backed sliding window implementation. Support rate limiting
 by authenticated user, API key, or custom resolvers.
 
-### M5: Add query builder `upsert` with configurable conflict resolution
+### M5: Add database-level advisory locks across MySQL, PostgreSQL, and SQLite
 
-Implement `DB::table('users')->upsert($rows, $uniqueBy, $updateColumns)`
-across MySQL, PostgreSQL, and SQLite grammars. MySQL should use
-`INSERT ... ON DUPLICATE KEY UPDATE`, PostgreSQL `INSERT ... ON CONFLICT
-... DO UPDATE`, and SQLite `INSERT OR REPLACE`. Support composite
-unique keys, expressions in update values (e.g., `DB::raw('count + 1')`),
-and an `upserted` event on Eloquent models.
+Implement `DB::advisoryLock('migration_batch')` that acquires a
+named advisory lock using `GET_LOCK()` on MySQL,
+`pg_advisory_lock()` on PostgreSQL, and a file-based fallback on
+SQLite. Add `->get($name, $timeout)`, `->release($name)`, and
+`->block($name, fn() => ...)` methods. Throw
+`LockTimeoutException` when the lock cannot be acquired within
+the timeout. Support shared and exclusive lock modes. Implement
+grammar-specific lock SQL in `MySqlGrammar`, `PostgresGrammar`,
+and `SQLiteGrammar`. Expose through the `Connection` class.
+Add an Artisan middleware trait to prevent concurrent command
+execution using advisory locks.
 
-### M6: Implement Eloquent lazy collection cursors with memory-bounded chunking
+### M6: Implement connection-level query timeout with per-query override
 
-Add `Model::cursor()` that returns a `LazyCollection` backed by a
-server-side cursor (PDO unbuffered query). Integrate with chunk
-processing so `User::cursor()->each(...)` never holds more than one
-Eloquent model in memory. Support cursor-based pagination for large
-result sets. Add cursor support to all database drivers including
-SQLite (simulated with LIMIT/OFFSET) and SQL Server.
+Add a configurable query timeout at the database connection level
+via `database.connections.mysql.timeout` (in seconds) that
+automatically kills queries exceeding the threshold. Implement via
+`SET SESSION max_execution_time` on MySQL and `SET
+statement_timeout` on PostgreSQL. Add per-query override:
+`DB::timeout(5)->select(...)`. When a query exceeds the timeout,
+throw a `QueryTimeoutException` containing the query SQL and
+elapsed time. Implement in `Connection`, `MySqlConnector`,
+`PostgresConnector`, and the query builder. Add
+`--timeout` option to Artisan `db:monitor` for detecting
+long-running queries.
 
 ### M7: Add middleware priority ordering with topological sort
 
@@ -211,14 +241,18 @@ sort in the router. Detect and report circular dependencies at
 boot time. Support priority groups for route-level and global
 middleware independently.
 
-### M8: Implement conditional validation rules with cross-field dependencies
+### M8: Add Eloquent model factory states with dependencies
 
-Add `required_if_accepted`, `required_unless_declined`, and a
-general-purpose `Rule::when(fn ($input) => ..., 'required|email')`
-syntax that evaluates the condition closure against the full input.
-Support dependency tracking so validation error messages reference the
-controlling field. Add circular dependency detection when rule A
-depends on rule B and vice versa. Integrate with form request classes.
+Extend Eloquent model factories to support state dependencies
+where one state requires another to be applied first. Add
+`$factory->state('published')->dependsOn('approved')` so that
+calling `->published()` automatically applies `->approved()` first.
+Detect circular state dependencies at factory definition time.
+Add `afterCreating` hooks that are scoped to specific states. Support
+state composition with `$factory->states(['approved', 'featured'])`.
+Integrate with `HasFactory` trait and the factory resolution in
+`Illuminate\Database\Eloquent\Factories\Factory`. Add state
+introspection via `$factory->getAppliedStates()`.
 
 ### M9: Add database schema diffing for migration generation
 
@@ -229,14 +263,19 @@ additions/removals, foreign key modifications, and table renames.
 Generate both `up()` and `down()` methods. Add a `--dry-run` flag
 that prints the SQL without creating the migration file.
 
-### M10: Implement queue worker graceful shutdown with job completion guarantees
+### M10: Add notification channel throttling with per-user rate limits
 
-Add `SIGTERM` and `SIGQUIT` handling to the queue worker that allows
-the current job to complete before shutting down. Track in-progress
-jobs in a Redis set so a supervisor can verify all jobs finished.
-Add a `--drain` mode that processes remaining jobs and exits when the
-queue is empty. Support configurable shutdown timeout after which the
-job is released back to the queue with an incremented attempt count.
+Implement per-channel, per-user notification throttling to prevent
+spamming users with duplicate or excessive notifications. Add
+`throttle($seconds)` to `Notification` classes that limits how
+often the same notification type is sent to the same notifiable
+via each channel. Use `Cache\RateLimiter` under the hood with
+keys derived from the notification class, notifiable ID, and
+channel name. Add `shouldThrottle()` and `throttleKey()` methods
+for custom throttle logic. Integrate into `NotificationSender`
+so throttled notifications are silently dropped. Add
+`Notification::assertThrottled()` for testing. Modify
+`ChannelManager` to check throttle state before dispatching.
 
 ## Wide
 
@@ -260,14 +299,21 @@ with ETags, and batch resource loading. Support JSON:API specification
 compliance mode. Changes span the resource classes, routing, query
 string parsing, and response formatting.
 
-### W3: Migrate the test suite to support parallel execution
+### W3: Implement a database query profiler across HTTP, queue, and Artisan
 
-Refactor `TestCase` and all test infrastructure to support
-`php artisan test --parallel`. Fix database migration state isolation
-(each parallel process gets its own test database), fix filesystem
-state (temp directories per process), fix cache isolation, and fix
-queue fake isolation. Add `ParallelTestCase` base class that handles
-resource isolation automatically.
+Build a query profiling system that records all database queries with
+execution time, caller stack trace, bindings, connection name, and
+the context (HTTP request, queue job, or Artisan command) that
+triggered them. Add `DB::enableProfiler()` and a `QueryProfiled`
+event. Implement an HTTP middleware that collects queries per request
+and adds `X-Query-Count` and `X-Query-Time` response headers. Add
+an Artisan `db:profile` command that analyzes recorded queries for
+N+1 patterns (repeated queries with different bindings), missing
+index hints (queries with full table scans), and slow queries above
+a threshold. Store profiling data via a `ProfileStore` interface
+with database and file drivers. Add a Blade component for rendering
+query timelines in development. Cross-cuts Database, Http,
+Queue, Console, Events, and View subsystems.
 
 ### W4: Add multi-tenancy support across database, cache, queue, and filesystem
 

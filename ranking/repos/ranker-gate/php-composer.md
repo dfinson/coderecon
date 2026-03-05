@@ -80,22 +80,24 @@ options. Add `--sort=name` (default, current behavior), `--sort=size`
 (by installed size), and `--sort=date` (by last update date) options.
 Include a `--reverse` flag for descending order.
 
-### N3: Fix `platform-check` false positive for replaced packages
+### N3: Fix `SvnDriver::execute` not masking credentials in error output
 
-When a package provides a platform extension replacement via
-`"replace": {"ext-json": "*"}`, the platform check at autoload time
-still warns that `ext-json` is missing. The platform checker does not
-consult the `replace` field. Fix the checker to treat replaced
-extensions as available.
+When `SvnDriver` executes SVN commands with `--username` and
+`--password` flags and the command fails, the error message logged
+via `$io->writeError()` includes the password in cleartext. A user
+running Composer in CI with verbose output inadvertently exposes
+repository credentials in build logs. Mask the password value in
+the error output before logging, consistent with how `Svn::cleanEnv`
+already handles environment variables.
 
-### N4: Fix `VcsRepository` failing to detect tags with slashes in names
+### N4: Fix `BumpCommand` not skipping packages with branch-alias constraints
 
-When a Git repository uses tags containing slashes (e.g., `release/v2.1.0`),
-`VcsRepository` fails to parse them as valid version references. The tag
-listing code in the Git driver splits on `/` expecting only a refs/tags
-prefix and discards everything after the first slash in the tag name itself.
-Fix the Git driver's tag parser to preserve slashes within tag names and
-map them to valid Composer versions.
+When running `composer bump`, packages whose constraint is
+`dev-main` or contains a branch alias (e.g., `dev-main as 2.0.0`)
+are processed by the bumper, which produces invalid constraints
+like `^dev-main`. The command should detect dev/branch-alias
+constraints and skip them with an informational message instead of
+writing a broken constraint to `composer.json`.
 
 ### N5: Fix `AutoloadGenerator` producing duplicate classmap entries
 
@@ -115,62 +117,68 @@ ignores nested packages. Fix `PathRepository` to correctly scope its
 package discovery to only the target directory without descending into
 subdirectories that are separate packages.
 
-### N7: Add `--patch-only` flag to `composer update`
+### N7: Fix `StatusCommand` not detecting uncommitted changes in source-installed packages
 
-The `update` command currently accepts `--with-dependencies` and
-`--no-dev` but provides no way to restrict updates to patch-level
-version bumps only. Add a `--patch-only` flag that constrains the solver
-to select versions within the same minor version as the currently locked
-version for each targeted package. Emit a warning if a package has no
-newer patch version available.
+`composer status` checks for local modifications in source-installed
+packages by running `git status` in each package directory. However,
+it does not detect untracked files (new files added but not committed).
+A developer who adds a new file inside `vendor/pkg/src/` gets no
+warning before running `composer update`, which overwrites the vendor
+directory. Include untracked files in the status output using
+`git status --porcelain`.
 
-### N8: Fix `Factory::createComposer` leaking file handles on invalid JSON
+### N8: Fix `ArchiveCommand` including `.git` directory in created archives
 
-When `Factory::createComposer` encounters a malformed `composer.json`,
-it throws a `JsonValidationException` but does not close the file stream
-opened to read the file. On systems processing many repositories in a
-loop (e.g., Satis), this causes file descriptor exhaustion. Fix the
-factory to use a try/finally block ensuring the stream is closed before
-the exception propagates.
+When `composer archive` creates a zip or tar archive from a local
+path, the `ArchivableFilesFinder` includes the `.git` directory in
+the archive, inflating the file size and potentially leaking
+repository history. The finder should exclude `.git`, `.svn`, and
+`.hg` version control directories by default when building the
+file list for archiving.
 
-### N9: Fix `Pool` ignoring stability flags for transitively required packages
+### N9: Fix `SearchCommand` not respecting configured repository priority
 
-When a root `composer.json` sets `"minimum-stability": "stable"` but
-adds `"prefer-stable": true` with an explicit `@beta` flag on a direct
-dependency, transitive dependencies of that package do not inherit the
-relaxed stability. The `Pool` filters out beta versions of transitive
-packages even when they are the only versions satisfying the constraint.
-Fix `Pool::addPackage` to propagate stability flags through the
-dependency chain.
+`composer search` queries all configured repositories but displays
+results in arbitrary order regardless of repository priority. When
+a private Packagist repository is configured alongside the public
+one, private packages appear interleaved with public results. Sort
+search results by repository priority (order of declaration in
+`composer.json`), then alphabetically within each repository.
 
-### N10: Fix `composer require` not updating the lock file hash
+### N10: Fix `ValidateCommand` not checking for conflicting `autoload` and `autoload-dev` paths
 
-After `composer require` adds a new package, it updates `composer.json`
-and `composer.lock` but does not recalculate the `content-hash` field
-in the lock file. A subsequent `composer install` on a clean checkout
-emits a "lock file out of date" warning even though the lock is correct.
-Fix the require command to recalculate and write the content hash after
-modifying the lock file.
+`composer validate` checks JSON schema correctness but does not
+detect when `autoload` and `autoload-dev` PSR-4 entries map
+overlapping namespace prefixes to different directories, which
+causes unpredictable class loading depending on whether dev
+dependencies are installed. Add a check that warns when both
+sections define the same namespace prefix with different paths.
 
 ## Medium
 
-### M1: Implement parallel package downloads
+### M1: Implement download integrity verification with content-hash validation
 
-Add parallel downloading of package archives. When `composer install`
-determines the set of packages to download, spawn multiple concurrent
-download workers (default 4, configurable via `--concurrency=N`).
-Show a combined progress bar with per-package status. Handle partial
-failures (retry individual downloads) without aborting the entire
-operation. Support parallel git clones for source installs.
+After downloading a package archive, verify the file's SHA-256
+checksum against the `dist.shasum` value from the repository metadata
+before extraction. On mismatch, delete the corrupted file, emit a
+warning with both expected and actual hashes, and re-download once
+before failing. Add a `--verify-downloads` CLI flag and a
+`config.verify-downloads` option (default: true). Support disabling
+verification for local/path repositories. Modify `FileDownloader`,
+`ZipDownloader`, and `TarDownloader` to call the verification step
+after the download completes but before extraction begins.
 
-### M2: Add security vulnerability scanning
+### M2: Add package size reporting to `ShowCommand` and post-install summary
 
-Implement `composer audit` that checks installed packages against a
-vulnerability database (Packagist security advisories). Report CVE
-IDs, severity, affected version ranges, and fixed versions. Support
-`--format=json` for CI integration. Add `--ignore=CVE-2024-XXXX` for
-acknowledged vulnerabilities. Run automatically after `composer install`
-with a configurable severity threshold.
+After installation, users have no way to see how much disk space each
+package consumes in `vendor/`. Add a `--sizes` flag to
+`composer show` that calculates and displays the installed size
+of each package by walking its vendor directory. Show sizes in
+human-readable format (KB/MB). Add a post-install summary line
+showing total `vendor/` size and the top 5 largest packages.
+Support `--format=json` output of size data. Implement size
+calculation in a new method on `Filesystem` and integrate it
+into `ShowCommand` and `InstallCommand`'s output.
 
 ### M3: Implement workspace/monorepo support
 
@@ -181,14 +189,17 @@ automatically. `composer install` in the root resolves dependencies
 for all workspace members together, deduplicating shared dependencies.
 Add `--workspace-filter=pkg/*` to operate on a subset.
 
-### M4: Implement a `composer outdated --direct` summary report
+### M4: Add `composer outdated --major-only` and semver-level categorization
 
-Add a `--direct` flag to `composer outdated` that limits output to
-direct dependencies only and displays a summary table showing package
-name, current version, latest version, semver-level of the update
-(major/minor/patch), and a link to the changelog if available from the
-repository metadata. Support `--format=json` and `--format=markdown`
-output. Sort by semver-level (majors first) by default.
+The `outdated` command shows all outdated packages but does not
+categorize them by the semver level of the available update. Add
+`--major-only`, `--minor-only`, and `--patch-only` filter flags
+that limit output to packages with updates at the respective
+semver level. Display a color-coded semver column (red for major,
+yellow for minor, green for patch) in the default table output.
+Add `--format=markdown` for pasting into pull request descriptions.
+Determine semver level by comparing the locked version against the
+latest available version using `VersionParser`.
 
 ### M5: Add configurable retry and mirror fallback to Downloader
 
@@ -200,26 +211,31 @@ circuit-breaker that skips a mirror after repeated failures within a
 time window. Add `--retry-count` and `--mirror-timeout` CLI options and
 corresponding `config` keys.
 
-### M6: Implement `composer doctor` for environment diagnostics
+### M6: Implement `composer diff` for comparing installed vs locked versions
 
-Add a `composer doctor` command that performs a comprehensive check of
-the local environment. Verify PHP version and loaded extensions against
-`require` and platform requirements, check that git/svn/hg binaries are
-available and functional, validate `composer.json` schema and
-`composer.lock` consistency, detect conflicting global plugins, test
-connectivity to configured repositories, and report disk space in the
-cache directory. Output a pass/warning/fail summary per check.
+Add a `composer diff` command that compares the currently installed
+packages (from `vendor/composer/installed.json`) against the lock
+file (`composer.lock`). Show packages that are installed but not in
+the lock file, packages in the lock file but not installed, and
+packages where the installed version differs from the locked
+version. Support `--format=json` for CI integration. Add a
+`--changelog` flag that fetches and displays changelog URLs from
+repository metadata for each changed package. Integrate with
+`Locker`, `RepositoryManager`, and the installed repository.
 
-### M7: Add partial lock file update for `composer update` with package targets
+### M7: Add dependency tree depth limiting to the solver
 
-When running `composer update vendor/package`, Composer currently
-re-resolves the entire dependency graph and rewrites the full lock file.
-Implement partial lock file updates where only the targeted packages and
-their transitive dependents are re-resolved. Preserve the resolution
-result for untouched packages. Add a `--dry-run` comparison showing
-which lock entries would change. The solver must detect when a partial
-update is impossible due to constraint conflicts and fall back to a full
-resolution with a diagnostic message.
+Deeply nested dependency trees slow resolution and increase the
+risk of version conflicts. Add a `config.max-depth` option
+(default: unlimited) that causes the solver to emit a warning
+when the dependency graph exceeds the configured depth, and a
+`--max-depth=N` CLI option for `update` and `require` that
+makes the solver reject solutions deeper than N levels. Report
+the deepest dependency path found during resolution. Implement
+depth tracking in the `Solver` by augmenting rule generation
+in `RuleSetGenerator` and adding depth attributes to `Pool`
+entries. Display the deepest path in the `DependencyResolver`
+output when verbosity is enabled.
 
 ### M8: Implement autoload generation caching
 
@@ -231,27 +247,29 @@ changed since the last dump. Add a cache manifest file alongside the
 generated autoloader. Support `--force` to bypass the cache. Measure
 and log time savings for large dependency trees.
 
-### M9: Add `composer exec` with proper PATH and environment setup
+### M9: Add `composer bin` for managing vendor binary symlinks
 
-Implement a `composer exec` command that runs a binary from
-`vendor/bin/` with an automatically configured environment. Set `PATH`
-to include `vendor/bin`, configure `COMPOSER_*` environment variables,
-set the working directory to the project root, and pass through stdin
-and exit codes. Support running any binary installed by any dependency,
-show a helpful error when a binary is not found listing installable
-packages that provide it, and add a `--list` flag that shows all
-available binaries with their providing package.
+Vendor binaries in `vendor/bin/` are created as symlinks or proxy
+scripts during installation, but there is no command to inspect or
+manage them. Add a `composer bin` command with subcommands:
+`composer bin list` shows all available binaries with their
+providing package and resolved path, `composer bin path <name>`
+prints the absolute path to a binary, and `composer bin check`
+verifies that all expected symlinks exist and point to valid
+targets. Integrate with `InstallationManager` to read the binary
+registry and `Filesystem` to validate symlink targets.
 
-### M10: Implement `composer why-not` with version constraint analysis
+### M10: Implement `composer depends --tree` with version constraint display
 
-Extend the `composer why-not` command to provide detailed constraint
-analysis when a package version cannot be installed. Walk the solver's
-rule set to identify every constraint that blocks the requested version,
-including transitive constraints from indirect dependencies. Display
-a tree of conflicting requirements with the exact version ranges each
-constraint allows. Suggest the minimum set of packages that need to be
-updated to unblock the requested version. Support `--format=json` for
-programmatic consumption.
+The `depends` command shows which packages require a given package
+but only displays one level of dependents. Add a `--tree` flag
+that recursively walks the dependency graph upward from the target
+package to the root requirements, displaying a nested tree of each
+path. At each node, show the version constraint that creates the
+dependency (`vendor/a ^2.0 → vendor/b ~1.5 → target >=1.0`).
+Highlight paths that pass through `require-dev` differently from
+production paths. Integrate with `BaseDependencyCommand` and the
+`Locker`'s installed repository for graph traversal.
 
 ## Wide
 
