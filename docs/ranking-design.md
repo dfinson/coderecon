@@ -335,22 +335,27 @@ non-OK avoids returning a bad result set.
 
 ### 5.1 Repo Selection
 
-Two repo sets serve different models:
+Three repo sets serve different purposes:
 
 **Ranker + Gate set** (30 repos): 10 languages × 3 repos per language
 (small/medium/large scale). Trains the object ranker and gate classifier.
 30 tasks per repo (10 narrow / 10 medium / 10 wide), each with 5 OK
-queries + up to 9 bad queries.
+queries + up to 9 bad queries (3× UNSAT, 3× BROAD, 3× AMBIG).
 
 **Cutoff set** (20 repos): 10 languages × 2 repos per language.
 Trains the cutoff predictor (N* estimation). 30 tasks per repo, each
-with 5 OK queries only (no bad queries — they are gated before cutoff).
-Repos are chosen for **varied touched-set sizes** so the cutoff model
-sees a wide range of N* values.
+with 5 OK queries only (no bad queries — non-OK queries are gated
+before cutoff). Repos chosen for **varied touched-set sizes** so the
+cutoff model sees a wide range of N* values.
 
-**Total:** 50 repos, 1,500 tasks, 7,500+ queries.
+**Evaluation set** (15 repos): 10 languages × 1 medium repo per language
++ 5 additional repos for the most popular languages (Python, TypeScript,
+Go, Java, C++). Uses the full query set (5 OK + up to 9 bad) — same
+as ranker+gate. Held out from training for unbiased evaluation.
 
-**Selection criteria** (both sets):
+**Total:** 65 repos, 1,950 tasks, 9,750+ queries.
+
+**Selection criteria** (all sets):
 
 1. **Scale diversity within each language:**
    - One focused library/tool — a single developer could hold the entire
@@ -373,7 +378,7 @@ sees a wide range of N* values.
 4. **Open source and permissively licensed** — training data must be usable
    under the repo's license.
 
-**Validation (one-time, post-selection):** After indexing all 50 repos, confirm
+**Validation (one-time, post-selection):** After indexing all 65 repos, confirm
 that the distribution of semantic object counts spans a wide range. If it
 clusters, swap repos to increase diversity.
 
@@ -381,8 +386,7 @@ clusters, swap repos to increase diversity.
 
 **Who:** A "task author" reasoning agent, operating per repo.
 
-**Task count:** 30 tasks per repo (10 narrow / 10 medium / 10 wide),
-for both ranker+gate and cutoff repo sets.
+**Task count:** 30 tasks per repo (10 narrow / 10 medium / 10 wide).
 
 **Process:**
 
@@ -730,15 +734,16 @@ One row per query. All query types.
 2. Train LightGBM LambdaMART grouped by `(run_id, query_id)`.
 3. Optimize NDCG with graded relevance labels.
 
-### 8.2 Cutoff (no-leakage K-fold)
+### 8.2 Cutoff (no-leakage K-fold across all 50 repos)
 
-1. K-fold split across tasks/runs.
-2. Per fold: train ranker on K−1 folds, score held-out fold → out-of-fold
-   ranked list.
+1. K-fold split across repos (e.g. 5-fold, 10 repos per fold).
+2. Per fold: train ranker on K−1 folds (40 repos), score held-out
+   fold (10 repos) → out-of-fold ranked lists.
 3. Per held-out query: compute $N^*(q) = \arg\max_N F_1(\text{top-}N,
    \text{ground truth})$.
-4. Collect `queries_cutoff` rows from all folds.
-5. Train cutoff regressor on aggregated out-of-fold data.
+4. Repeat across all folds → 7,500 `queries_cutoff` rows with no
+   leakage (every query scored by a ranker that never trained on it).
+5. Train cutoff regressor on the full 7,500-row aggregated dataset.
 
 ### 8.3 Gate
 
@@ -828,7 +833,7 @@ Key metrics for comparison:
 
 1. **During development**: Run evaluation on the codeplane repo's own
    ground truth (existing 72-record dataset adapted to def-level).
-2. **After dataset generation**: Run evaluation on the full 30-repo
+2. **After dataset generation**: Run evaluation on the full 50-repo
    training set using held-out folds.
 3. **Ongoing**: Add new repos/tasks to the evaluation set as codeplane
    adds language support. Re-train and re-evaluate.
@@ -908,7 +913,7 @@ benchmarking/
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│          PER REPO (×30 ranker+gate, ×20 cutoff)       │
+│          PER REPO (×30 ranker+gate, ×20 cutoff, ×15 eval) │
 │                                                        │
 │  One agent session per repo                            │
 │    │                                                   │
