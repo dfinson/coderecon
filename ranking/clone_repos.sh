@@ -85,6 +85,13 @@ for url in "${REPOS[@]}"; do
   else
     echo "  WARNING: cpl init failed for $name (exit $?)"
   fi
+
+  # Commit any files cpl init created (.github/copilot-instructions.md, .vscode/)
+  if [[ -n "$(git -C "$dest" status --porcelain 2>/dev/null)" ]]; then
+    echo "  committing cpl init artifacts"
+    git -C "$dest" add -A
+    git -C "$dest" commit -m "cpl init: add codeplane config files" --no-verify -q
+  fi
 done
 
 echo ""
