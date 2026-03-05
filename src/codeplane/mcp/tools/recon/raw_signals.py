@@ -125,6 +125,7 @@ async def _raw_signals_pipeline(
             "kind": d.kind,
             "name": d.name,
             "lexical_path": d.lexical_path,
+            "qualified_name": d.qualified_name,
             # Span
             "start_line": d.start_line,
             "end_line": d.end_line,

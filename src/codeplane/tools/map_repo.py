@@ -61,7 +61,7 @@ class EntryPoint:
     path: str
     kind: str  # function, class, method
     name: str
-    lexical_path: str | None
+    qualified_name: str | None
 
 
 @dataclass
@@ -385,7 +385,7 @@ class RepoMapper:
                     path=path,
                     kind=d.kind,
                     name=d.name,
-                    lexical_path=d.lexical_path,
+                    qualified_name=d.qualified_name,
                 )
             )
 

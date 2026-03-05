@@ -521,12 +521,14 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
             # Find containing scope
             containing_scope = _find_containing_scope(scopes, sym.line, sym.column)
 
+            lp = _compute_lexical_path(sym, symbols)
             def_dict = {
                 "def_uid": def_uid,
                 "unit_id": unit_id,
                 "kind": sym.kind,
                 "name": sym.name,
-                "lexical_path": _compute_lexical_path(sym, symbols),
+                "qualified_name": lp if "." in lp else None,
+                "lexical_path": lp,
                 "namespace": _type_to_ns.get(sym.name),
                 "start_line": sym.line,
                 "start_col": sym.column,

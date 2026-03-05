@@ -496,6 +496,23 @@ def initialize_repo(
     if not cplignore_path.exists() or reindex:
         cplignore_path.write_text(get_cplignore_template())
 
+    # Merge repo-root .cplignore if it exists — user patterns survive reindex
+    root_cplignore = repo_root / ".cplignore"
+    if root_cplignore.exists():
+        generated = cplignore_path.read_text()
+        root_lines = root_cplignore.read_text().strip()
+        if root_lines:
+            # Collect patterns not already in the generated template
+            existing = set(generated.splitlines())
+            new_patterns = [
+                ln for ln in root_lines.splitlines()
+                if ln.strip() and ln not in existing
+            ]
+            if new_patterns:
+                merged = generated.rstrip() + "\n\n# From repo-root .cplignore\n"
+                merged += "\n".join(new_patterns) + "\n"
+                cplignore_path.write_text(merged)
+
     # Create .gitignore to exclude artifacts from version control per SPEC.md §7.7
     gitignore_path = codeplane_dir / ".gitignore"
     if not gitignore_path.exists() or reindex:

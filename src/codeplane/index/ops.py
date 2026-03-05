@@ -2885,12 +2885,22 @@ class IndexCoordinatorEngine:
 
         all_files: list[str] = []
         for dirpath, dirnames, filenames in os.walk(self.repo_root):
-            # Prune dirs in-place to skip expensive subtrees
-            dirnames[:] = [d for d in dirnames if not checker.should_prune_dir(d)]
-
             dirpath_p = Path(dirpath)
             rel_dir = str(dirpath_p.relative_to(self.repo_root)).replace("\\", "/")
             prefix = "" if rel_dir == "." else rel_dir
+
+            # Prune dirs in-place to skip expensive subtrees.
+            # Two checks: (1) bare name against hardcoded/default sets,
+            # (2) full relative path against .cplignore/.gitignore patterns.
+            pruned: list[str] = []
+            for d in dirnames:
+                if checker.should_prune_dir(d):
+                    continue
+                child_rel = f"{prefix}/{d}" if prefix else d
+                if checker.should_prune_dir_path(child_rel):
+                    continue
+                pruned.append(d)
+            dirnames[:] = pruned
 
             # Load nested ignore files (skip root — already loaded above)
             if prefix:

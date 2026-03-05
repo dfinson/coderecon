@@ -322,6 +322,7 @@ class FactQueries:
             select(DefFact)
             .where(
                 (col(DefFact.name).ilike(pattern))
+                | (col(DefFact.qualified_name).ilike(pattern))
                 | (col(DefFact.docstring).ilike(pattern))
                 | (col(DefFact.lexical_path).ilike(pattern))
             )

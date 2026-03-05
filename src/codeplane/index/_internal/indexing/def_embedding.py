@@ -124,9 +124,9 @@ def build_def_scaffold(
     lines.append(f"{kind} {compact}")
 
     # Parent class/module context
-    lexical = d.get("lexical_path", "") or ""
-    if lexical and "." in lexical:
-        parent = lexical.rsplit(".", 1)[0]
+    qualified = d.get("qualified_name", "") or d.get("lexical_path", "") or ""
+    if qualified and "." in qualified:
+        parent = qualified.rsplit(".", 1)[0]
         parent_words = " ".join(_word_split(parent))
         if parent_words:
             lines.append(f"in {parent_words}")

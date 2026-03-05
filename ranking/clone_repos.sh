@@ -1,26 +1,25 @@
 #!/usr/bin/env bash
-# Clone all 30 ranking training repos, remove origin, and run cpl init.
+# Clone all ranking repos (ranker-gate + cutoff + eval), remove origin.
 #
 # Usage:
 #   cd ranking && bash clone_repos.sh
+#   cd ranking && bash clone_repos.sh --with-cpl-init   # also run cpl init
 #
-# Prerequisites:
-#   - git
-#   - cpl CLI on PATH (codeplane)
-#
-# Each repo is cloned as a shallow copy (--depth=1) to save space.
-# The remote is removed so no accidental pushes occur.
-# cpl init runs blocking per repo to build the index.
+# Each repo is shallow-cloned (--depth=1). The remote is removed so
+# no accidental pushes occur. Pass --with-cpl-init to also index each
+# repo with codeplane (slow — ~2min per repo).
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLONES_DIR="$SCRIPT_DIR/clones"
+DO_CPL_INIT=false
+[[ "${1:-}" == "--with-cpl-init" ]] && DO_CPL_INIT=true
 
 mkdir -p "$CLONES_DIR"
 
-# Repo URLs extracted from ranking/repos/*.md
-REPOS=(
+# ── Ranker + Gate set (30 repos) ─────────────────────────────────
+RANKER_GATE=(
   https://github.com/fmtlib/fmt
   https://github.com/google/googletest
   https://github.com/opencv/opencv
@@ -53,10 +52,54 @@ REPOS=(
   https://github.com/colinhacks/zod
 )
 
-total=${#REPOS[@]}
+# ── Cutoff set (20 repos) ───────────────────────────────────────
+CUTOFF=(
+  https://github.com/pallets/click
+  https://github.com/Textualize/rich
+  https://github.com/date-fns/date-fns
+  https://github.com/trpc/trpc
+  https://github.com/spf13/cobra
+  https://github.com/gorilla/mux
+  https://github.com/clap-rs/clap
+  https://github.com/seanmonstar/reqwest
+  https://github.com/google/guava
+  https://github.com/FasterXML/jackson-databind
+  https://github.com/DapperLib/Dapper
+  https://github.com/App-vNext/Polly
+  https://github.com/heartcombo/devise
+  https://github.com/sidekiq/sidekiq
+  https://github.com/Seldaek/monolog
+  https://github.com/sebastianbergmann/phpunit
+  https://github.com/onevcat/Kingfisher
+  https://github.com/SnapKit/SnapKit
+  https://github.com/nlohmann/json
+  https://github.com/gabime/spdlog
+)
+
+# ── Eval set (15 repos) ─────────────────────────────────────────
+EVAL=(
+  https://github.com/celery/celery
+  https://github.com/vitest-dev/vitest
+  https://github.com/gofiber/fiber
+  https://github.com/tokio-rs/axum
+  https://github.com/mockito/mockito
+  https://github.com/AutoMapper/AutoMapper
+  https://github.com/sinatra/sinatra
+  https://github.com/symfony/console
+  https://github.com/ReactiveX/RxSwift
+  https://github.com/catchorg/Catch2
+  https://github.com/pydantic/pydantic
+  https://github.com/evanw/esbuild
+  https://github.com/gin-gonic/gin
+  https://github.com/projectlombok/lombok
+  https://github.com/grpc/grpc
+)
+
+ALL_REPOS=("${RANKER_GATE[@]}" "${CUTOFF[@]}" "${EVAL[@]}")
+total=${#ALL_REPOS[@]}
 i=0
 
-for url in "${REPOS[@]}"; do
+for url in "${ALL_REPOS[@]}"; do
   i=$((i + 1))
   name=$(basename "$url")
   dest="$CLONES_DIR/$name"
@@ -78,21 +121,22 @@ for url in "${REPOS[@]}"; do
     git -C "$dest" remote remove origin
   fi
 
-  # Run cpl init (blocking)
-  echo "  running cpl init ..."
-  if (cd "$dest" && cpl init); then
-    echo "  cpl init complete"
-  else
-    echo "  WARNING: cpl init failed for $name (exit $?)"
-  fi
+  if [[ "$DO_CPL_INIT" == true ]]; then
+    echo "  running cpl init ..."
+    if (cd "$dest" && cpl init); then
+      echo "  cpl init complete"
+    else
+      echo "  WARNING: cpl init failed for $name (exit $?)"
+    fi
 
-  # Commit any files cpl init created (.github/copilot-instructions.md, .vscode/)
-  if [[ -n "$(git -C "$dest" status --porcelain 2>/dev/null)" ]]; then
-    echo "  committing cpl init artifacts"
-    git -C "$dest" add -A
-    git -C "$dest" commit -m "cpl init: add codeplane config files" --no-verify -q
+    # Commit any files cpl init created
+    if [[ -n "$(git -C "$dest" status --porcelain 2>/dev/null)" ]]; then
+      echo "  committing cpl init artifacts"
+      git -C "$dest" add -A
+      git -C "$dest" commit -m "cpl init: add codeplane config files" --no-verify -q
+    fi
   fi
 done
 
 echo ""
-echo "=== Done: $total repos cloned and indexed ==="
+echo "=== Done: $total repos cloned ==="
