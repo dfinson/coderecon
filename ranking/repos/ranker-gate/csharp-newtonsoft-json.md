@@ -300,18 +300,24 @@ for processing large arrays element by element. Wire into
 `JsonSerializerInternalReader.CreateList` to support incremental
 collection building. Support cancellation and progress reporting.
 
-### W6: Add a diagnostic tracing layer for the serialization pipeline
+### W6: Add structured diagnostic event tracing for the serialization pipeline
 
-Add `JsonSerializerTrace` that hooks into `JsonSerializerInternalReader`
-and `JsonSerializerInternalWriter` to emit structured diagnostic
-events: contract resolution (type → contract mapping), converter
-selection (which `JsonConverter.CanConvert` matched), property
-population (name, value, skip reason), reference tracking (`$ref`
-resolution), and error handling (which error strategy was applied).
-Expose the trace via `JsonSerializerSettings.TraceWriter` using a
-new `ITraceWriter` interface with `Trace(TraceLevel, string, Exception)`
-method. Add built-in `MemoryTraceWriter` and `DiagnosticSourceTraceWriter`
-implementations. Ensure zero overhead when tracing is disabled.
+The existing `ITraceWriter` in `Serialization/ITraceWriter.cs` and its
+built-in implementations (`MemoryTraceWriter`, `DiagnosticsTraceWriter`)
+emit flat string trace messages through `JsonSerializerInternalBase`.
+Add a structured event layer on top: introduce `IStructuredTraceWriter`
+with a `Trace(SerializationTraceEvent)` method where
+`SerializationTraceEvent` carries typed fields (event kind, source
+type, target contract, converter used, property name, skip reason,
+JSON path). Hook structured event emission into
+`JsonSerializerInternalReader` (contract resolution, converter
+selection, property population, `$ref` resolution) and
+`JsonSerializerInternalWriter` (serialization dispatch, reference
+loop detection, converter invocation). Add
+`StructuredMemoryTraceWriter` that collects events for programmatic
+querying. Wire `IStructuredTraceWriter` into `JsonSerializerSettings`
+alongside the existing `TraceWriter` property. Ensure zero overhead
+when structured tracing is not configured.
 
 ### W7: Implement AOT and trimmer compatibility for the serialization engine
 

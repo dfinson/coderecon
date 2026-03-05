@@ -54,107 +54,83 @@ src/Humanizer/
 
 ## Narrow
 
-### N1: Fix `ToQuantity` formatting negative numbers incorrectly
+### N1: Add ordinal word support for Slovenian
 
-`(-3).ToWords()` returns "minus three" correctly, but
-`"item".ToQuantity(-3, ShowQuantityAs.Words)` returns "minus three item"
-(singular) instead of "minus three items" (plural). The pluralization
-logic does not handle negative quantities. Fix `ToQuantity` to use the
-absolute value for pluralization decisions.
+The Slovenian number-to-words converter in `Localisation/NumberToWords/SlovenianNumberToWordsConverter.cs` has a `ConvertToOrdinal()` method that simply returns the digit string via `number.ToString(culture)` instead of actual Slovenian ordinal words. Implement Slovenian ordinal words (prvi/prva/prvo for 1st, drugi/druga/drugo for 2nd, etc.) with grammatical gender agreement through `GrammaticalGender`. Handle irregular forms through at least 10th and regular suffix-based forms beyond that.
 
-### N2: Add ordinal word support for Portuguese
+### N2: Add ordinal word support for Polish
 
-The Portuguese localization supports `ToWords()` for cardinal numbers
-but not `ToOrdinalWords()`. Implement the ordinal number-to-words
-converter for Portuguese, handling gender agreement (primeiro/primeira)
-and irregular ordinals through 10th.
+The Polish number-to-words converter in `Localisation/NumberToWords/PolishNumberToWordsConverter.cs` has a `ConvertToOrdinal()` method that returns only the digit string via `number.ToString(culture)`. Implement actual Polish ordinal words (pierwszy/pierwsza/pierwsze for 1st, drugi/druga/drugie for 2nd, etc.) with grammatical gender agreement through the `GrammaticalGender` enum. Handle the irregular ordinal forms through 10th and regular derivation patterns beyond that.
 
-### N3: Fix `Truncate` with `TruncateFrom.Left` adding ellipsis at wrong end
+### N3: Implement Croatian `ConvertToOrdinal` from its TODO stub
 
-When truncating from the left with `"long string".Truncate(5, Truncator.FixedLength, TruncateFrom.Left)`, the ellipsis characters appear
-at the end instead of the beginning. The output is `"tring…"` but
-should be `"…tring"`. Fix the left-truncation to place the truncation
-indicator at the left.
+`CroatianNumberToWordsConverter.cs` in `Localisation/NumberToWords/` has a `ConvertToOrdinal()` method marked with `//TODO: In progress` that returns a numeric string fallback. Implement actual Croatian ordinal word generation (prvi, drugi, treći, etc.) with appropriate gender agreement, matching the pattern used by other Slavic converters like the Russian and Ukrainian implementations.
 
-### N4: Fix `Singularize` incorrectly singularizing uncountable nouns
+### N4: Implement Serbian Cyrillic `ConvertToOrdinal` from its TODO stub
 
-Calling `"sheep".Singularize()` returns "shep" instead of "sheep". The singularization engine does not consult the uncountable-words list before applying suffix-stripping rules. Fix the inflection pipeline to check uncountables first, matching the guard already present in `Pluralize`.
+`SerbianCyrlNumberToWordsConverter.cs` in `Localisation/NumberToWords/` has a `ConvertToOrdinal()` method marked `//TODO: In progress` that returns a numeric fallback. Implement Serbian Cyrillic ordinal words (први, други, трећи, etc.) with gender agreement, following the same patterns used by the existing Serbian Latin cardinal number conversion already in the file.
 
-### N5: Fix `Humanize` on `TimeSpan` dropping sub-second precision
+### N5: Implement Serbian Latin `ConvertToOrdinal` from its TODO stub
 
-`TimeSpan.FromMilliseconds(750).Humanize()` returns "no time" instead of "750 milliseconds". The humanizer considers only whole-second granularity and discards the millisecond component. Fix the duration humanization to include milliseconds when the total span is less than one second.
+`SerbianNumberToWordsConverter.cs` in `Localisation/NumberToWords/` has a `ConvertToOrdinal()` method marked `//TODO: In progress` returning a numeric fallback. Implement Serbian Latin ordinal words (prvi, drugi, treći, etc.) with gender forms, mirroring the cardinal logic already present and following the same approach used by the Cyrillic Serbian variant.
 
-### N6: Fix `ToRoman` returning empty string for zero
+### N6: Add German date-to-ordinal-words converter
 
-`(0).ToRoman()` silently returns an empty string. Roman numerals have no zero, but the method should throw an `ArgumentOutOfRangeException` or return a documented sentinel rather than silently producing invalid output. Add an explicit guard with a clear error message.
+The `Localisation/DateToOrdinalWords/` directory has converters for Catalan, Spanish, French, Lithuanian, and US English, but no German converter. German expresses ordinal dates as "1. Januar 2023" rather than "January 1st, 2023". Add `DeDateToOrdinalWordsConverter.cs` implementing `IDateToOrdinalWordConverter` with the German date format convention, and register it for the `"de"` locale in `Configuration/DateToOrdinalWordsConverterRegistry.cs`.
 
-### N7: Fix `Titleize` breaking on acronyms
+### N7: Add Italian date-to-ordinal-words converter
 
-`"use the NASA api".Titleize()` produces "Use The N A S A Api" because the titleization logic inserts spaces before each uppercase letter in a contiguous uppercase run. Adjust the word-boundary detection to preserve fully-uppercase sequences as single tokens.
+The `Localisation/DateToOrdinalWords/` directory lacks an Italian converter. Italian expresses ordinal dates as "1° gennaio 2023" rather than "January 1st, 2023", using the masculine ordinal indicator. Add `ItDateToOrdinalWordsConverter.cs` implementing `IDateToOrdinalWordConverter` with Italian date formatting conventions, and register it for the `"it"` locale in `Configuration/DateToOrdinalWordsConverterRegistry.cs`.
 
-### N8: Fix `Kebaberize` not handling consecutive uppercase letters
+### N8: Add `FromWords` support for Spanish
 
-`"XMLParser".Kebaberize()` yields `"x-m-l-parser"` rather than `"xml-parser"`. The casing-boundary detection splits every uppercase-to-uppercase transition. Update the kebab-case converter to group runs of uppercase letters as one segment, splitting only before the final uppercase letter when followed by lowercase.
+The `Localisation/WordsToNumber/` directory contains only a `DefaultWordsToNumberConverter` and `EnglishWordsToNumberConverter`. The `WordsToNumberConverterRegistry` falls back to a default for non-English locales, which cannot parse Spanish number words. Add `SpanishWordsToNumberConverter.cs` implementing `IWordsToNumberConverter` to parse Spanish number words ("cuarenta y dos" → 42, "cien" → 100, "mil quinientos" → 1500) and register it for the `"es"` locale in the registry.
 
 ### N9: Add ordinal word support for Czech
 
 The Czech localization has `ToWords()` for cardinal numbers but lacks `ToOrdinalWords()`. Implement the Czech ordinal converter, handling gender and case agreement (první, druhý/druhá/druhé) and the irregular forms through 10th.
 
-### N10: Fix `Humanize` on enum flags showing raw integer for combined values
+### N10: Add `FromWords` support for French
 
-When a `[Flags]` enum has a value that is a combination of defined members, `Humanize()` shows the underlying integer instead of a comma-separated list of flag names. Fix the enum humanizer to decompose combined flag values into their named constituents before formatting.
+The `Localisation/WordsToNumber/` directory has no French converter. The `WordsToNumberConverterRegistry` falls back to a default that cannot parse French number words. Add `FrenchWordsToNumberConverter.cs` implementing `IWordsToNumberConverter` to parse French number words ("quarante-deux" → 42, "soixante-dix" → 70, "quatre-vingts" → 80) handling French-specific vigesimal patterns. Register it for the `"fr"` locale in `WordsToNumberConverterRegistry.cs`.
 
 ## Medium
 
-### M1: Add relative time formatting with granularity control
+### M1: Add precision-based date humanization strategy with configurable thresholds
 
-The current `Humanize()` on `DateTime` shows "2 hours ago" but with no
-control over granularity. Implement a `Humanize(precision)` overload
-that shows multiple units: "2 hours and 15 minutes ago" (precision=2),
-"2 hours, 15 minutes, and 30 seconds ago" (precision=3). Support both
-past and future directions. Add `maxUnit` and `minUnit` parameters
-to cap the range.
+The `DateTimeHumanizeStrategy/` directory has `DefaultDateTimeHumanizeStrategy` and `PrecisionDateTimeHumanizeStrategy`, both producing single-unit output like "2 hours ago". Add a new `MultiUnitDateTimeHumanizeStrategy` that returns compound descriptions like "2 hours and 15 minutes ago" with a configurable number of output units. Implement `IDateTimeHumanizeStrategy` and wire it through `Configurator.DateTimeHumanizeStrategy`. Also add matching `MultiUnitDateOnlyHumanizeStrategy` and `MultiUnitDateTimeOffsetHumanizeStrategy` variants to maintain parity across the `DateTimeHumanizeStrategy/` interfaces. Update `DateHumanizeExtensions.cs` to expose an overload that accepts the precision parameter.
 
-### M2: Implement file size formatting with IEC/SI units
+### M2: Add SI decimal unit support to `ByteSize`
 
-Add `ByteSize` formatting that supports both IEC binary units (KiB, MiB,
-GiB — powers of 1024) and SI decimal units (KB, MB, GB — powers of 1000).
-Include parsing from formatted strings back to byte counts. Support
-custom decimal precision, automatic unit selection, and explicit unit
-specification. Add localization for unit names in supported languages.
+The `ByteSize` struct in `Bytes/ByteSize.cs` uses 1024-based binary units (KB, MB, GB) but labels them with SI-style names, conflating IEC binary and SI decimal conventions. Add proper dual-mode support: IEC binary units (KiB, MiB, GiB — powers of 1024) and SI decimal units (kB, MB, GB — powers of 1000). The `Humanize()` and `ToString()` methods on `ByteSize` should accept a format flag to select the unit system. Update `ByteSizeExtensions.cs` to provide `.Humanize(ByteSizeUnit.SI)` and `.Humanize(ByteSizeUnit.IEC)` overloads. Extend `IFormatter.DataUnitHumanize` in the `Localisation/Formatters/` module to include the new unit symbols.
 
-### M3: Add collection humanization
+### M3: Add configurable Oxford comma and conjunction support to collection humanization
 
-Implement `IEnumerable<T>.Humanize()` that formats collections as
-English lists: `["a", "b", "c"].Humanize()` → `"a, b, and c"`.
-Support conjunctions (`and`, `or`), Oxford comma configuration,
-custom separators, custom element formatters, and truncation for
-long lists (`"a, b, and 8 more"`). Add localization for conjunctions
-and list formatting conventions.
+`CollectionHumanizeExtensions.cs` delegates to `ICollectionFormatter` implementations, but the current formatters (`DefaultCollectionFormatter` and `OxfordStyleCollectionFormatter` in `Localisation/CollectionFormatters/`) are limited: `OxfordStyleCollectionFormatter` is English-only, and `DefaultCollectionFormatter` takes only a conjunction string. Add a `ConfigurableCollectionFormatter` that supports: Oxford comma toggle, custom separator (not just comma), truncation with "and N more" (e.g., `["a", "b", "c", "d", "e"].Humanize(maxItems: 3)` → `"a, b, c, and 2 more"`), and custom element-to-string formatters. Register it as an option through `CollectionFormatterRegistry.cs` and expose the new parameters via overloads in `CollectionHumanizeExtensions.cs`.
 
-### M4: Add metric prefix formatting for numbers
+### M4: Add `ToWords` support for ordinal numbers in `MetricNumeralExtensions`
 
-Implement `ToMetric()` that formats large and small numbers with SI metric prefixes: `1_500.ToMetric()` → `"1.5k"`, `0.003.ToMetric()` → `"3m"`. Support the full SI prefix range from yocto to yotta, custom decimal precision, and both symbol and full-word output modes ("kilo" vs "k"). Include a corresponding `FromMetric()` parser.
+`MetricNumeralExtensions.cs` provides `ToMetric()` and `FromMetric()` for SI prefix formatting but only handles the symbol forms ("k", "M", "G"). Add a `MetricNumeralFormats.Words` option so that `1500.ToMetric(MetricNumeralFormats.Words)` → `"1.5 kilo"` using the full prefix word instead of just the symbol. Extend the `MetricNumeralFormats` flags enum in `MetricNumeralFormats.cs` to include the new mode. Add localization support by extending `IFormatter` with a `MetricPrefixHumanize(string prefix)` method and implementing it in `Localisation/Formatters/DefaultFormatter.cs` and language-specific formatters.
 
 ### M5: Implement heading/slug generation
 
 Add `Slugify()` that converts arbitrary text to URL-safe slugs: `"What's New in C# 12?".Slugify()` → `"whats-new-in-c-12"`. Handle diacritics via Unicode normalization and decomposition, collapse consecutive separators, strip non-alphanumeric characters, and support configurable separator character. Add transliteration mappings for common non-Latin scripts (Cyrillic, Greek) to produce ASCII-only slugs.
 
-### M6: Add Roman numeral parsing and validation
+### M6: Add `ToRoman` support for large numbers with overline notation
 
-Implement `FromRoman()` that converts Roman numeral strings back to integers: `"XLII".FromRoman()` → `42`. Validate strict Roman numeral rules (no more than three consecutive identical symbols, correct subtractive notation). Provide clear error messages for malformed input. Support both uppercase and lowercase input and the overline notation for large numbers.
+`RomanNumeralExtensions.cs` limits `ToRoman()` to the range 1–3999. Extend the `ToRoman()` method to support numbers up to 3,999,999 using vinculum (overline) notation where a bar above a numeral multiplies its value by 1000. Since overline characters have no direct Unicode representation, use a configurable output format: parenthetical `(V)` = 5000, or Unicode combining overline `V̅`. Update `FromRoman()` to parse both notations back to integers. Add a `RomanNumeralStyle` enum to select between classic (1–3999) and extended modes, and update the guard in `ToRoman()` accordingly.
 
-### M7: Add a noun-countability API for inflections
+### M7: Add scoped vocabulary support for inflections
 
-Extend the inflection engine with `AddUncountable()`, `AddIrregular()`, and `AddPluralizationRule()` methods that let consumers register domain-specific vocabulary at runtime. Ensure thread safety for concurrent registration and lookup, and provide a scoped mechanism to add rules for one call without polluting the global rule set.
+`Inflections/Vocabulary.cs` provides global `AddPlural()`, `AddSingular()`, `AddIrregular()`, and `AddUncountable()` methods via `Vocabularies.Default`, but all registrations modify a shared singleton. Add a scoped vocabulary mechanism: `Vocabulary.CreateScope()` returns a `VocabularyScope` that layers domain-specific rules over the default without polluting it. The scope should be passable to `Pluralize()` and `Singularize()` via new overloads in `InflectorExtensions.cs`. Implement `IDisposable` on `VocabularyScope` for block-scoped usage patterns. Ensure the default `Vocabulary` rule-set remains immutable once the `LocaliserRegistry` has frozen (matching the existing freeze behavior in `LocaliserRegistry.cs`).
 
 ### M8: Implement duration formatting with clock-style output
 
 Add a `ToClockNotation()` method on `TimeSpan` that formats durations the way humans write them on clocks and stopwatches: `TimeSpan.FromSeconds(3661).ToClockNotation()` → `"1:01:01"`. Support optional display of days, configurable zero-padding, and fractional seconds for sub-second precision. Include localization for the separator character used in different cultures.
 
-### M9: Add text-to-number parsing
+### M9: Add `ToAge` support across date types
 
-Implement `FromWords()` that parses written-out numbers back to integers: `"forty-two".FromWords()` → `42`. Handle compound numbers ("one hundred and twenty-three"), ordinals ("third" → 3), and negative values ("minus seven" → −7). Support the same set of languages that `ToWords()` already handles, delegating to per-locale parsers.
+`TimeSpanHumanizeExtensions.cs` provides `ToAge()` only on `TimeSpan`, returning strings like "40 years old". Extend age formatting to `DateTime` and `DateTimeOffset` via `DateHumanizeExtensions.cs` so that `birthDate.ToAge()` calculates the elapsed time from the given date and formats it as an age expression. Also add `DateOnly.ToAge()` to `DateToOrdinalWordsExtensions.cs` (under `#if NET6_0_OR_GREATER`). Ensure all variants delegate to `IFormatter.TimeSpanHumanize_Age()` for localization. Add `maxUnit` and `toWords` parameters matching the existing `TimeSpan.ToAge()` overload. Update `Localisation/Formatters/DefaultFormatter.cs` to support a gendered age format for languages that require it.
 
 ### M10: Implement sentence-level truncation
 

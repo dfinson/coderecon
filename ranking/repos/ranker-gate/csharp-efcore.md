@@ -76,13 +76,17 @@ SQL queries for the included entity. The query splitting logic does
 not deduplicate navigations that resolve to the same table. Fix the
 split query generator to detect and merge duplicate includes.
 
-### N2: Add `HasComment()` support for columns in migrations
+### N2: Fix `DbContext.Find` not applying value converter during identity map lookup
 
-The `HasComment("...")` fluent API sets a comment on a table, but
-there is no way to set a comment on an individual column. Add
-`property.HasComment("...")` that generates `COMMENT ON COLUMN` in
-migrations for databases that support it (PostgreSQL, MySQL). For
-SQL Server, store the comment as an extended property.
+When using `DbContext.Find<T>(id)` on an entity whose primary key
+property has a `ValueConverter` (e.g., a strongly-typed ID wrapper
+configured via `HasConversion`), the `Find` method in `DbContext.cs`
+does not apply `ValueConverter.ConvertToProvider` on the passed key
+value before performing the identity map lookup in
+`EFCore/ChangeTracking/Internal/`. This causes already-tracked
+entities to not be found, falling through to a database query that
+applies the converter correctly on the SQL parameter but produces a
+duplicate tracked entity on materialisation.
 
 ### N3: Fix `ExecuteUpdate` not translating `DateOnly` arithmetic
 
@@ -181,14 +185,20 @@ auto-invalidation system that tracks which tables each cached query
 reads from. Support cache backends: in-memory (default) and
 distributed (via `IDistributedCache`). Add cache hit/miss metrics.
 
-### M3: Implement temporal table queries
+### M3: Add configurable retry semantics for `ExecuteUpdate` and `ExecuteDelete`
 
-Add first-class support for SQL Server temporal tables (system-versioned
-tables). Implement `.TemporalAsOf(dateTime)`, `.TemporalBetween()`,
-`.TemporalContainedIn()`, and `.TemporalAll()` query operators. Map
-temporal period columns (`ValidFrom`, `ValidTo`) as shadow properties.
-Support temporal JOINs where related entities are queried at the
-same point in time.
+`ExecuteUpdate` and `ExecuteDelete` in `EFCore.Relational/Query/`
+execute their SQL commands immediately without passing through the
+`IExecutionStrategy` retry logic defined in
+`EFCore/Storage/ExecutionStrategy.cs`. When a transient error occurs
+during a bulk operation, the caller gets an immediate exception
+instead of automatic retry. Wire `ExecuteUpdate` and
+`ExecuteDelete` command execution through the `IExecutionStrategy`.
+Support the same `MaxRetryCount` and `MaxRetryDelay` settings used
+by `SaveChanges`. Add diagnostics events in
+`EFCore.Relational/Diagnostics/` for retry attempts on bulk
+operations. Update all relational providers (`EFCore.SqlServer/`,
+`EFCore.Sqlite.Core/`) to route through the retry pipeline.
 
 ### M4: Add bulk operations support
 
@@ -231,15 +241,20 @@ and logs a warning. Provide an opt-in `EnablePartialClientEvaluation()`
 API and instrument it with diagnostics so users can identify and fix
 performance bottlenecks.
 
-### M8: Add JSON column mapping with LINQ query support
+### M8: Add cascade `ExecuteDelete` that respects navigation relationships
 
-Implement mapping of complex object properties to JSON columns. Add
-`OwnsOne(e => e.Address, b => b.ToJson())` to store owned types as
-JSON. Translate property access inside JSON into provider-specific
-JSON path queries (`JSON_VALUE` on SQL Server, `json_extract` on
-SQLite, JSON operators on PostgreSQL). Support indexing into JSON
-arrays and filtering on nested JSON properties. Handle migrations
-that add or alter JSON columns.
+`ExecuteDelete()` operates on a single entity type and does not
+cascade to dependent entities, leaving orphaned rows that violate
+foreign key constraints. Add `ExecuteDeleteCascading()` in
+`EFCore.Relational/Query/` that analyses the entity's navigation
+metadata from `EFCore/Metadata/` to discover required dependents,
+generates `DELETE` statements in dependency order (leaf entities
+first), and wraps the multi-table delete in a transaction. Support
+self-referencing entities by detecting cycles via the navigation
+graph. Wire through the
+`RelationalQueryableMethodTranslatingExpressionVisitor` for SQL
+generation. Add provider-specific optimisation in
+`EFCore.SqlServer/` using `DELETE ... FROM ... JOIN` syntax.
 
 ### M9: Add connection resiliency with automatic transaction replay
 
