@@ -139,48 +139,58 @@ codepoint boundaries.
 
 ## Medium
 
-### M1: Implement issue templates with YAML frontmatter
+### M1: Add scheduled release publishing
 
-Add support for issue templates defined in `.gitea/ISSUE_TEMPLATE/`
-with YAML frontmatter for metadata (title prefix, labels, assignees,
-projects). Support template types: bug report, feature request, and
-custom. Render the template form in the "New Issue" UI with typed
-form fields (text input, textarea, dropdown, checkboxes) defined
-in the YAML. Validate required fields before submission.
+The `Release` model in `models/repo/release.go` has `IsDraft` and
+`IsPrerelease` fields, but no way to schedule a draft release for
+automatic publishing at a future time. Add a `ScheduledPublishUnix`
+field to the `Release` struct and a cron task in `services/cron/`
+that publishes releases when their scheduled time is reached.
+Update `services/release/release.go` to handle the scheduling logic
+and `routers/api/v1/repo/release.go` to expose the field in the API.
 
-### M2: Add code owners with required reviews
+### M2: Add saved replies for issue and PR comments
 
-Implement a CODEOWNERS file (`.gitea/CODEOWNERS`) that maps file
-patterns to responsible teams or users. When a PR modifies files
-matching a pattern, automatically request reviews from the code
-owners. Add a "code owner approval required" branch protection rule
-that blocks merging until at least one code owner approves. Show
-code owner status on the PR files changed view.
+Users currently have no way to save frequently used comment
+responses. Add a `SavedReply` model (title + content) linked to
+`models/user/` with CRUD operations. Add API endpoints in
+`routers/api/v1/user/` and a UI dropdown in the comment editor
+(`templates/repo/issue/view_content/`) that inserts a saved
+reply's Markdown content into the textarea. Support per-user
+saved replies and organization-level shared replies via
+`models/organization/`.
 
-### M3: Implement repository archival with read-only mode
+### M3: Add stale issue auto-close with configurable policy
 
-Add a "repository archive" feature that puts a repository into a
-read-only state — no new pushes, PRs, or issues, but all existing
-content remains accessible. Show an "archived" banner on the
-repository page. Allow un-archiving by the repository owner. Update
-the API, webhooks, and repository listing/search to respect archive
-status.
+Implement automatic closing of stale issues after a configurable
+period of inactivity. Add a `StalePolicy` struct to the repository
+settings in `models/repo/repo.go` with fields for inactivity
+threshold, warning label, and exempt labels. Add a cron task in
+`services/cron/tasks_extended.go` that queries `models/issues/`
+for issues whose `UpdatedUnix` exceeds the threshold, applies a
+"stale" label via `models/issues/issue_label.go`, posts a warning
+comment, and closes them after a second grace period.
 
-### M4: Add CI/CD pipeline status badges
+### M4: Add issue task list progress tracking
 
-Implement status badge generation for Gitea Actions pipelines.
-Provide badge URLs in Markdown and HTML formats showing the current
-status (passing/failing/running) of a specified workflow. Support
-branch-specific badges. Cache badge SVGs with appropriate TTL.
-Add a "Get badge" UI in the repository Actions settings.
+When an issue body contains Markdown task lists (`- [ ]` / `- [x]`),
+track the completion count in the issue model. Add `TasksDone` and
+`TasksTotal` fields to the `Issue` struct in `models/issues/issue.go`.
+Parse task lists in `services/issue/content.go` when the issue body
+is created or updated. Display a progress bar on issue list views
+in `templates/shared/issuelist.tmpl`. Update the REST API response
+in `services/convert/issue.go` to include task progress fields.
 
-### M5: Implement pull request review approval rules
+### M5: Add IP-based access restrictions for repositories
 
-Add configurable approval rules beyond the existing simple "N approvals
-required." Support rules like: at least one approval from each team in
-a list, approval from the code owner of each changed path, dismissal
-of stale approvals on new pushes, and blocking reviews that prevent
-merge until resolved.
+Add IP allowlist support for repository access. Create an
+`AllowedIPRange` model linked to repositories and organizations
+with CIDR range fields. Enforce the allowlist in the Git HTTP
+handler (`routers/web/repo/githttp.go`), the API middleware
+(`routers/api/v1/api.go`), and the SSH key authentication path
+(`routers/private/serv.go`). Add management UI in the repository
+settings and organization admin pages. Support both IPv4 and IPv6
+ranges with validation in `modules/validation/`.
 
 ### M6: Add repository dependency graph visualization
 
@@ -190,54 +200,81 @@ Gemfile, requirements.txt, etc.). Show a DAG of direct and transitive
 dependencies. Highlight known security vulnerabilities. Link to the
 dependency's repository if hosted on the same Gitea instance.
 
-### M7: Implement branch comparison view
+### M7: Add push mirror with tag and branch filtering
 
-Add a `/compare/branch_a...branch_b` page that shows the diff between
-two branches, including changed files count, lines added/removed, and
-commit list. Support swapping comparison direction. Include a "Create
-Pull Request" button pre-filled with the compared branches.
+The `PushMirror` model in `models/repo/pushmirror.go` mirrors all
+refs to the remote. Add configurable branch and tag pattern filters
+(include/exclude globs) to the `PushMirror` struct. Update the
+mirror push logic in `services/mirror/mirror_push.go` to apply
+the filters when building the refspec list. Add filter configuration
+fields to the push mirror API in `routers/api/v1/repo/mirror.go`
+and the web UI form in `routers/web/repo/setting/` templates.
 
-### M8: Add actions workflow dispatch with inputs
+### M8: Add deploy key scoping with read/write per-branch permissions
 
-Implement manual workflow dispatch for Gitea Actions. Support the
-`workflow_dispatch` event with configurable input fields (string,
-choice, boolean) defined in the workflow YAML. Add a "Run workflow"
-button in the Actions tab that shows a form for the inputs.
+Deploy keys in `models/asymkey/` currently grant repository-wide
+read or read-write access. Add per-branch permission scoping so a
+deploy key can be restricted to push only to specific branches.
+Extend the `DeployKey` model with a `BranchPattern` field. Enforce
+branch restrictions in the pre-receive hook (`routers/private/
+hook_pre_receive.go`) by checking the deploy key's allowed branches
+against the pushed ref. Update the deploy key API in
+`routers/api/v1/repo/key.go` and web UI in repository settings.
 
-### M9: Implement repository archive download with format selection
+### M9: Add time tracking reports with CSV export and label breakdown
 
-Add `/archive/{ref}.{format}` endpoint supporting zip, tar.gz, and
-tar.bz2 formats. Cache generated archives for frequently requested
-refs. Support subdirectory archives (`/archive/{ref}/{path}.zip`).
-Add download buttons to the repository web UI.
+The `TrackedTime` model in `models/issues/tracked_time.go` records
+per-issue time entries, but there is no aggregated reporting or
+export capability. Add a time tracking report page that aggregates
+tracked time by user, milestone, and label for a repository over a
+configurable date range. Implement CSV export of the report data.
+Add the report route in `routers/web/repo/` and a corresponding
+API endpoint in `routers/api/v1/repo/`. Query tracked times using
+`FindTrackedTimesOptions` and join with `models/issues/issue_label.go`
+for the label breakdown. Render the report using a new template in
+`templates/repo/issue/`.
 
-### M10: Add Git blame with inline annotations
+### M10: Add GPG signature verification for release tag assets
 
-Implement a blame view that shows per-line commit attribution alongside
-the source code, similar to GitHub's blame view. Show commit SHA,
-author, and date for each line group. Support navigating to the commit
-that last changed a specific line. Handle blame across renames.
+Release assets uploaded via `services/release/release.go` have no
+integrity verification. Add GPG signature verification for release
+tags by checking the tag signature against the uploader's GPG keys
+in `models/asymkey/gpg_key.go`. Display a verification badge on the
+release page template showing whether the tag is signed and by whom.
+Extend `services/convert/release.go` to include signature status in
+the API response. Add a `.asc` signature file auto-detection for
+uploaded assets paired with their corresponding release attachment
+in `models/repo/attachment.go`.
 
 ## Wide
 
-### W1: Implement project boards with Kanban and table views
+### W1: Implement audit log for security-sensitive operations
 
-Add project management boards that span across repositories within
-an organization. Support Kanban view (draggable cards between columns)
-and table view (sortable/filterable list). Cards can be issues or
-PRs from any repository in the organization. Support custom fields
-(status, priority, size), swimlanes by assignee or label, and WIP
-limits per column. Add API endpoints for all project board operations.
+Add a comprehensive audit log that records security-sensitive events
+across the instance: login attempts, permission changes, repository
+transfers (`services/repository/transfer.go`), team membership
+changes (`models/organization/team_user.go`), deploy key additions
+(`models/asymkey/`), two-factor auth changes (`models/auth/twofactor.go`),
+and webhook modifications (`models/webhook/webhook.go`). Create an
+`AuditEvent` model with actor, action, target, IP address, and
+timestamp fields. Add a searchable admin UI in `routers/web/admin/`,
+API endpoints in `routers/api/v1/admin/`, and retention policy
+configuration. Hook into the notification service
+(`services/notify/`) to capture events across all subsystems.
 
-### W2: Add full-text code search with syntax-aware indexing
+### W2: Implement secret scanning for committed credentials
 
-Implement a code search feature that indexes repository contents
-with syntax awareness. Support exact matches, regex, and symbol
-search. Use the existing bleve indexer infrastructure but add
-language-specific tokenization (camelCase splitting, identifier
-extraction). Show results with syntax-highlighted context. Support
-searching across all repositories the user has access to. Add
-search filters for language, file path, and repository.
+Add a secret scanning system that detects accidentally committed
+credentials (API keys, private keys, tokens) in repository pushes.
+Create a `SecretScanRule` model with regex patterns for common
+secret formats (AWS keys, GitHub tokens, private keys). Hook into
+the post-receive pipeline (`routers/private/hook_post_receive.go`)
+to scan pushed commits via `modules/git/`. Store findings in a
+new `SecretScanAlert` model linked to repositories. Add alert
+management UI in repository settings, notification delivery via
+`services/mailer/`, webhook events in `modules/webhook/`, and
+API endpoints. Support custom patterns per organization and
+allow-listing of false positives.
 
 ### W3: Implement SSO with SAML 2.0 support
 
@@ -249,25 +286,35 @@ provisioning that creates Gitea accounts on first SAML login. Implement
 single logout (SLO). Add admin UI for SAML configuration with
 metadata import/export.
 
-### W4: Add container registry support
+### W4: Add repository-level custom fields for issues and PRs
 
-Implement a Docker/OCI container registry as part of Gitea's package
-infrastructure. Support image push/pull, tag listing, image manifest
-inspection, vulnerability scanning integration, and garbage collection
-of untagged layers. Add authentication via Gitea's existing auth system.
-Integrate with the repository's Actions for automated builds. Changes
-span the package registry, HTTP routing, storage backend, and auth
-systems.
+Implement user-defined custom fields (text, number, date, dropdown,
+multi-select) that can be attached to issues and pull requests at
+the repository level. Create a `CustomField` model and
+`CustomFieldValue` model in `models/issues/` with field type
+validation. Add field definition management in repository settings
+(`routers/web/repo/setting/`). Render custom fields in the issue
+creation form, issue sidebar, and issue list filtering. Update the
+search/filter logic in `models/issues/issue_search.go` to support
+querying by custom field values. Add API endpoints in
+`routers/api/v1/repo/` and update `services/convert/issue.go` to
+include custom fields in API responses. Support field inheritance
+from organization-level defaults via `models/organization/`.
 
-### W5: Implement repository insights and analytics
+### W5: Implement saved search and custom issue dashboards
 
-Add a repository analytics page showing: commit activity over time,
-active contributors chart, code frequency (additions/deletions per
-week), pull request merge time distribution, issue resolution time
-trends, and code language breakdown over time. Store aggregate metrics
-in a time-series table. Include an API for programmatic access.
-Changes span models, services, routers, and add scheduled aggregation
-workers.
+Add persistent saved searches that users can pin as custom dashboard
+views. Create a `SavedSearch` model in `models/user/` storing the
+query string, filter parameters (labels, milestones, assignees from
+`models/issues/`), sort order, and display columns. Add a dashboard
+page in `routers/web/user/` that renders multiple saved searches as
+panels with live issue counts. Support organization-wide shared
+searches via `models/organization/`. Add notification digests in
+`services/mailer/` that email periodic summaries based on saved
+search criteria. Expose saved search CRUD through the API in
+`routers/api/v1/user/`. Changes span user models, issue search
+infrastructure (`models/issues/issue_search.go`), web routes,
+API routes, and the mailer service.
 
 ### W6: Add federated repository interaction via ActivityPub
 

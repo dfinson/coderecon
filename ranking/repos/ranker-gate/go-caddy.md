@@ -68,12 +68,15 @@ path. The path prefix is restored before the error handler runs. Fix
 the error handling to preserve the stripped path context within
 `handle_path` blocks.
 
-### N2: Add `max_header_size` directive to HTTP server
+### N2: Add `retry_delay` option to `reverse_proxy` for backoff between retries
 
-The HTTP server does not expose a way to configure the maximum HTTP
-header size. Large headers from corporate proxies or OAuth tokens can
-exceed Go's default 1MB limit. Add a `max_header_size` Caddyfile
-directive and JSON config option that sets `http.Server.MaxHeaderBytes`.
+The reverse proxy in `modules/caddyhttp/reverseproxy/reverseproxy.go`
+retries failed requests on other upstreams but retries immediately
+without any delay. When an upstream fails, instant retries to the
+remaining upstreams create burst load that can cascade failures.
+Add a `retry_delay` field to the `Handler` struct and a corresponding
+Caddyfile option that introduces a configurable pause between retry
+attempts, with optional exponential backoff.
 
 ### N3: Fix reverse proxy health check not respecting `tls_server_name`
 
@@ -83,12 +86,15 @@ The health check TLS handshake uses the upstream's IP address as the
 server name, causing certificate verification failures. Fix the health
 checker to use the configured `tls_server_name`.
 
-### N4: Fix `respond` directive not setting Content-Type for JSON bodies
+### N4: Add `max_concurrent_requests` option to the HTTP server
 
-When using `respond 200 {"ok":true}` in a Caddyfile, the response has
-no Content-Type header. The respond handler does not detect JSON content.
-Fix the respond handler to auto-detect and set `application/json` when
-the body starts with `{` or `[`.
+The `Server` struct in `modules/caddyhttp/server.go` configures
+timeouts (`ReadTimeout`, `WriteTimeout`, `IdleTimeout`) but has no
+way to limit the number of concurrently-processed requests. Under
+high load, unbounded concurrency can exhaust memory and goroutines.
+Add a `max_concurrent_requests` field that, when set, uses a
+semaphore to limit active handler invocations and returns
+`503 Service Unavailable` when the limit is reached.
 
 ### N5: Fix `file_server` browse mode not HTML-escaping filenames
 
@@ -96,19 +102,26 @@ The directory listing in `file_server browse` renders filenames as raw
 HTML. A file named `<script>alert(1)</script>.txt` creates an XSS
 vulnerability. Fix the browse template to HTML-escape filenames.
 
-### N6: Add `acme_dns_challenge` directive for DNS-01 ACME challenges
+### N6: Add built-in `threshold` circuit breaker for `reverse_proxy`
 
-The Caddyfile supports HTTP-01 and TLS-ALPN-01 ACME challenges but has
-no shorthand for DNS-01. Add an `acme_dns_challenge` directive that
-configures DNS-01 with a specified provider (Cloudflare, Route53, etc.)
-and credentials.
+The `CircuitBreaker` interface is defined in
+`modules/caddyhttp/reverseproxy/healthchecks.go` and the `Handler`
+struct in `reverseproxy.go` accepts a circuit breaker via `CBRaw`,
+but Caddy ships no built-in implementation. Add a threshold-based
+circuit breaker module registered as
+`http.reverse_proxy.circuit_breakers.threshold` that trips after a
+configurable number of consecutive failures and resets after a
+cooldown period. Add Caddyfile `circuit_breaker` sub-directive.
 
-### N7: Fix `reverse_proxy` not forwarding trailer headers
+### N7: Add `Proxy-Status` response header (RFC 9209) to `reverse_proxy`
 
-When the upstream response includes HTTP trailers, the reverse proxy
-strips them before forwarding to the client. The proxy does not set up
-trailer header forwarding. Fix the proxy handler to declare and forward
-trailers using `http.ResponseWriter`'s trailer support.
+The reverse proxy in `modules/caddyhttp/reverseproxy/reverseproxy.go`
+does not generate the `Proxy-Status` HTTP response header defined by
+RFC 9209. When an upstream returns an error, times out, or the
+connection fails, the client has no structured way to understand the
+proxy's role in the failure. Add `Proxy-Status` header generation for
+upstream errors, timeouts, and connection failures, with an option to
+enable/disable it via `proxy_status` in the Caddyfile.
 
 ### N8: Fix `log` directive custom format not applying to error responses
 
@@ -125,12 +138,15 @@ request context for use by other handlers, and includes it in access
 log entries. Support accepting an existing request ID from an incoming
 header.
 
-### N10: Fix `basicauth` not constant-time comparing passwords
+### N10: Add JWT bearer token authentication provider to `caddyauth`
 
-The `basicauth` handler compares bcrypt-hashed passwords but the
-username comparison is not constant-time, leaking timing information
-about valid usernames. Fix the auth handler to use constant-time
-comparison for both username and password verification.
+The authentication module in `modules/caddyhttp/caddyauth/` supports
+only HTTP Basic Auth via `HTTPBasicAuth` in `basicauth.go`. Add a
+JWT bearer token authentication provider that validates `Authorization:
+Bearer <token>` headers, supports configurable JWKS endpoints for key
+resolution, RS256/ES256 algorithm validation, claims-based user
+identity extraction, and token expiry checks. Register it under
+`http.authentication.providers.jwt_bearer`.
 
 ## Medium
 
@@ -151,20 +167,30 @@ monitoring for idle connections, automatic reconnection on upstream
 failure, and WebSocket compression (permessage-deflate) negotiation
 passthrough. Add per-connection metrics to the Prometheus endpoint.
 
-### M3: Implement on-demand TLS certificate rotation
+### M3: Implement HTTP response caching handler module
 
-Add support for on-demand TLS certificate rotation that doesn't require
-a server restart. When a certificate is about to expire, the ACME client
-should obtain a new certificate and hot-swap it into the TLS config
-without dropping any active connections. Add logging and metrics for
-certificate rotation events.
+Add a `cache` HTTP handler module that caches upstream responses for
+subsequent matching requests. Support RFC 7234 cache-control directives,
+conditional requests (`If-None-Match`, `If-Modified-Since`) with ETag
+and Last-Modified validation, configurable memory storage with LRU
+eviction, per-route TTL overrides, and cache key computation from
+method, path, query, and selected headers. Add Vary header handling
+for content negotiation. Add `cache` Caddyfile directive and JSON
+config. This involves a new handler module, cache storage layer,
+and Caddyfile adapter integration in `caddyconfig/httpcaddyfile/`.
 
-### M4: Implement request body buffering with size limits
+### M4: Add CORS handler module with preflight handling
 
-Add a `request_body` directive that controls request body handling:
-maximum size (reject with 413), buffering mode (buffer to memory vs
-stream), and timeout for reading the request body. Support per-route
-configuration. Add metrics for request body sizes.
+Add a `cors` HTTP handler module that manages Cross-Origin Resource
+Sharing headers. Support origin allowlists with wildcard patterns
+(e.g. `*.example.com`), automatic preflight (`OPTIONS`) response
+handling with `Access-Control-Allow-Methods` and
+`Access-Control-Allow-Headers`, configurable `Access-Control-Max-Age`
+for preflight caching, credential support
+(`Access-Control-Allow-Credentials`), exposed headers configuration,
+and per-route CORS policies. Add `cors` Caddyfile directive. This
+spans a new handler module under `modules/caddyhttp/`, Caddyfile
+parsing in `caddyconfig/httpcaddyfile/`, and directive ordering.
 
 ### M5: Add gRPC reverse proxy support
 
@@ -202,12 +228,16 @@ per client IP. Support configurable limit, custom response on limit
 exceeded, whitelisting for trusted IPs, and metrics for rejected
 connections. Add Caddyfile syntax and JSON config.
 
-### M10: Implement dynamic upstreams from service discovery
+### M10: Add Consul service discovery for reverse proxy dynamic upstreams
 
-Add reverse proxy upstream discovery from external sources: DNS SRV
-records, Consul service catalog, and static file. Upstreams are
-refreshed periodically (configurable interval). Support health-aware
-discovery where unhealthy upstreams are excluded from the refresh result.
+The reverse proxy supports `SRVUpstreams`, `AUpstreams`, and
+`MultiUpstreams` in `modules/caddyhttp/reverseproxy/upstreams.go` for
+dynamic upstream discovery. Add a Consul-based upstream source that
+queries the Consul service catalog for healthy instances. Support
+configurable Consul address, datacenter, service name, tag filtering,
+refresh interval, and health-aware discovery that excludes failing
+nodes. Register it as `http.reverse_proxy.upstreams.consul`. Add
+Caddyfile syntax within `dynamic` upstream blocks.
 
 ## Wide
 
@@ -220,23 +250,37 @@ Support live configuration editing with validation and rollback.
 The UI should be a single embedded module served from the admin
 endpoint.
 
-### W2: Implement request tracing with OpenTelemetry
+### W2: Implement request audit trail with persistence and admin API
 
-Add native OpenTelemetry support across the request lifecycle. Create
-spans for the listener accept, TLS handshake, route matching, each
-handler in the chain, reverse proxy upstream selection, upstream request,
-and response writing. Propagate trace context across reverse proxy
-hops. Add a `tracing` Caddyfile directive and JSON config. Support
-OTLP export (gRPC and HTTP).
+Add a comprehensive request auditing system that captures and persists
+request/response metadata across the request lifecycle. For each
+request, record: client IP, TLS details (cipher, protocol, client
+certificate from `modules/caddytls/connpolicy.go`), matched route
+(from `modules/caddyhttp/routes.go`), handler chain execution times,
+upstream selection and response (from `modules/caddyhttp/reverseproxy/`),
+response status and body size, and errors (from
+`modules/caddyhttp/errors.go`). Store audit entries to configurable
+backends (file, webhook). Add admin API endpoints at `/audit/` to
+query and export records. Register event handlers via
+`modules/caddyevents/` for audit-relevant events. This spans the
+HTTP server, route matching, reverse proxy, TLS module, admin API,
+event system, and file I/O.
 
-### W3: Add Prometheus metrics and Grafana dashboard
+### W3: Implement request rate limiting with distributed state
 
-Implement native Prometheus metrics export: request count/duration/size
-by status code and route, active connections, TLS certificate expiry
-times, reverse proxy upstream health/latency, cache hit ratios, and
-Go runtime metrics. Add a bundled Grafana dashboard JSON. Serve metrics
-via a dedicated admin endpoint. This spans metric collection points
-across all handler modules, the admin API, and adds a metrics module.
+Add a comprehensive rate limiting system spanning the HTTP handler
+chain, reverse proxy, and admin API. Support per-client (by IP via
+`modules/caddyhttp/ip_matchers.go`), per-route, and global rate limits
+using a token bucket algorithm. Return proper `429` responses with
+`Retry-After` headers (via `modules/caddyhttp/staticresp.go` patterns).
+Include distributed rate limiting via a shared storage backend (using
+Caddy's `storage.go` interface, with an embedded single-instance
+implementation). Add adaptive throttling that adjusts limits based on
+upstream health from `modules/caddyhttp/reverseproxy/healthchecks.go`.
+Expose rate limit status via the admin API (`admin.go`). Add a
+`rate_limit` Caddyfile directive and Prometheus metrics for rate limit
+hits. This spans handler chain, storage, admin API, reverse proxy
+health integration, metrics, and Caddyfile parsing.
 
 ### W4: Implement edge-side includes (ESI) handler
 
@@ -265,14 +309,21 @@ persisted with a version number and timestamp. Support `GET /config/versions`
 rollback on startup failure. Add a config diff endpoint. This spans
 the admin API, config management, storage, and lifecycle management.
 
-### W7: Add HTTP/3 Alt-Svc discovery and zero-RTT support
+### W7: Implement request deduplication and coalescing for reverse proxy
 
-Implement full HTTP/3 support with: Alt-Svc header advertisement for
-HTTP/3 availability, 0-RTT connection resumption with replay protection,
-QUIC connection migration (handle client IP changes), and HTTP/3 QPACK
-header compression. Add HTTP/3-specific metrics and admin visibility.
-This spans the listener, TLS configuration, HTTP/3 transport, and
-metrics collection.
+Add request deduplication (thundering herd protection) to the reverse
+proxy handler in `modules/caddyhttp/reverseproxy/reverseproxy.go`.
+When multiple clients request the same cacheable resource simultaneously,
+only one request is forwarded to the upstream; other identical requests
+wait for the first response and share it. Support configurable cache
+keys (path, query, selected headers), per-route dedup policies via
+Caddyfile, timeout for coalesced requests, and dedup bypass for
+non-idempotent methods. Add metrics for dedup hits integrated with
+the existing Prometheus metrics in `modules/caddyhttp/metrics.go`.
+Expose coalescing status in the admin API. This spans the reverse
+proxy handler, request matching, response buffering
+(`modules/caddyhttp/responsewriter.go`), connection tracking, metrics,
+admin API, and Caddyfile parsing.
 
 ### W8: Implement zero-downtime config reload with connection draining
 
