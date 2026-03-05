@@ -204,10 +204,10 @@ async def _raw_signals_pipeline(
             "elapsed_ms": elapsed_ms,
             "candidate_count": len(candidates_out),
             "emb_hits": len(emb_scores),
-            "term_hits": len(term_scores),
-            "lex_hits": len(lex_scores),
-            "graph_hits": len(graph_scores),
-            "symbol_hits": len(symbol_scores),
+            "term_hits": sum(1 for c in merged.values() if c.from_term_match),
+            "lex_hits": sum(1 for c in merged.values() if c.from_lexical),
+            "graph_hits": sum(1 for c in merged.values() if c.from_graph),
+            "symbol_hits": sum(1 for c in merged.values() if c.from_explicit),
         },
     }
 
