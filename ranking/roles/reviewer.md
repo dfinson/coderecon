@@ -60,7 +60,34 @@ For each of the 8 OK queries:
 - Does it avoid the FORBIDDEN patterns for its type?
 - Are seeds pre-implementation knowledge (not hindsight)?
 - Are pins pre-implementation knowledge (not hindsight)?
-- Does the justification explain why this query leads to the right code?
+- Does `expected_defs` list valid defs from the task's ground truth?
+- Does the justification answer all three required questions:
+  1. Rule compliance (quotes specific satisfying content)?
+  2. Target defs (names defs from expected_defs and explains why)?
+  3. Pre-implementation (explains why a developer would write this
+     before knowing the answer)?
+
+**Detect forced queries.** Some query types don't apply naturally to
+every task — especially narrow tasks where the change is localized.
+Signs a query was forced:
+
+- The query text is vague or generic to satisfy the REQUIRED rule
+  without genuinely targeting the task's defs
+- The justification stretches to explain relevance
+- `expected_defs` is a weak match (the query would realistically
+  surface many irrelevant defs before the expected ones)
+- Q_STRUCTURAL names a symbol with a relationship that doesn't
+  meaningfully exist in the code (e.g., "callers of X" when X has
+  no callers)
+- Q_LEXICAL uses a string that appears in dozens of files, not
+  specific to the task's neighborhood
+
+**When you find a forced query:** For **narrow (N) tasks only**,
+remove up to **2** forced queries and note in `reviewer_corrections`
+which query types were removed and why they didn't apply. Having
+6–7 genuine queries is better than 8 with filler. For medium and
+wide tasks, all 8 query types should be achievable — if one looks
+forced, try to fix it rather than removing it.
 
 Quick reference for REQUIRED/FORBIDDEN:
 
@@ -73,7 +100,7 @@ Quick reference for REQUIRED/FORBIDDEN:
 | Q_NAVIGATIONAL | ≥2 file paths | Domain descriptions, relationships |
 | Q_SEM_IDENT | Domain concepts + 2–3 symbol names | — |
 | Q_IDENT_NAV | 2+ symbols + 2+ file paths | — |
-| Q_FULL | No constraints | — |
+| Q_FULL | ≥1 symbol name or file path | — |
 
 ### 7. Verify exploration_log
 

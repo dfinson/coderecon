@@ -41,14 +41,23 @@ For EACH task:
 
 Read the code, make edits, and verify they work.
 
+**Before starting:** verify the working tree is clean:
+
+```
+git status --porcelain
+```
+
+If any output appears, stop and investigate before proceeding.
+
 When the solution is complete:
 
 1. Capture the diff: `git diff`
-2. Commit with a descriptive message:
-   `git add -A && git commit -m "task {heading_id}: <brief description>"`
-   (e.g., `git commit -m "task N1: fix generate_unique_id nondeterminism"`)
-3. Immediately revert the commit to restore clean state:
-   `git reset HEAD~1 --hard`
+2. Revert only the files you changed:
+   `git checkout <file1> <file2> ...`
+   List every file you modified — do NOT use `git checkout .` or
+   `git reset --hard` as other work may be in progress.
+3. Verify clean state: `git status --porcelain` should show no
+   changes to tracked files.
 
 The working tree must be clean before starting the next task.
 
