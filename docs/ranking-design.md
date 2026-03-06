@@ -469,6 +469,15 @@ Uses the EVEE benchmarking framework.
 **Comparison:** head-to-head with heuristic recon baseline on F1 delta,
 precision delta, recall delta, and latency.
 
+**Agent trace collection:** During eval set runs, export VS Code chat
+replays (raw JSON) to `data/{repo_id}/replays/`. The raw export
+contains full LLM request metadata (tokens, timing, TTFT, cache hits),
+tool call args/responses, conversation context, and agent reasoning.
+Run `chatreplay_to_traces.py` post-collection to extract compressed
+traces for efficiency metrics (turns, tokens, tool calls). Keep raw
+exports as source of truth — they can be re-extracted with richer
+formats later.
+
 **Project structure:**
 
 ```
