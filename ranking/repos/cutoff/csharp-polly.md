@@ -162,13 +162,14 @@ documentation and `MaxRetryAttempts` counting. Fix
 builder to validate options with `ArgumentNullException` at the
 `AddStrategy` call site.
 
-### N9: Fix CircuitStateController half-open state allowing unlimited concurrent probes
+### N9: Fix CircuitStateController not resetting half-open attempt counter on close
 
-When the circuit transitions to `HalfOpen`, multiple concurrent
-requests can all pass through as probe requests because the state
-check is not atomic. Fix `CircuitStateController.cs` to use
-`Interlocked.CompareExchange` to allow only a single probe request
-in the `HalfOpen` state.
+When the circuit transitions from `HalfOpen` back to `Closed` after a
+successful probe, `CircuitStateController` does not reset
+`_halfOpenAttempts` to zero. On subsequent open→half-open transitions,
+the stale counter inflates telemetry reporting of half-open probes.
+Fix `CircuitStateController.cs` to reset `_halfOpenAttempts` in the
+`OnActionSuccess` path when transitioning from `HalfOpen` to `Closed`.
 
 ### N10: Fix TelemetryUtil not including pipeline name in enriched tags
 
@@ -180,25 +181,31 @@ Fix `TelemetryUtil.cs` to include the pipeline instance name from
 
 ## Medium
 
-### M1: Add exponential backoff with decorrelated jitter to RetryHelper
+### M1: Add progressive delay backoff type to RetryHelper
 
-Implement the "decorrelated jitter" backoff algorithm (based on the
-AWS architecture blog) as a new `BackoffType.DecorrelatedJitter` option.
-The algorithm tracks previous delay to compute the next, requiring
-state across retries. Changes span `RetryHelper.cs` for the algorithm,
-`RetryStrategyOptions.cs` for the new `BackoffType` enum value,
-`RetryResilienceStrategy.cs` for state threading, and
-`RetryConstants.cs` for defaults.
+Implement `DelayBackoffType.Progressive` that starts with a configured
+initial delay, then advances by a fixed additive increment per attempt
+(e.g., 100ms → 300ms → 500ms → 700ms). Unlike `Linear` which uses
+multiples of the base delay, `Progressive` uses an absolute step. The
+algorithm needs an `Increment` property on `RetryStrategyOptions`.
+Changes span `DelayBackoffType.cs` for the new enum value,
+`RetryHelper.cs` for the calculation, `RetryStrategyOptions.cs` for
+the new `Increment` property, `RetryConstants.cs` for defaults, and
+`RetryResilienceStrategy.cs` for wiring the increment into delay
+generation.
 
-### M2: Implement CircuitBreaker health metrics with sliding window
+### M2: Implement circuit breaker manual health reset with cold-start protection
 
-Replace the simple consecutive-failure counter with a time-based
-sliding window that tracks success/failure rates. Add
-`AdvancedCircuitBreakerOptions.SamplingDuration` and
-`MinimumThroughput`. Changes span `CircuitBreakerStrategyOptions.cs`,
-`CircuitStateController.cs` for the sliding window data structure,
-`CircuitBreakerResilienceStrategy.cs` for metric collection, and
-`AdvancedCircuitBreakerOptions.cs` for validation.
+Add `CircuitBreakerManualControl.ResetHealthAsync()` that transitions
+the circuit from `Open` to `Closed` but enters a cold-start period
+where the `FailureRatio` threshold is temporarily raised (e.g., doubled)
+for the first `SamplingDuration` window to avoid immediately re-opening
+from residual errors. Requires changes to
+`CircuitBreakerManualControl.cs` for the new method,
+`CircuitStateController.cs` for the cold-start state tracking,
+`AdvancedCircuitBehavior.cs` for threshold adjustment during cold-start,
+and `CircuitBreakerStrategyOptions.cs` for a configurable cold-start
+ratio multiplier.
 
 ### M3: Add ResiliencePipeline execution result metadata
 
@@ -229,14 +236,18 @@ quorum-based selection. Changes span `HedgingStrategyOptions.cs`,
 `HedgingHandler.cs` for selector invocation, and
 `HedgingActionGeneratorArguments.cs` for context.
 
-### M6: Implement chaos engineering strategies (fault injection)
+### M6: Implement outcome event notification system for pipeline observability
 
-Add `ChaosFaultStrategy` and `ChaosLatencyStrategy` that inject
-faults and delays with configurable probability and fault factories.
-Support enabling/disabling via a `ChaosManager` toggle. Changes span
-new `Chaos/` directory with strategy, options, and constants classes,
-`ResiliencePipelineBuilder.cs` for `AddChaosFault()` and
-`AddChaosLatency()` extension methods, and telemetry integration.
+Add `ResiliencePipelineBuilder.OnOutcome(Action<OutcomeEventArgs>)`
+that registers a callback invoked after each strategy in the pipeline
+produces an outcome, carrying the strategy name, outcome
+(result or exception), duration, and attempt metadata. Support
+multiple subscribers with ordering guarantees. Changes span
+`ResiliencePipelineBuilder.cs` for the registration API, new
+`OutcomeEventArgs.cs` and `OutcomeEventNotifier.cs` classes,
+`ResilienceStrategy.cs` for notifier injection, each strategy class
+(`Retry`, `Timeout`, `Fallback`) for emitting events, and
+`Telemetry/TelemetryUtil.cs` for bridging with existing telemetry.
 
 ### M7: Add per-strategy timeout support to ResiliencePipeline
 

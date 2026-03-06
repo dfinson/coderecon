@@ -140,13 +140,15 @@ animation loop to spin at maximum speed. Fix `GIFAnimatedImage.swift`
 to clamp the minimum frame duration to 0.1 seconds per the GIF spec
 recommendation.
 
-### N7: Fix RequestModifier not applied for redirected URLs
+### N7: Fix SessionDataTask not cancelling underlying URLSession task when last callback is removed
 
-When a download request is redirected (HTTP 301/302), the
-`RequestModifier` set in `KingfisherOptionsInfo` is only applied to
-the original request, not to the redirected request. Fix
-`SessionDelegate.swift` to re-apply the modifier in the
-`urlSession(_:task:willPerformHTTPRedirection:)` delegate method.
+When multiple callers download the same URL and each cancels
+independently, `cancel(token:)` in `SessionDataTask.swift` removes
+the caller's callback from `callbacksStore` but does not check
+whether the store is now empty. The orphaned URLSession data task
+continues downloading data that no caller wants, wasting bandwidth.
+Fix `cancel(token:)` to also cancel the underlying task when no
+callbacks remain.
 
 ### N8: Fix ImageCache.retrieveImage returning expired disk entry
 
@@ -163,26 +165,26 @@ case and always dispatches on `DispatchQueue.main`. Fix
 `CallbackQueue.swift` to dispatch on the queue specified by the
 enum case (`.mainAsync`, `.untouch`, `.dispatch(queue)`).
 
-### N10: Fix String+MD5 producing incorrect hash for emoji strings
+### N10: Fix Indicator view not removed from superview after image load cancellation
 
-`String+MD5.kf.md5` computes the hash using the string's UTF-16
-representation length instead of its UTF-8 byte count, producing
-incorrect cache keys for strings containing multi-byte emoji
-characters. Fix the MD5 computation in `String+MD5.swift` to use
-the UTF-8 encoded byte buffer.
+When an image view's download task is cancelled via
+`cancelDownloadTask()`, the `Indicator`'s `stopAnimatingView()` is
+called but the indicator view itself remains in the view hierarchy
+as an invisible subview. Over repeated load-cancel cycles, orphaned
+indicator views accumulate in `Indicator.swift`. Fix the indicator to
+remove its view from the superview when animation stops due to
+cancellation.
 
 ## Medium
 
-### M1: Add progressive JPEG loading with incremental display
+### M1: Add cache size reporting API to ImageCache
 
-Implement progressive JPEG support so that partially downloaded data
-is decoded and displayed incrementally as bytes arrive. Add an
-`ImageProgressive` struct to configure scan-line thresholds. Wire
-the progressive decoding into `SessionDelegate.swift`'s
-`urlSession(_:dataTask:didReceive:)` callback, update
-`ImageDownloader.swift` to pass partial images to a new
-delegate callback, and extend `KingfisherOptionsInfo` with a
-`.progressiveJPEG(ImageProgressive)` option.
+Implement synchronous and asynchronous methods on `ImageCache.swift`
+that return the current memory cache entry count, memory byte usage
+from `MemoryStorage.swift`, disk cache entry count, and disk byte
+usage from `DiskStorage.swift`. Add a `CacheReport` struct to
+aggregate the statistics, and integrate reporting into
+`KingfisherManager.swift` so callers can display cache usage.
 
 ### M2: Implement disk cache migration with versioned metadata
 
@@ -193,25 +195,26 @@ migrate or discard them. Add a `DiskStorage.MetadataVersion` enum,
 update `CacheSerializer.swift` to write version headers, and modify
 `DiskStorage.swift` to read and validate headers on retrieval.
 
-### M3: Add retry policy with exponential backoff for failed downloads
+### M3: Implement download priority escalation for deduplicated requests
 
-Implement a configurable `RetryStrategy` protocol with a built-in
-`DelayRetryStrategy` that supports exponential backoff, maximum
-attempt count, and jitter. Integrate the retry logic into
-`ImageDownloader.swift`'s download completion path, add a
-`.retryStrategy(RetryStrategy)` option to `KingfisherOptionsInfo`,
-and update `KingfisherManager.swift` to pass the strategy through
-the download pipeline.
+When multiple callers request the same URL via `ImageDownloader.swift`,
+a single `SessionDataTask` is created in `SessionDelegate.swift`.
+If the first caller requests with `.downloadPriority(0.0)` and a
+later caller with `.downloadPriority(1.0)`, the URLSession task
+retains the original low priority. Implement priority escalation in
+`SessionDataTask.swift` that updates the underlying task's priority
+to the maximum of all registered callbacks, and wire the escalation
+through `ImageDownloader.swift`.
 
-### M4: Add low-data-mode support that skips prefetching and reduces quality
+### M4: Add ImagePrefetcher progress reporting with per-URL status
 
-Implement detection of the system's Low Data Mode setting and
-automatically adjust Kingfisher's behavior: skip all
-`ImagePrefetcher` operations, request lower-resolution variants via
-`RequestModifier`, and prefer cached images over network fetches.
-Changes span `ImagePrefetcher.swift`, `ImageDownloader.swift`,
-`KingfisherOptionsInfo.swift` for a `.lowDataModeSource` option,
-and `KingfisherManager.swift` for fallback coordination.
+Extend `ImagePrefetcher.swift` to report per-URL prefetch status
+(pending, downloading, cached, failed) in addition to the aggregate
+progress callback. Add a `PrefetchStatus` enum, update the prefetch
+progress handler signature in `ImagePrefetcher.swift` to include
+per-URL status, integrate status tracking with `ImageCache.swift`
+for cache-hit detection before scheduling downloads, and surface
+the enhanced progress via `KFOptionsSetter.swift`.
 
 ### M5: Implement cache access cost tracking with per-key statistics
 
@@ -272,17 +275,18 @@ to surface prefetch progress to callers.
 
 ## Wide
 
-### W1: Add full SwiftUI lifecycle integration with environment-based configuration
+### W1: Add comprehensive image request tracing and debug logging
 
-Implement a `KingfisherEnvironment` that propagates configuration
-(cache policy, downloader, processors) through SwiftUI's
-`EnvironmentValues`. Overhaul `KFImage.swift` to read from the
-environment, add `KFAnimatedImage` for SwiftUI GIF support, create
-`ImageBinder.swift` integration with `@StateObject`, add view
-modifiers for `.kingfisherOptions()`, `.placeholder()`,
-`.onProgress()`, and `.onFailure()`. Changes span `SwiftUI/`,
-`General/KingfisherOptionsInfo.swift`, `KingfisherManager.swift`,
-and `Image/Placeholder.swift`.
+Implement a `KingfisherLogger` protocol with configurable log levels
+that provides structured trace logging for the complete image loading
+lifecycle — request initiation, cache lookup results (memory/disk
+hit/miss), download start with request headers, download progress,
+processing step durations, and cache store confirmation. Integrate
+trace points into `KingfisherManager.swift`, `ImageDownloader.swift`,
+`SessionDelegate.swift`, `ImageCache.swift`, `MemoryStorage.swift`,
+`DiskStorage.swift`, and `ImageProcessor.swift`. Add a built-in
+`ConsoleLogger` implementation and expose `.logger(KingfisherLogger)`
+option in `KingfisherOptionsInfo.swift`.
 
 ### W2: Implement image pipeline with composable async/await stages
 
@@ -318,17 +322,19 @@ to select encrypted vs. plain storage based on a new
 Add key rotation support in `DiskStorage.swift` and migration logic
 for re-encrypting existing entries.
 
-### W5: Add multi-source image loading with fallback chain
+### W5: Implement image request batching with transaction semantics
 
-Implement an `ImageSourceChain` that tries multiple sources in order
-(memory cache → disk cache → CDN primary → CDN fallback → local
-asset) and returns the first successful result. Create the chain
-coordinator, update `ImageSource.swift` and `Resource.swift` to
-support source arrays, modify `KingfisherManager.swift` to execute
-the chain, update `ImageDownloader.swift` to support per-source
-timeout and auth, add `.alternativeSources([Source])` to
-`KingfisherOptionsInfo.swift`, and update all `Views/` extensions
-to accept multi-source resources.
+Add an `ImageTransaction` that groups multiple image load requests
+into a batch that succeeds or fails atomically. If any image in the
+batch fails to load, all successfully loaded images are rolled back
+from cache. Implement the transaction coordinator in a new
+`ImageTransaction` class, integrate batch lifecycle management into
+`KingfisherManager.swift`, add transactional cache operations in
+`ImageCache.swift` with rollback support in `MemoryStorage.swift`
+and `DiskStorage.swift`, wire batch progress through
+`ImagePrefetcher.swift`, update `KFOptionsSetter.swift` for
+transaction configuration, and add `.transaction(ImageTransaction)`
+to `KingfisherOptionsInfo.swift`.
 
 ### W6: Implement background image processing queue with operation dependencies
 
@@ -366,18 +372,19 @@ named shared cache instances, add `.sharedCacheIdentifier(String)`
 to `KingfisherOptionsInfo.swift`, and update `KingfisherManager.swift`
 to handle cache invalidation across processes.
 
-### W9: Add full offline mode with request queuing and sync-on-reconnect
+### W9: Add stale-while-revalidate caching strategy with conditional requests
 
-Implement an offline mode that queues image download requests when
-the network is unavailable and automatically retries them on
-reconnection. Add a `NetworkMonitor` using `NWPathMonitor`, create
-a persistent request queue in `DiskStorage.swift`, implement queue
-draining in `ImageDownloader.swift`, add connection-state-aware
-prefetching in `ImagePrefetcher.swift`, update
-`KingfisherManager.swift` to coordinate online/offline transitions,
-expose `.offlineMode` and `.requestQueuePolicy` options in
-`KingfisherOptionsInfo.swift`, and update `SessionDelegate.swift`
-to handle mid-download connectivity loss gracefully.
+Implement a caching strategy that serves stale cached images
+immediately while asynchronously revalidating them with the server
+using HTTP conditional requests (`If-Modified-Since`, `ETag`).
+Create a `RevalidationPolicy` protocol with built-in
+implementations, update `ImageDownloader.swift` to send conditional
+requests via `SessionDelegate.swift`, modify `DiskStorage.swift` to
+store HTTP response headers alongside cached data, add revalidation
+state tracking in `ImageCache.swift`, update
+`KingfisherManager.swift` to orchestrate the stale-serve-then-
+revalidate flow, and expose `.revalidationPolicy(RevalidationPolicy)`
+option in `KingfisherOptionsInfo.swift`.
 
 ### W10: Implement server-driven image variant selection with content negotiation
 

@@ -194,14 +194,16 @@ buffered but are never flushed because the handler remains in the
 activated state. Fix the handler to transition back to buffering mode
 after a configurable reset interval or when `reset()` is called.
 
-### N10: Fix PsrLogMessageProcessor not handling nested array placeholders
+### N10: Fix PsrLogMessageProcessor not handling object placeholders with __toString
 
 `PsrLogMessageProcessor` replaces `{key}` placeholders in the message
-with values from the context array, but only handles scalar values.
-Context values that are arrays or objects are replaced with the literal
-string `Array` or an object hash. Fix the processor to recursively
-serialize nested structures using `json_encode()` for array/object
-context values.
+with values from the context array. When the context value is an object
+that implements `__toString()`, the processor should invoke `__toString()`
+for the replacement. Currently, objects without `__toString()` produce
+a generic representation, but objects with `__toString()` are also not
+called consistently — they are serialized via `json_encode` instead of
+using their string representation. Fix the processor to prefer
+`__toString()` when available on object context values.
 
 ## Medium
 
@@ -292,16 +294,18 @@ Requires a new `ValidatingProcessor.php` in `Processor/`, a
 `RecordSchema.php` definition class, and integration with
 `NormalizerFormatter.php` for type coercion.
 
-### M10: Implement handler-level output format negotiation
+### M10: Implement handler-level log level override with runtime adjustment
 
-Add a mechanism where handlers declare their preferred `Formatter`
-type via a `getDefaultFormatter()` override, and `Logger` auto-assigns
-formatters during handler registration if none is explicitly set.
-Extend this to support format negotiation where a handler can accept
-multiple formats ranked by preference. Changes span
-`AbstractProcessingHandler.php` for the negotiation API, `Logger.php`
-for auto-assignment during `pushHandler()`, and updates to all
-concrete handlers to declare their format preferences.
+Add `AbstractHandler::setLevel(Level)` that allows changing the minimum
+log level of a handler at runtime without reconstructing the handler
+stack. When combined with `GroupHandler` or `BufferHandler`, the level
+change must propagate to wrapped handlers via a `LevelAware` interface.
+Changes span `AbstractHandler.php` for the setter and thread-safe
+level storage, `AbstractProcessingHandler.php` for level-check
+updating, `GroupHandler.php` for propagation to child handlers,
+`BufferHandler.php` for re-filtering buffered records on level change,
+and `Logger.php` for a `setHandlerLevel(string $handlerClass, Level)`
+convenience method.
 
 ## Wide
 

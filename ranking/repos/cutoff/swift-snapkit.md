@@ -104,38 +104,49 @@ resolved attributes should reference the guide's anchors instead. Fix
 `ConstraintAttributes` so that `.edges` correctly respects the safe
 area when the constraint target is a `UILayoutGuide`.
 
-### N4: Fix priority chaining dropping previous constraint in maker
+### N4: Fix ConstraintMakerEditable.dividedBy not guarding against zero divisor
 
-When chaining `.priority(.required)` onto a constraint inside
-`snp.makeConstraints`, the `ConstraintMakerPriortizable` returns a
-finalizable object but discards the constraint description's link to
-the maker's internal list, causing it to not be activated. Fix the
-return chain in `ConstraintMakerPriortizable.swift` to preserve the
-constraint's registration with the `ConstraintMaker`.
+`ConstraintMakerEditable.dividedBy(_:)` in
+`ConstraintMakerEditable.swift` computes
+`1.0 / amount.constraintMultiplierTargetValue` without checking for
+zero. Passing zero produces an infinite multiplier that creates an
+invalid `NSLayoutConstraint`, causing undefined Auto Layout behavior
+at runtime with no diagnostic message. Fix `dividedBy` to check for
+a zero divisor and trigger a `preconditionFailure` with a descriptive
+error message.
 
-### N5: Fix labeled() not propagating identifier to underlying NSLayoutConstraint
+### N5: Fix ConstraintConfig.interfaceLayoutDirection not being thread-safe
 
-Calling `.labeled("myLabel")` on a constraint description sets the
-label on the `ConstraintDescription` but does not transfer it to the
-underlying `NSLayoutConstraint.identifier` when the constraint is
-activated. Fix `Constraint.swift` to assign the description's label
-to the `NSLayoutConstraint.identifier` property during activation.
+`ConstraintConfig.interfaceLayoutDirection` in
+`ConstraintConfig.swift` is a static `var` with no synchronization.
+It is read during constraint constant resolution in
+`ConstraintConstantTarget.swift` (which can execute on any thread)
+and may be written from the main thread simultaneously, creating a
+data race. Fix `ConstraintConfig.swift` to use a thread-safe access
+pattern (e.g., a serial dispatch queue or atomic wrapper) for the
+static layout direction property.
 
-### N6: Fix snp.contentHuggingHorizontalPriority mapping to wrong axis
+### N6: Fix ConstraintDSL.setLabel using OBJC_ASSOCIATION_COPY_NONATOMIC for concurrent access
 
-The `ConstraintViewDSL.swift` exposes `contentHuggingHorizontalPriority`
-and `contentCompressionResistanceHorizontalPriority` convenience setters.
-The horizontal hugging priority setter incorrectly passes `.vertical`
-as the axis argument to `setContentHuggingPriority(_:for:)`. Fix the
-axis parameter in `ConstraintViewDSL.swift`.
+`ConstraintDSL.setLabel(_:)` in `ConstraintDSL.swift` stores the
+label string via `objc_setAssociatedObject` with
+`OBJC_ASSOCIATION_COPY_NONATOMIC`. When `setLabel` and `label()` are
+called concurrently from different threads (e.g., main thread setting
+labels while a background thread reads them for debugging), the
+non-atomic association policy can produce torn reads. Fix
+`ConstraintDSL.swift` to use `OBJC_ASSOCIATION_COPY` (which is
+atomic) for the label association.
 
-### N7: Fix Debugging.swift not including multiplier in constraint description
+### N7: Fix Debugging descriptionForAttribute missing margin attributes on macOS
 
-The `Debugging.swift` description method prints the constraint's
-first item, attribute, relation, second item, and constant, but omits
-the multiplier when it is not 1.0. Fix the description builder in
-`Debugging.swift` to include the multiplier value in the formatted
-output when it differs from the default.
+The `descriptionForAttribute` function in `Debugging.swift` provides
+human-readable names for all layout attributes on iOS (including
+margin variants like `topMargin`, `leadingMargin`, etc.) but the macOS
+(`#else`) branch omits these cases entirely. On macOS, any constraint
+involving margin attributes falls through to the `@unknown default`
+case and is described as "unknown". Fix the macOS branch in
+`Debugging.swift` to include descriptions for all margin attributes
+available on macOS 10.11+.
 
 ### N8: Fix ConstraintInsets.init ignoring directional insets on RTL
 

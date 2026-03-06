@@ -140,14 +140,16 @@ src/
 
 ## Narrow
 
-### N1: Fix IsEqual constraint not respecting delta for nested float arrays
+### N1: Fix IsEqualWithDelta constraint not propagating delta to nested object comparisons
 
-`IsEqual` accepts a `$delta` parameter for float comparison tolerance,
-but when comparing arrays containing nested float values, the delta is
-not propagated to recursive comparisons. Arrays like `[1.0, [2.001]]`
-vs `[1.0, [2.002]]` fail with delta `0.01` even though all floats are
-within tolerance. Fix `IsEqual.php` to pass the delta through the
-recursive comparison path.
+`IsEqualWithDelta` accepts a `$delta` parameter for float comparison
+tolerance, but when comparing objects or arrays containing nested
+float values, the delta is not propagated through the internal
+comparator. Objects like `new Coord(1.0, [2.001])` vs
+`new Coord(1.0, [2.002])` fail with delta `0.01` even though all
+floats are within tolerance. Fix `IsEqualWithDelta.php` to ensure the
+delta is passed through to the recursive comparison in the
+`evaluate()` method.
 
 ### N2: Fix TestCase::expectException not clearing between data provider iterations
 
@@ -157,13 +159,15 @@ if the subsequent iteration does not call `expectException()` again.
 Fix `TestCase.php` to reset the expected exception state between data
 provider iterations in the lifecycle reset logic.
 
-### N3: Fix AnnotationParser not handling multi-line @depends annotations
+### N3: Fix AttributeParser not handling #[Depends] with class-qualified method names
 
-`AnnotationParser` parses `@depends` annotations but fails when the
-annotation spans multiple lines (e.g., with a long class-qualified
-method name that wraps). The parser only reads the first line after the
-tag. Fix `AnnotationParser.php` to handle continuation lines for
-`@depends` annotations.
+`AttributeParser` parses `#[Depends]` attributes but fails when the
+dependency specifies a full class-qualified method name (e.g.,
+`#[Depends('OtherTest::testSetup')]`). The parser attempts to split on
+`::` but does not handle namespace backslashes in the class portion,
+causing the dependency to be silently dropped. Fix
+`AttributeParser.php` to correctly parse fully qualified class names
+with namespace separators in `#[Depends]` attribute values.
 
 ### N4: Fix Count constraint failing on generators that have already started
 

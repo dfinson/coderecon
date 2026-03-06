@@ -128,9 +128,14 @@ The global mailer_sender configuration is ignored when sending unlock instructio
 
 The trackable hook updates sign_in_count and timestamps before the Warden after_set_user callback chain finishes. If a later callback aborts authentication by throwing :warden, the tracking data is persisted for a session that was never established.
 
-### N5 – Token generator produces non-URL-safe characters in reset tokens
+### N5 – Token generator does not enforce single-use consumption
 
-The token generator can produce base64 strings containing plus and slash characters. When these appear in password reset URLs, some mail clients break the link. The generator should use URL-safe base64 encoding.
+The token generator creates reset and confirmation tokens but does not
+track whether a token has already been consumed. If a token is used
+successfully (e.g., password reset), the same token remains valid until
+it expires, allowing replay. The `digest` method in token_generator.rb
+should be paired with a consumption check that clears the stored digest
+after first use.
 
 ### N6 – flash message key mismatch for already-confirmed accounts
 
@@ -162,9 +167,16 @@ The sessions controller does not limit login attempts at the application layer. 
 
 The failure app assumes only one resource is being authenticated per request. When an application uses two devise models (e.g., User and Admin), a failed authentication for Admin incorrectly redirects to the User sign-in path. The failure app should inspect the attempted mapping and route to the correct scope's sign-in page.
 
-### M3 – Add email-change confirmation workflow
+### M3 – Add password breach detection using haveibeenpwned integration
 
-Currently, when a user updates their email through the registrations controller, the new address takes effect immediately even when the confirmable module is active. Implement a pending-email confirmation flow: store the new email in a pending field, send a confirmation to the new address, and only swap it upon confirmation.
+Integrate a password breach check that queries the Have I Been Pwned
+passwords API (k-anonymity model) during registration and password
+change. When a password appears in known breaches, reject it with a
+configurable validation error. This requires changes to the validatable
+module for the new validation rule, the registrations controller for
+flash message handling, the database_authenticatable model for the API
+client call, the configuration module for the opt-in flag and threshold,
+and new i18n entries in the locale file.
 
 ### M4 – Integrate CSRF token rotation on sign-in
 

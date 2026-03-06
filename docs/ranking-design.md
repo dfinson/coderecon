@@ -233,234 +233,87 @@ natural-language description of work — no code, no diffs, no hints.
 
 ### 4.3 Data Collection Pipeline
 
-Two phases:
-- **Ground truth** (Phase 1+2): run once per repo, permanent.
-- **Retrieval signals** (Phase 3): re-run when harvesters change.
+Three phases, three agent roles:
+- **Phase 1 — Pre-flight audit** (Role 1): validate tasks against the
+  actual repo; correct the md file if needed.
+- **Phase 2 — Solve + Reflect** (Role 2): solve each task, produce
+  ground truth JSON with exploration log.
+- **Phase 3 — Review** (Role 3): verify executor outputs, correct
+  JSONs in-place, fill `reviewer_corrections`.
+- **Phase 4 — Signal collection** (automated, re-runnable).
 
-#### Phase 1+2: Solve + Reflect
+Role prompts live in `ranking/roles/`:
 
-One agent session per repo.
+| File | Role | Job |
+|------|------|-----|
+| `roles/auditor.md` | Pre-flight Auditor | Verify tasks are grounded, coherent, scoped, solvable. Edit md to fix bad tasks. |
+| `roles/executor.md` | Task Executor | Solve tasks, capture exploration process, produce ground truth JSON. |
+| `roles/reviewer.md` | Outputs Reviewer | Verify executor outputs, simulate solving independently, correct JSONs in-place. |
 
-**Agent prompt:**
+#### Invocation
+
+Each role runs as a separate agent session inside the cloned repo:
 
 ```
-Read the file at ../../repos/{name}.md and understand it fully.
+# Role 1: Pre-flight audit
+"Read ../../repos/{set}/{repo}.md as the Pre-flight Auditor.
+ Your role instructions are in ../../roles/auditor.md.
+ Read both files thoroughly, then do your job."
 
-Solve each task using native tools. After solving each task (but before
-stashing), produce the ground truth record.
+# Role 2: Task execution
+"Read ../../repos/{set}/{repo}.md as the Task Executor.
+ Your role instructions are in ../../roles/executor.md.
+ Read both files thoroughly, then do your job."
 
-For EACH task in the file:
-
-  STEP 1 — SOLVE
-  Read the code, make edits, verify they work. Capture a git diff.
-  Then git stash to restore clean state before the next task.
-
-  STEP 2 — REFLECT
-  Write a JSON file to ../../data/{repo_id}/ground_truth/{task_id}.json.
-
-  GROUND TRUTH FORMAT:
-
-  {
-    "task_id": "N1",
-    "task_text": "<full task description from the md file>",
-    "diff": "<raw git diff output>",
-    "solve_notes": "<1-3 sentence narrative of what you did and why>",
-    "confidence": "high",
-    "minimum_sufficient_defs": [
-      {
-        "path": "<repo-relative path>",
-        "name": "<def name>",
-        "kind": "<kind>",
-        "reason": "edited: <what changed>" or "read: <why a human needs this>"
-      }
-    ],
-    "thrash_preventing_defs": [
-      {
-        "path": "<repo-relative path>",
-        "name": "<def name>",
-        "kind": "<kind>",
-        "reason": "read: <why seeing this upfront prevents re-searching>"
-      }
-    ],
-    "excluded_defs": [
-      {
-        "path": "<repo-relative path>",
-        "name": "<def name>",
-        "kind": "<kind>",
-        "reason": "<why this was opened but not needed>"
-      }
-    ],
-    "queries": [
-      {
-        "query_type": "Q_SEMANTIC",
-        "query_text": "...",
-        "seeds": [],
-        "pins": [],
-        "justification": "<why this query + these seeds/pins>"
-      },
-      ...
-    ]
-  }
-
-  FIELD DEFINITIONS:
-
-  task_id: The heading ID from the md file (N1, M1, W2, etc.)
-  task_text: The full task description text, verbatim.
-  diff: The raw git diff output from your solution.
-  solve_notes: 1-3 sentences explaining what you did and why.
-  confidence: Your confidence in the ground truth completeness.
-    "high" = certain nothing is missing or extra.
-    "medium" = mostly confident but one or two defs might be wrong.
-    "low" = unsure, task was complex with many dependencies.
-
-  TWO-TIER GROUND TRUTH:
-
-  minimum_sufficient_defs: The minimum set of defs a COMPETENT HUMAN
-  DEVELOPER would need to see to implement the correct solution.
-  If you removed any def from this list, a skilled developer could
-  not complete the task correctly without finding it themselves.
-  Includes:
-    - Every def you EDITED (reason starts with "edited:")
-    - Every def you absolutely HAD to read for correctness
-      (contracts, interfaces, type signatures you relied on)
-
-  thrash_preventing_defs: ADDITIONAL defs (beyond minimum_sufficient)
-  that an AI CODING AGENT would need to see upfront to avoid making
-  unnecessary search/read calls during implementation. These are defs
-  where:
-    - Not seeing them would cause the agent to make wrong assumptions
-      and then backtrack
-    - The agent would proactively search for them out of caution
-    - Understanding them prevents a wrong turn even if a human
-      wouldn't need to check
-
-  Think: "what context would I need upfront so I could implement
-  the solution WITHOUT making any additional search or read calls?"
-  The union of minimum_sufficient + thrash_preventing is that set.
-
-  Do NOT include in either list:
-    - Defs you opened and immediately closed without using
-    - Defs you skimmed out of curiosity but didn't need
-    - Entire files — list specific defs
-
-  excluded_defs: Defs you opened during solving but consciously
-  excluded from both lists. Include the reason. This lets an auditor
-  verify you considered and rejected them (not that you forgot them).
-
-  Each entry has:
-    - path: repo-relative file path (e.g. "src/auth/middleware.py")
-    - name: the definition's simple name (e.g. "check_rate")
-    - kind: one of: function, method, class, struct, interface, trait,
-      enum, variable, constant, module, property, pair, key, table,
-      target, heading
-    - reason: why this def is in this category
-
-  If you edited a method inside a class, list the METHOD. Only list
-  the parent class if you also needed its class-level code.
-
-  WHY THIS MATTERS: minimum_sufficient_defs becomes the recall floor
-  — if the model misses any of these, that's a hard failure.
-  thrash_preventing_defs becomes the training target — the model
-  learns to return this larger set to prevent agent thrash.
-  If you include junk, the model learns to surface junk. If you miss
-  something, the model learns to miss it. Be precise.
-
-  SEED AND PIN RULES:
-  - seeds: symbol names from the code you touched. Pick the 1-4 MOST
-    CENTRAL ones — what a developer would know from the task
-    description or from running map_repo before starting work.
-    Do NOT include every helper that got touched.
-  - pins: repo-relative file paths. Pick the 2-4 MOST OBVIOUS files
-    — what a developer could identify from the task description or
-    repo structure before starting work.
-  - Seeds and pins represent what a developer knows GOING IN, not
-    perfect hindsight of the full answer.
-
-  THE 8 OK QUERY TYPES (ALL 8 REQUIRED):
-
-  Q_SEMANTIC (isolation — embedding only):
-    Describe the problem using ONLY domain/business concepts.
-    FORBIDDEN: symbol names, file paths, code terms, language keywords.
-    REQUIRED: a description that a non-programmer could understand.
-    seeds: []  pins: []
-
-  Q_LEXICAL (isolation — full-text only):
-    Use strings that appear LITERALLY in the source code.
-    REQUIRED: at least one phrase in quotes that grep would find —
-    an error message, log string, comment, docstring, or string literal.
-    FORBIDDEN: symbol names that don't appear as literal strings.
-    seeds: []  pins: []
-
-  Q_IDENTIFIER (isolation — term match only):
-    List exact symbol names from the code you touched.
-    REQUIRED: at least 3 symbol names, comma-separated.
-    FORBIDDEN: file paths, English descriptions, relationship words.
-    seeds: []  pins: []
-
-  Q_STRUCTURAL (isolation — graph only):
-    Describe the code through structural relationships.
-    REQUIRED: at least one concrete symbol AND a relationship word
-    (callers, callees, subclasses, implementors, siblings, imports).
-    seeds: 1-2 (the entry points for graph traversal)
-    pins: []
-
-  Q_NAVIGATIONAL (isolation — explicit/path only):
-    Use explicit file paths and directory locations.
-    REQUIRED: at least 2 file paths from the files you touched.
-    FORBIDDEN: domain descriptions, relationship words.
-    seeds: []
-    pins: 2-4 file paths from your solution
-
-  Q_SEM_IDENT (combination — embedding + term match):
-    Domain description that also names key symbols naturally.
-    REQUIRED: mix domain concepts with 2-3 exact symbol names.
-    seeds: 2-3 of the symbols mentioned
-    pins: []
-
-  Q_IDENT_NAV (combination — term match + explicit):
-    Symbol names with file paths.
-    REQUIRED: 2+ symbol names AND 2+ file paths.
-    seeds: 2-4 symbol names
-    pins: 2-4 file paths
-
-  Q_FULL (combination — all signals):
-    Natural developer query. No constraints.
-    seeds: 2-4 central symbol names
-    pins: 2-4 key file paths
-
-  Each query MUST include a "justification" field: a brief
-  explanation of why this query text + these seeds/pins would lead
-  to the relevant code. This lets an auditor verify the query is
-  well-formed and the seeds/pins are pre-implementation knowledge.
-
-  NON-OK QUERIES (optional — only those that arise naturally):
-
-  UNSAT (up to 2): Factually wrong assumption. seeds: [] pins: []
-  BROAD (up to 2): 15+ files, 3+ directories. seeds: [] pins: []
-  AMBIG (up to 2): 2+ possible targets. seeds: [] pins: []
-  SKIP any that feel forced.
-
-  STEP 3 — VALIDATE (second pass, AFTER writing the JSON)
-  Re-read your JSON file and verify:
-    1. diff cross-check: every function/method/class in the diff
-       appears in minimum_sufficient_defs with reason "edited:..."
-    2. minimum_sufficient: would a skilled human fail without any
-       of these? If not, move it to thrash_preventing or remove.
-    3. thrash_preventing: would an AI agent search for this if not
-       given upfront? If not, remove it.
-    4. excluded: did you open defs that aren't in either list?
-       Add them to excluded_defs with reason.
-    5. queries: each follows REQUIRED/FORBIDDEN rules? Each has
-       a justification?
-    6. seeds/pins: pre-implementation knowledge, not hindsight?
-    7. completeness: exactly 8 OK queries? Exact query_type strings?
-    8. solve_notes and confidence filled in?
-
-  Fix any issues before moving to the next task.
-
-Work through every task sequentially. After all tasks, say
-"ALL TASKS COMPLETE".
+# Role 3: Outputs review
+"Read ../../repos/{set}/{repo}.md as the Outputs Reviewer.
+ Your role instructions are in ../../roles/reviewer.md.
+ Read both files thoroughly, then do your job."
 ```
+
+#### Ground truth JSON schema
+
+Each task produces one file: `data/{repo_id}/ground_truth/{task_id}.json`.
+
+```json
+{
+  "task_id": "N1",
+  "task_text": "<verbatim from md>",
+  "diff": "<raw git diff>",
+  "solve_notes": "<1-3 sentences>",
+  "exploration_log": {
+    "search_sequence": [
+      {"action": "...", "result": "...", "reasoning": "..."}
+    ],
+    "dead_ends": [
+      {"explored": "...", "why_irrelevant": "..."}
+    ],
+    "key_decisions": [
+      {"decision": "...", "alternatives": ["..."], "reasoning": "..."}
+    ],
+    "aha_moment": "...",
+    "hindsight": "..."
+  },
+  "confidence": "high|medium|low",
+  "minimum_sufficient_defs": [
+    {"path": "...", "name": "...", "kind": "...", "reason": "edited:|read: ..."}
+  ],
+  "thrash_preventing_defs": [
+    {"path": "...", "name": "...", "kind": "...", "reason": "read: ..."}
+  ],
+  "tier_difference_reasoning": "<why the two tiers differ or are identical>",
+  "excluded_defs": [
+    {"path": "...", "name": "...", "kind": "...", "reason": "..."}
+  ],
+  "queries": [
+    {"query_type": "Q_SEMANTIC", "query_text": "...", "seeds": [], "pins": [], "justification": "..."}
+  ],
+  "reviewer_corrections": "<filled by Role 3: corrections summary or 'No corrections required'>"
+}
+```
+
+Field details, query type rules, seed/pin rules, and validation
+checklist are in `roles/executor.md` (the canonical reference).
 
 **Post-processing** (automated):
 
@@ -609,6 +462,11 @@ src/codeplane/ranking/          # Runtime inference (ships with codeplane)
 └── data/                       # Serialized .lgbm model artifacts
 
 ranking/                        # Training pipeline (separate project)
+├── roles/
+│   ├── auditor.md              # Role 1: pre-flight audit prompt
+│   ├── executor.md             # Role 2: task execution prompt
+│   └── reviewer.md             # Role 3: outputs review prompt
+├── repos/{set}/{repo}.md       # Task definitions per repo
 ├── src/cpl_ranking/
 │   ├── collector.py, collect_signals.py
 │   ├── train_ranker.py, train_cutoff.py, train_gate.py

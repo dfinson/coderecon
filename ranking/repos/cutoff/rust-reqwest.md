@@ -32,9 +32,12 @@ reqwest/
     │   ├── request.rs         # Async Request — method, URL, headers, body construction
     │   ├── response.rs        # Async Response — status, headers, body streaming, json/text/bytes
     │   ├── body.rs            # Async Body — from bytes, stream, file, with content-length
-    │   ├── decoder.rs         # Response body decoder — gzip, brotli, deflate, zstd decompression
     │   ├── multipart.rs       # Multipart form data — Part, Form, streaming encoder
-    │   ├── h3_client.rs       # HTTP/3 client implementation via quinn
+    │   ├── h3_client/          # HTTP/3 client implementation via quinn
+    │   │   ├── mod.rs          # H3 client entry point
+    │   │   ├── connect.rs      # H3 connection setup
+    │   │   ├── dns.rs          # H3-specific DNS
+    │   │   └── pool.rs         # H3 connection pooling
     │   └── upgrade.rs         # Connection upgrade support (WebSocket handshake)
     ├── blocking/
     │   ├── client.rs          # Blocking Client — sync wrapper spawning a tokio runtime
@@ -48,7 +51,7 @@ reqwest/
     ├── tls.rs                 # TLS configuration — native-tls and rustls backends, certificates
     ├── dns/
     │   ├── resolve.rs         # DNS resolution trait and default resolver
-    │   └── gai.rs             # getaddrinfo-based resolver
+    │   ├── gai.rs             # getaddrinfo-based resolver
     │   └── hickory.rs         # Hickory (trust-dns) async resolver
     ├── cookie.rs              # Cookie jar — cookie storage and automatic header management
     ├── error.rs               # Error type — URL, connect, timeout, status, decode errors
@@ -77,13 +80,15 @@ reqwest/
 
 ## Narrow
 
-### N1: Fix Response::text() not respecting charset from Content-Type header
+### N1: Fix Response::json() not returning a typed error when Content-Type is not application/json
 
-When a response has `Content-Type: text/html; charset=iso-8859-1`,
-`response.text()` in `async_impl/response.rs` always decodes as UTF-8
-instead of using the declared charset. Fix the text decoding to parse
-the `charset` parameter from the `Content-Type` header and use the
-`encoding_rs` crate for non-UTF-8 encodings.
+When calling `response.json::<T>()` on a response with
+`Content-Type: text/html`, the method attempts JSON deserialization
+anyway, producing a confusing serde parse error instead of a clear
+content-type mismatch error. Fix `json()` in `async_impl/response.rs`
+to check the `Content-Type` header and return a `Decode` error with
+a descriptive message when the media type is not `application/json`
+or a `+json` suffix type.
 
 ### N2: Fix blocking Client not forwarding timeout to connect phase
 
@@ -101,12 +106,16 @@ in `proxy.rs` splits incorrectly at the embedded `@`. Fix the proxy
 URL parsing to properly handle URL-encoded credentials and decode
 them before sending the `Proxy-Authorization` header.
 
-### N4: Fix gzip decoder not handling concatenated gzip streams
+### N4: Fix redirect policy not restoring original request method after 307/308 redirects on the blocking client
 
-When a server sends a response with multiple concatenated gzip members
-(valid per RFC 1952), the decoder in `async_impl/decoder.rs` stops
-after the first member and truncates the response body. Fix the gzip
-decoder to continue decompressing subsequent members until EOF.
+When the blocking client in `blocking/client.rs` follows a 307
+(Temporary Redirect) or 308 (Permanent Redirect), the HTTP spec
+requires preserving the original method and body. The async client
+handles this via `tower_http::FollowRedirect`'s `clone_body` method,
+but the blocking wrapper's timeout enforcement can race with the
+redirect, dropping the body before the redirected request is sent.
+Fix the blocking redirect path to ensure the body clone is completed
+before the timeout check.
 
 ### N5: Fix redirect policy not preserving fragment from original URL
 
@@ -116,56 +125,72 @@ final URL. Per RFC 7231 §7.1.2, the fragment should be inherited if
 the redirect target has no fragment. Fix `redirect.rs` to preserve
 the original fragment when the redirect URL lacks one.
 
-### N6: Fix cookie jar not handling domain cookies starting with a dot
+### N6: Fix IntoUrl not preserving empty query strings
 
-When a server sets `Set-Cookie: sid=abc; Domain=.example.com`, the
-cookie jar in `cookie.rs` stores it with the leading dot, but matching
-logic fails to match requests to `sub.example.com` because it compares
-`.example.com` != `sub.example.com` without stripping the leading dot
-per RFC 6265 §5.2.3. Fix domain matching in the cookie store.
+When `IntoUrl` in `into_url.rs` processes a URL string like
+`http://example.com/?`, the trailing `?` indicating an empty query
+string is stripped during URL parsing. This means
+`request.url().query()` returns `None` instead of `Some("")`,
+which can cause servers that distinguish between no query string and
+an empty query string to behave differently. Fix `IntoUrl` to
+preserve the distinction between absent and empty query strings.
 
-### N7: Fix multipart form not setting Content-Length when all parts are known-size
+### N7: Fix redirect policy not stripping sensitive headers on HTTPS-to-HTTP scheme downgrade
 
-When all parts of a multipart form have known sizes (bytes or string),
-`multipart.rs` in `async_impl/` still sends with `Transfer-Encoding: chunked`
-instead of computing and setting `Content-Length`. Fix the form builder
-to calculate total content length when all parts support it, falling
-back to chunked only for stream parts.
+When a request with an `Authorization` or `Cookie` header is
+redirected from HTTPS to HTTP on the same host,
+`remove_sensitive_headers` in `redirect.rs` preserves them because
+it only compares host and port (`next.host_str()` and
+`next.port_or_known_default()`), not the URL scheme. The auth
+credentials are then sent over an unencrypted connection. Fix
+`remove_sensitive_headers` in `redirect.rs` to also detect scheme
+downgrades (HTTPS → HTTP) and strip `Authorization`, `Cookie`,
+and `Proxy-Authorization` headers when the redirect target uses
+a less-secure scheme than the previous request.
 
-### N8: Fix error Display impl not including the URL for timeout errors
+### N8: Fix error type not including the HTTP method for request-phase errors
 
-When a request times out, the error message from `error.rs` says
-"request timeout" without including the URL that timed out, making
-debugging difficult when multiple requests are in flight. Fix the
-`Display` implementation of `Error` to include the URL for timeout
-error variants.
+When a request fails during sending (connect error, timeout, etc.),
+the error message from `error.rs` includes the URL via `Display` but
+omits the HTTP method (GET, POST, etc.). When multiple requests to
+the same URL with different methods are in flight, the error message
+is ambiguous. Fix the `Error` type to store and display the HTTP
+method for `Kind::Request` errors.
 
-### N9: Fix IntoUrl rejecting valid URLs with empty path segments
+### N9: Fix blocking Response::copy_to not reporting bytes written on error
 
-`IntoUrl` in `into_url.rs` rejects URLs like `http://example.com//api/v1`
-(double slash) as invalid, even though this is a valid URL per RFC 3986.
-Fix the URL validation to accept empty path segments.
+When `blocking::Response::copy_to(&mut writer)` encounters a write
+error partway through streaming the response body, the error does not
+include how many bytes were successfully written. Fix `copy_to` in
+`blocking/response.rs` to wrap the IO error with a context struct
+that includes the byte count, so callers can implement resume logic
+or progress reporting on partial failures.
 
-### N10: Fix WASM client not sending custom headers set via RequestBuilder
+### N10: Fix WASM client not propagating timeout to the AbortController signal
 
-When running in a WASM target, custom headers set via
-`request.header("X-Custom", "value")` in `wasm/request.rs` are silently
-dropped because the fetch API `Headers` object is constructed before
-custom headers are applied. Fix the header construction order to apply
-custom headers after default headers.
+When `RequestBuilder::timeout(Duration::from_secs(5))` is set on the
+WASM client, the timeout is stored on the `Request` struct but the
+`AbortController` in `wasm/client.rs` only calls `abort()` after the
+timer fires — it does not use `AbortSignal.timeout()` which is more
+efficient and avoids keeping a `setTimeout` handle alive. Fix the WASM
+fetch path to use the native `AbortSignal.timeout()` API when available
+and fall back to the manual timer approach otherwise.
 
 ## Medium
 
-### M1: Implement retry policy with exponential backoff
+### M1: Implement request event hooks for lifecycle observation
 
-Add `ClientBuilder::retry_policy(RetryPolicy::exponential(3, Duration::from_millis(100)))`
-that automatically retries failed requests on transient errors (5xx,
-connection reset, timeout). Support configurable max retries, backoff
-strategy, jitter, retry-after header respect, and idempotency checks.
-Requires a retry middleware layer in `async_impl/client.rs`, a new
-`retry.rs` module, integration with `blocking/client.rs`, error
-classification in `error.rs`, and request body cloning/rewindable
-body support.
+Add `ClientBuilder::on_request(callback)` and
+`ClientBuilder::on_response(callback)` that fire user-provided
+callbacks at each stage of the request lifecycle: before DNS
+resolution, after connect, after TLS handshake, before request send,
+and after response headers are received. Each callback receives a
+read-only view of the request/connection state (URL, method, remote
+address, TLS version). Requires a hook registry in
+`async_impl/client.rs`, event structs for each lifecycle phase,
+connection metadata extraction from `connect.rs`, integration with
+the blocking client in `blocking/client.rs`, and error handling when
+callbacks fail.
 
 ### M2: Add request and response interceptors/middleware
 
@@ -225,14 +250,17 @@ cache module, integration with the request pipeline in
 `async_impl/client.rs`, header parsing utilities, storage abstraction,
 and blocking client integration.
 
-### M8: Add SOCKS5 proxy with DNS resolution options
+### M8: Add per-request TLS configuration override
 
-Implement full SOCKS5 proxy support with: remote DNS resolution
-(hostname sent to proxy), local DNS resolution (IP sent to proxy),
-username/password authentication, and SOCKS5h variant. Support chaining
-SOCKS5 with HTTP proxies. Requires a SOCKS5 handshake implementation,
-integration with `proxy.rs`, connection establishment in `connect.rs`,
-TLS-over-SOCKS tunneling, and the `no_proxy` bypass logic.
+Implement `RequestBuilder::tls_config(config)` that lets individual
+requests override the client-level TLS settings — for example, to pin
+a specific certificate for one endpoint while using system roots for
+others. Support overriding: minimum TLS version, accepted cipher
+suites, client certificate, and server name indication (SNI). Requires
+a per-request TLS config struct, integration with `connect.rs` for
+connection-level override, changes to `tls.rs` to create per-request
+TLS connectors, and fallback to the client-wide config when no override
+is set.
 
 ### M9: Implement request body streaming from AsyncRead sources
 

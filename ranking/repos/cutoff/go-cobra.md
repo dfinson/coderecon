@@ -113,13 +113,14 @@ garbled output. Fix the `activeHelpMarker` formatting in `active_help.go`
 to trim trailing whitespace before encoding the help message into the
 completion output.
 
-### N6: Fix Command.UsageString panicking when called before Execute
+### N6: Fix reStructuredText doc generator not rendering Deprecated field
 
-Calling `cmd.UsageString()` before `cmd.Execute()` panics with a nil
-pointer dereference because `cmd.ctx` is not initialized until
-execution begins. Fix `UsageString()` in `command.go` to create a
-default context if one does not exist yet, matching the behavior of
-`HelpString()`.
+When a command has its `Deprecated` field set, the reStructuredText doc
+generator in `doc/rest_docs.go` omits the deprecation notice entirely.
+`GenReSTCustom` renders Synopsis, Examples, Options, and SEE ALSO
+sections but never checks `cmd.Deprecated`. Fix `GenReSTCustom` to
+include a "Deprecated" section with the deprecation message when the
+field is set, placed before the Synopsis section.
 
 ### N7: Fix man page doc generator not rendering Deprecated field
 
@@ -136,12 +137,14 @@ flag completions instead of leaving it as a value. Fix the bash
 completion logic in `completions.go` to detect when a flag is expecting
 a value and suppress flag-name completions.
 
-### N9: Fix Command.DebugFlags outputting to stdout instead of stderr
+### N9: Fix Markdown doc generator not rendering Deprecated field
 
-`Command.DebugFlags()` writes flag debug information to `os.Stdout`,
-which pollutes program output and breaks piping. Change the output
-target to `cmd.ErrOrStderr()` in `command.go` so debug output goes
-to stderr, consistent with other diagnostic methods.
+When a command has its `Deprecated` field set, the Markdown doc
+generator in `doc/md_docs.go` omits the deprecation notice entirely.
+`GenMarkdownCustom` renders Synopsis, Examples, Options, and SEE ALSO
+sections but never checks `cmd.Deprecated`. Fix `GenMarkdownCustom`
+to include a "DEPRECATED" section with the deprecation message when
+the field is set, placed before the Synopsis section.
 
 ### N10: Fix yaml_docs.go not including the Aliases field in generated YAML
 
@@ -152,14 +155,17 @@ to include an `aliases` key listing all command aliases.
 
 ## Medium
 
-### M1: Implement ordered subcommand groups in help output
+### M1: Implement command tree linting for common configuration errors
 
-Add support for organizing subcommands into named groups that appear
-as sections in the help output (e.g., "Management Commands",
-"Build Commands"). Requires a `Command.AddGroup()` method, a `Group`
-field on `Command` to associate it with a group, changes to
-`Command.UsageString()` for grouped display, and integration with
-shell completions to preserve group ordering in completion results.
+Add `Command.ValidateTree() []ConfigWarning` that walks the entire
+command tree and detects common misconfigurations: duplicate aliases
+across sibling subcommands, persistent flags on a child that shadow
+a parent's persistent flag with the same name, commands marked
+`Runnable` but missing both `Run` and `RunE`, and subcommands
+registered under a hidden parent. Requires recursive traversal in
+`command.go`, a `ConfigWarning` struct with severity and path,
+integration with `DebugFlags()` output, and checks against
+`flag_groups.go` for groups referencing nonexistent flags.
 
 ### M2: Add flag value completion for custom types
 
@@ -171,34 +177,43 @@ common formats. Requires changes to the completion engine in
 `pflag.Value` interface detection, and updates to all shell-specific
 completion scripts to pass the type hint through.
 
-### M3: Implement persistent pre-run hooks with error short-circuiting
+### M3: Implement flag completion filtering based on mutually exclusive flag groups
 
-Add `PersistentPreRunE` chaining so that when a parent command and
-a child command both define `PersistentPreRunE`, both run in order
-(parent first) instead of the child silently overriding the parent.
-Requires changes to the command execution pipeline in `command.go`,
-a chain-builder for hooks, proper error propagation to stop execution
-if any hook fails, and test coverage for multi-level nesting.
+When completing flags, the completion engine in `completions.go`
+suggests all flags regardless of mutually exclusive constraints
+set via `MarkFlagsMutuallyExclusive` in `flag_groups.go`. If a user
+has already provided `--json`, and `--json` and `--yaml` are in a
+mutually exclusive group, `--yaml` should still appear as a
+completion candidate. Implement filtering so that flags belonging
+to a mutually exclusive group are excluded from completions when
+another flag in the same group has already been provided. Requires
+reading the `mutuallyExclusiveAnnotation` annotations in the
+completion path in `completions.go`, checking which flags have
+already been parsed during completion, filtering the completion
+results against active exclusion constraints, and integration with
+the annotation system used by `flag_groups.go`.
 
-### M4: Add context.Context integration for command lifecycle
+### M4: Add per-command help topic pages for long-form documentation
 
-Integrate Go's `context.Context` into the command lifecycle: allow
-setting a base context on the root command, propagate it through
-`PersistentPreRun` / `RunE` / `PostRunE`, and support cancellation
-(e.g., on SIGINT). Requires changes to `Command.ExecuteC()` for context
-creation, signal handling setup, context passing through hooks, and
-updates to the `cobra` CLI generator templates to include context-aware
-scaffolding.
+Implement `Command.AddHelpTopic(name, short, long string)` that
+registers a virtual subcommand which only displays long-form help
+text (no `Run` function). Topics appear in the help output under a
+"Additional help topics:" section. Requires a `helpTopics` list on
+`Command`, rendering in the usage template in `command.go`, exclusion
+from completion results when the topic has no runnable action,
+integration with `doc/md_docs.go` to generate pages for topics, and
+`Walk()` support for topic enumeration.
 
-### M5: Implement command suggestions with Levenshtein distance and aliases
+### M5: Implement structured error types for command execution failures
 
-Enhance the "unknown command" error to suggest the closest matching
-commands using Levenshtein distance, considering both primary names
-and aliases. Show up to 3 suggestions sorted by distance. Requires a
-distance function, integration with `Command.Find()` for candidate
-collection, formatting changes to the error message in `command.go`,
-and respect for `DisableSuggestions` and `SuggestionsMinimumDistance`
-settings.
+Replace the plain `error` returns from the command pipeline with a
+`CommandError` type that includes the failing command path, the
+execution phase (flag parsing, pre-run, run, post-run), the original
+error, and a usage hint. Add `Command.SilenceUsageOnError(phase)` to
+suppress usage printing for specific phases. Requires a `CommandError`
+struct, changes to error wrapping in `command.go`'s `execute()` method,
+integration with `PersistentPostRunE` for cleanup on error, and
+formatting that respects `SilenceErrors` and `SilenceUsage` flags.
 
 ### M6: Add shell completion testing utilities
 

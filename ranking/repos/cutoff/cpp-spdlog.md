@@ -147,13 +147,16 @@ into the original `log_msg`'s memory. When the original `log_msg`
 is destroyed, the source location fields become dangling. Fix the
 buffer to own copies of the filename and function name strings.
 
-### N5: Fix circular_q::overwrite_push not updating count on full queue
+### N5: Fix periodic_worker not catching exceptions from callback function
 
-`circular_q::overwrite_push()` in `details/circular_q.h` always
-increments the count after pushing an element, even when the queue
-is already full and the oldest element is being overwritten. This
-causes `size()` to return a value larger than capacity. Fix the
-method to keep count unchanged when the queue is full.
+The `periodic_worker` in `details/periodic_worker.h` runs the
+user-provided callback on a background timer thread without any
+exception handling. If the callback throws (e.g., during a flush
+operation that encounters an I/O error), the exception propagates
+uncaught out of the thread, invoking `std::terminate()` and crashing
+the process. Fix the worker loop in `periodic_worker.h` to wrap the
+`callback_fun()` invocation in a try/catch block that suppresses the
+exception and continues the periodic loop.
 
 ### N6: Fix backtracer not respecting logger level when dumping
 
@@ -191,13 +194,16 @@ last flush and the `terminate` signal are silently dropped. Fix the
 destructor to drain and process all pending log messages before
 posting the terminate signal.
 
-### N10: Fix cfg::helpers not parsing level names case-insensitively
+### N10: Fix cfg::helpers not supporting quoted logger names with special characters
 
-The level-parsing helper in `cfg/helpers.h` compares level name
-strings using exact case matching. Setting `SPDLOG_LEVEL=WARNING`
-(uppercase) via the environment is rejected because the parser
-expects `warning` (lowercase). Fix the parsing to perform
-case-insensitive comparison.
+The `load_levels()` helper in `cfg/helpers-inl.h` splits the level
+spec string on commas and equals signs using simple `std::getline`
+and `find` operations. Logger names containing commas or equals signs
+(e.g., `"app.db=query"`) cannot be specified because the parser
+splits on these characters without supporting quoting or escaping.
+Fix the parsing in `cfg/helpers-inl.h` to support quoted logger
+names (e.g., `"app.db=query"=debug`) by detecting and handling
+double-quoted strings in `extract_kv_` and `extract_key_vals_`.
 
 ## Medium
 

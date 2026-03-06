@@ -153,62 +153,77 @@ and event class in the logged message for debuggability.
 
 ## Medium
 
-### M1: Add Collectors integration for Guava collection types
+### M1: Add Cache.policy() runtime introspection API
 
-Add `ImmutableList.toImmutableList()`, `ImmutableSet.toImmutableSet()`,
-`ImmutableMap.toImmutableMap()`, and `ImmutableMultimap` collectors that
-return `java.util.stream.Collector` instances. Each collector must
-support parallel streams via concurrent accumulation and must reject
-null elements/keys/values with clear error messages. Changes span the
-`collect/` package across multiple immutable collection classes and
-their builder internals.
+Add a `CachePolicy` value object and `Cache.policy()` method that
+exposes the eviction configuration of a built cache at runtime:
+maximum size, expire-after-write duration, expire-after-access
+duration, refresh-after-write duration, and whether statistics
+recording is enabled. Currently callers must track `CacheBuilder`
+settings externally. Changes span `Cache.java` for the new interface
+method, a new `CachePolicy.java` value object, `CacheBuilder.java` for
+capturing policy metadata, and `LocalCache.java` for implementing the
+`policy()` method from the internal segment state.
 
-### M2: Implement CacheBuilder.refreshAfterWrite with async reload
+### M2: Implement CacheBuilder.writer for synchronous write-through hooks
 
-Add `CacheBuilder.refreshAfterWrite(Duration)` that triggers
-asynchronous reload of stale entries via `CacheLoader.asyncReload()`.
-The stale value must remain available during reload. Requires changes
-to `CacheBuilder`, `LocalCache` entry lifecycle, `CacheLoader` for the
-async reload hook, and `CacheStats` to track refresh counts and
-failures.
+Add a `CacheWriter<K, V>` interface with `write(K key, V value)` and
+`delete(K key, V value, RemovalCause cause)` callbacks invoked
+synchronously during cache mutations. `CacheBuilder.writer(CacheWriter)`
+configures the writer. The writer's `delete()` is called on explicit
+`invalidate()`, size-eviction, and expiration-eviction, while `write()`
+is called on `put()` and `LoadingCache.get()` loads. Changes span a new
+`CacheWriter.java` interface, `CacheBuilder.java` for configuration
+and validation, `LocalCache.java` for invoking the writer hooks in
+segment put and remove paths, and `RemovalCause.java` for cause
+context.
 
-### M3: Add Graph traversal algorithms to the graph package
+### M3: Add topological sort and cycle detection to the graph package
 
-Implement `Traverser.breadthFirst()`, `Traverser.depthFirstPreOrder()`,
-and `Traverser.depthFirstPostOrder()` that return lazy `Iterable`s over
-`Graph`, `ValueGraph`, and `Network` types. Support cycle detection with
-configurable behavior (skip or throw). Changes span `Traverser`,
-`Graph`, `ValueGraph`, `Network`, and new internal iterator classes in
-the `graph/` package.
+Implement `Graphs.topologicalOrder(Graph<N>)` returning an
+`ImmutableList<N>` of nodes in topological order for directed acyclic
+graphs, throwing `IllegalArgumentException` on cyclic input. Add
+`Graphs.hasCycle(Graph<N>)` for O(V+E) cycle detection using Kahn's
+algorithm. Both must work with `Graph`, `ValueGraph`, and `Network`
+via the `SuccessorsFunction` abstraction. Changes span `Graphs.java`
+for the public API methods, internal helper classes for in-degree
+tracking, and `Traverser.java` for shared iteration infrastructure.
 
-### M4: Implement Streams utility class for Guava-style stream helpers
+### M4: Add EventBus subscriber introspection and priority ordering
 
-Add `com.google.common.collect.Streams` with `stream(Iterable)`,
-`stream(Optional)`, `zip(Stream, Stream, BiFunction)`,
-`findLast(Stream)`, `mapWithIndex(Stream, FunctionWithIndex)`, and
-`forEachPair()`. Each method must handle parallel streams correctly and
-integrate with Guava's `FluentIterable`. Changes touch `collect/Streams`,
-`collect/FluentIterable`, and the primitives packages for typed stream
-support.
+Implement `EventBus.getRegisteredSubscribers()` that returns a
+structured view of all registered subscriber methods grouped by event
+type. Add a `@SubscriberPriority(int)` annotation to control dispatch
+order for multiple subscribers of the same event type (lower values
+execute first). Changes span `EventBus.java` for the introspection
+API, `SubscriberRegistry.java` for priority-sorted subscriber
+maintenance, `Subscriber.java` for priority extraction from the
+annotation, and a new `SubscriberPriority.java` annotation class in
+the `eventbus/` package.
 
-### M5: Add Duration-based overloads to util.concurrent APIs
+### M5: Add ClosingFuture for resource-safe future chaining
 
-Replace long-millis parameters with `java.time.Duration` overloads in
-`RateLimiter.create()`, `RateLimiter.acquire()`,
-`Uninterruptibles.sleepUninterruptibly()`,
-`ServiceManager.awaitHealthy()`, `Service.awaitRunning()`, and
-`Monitor.enter()`. Maintain backward compatibility with the existing
-long-based methods. Changes span 6–8 files across `util/concurrent/`.
+Implement `ClosingFuture<V>` in `util/concurrent/` that wraps a
+`ListenableFuture<V>` where V is `Closeable`. When the future chain
+completes (success or failure), all accumulated closeables are closed
+in reverse acquisition order. Support `transform()`,
+`transformAsync()`, and `whenAllSucceed()` combinators that
+propagate closeable tracking. Changes span a new
+`ClosingFuture.java` class, integration with `Futures.java` for
+chain composition, `MoreExecutors.java` for cleanup executor support,
+and `FluentFuture.java` for bridge methods.
 
-### M6: Implement MoreCollectors for advanced stream collection patterns
+### M6: Add bounded-size strong interner with LRU eviction
 
-Add `MoreCollectors.onlyElement()` (throws on 0 or 2+ elements),
-`MoreCollectors.toOptional()` (returns Optional for 0 or 1 elements),
-`MoreCollectors.toImmutableRangeSet()`, and
-`MoreCollectors.flatteningToImmutableListMultimap()`. Each collector
-needs careful handling of combiner logic for parallel streams. Changes
-span a new `MoreCollectors` class in `collect/` and integration with
-`ImmutableRangeSet`, `ImmutableListMultimap`, and their builders.
+Implement `Interners.newBoundedStrongInterner(int maxSize)` that
+provides strong-reference interning with a configurable maximum number
+of interned instances. When the bound is reached, the least-recently-
+used interned value is evicted. The current `newStrongInterner()` grows
+unboundedly and can cause memory exhaustion for large domains. Changes
+span `Interners.java` for the new factory method, a new
+`BoundedStrongInterner.java` implementation using an LRU eviction
+data structure, and `MapMaker.java` for the underlying concurrent map
+configuration.
 
 ### M7: Add ServiceManager health-check endpoint support
 
@@ -238,15 +253,20 @@ items receive more hash bits for lower false-positive rates. Add
 `BloomFilter`, `BloomFilterStrategies`, the `Funnel` interface, and
 the hash-function internals in `hash/`.
 
-### M10: Implement Comparators utility class with chaining helpers
+### M10: Add multi-hash BloomFilter with pluggable hash strategies
 
-Add `com.google.common.collect.Comparators` with `emptiesFirst()`,
-`emptiesLast()`, `isInOrder(Iterable, Comparator)`,
-`isInStrictOrder()`, `least(int, Comparator)` returning a `Collector`,
-and `greatest(int, Comparator)`. Integrate with `Ordering` for
-migration path and with `ImmutableSortedSet` for optimized collection.
-Changes touch `collect/Comparators`, `collect/Ordering`, and
-`collect/ImmutableSortedSet`.
+Extend `BloomFilter` to support user-supplied hash strategy
+selection at construction time via
+`BloomFilter.create(Funnel, long, double, Strategy)` where
+`Strategy` is a public version of the internal `BloomFilterStrategies`
+enum. Add a `MURMUR3_128_MITZ_64` strategy alongside the existing
+default. Expose `BloomFilter.approximateElementCount()` to estimate
+how many elements have been inserted and `BloomFilter.expectedFpp()`
+to compute the current false-positive probability. Changes span
+`BloomFilter.java` for the new factory and estimation methods,
+`BloomFilterStrategies.java` for the new strategy enum entry, and
+`LockFreeBitArray` (inner class) for bitcount-based cardinality
+estimation.
 
 ## Wide
 

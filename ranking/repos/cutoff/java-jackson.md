@@ -122,12 +122,13 @@ without the full JSON path (e.g., just `"age"` instead of
 `DeserializationContext` to accumulate the full property path using
 the `JsonStreamContext` stack.
 
-### N6: Fix SerializerProvider not caching serializers for types with custom views
+### N6: Fix SerializationContext not invalidating cached serializers on view change
 
 Serializers resolved with `@JsonView` active are incorrectly cached
 and reused for requests without a view, causing fields to be omitted.
 Fix the cache key computation in `SerializerCache` to include the
-active view class in the lookup key.
+active view class in the lookup key so that view-specific and
+view-less serializations use separate cache entries.
 
 ### N7: Fix MapSerializer not respecting @JsonPropertyOrder on map entries
 
@@ -194,34 +195,40 @@ is full. Requires changes to `ObjectWriter`, `ser/SequenceWriter`,
 `SerializerProvider` for streaming context, and `cfg/SerializationConfig`
 for buffer-size configuration.
 
-### M4: Add support for Java 16+ record types
+### M4: Add support for sealed class hierarchies in deserialization
 
-Implement automatic deserialization of Java records: detect record
-classes in `BeanDescription`, extract canonical constructor parameters,
-map JSON properties to record components without annotations, and
-support `@JsonProperty` overrides on record components. Changes span
-`introspect/BasicBeanDescription`, `introspect/AnnotatedClass`,
-`deser/BeanDeserializerFactory`, `deser/ValueInstantiator`, and
-`type/TypeFactory` for record type detection.
+Implement automatic subtype detection for Java 17 sealed classes: when
+deserializing a sealed interface or abstract class, inspect its
+`getPermittedSubclasses()` to build the subtype candidate set without
+requiring `@JsonSubTypes`. Support sealed hierarchies nested multiple
+levels deep. Changes span `introspect/BasicBeanDescription` for
+sealed-class detection, `jsontype/TypeResolverBuilder` for automatic
+subtype registration, `deser/BeanDeserializerFactory` for candidate
+filtering, and `type/TypeFactory` for sealed type introspection.
 
-### M5: Implement ObjectMapper.builder() immutable configuration pattern
+### M5: Implement ObjectMapper.copyWith for selective configuration override
 
-Add `ObjectMapper.builder()` with a fluent API for constructing
-fully-configured immutable mappers: `enable(Feature)`, `disable(Feature)`,
-`addModule(Module)`, `setVisibility()`, `setPropertyNamingStrategy()`,
-and `build()`. The builder must validate configuration consistency at
-build time. Changes touch `ObjectMapper`, `cfg/MapperConfig`,
-`cfg/BaseSettings`, `module/Module`, and `cfg/MapperBuilder`.
+Add `ObjectMapper.copyWith(Consumer<MapperBuilder>)` that creates a
+new mapper sharing the base configuration but with targeted overrides
+applied via the builder consumer. Unlike `copy()`, this avoids full
+reconfiguration and preserves cached serializer/deserializer state
+where the override does not affect resolution. Changes span
+`ObjectMapper.java` for the new method, `cfg/MapperBuilder.java` for
+partial-state cloning, `cfg/BaseSettings.java` for selective field
+copying, and `ser/SerializerCache.java` and
+`deser/DeserializerCache.java` for shared-vs-private cache decisions.
 
-### M6: Add polymorphic deserialization with deduction-based type resolution
+### M6: Add property-name aliasing with conflict detection
 
-Implement `JsonTypeInfo.Id.DEDUCTION` that inspects incoming JSON
-properties to deduce the concrete type without an explicit type
-discriminator field. For each subtype, compute a unique property
-signature and match incoming properties against it. Changes span
-`jsontype/TypeResolverBuilder`, a new `jsontype/impl/DeductionTypeDeserializer`,
-`introspect/BeanDescription` for property signatures, and
-`deser/BeanDeserializerFactory` for candidate registration.
+Implement `@JsonAlias` support during serialization (currently only
+works for deserialization) so aliases can be used as alternative output
+names based on a `SerializationFeature` flag. Add conflict detection
+that throws `InvalidDefinitionException` when multiple properties
+resolve to the same alias. Changes span `ser/BeanPropertyWriter.java`
+for alias-aware output name selection, `introspect/BeanDescription`
+for alias metadata extraction, `cfg/SerializationConfig` for the
+feature flag, and `ser/BeanSerializerFactory` for conflict validation
+during serializer construction.
 
 ### M7: Implement contextual serializer/deserializer support for container types
 
@@ -252,15 +259,18 @@ status or error-code field. Changes span `ObjectReader`,
 `DeserializationContext` error handling, `exc/MismatchedInputException`,
 and a new `deser/ErrorBodyDeserializer`.
 
-### M10: Add Mix-in annotation support for third-party classes
+### M10: Add per-type serialization/deserialization interceptors
 
-Implement `ObjectMapper.addMixIn(target, mixinSource)` that applies
-annotations from a mixin interface to a target class without modifying
-it. Support field-level, method-level, and constructor-level mixins.
-The introspection layer must merge mixin annotations with the target's
-own annotations, with mixin taking precedence. Changes span
-`introspect/JacksonAnnotationIntrospector`, `introspect/AnnotatedClass`,
-`introspect/MixInResolver`, `cfg/MapperConfig`, and `ObjectMapper`.
+Implement `Module.addSerializationInterceptor(Class, Interceptor)` and
+`Module.addDeserializationInterceptor(Class, Interceptor)` that allow
+modules to hook into the serialization and deserialization lifecycle
+for specific types. Interceptors receive the value before/after
+processing and can modify or wrap it. Changes span
+`module/SimpleModule.java` for the registration API,
+`ser/BeanSerializer.java` for pre/post serialization hooks,
+`deser/bean/BeanDeserializer.java` for pre/post deserialization hooks,
+and `cfg/SerializerFactoryConfig.java` /
+`cfg/DeserializerFactoryConfig.java` for interceptor storage.
 
 ## Wide
 

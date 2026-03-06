@@ -53,14 +53,16 @@ mux/
 
 ## Narrow
 
-### N1: Fix Router.ServeHTTP not setting 405 Method Not Allowed when path matches but method does not
+### N1: Fix Router.Match not populating RouteMatch.MatchErr for host mismatch
 
-When a request matches a route's path pattern but not its method
-constraint, the router returns 404 Not Found instead of 405 Method Not
-Allowed. The `Router.ServeHTTP` method in `mux.go` does not distinguish
-between "no route found" and "route found but method mismatch." Fix the
-match logic to track method mismatches and return 405 with an `Allow`
-header listing permitted methods.
+When a request matches a route's path and method but fails the host
+constraint (set via `Route.Host()`), `Router.Match()` returns `false`
+with `match.MatchErr` left at its zero value instead of being set to
+a distinguishable error. This makes it impossible for callers to
+tell whether the match failed due to host, path, or method. Fix the
+match loop in `mux.go` to set a `ErrHostMismatch` sentinel on
+`RouteMatch.MatchErr` when the host matcher is the only failing
+constraint.
 
 ### N2: Fix Vars() returning nil instead of empty map for routes without path variables
 
@@ -70,13 +72,14 @@ causing callers that iterate over the result to panic. Fix the variable
 extraction path in `regexp.go` to always set a non-nil map in the
 request context.
 
-### N3: Fix Route.GetPathTemplate panicking for routes built with PathPrefix
+### N3: Fix Route.Name silently overwriting names registered by other routes
 
-When a route is created via `router.PathPrefix("/api")`, calling
-`route.GetPathTemplate()` panics with a nil pointer dereference because
-`PathPrefix` stores the regexp differently than `Path`. Fix
-`GetPathTemplate()` in `route.go` to handle the prefix case by
-returning the template from the prefix regexp.
+When two different routes both call `.Name("api")`, the second
+registration silently overwrites the first in the `namedRoutes` map
+in `route.go`. `Router.Get("api")` then returns the wrong route with
+no warning. The existing check in `Name()` only prevents renaming the
+same route. Fix `Name()` to return an error when the name is already
+registered by a different route in the `namedRoutes` map.
 
 ### N4: Fix CORSMethodMiddleware not including OPTIONS in the Allow header
 
@@ -93,57 +96,66 @@ matcher in `regexp.go` decodes it before matching, causing the variable
 to be split incorrectly. Fix the regexp matching to operate on the
 raw (encoded) path and decode variable values only after extraction.
 
-### N6: Fix Route.Subrouter not inheriting middleware from the parent router
+### N6: Fix Router.Walk sharing mutable ancestor slice across WalkFunc callbacks
 
-When a subrouter is created via `route.Subrouter()`, the middleware
-registered on the parent router via `Use()` is not applied to requests
-that match the subrouter's routes. Fix `Subrouter()` in `route.go` to
-chain the parent router's middleware into the subrouter's middleware
-stack.
+In `mux.go`, the `walk` method reuses and mutates the `ancestors` slice
+between iterations. It calls `ancestors = append(ancestors, t)` before
+descending into a subrouter and truncates afterward, but the `WalkFunc`
+receives the live slice. A callback that stores the `ancestors` reference
+will see it mutated by later calls. Fix `walk` to pass a copy of the
+ancestors slice to `WalkFunc` and when recursing into subrouters.
 
-### N7: Fix Route.URL not respecting custom regexp constraints in path variables
+### N7: Fix Route.URL not percent-encoding path variable values containing reserved characters
 
-When a route is defined with `Path("/api/{version:[v][0-9]+}/resource")`,
-`route.URL("version", "v2")` generates the correct URL but
-`route.URL("version", "invalid")` does not report an error — it silently
-produces an invalid URL. Fix `URL()` in `route.go` to validate variable
-values against their regexp constraints before building the URL.
+In `regexp.go`, the `url()` method applies `url.QueryEscape` for query
+variable values but inserts path variable values into the URL string
+without calling `url.PathEscape`. If a path variable value contains
+reserved characters like `?`, `#`, or space, the resulting URL from
+`Route.URL()` is malformed. Fix `url()` in `regexp.go` to apply
+`url.PathEscape` to path variable values before format-string
+insertion.
 
-### N8: Fix Router.Walk skipping routes added after router.Use() was called
+### N8: Fix Router.ServeHTTP not setting request context for method-not-allowed handlers
 
-When middleware is added to a router via `Use()` and routes are added
-afterward, `Router.Walk()` skips those routes because the walk
-function iterates the route list captured before middleware registration.
-Fix the walk implementation in `mux.go` to iterate the current route
-list regardless of middleware registration order.
+In `mux.go`, when `Match()` returns `false` with
+`match.MatchErr == ErrMethodMismatch`, the 405 handler is invoked
+without the router context set on the request. Middleware and the
+`MethodNotAllowedHandler` cannot call `mux.CurrentRouter(r)` because
+`requestWithRouter` is only called in the match-success branch. Fix
+`ServeHTTP` to call `requestWithRouter` before dispatching the 405
+handler so the router is available in the request context.
 
-### N9: Fix HeadersRegexp matcher not compiling patterns once and reusing them
+### N9: Fix CORSMethodMiddleware producing duplicate methods in the Allow header
 
-`Route.HeadersRegexp("Accept", "json.*")` compiles the regexp pattern
-on every incoming request instead of compiling once during route
-definition. This causes unnecessary allocations under load. Fix the
-header matching in `route.go` to precompile and cache the regexp during
-route construction.
+In `middleware.go`, `getAllMethodsForRoute` collects methods from all
+routes that match the request path, but when multiple routes with
+overlapping path matchers register the same HTTP methods, the collected
+list contains duplicates (e.g., `GET,GET,POST`). The `Allow` header
+is then set with repeated values. Fix `getAllMethodsForRoute` to
+deduplicate the methods list before returning.
 
-### N10: Fix SetURLVars test helper not working with subrouter-matched requests
+### N10: Fix Router.ServeHTTP clean path redirect using 301 for non-GET methods
 
-The `SetURLVars` test helper in `test_helpers.go` sets variables on the
-request context, but when a handler is behind a subrouter, the
-subrouter's match overwrites the context — discarding the test-injected
-variables. Fix `SetURLVars` to use a context key that takes precedence
-over the subrouter match.
+In `mux.go`, when `cleanPath` produces a path different from the
+request, `ServeHTTP` always responds with `http.StatusMovedPermanently`
+(301). For POST, PUT, and DELETE requests, most HTTP clients convert
+the redirected request to GET, losing the original method and body.
+Fix the redirect to use 308 (Permanent Redirect) for methods other
+than GET and HEAD so the original method is preserved.
 
 ## Medium
 
-### M1: Implement route naming and URL generation with reverse routing
+### M1: Implement route conflict detection and diagnostics
 
-Add `Route.Name(name string)` to register named routes and
-`Router.Get(name string)` to retrieve them by name. Implement
-`Router.URLPath(name string, pairs ...string)` that builds a URL
-from a named route's template by substituting path variables. Requires
-a name registry on `Router`, integration with `Route.URL()` for
-generation, error reporting for duplicate names, and handling of
-subrouter-owned routes.
+Add `Router.CheckConflicts() []RouteConflict` that analyzes all
+registered routes and detects overlapping patterns that could cause
+ambiguous matching. Detect: routes with identical path templates but
+different methods (informational), routes where one path is a prefix
+of another without `PathPrefix` (warning), and routes with overlapping
+regexp patterns in path variables. Requires path template comparison
+logic in `regexp.go`, a `RouteConflict` struct with severity and
+affected routes, integration with `Router.Walk()` for route collection,
+and clear formatting of conflict reports.
 
 ### M2: Add request body content-type based routing
 

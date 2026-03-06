@@ -58,7 +58,7 @@ clap/
 │       │   ├── args.rs            # Args derive — struct fields → Arg definitions
 │       │   ├── subcommand.rs      # Subcommand derive — enum variants → subcommands
 │       │   └── value_enum.rs      # ValueEnum derive — enum → string value mapping
-│       └── attrs.rs               # Attribute parsing — #[arg(...)], #[command(...)]
+│       └── attr.rs                # Attribute parsing — #[arg(...)], #[command(...)]
 ├── clap_complete/
 │   └── src/
 │       ├── lib.rs                 # Shell completion generation entry point
@@ -95,13 +95,15 @@ clap/
 
 ## Narrow
 
-### N1: Fix ArgMatches::get_one panicking when a default value has an incompatible type
+### N1: Fix debug assertions not detecting self-referencing ArgGroup requirements
 
-When `Arg::default_value("true")` is set on a `bool` arg that uses
-`value_parser!(bool)`, calling `matches.get_one::<bool>()` panics at
-the downcast because the default is stored as a raw `OsString` rather
-than a parsed `bool`. Fix `parser/arg_matcher.rs` to run the
-`ValueParser` on default values before storing them in `ArgMatches`.
+When an `ArgGroup` lists one of its own member args in its `requires`
+list (e.g., group `"io"` contains `["input", "output"]` and requires
+`["input"]`), the constraint is tautological but goes undetected.
+The assertion pass in `builder/debug_asserts.rs` validates that
+required IDs exist in the command but does not check whether a group
+requires one of its own members. Fix `assert_app` to detect and
+report self-referencing group requirements.
 
 ### N2: Fix usage string not showing mutual exclusion between arg groups
 
@@ -118,35 +120,47 @@ output. Fix the column-width calculation in `output/help.rs` to
 properly account for flag name length and fall back to stacked layout
 when space is insufficient.
 
-### N4: Fix derive macro not respecting #[arg(value_name = "...")] on positional args
+### N4: Fix elvish completion generator not escaping special characters in descriptions
 
-When `#[arg(value_name = "FILE")]` is placed on a positional argument
-in a derive struct, the generated code ignores `value_name` and uses
-the field name instead. Fix `clap_derive/src/derives/args.rs` to emit
-the `Arg::value_name()` call when the attribute is present.
+When a command or arg description contains characters special in
+Elvish syntax (backticks, single quotes, or dollar signs), the
+generated completion script in `clap_complete/src/aot/shells/elvish.rs`
+produces syntax errors because descriptions are inserted into Elvish
+string literals without escaping. Fix the elvish generator to escape
+special characters in descriptions before emitting them.
 
-### N5: Fix error format not including the invalid value when ValueParser fails
+### N5: Fix error format not showing valid values for custom `PossibleValuesParser` failures
 
-When a custom `ValueParser` returns an error for an invalid value, the
-formatted error message shows the flag name but omits the actual value
-the user provided. Fix `error/format.rs` to include the invalid value
-in the `InvalidValue` error context.
+When a `PossibleValuesParser` rejects an input, the error message
+in `error/format.rs` shows the invalid value and the flag name but
+does not list the valid possible values unless they were set via
+`Arg::value_parser(["a", "b", "c"])`. When a `PossibleValuesParser`
+is constructed manually and passed as a `ValueParser`, the possible
+values are not extracted for the error context. Fix error construction
+to include possible values from the `ValueParser` metadata.
 
-### N6: Fix clap_lex not handling equals sign in short flag clusters
+### N6: Fix clap_lex not treating negative numbers as values when `allow_negative_numbers` is not set
 
-Passing `-abc=val` where `-c` takes a value doesn't correctly split
-the equals sign from the flag cluster. The lexer in `clap_lex/src/lib.rs`
-treats `=val` as part of the last short flag's value but fails to
-strip the `=` prefix. Fix the short-flag cluster iteration to handle
-inline `=` values.
+When an argument like `--offset` expects a numeric value and the user
+passes `--offset -5`, the lexer in `clap_lex/src/lib.rs` classifies
+`-5` as a short flag cluster via `to_short()` because
+`is_negative_number()` is only checked in specific parser paths.
+The parser in `parser/parser.rs` then reports an unknown flag `-5`
+instead of treating it as the value for `--offset`. Fix the parser's
+value-reading logic to check `is_negative_number()` before
+interpreting a token as flags.
 
-### N7: Fix fish completion escaping backslashes in description strings
+### N7: Fix fish completion generator's `escape_name` not sanitizing binary names containing dots or special characters
 
-When a command or arg description contains a backslash (e.g.,
-`"use \n for newline"`), the fish completion script in
-`clap_complete/src/shells/fish.rs` emits an unescaped backslash that
-fish interprets as an escape sequence. Fix the fish generator to
-double-escape backslashes in description strings.
+The `escape_name` function in `clap_complete/src/aot/shells/fish.rs`
+only replaces hyphens with underscores (`name.replace('-', "_")`).
+When a binary name contains dots, colons, or other non-alphanumeric
+characters (e.g., `my.app` or `cargo:test`), the generated fish
+function names like `__fish_my.app_needs_command` contain characters
+that are invalid in fish identifiers, producing syntax errors in
+the completion script. Fix `escape_name` to also replace dots,
+colons, and other non-alphanumeric, non-underscore characters with
+underscores.
 
 ### N8: Fix Command::display_name not propagating to subcommand error messages
 
@@ -155,20 +169,24 @@ subcommand errors still show the binary name from argv[0] instead of
 the display name. Fix error context assembly in `error/mod.rs` to use
 `display_name` if set, walking up the command tree.
 
-### N9: Fix ArgAction::Count overflow silently wrapping on u8 boundary
+### N9: Fix validator not reporting all group conflicts when multiple groups are violated simultaneously
 
-When using `ArgAction::Count` with the default `u8` storage, passing a
-flag more than 255 times causes a silent overflow to 0. Fix the
-counting logic in `parser/parser.rs` to saturate at `u8::MAX` instead
-of wrapping.
+When a user provides flags that violate two or more `ArgGroup`
+constraints at the same time (e.g., both a mutually-exclusive pair and
+a missing required-together pair), the validator in
+`parser/validator.rs` short-circuits after the first violation and
+only reports one error. Fix the group validation pass to collect all
+group constraint violations before returning, and format them as a
+combined error listing each violated group and its members.
 
-### N10: Fix styled_str not resetting color when nested styles are applied
+### N10: Fix `zsh` completion generator not handling subcommands with hyphens in names
 
-When `StyledStr` applies a bold+color style followed by a nested color
-change, the reset sequence only clears the inner style, leaving the
-terminal in a partially styled state. Fix `builder/styled_str.rs` to
-track style nesting depth and emit a full reset when returning to the
-base level.
+When a subcommand name contains hyphens (e.g., `my-subcommand`), the
+zsh completion script in `clap_complete/src/aot/shells/zsh.rs` produces
+a function name with hyphens, which is invalid zsh syntax. The
+generator should replace hyphens with underscores in generated function
+names while preserving the original hyphenated name in the completion
+text and descriptions.
 
 ## Medium
 
@@ -197,26 +215,31 @@ Add `#[command(flatten_external = "some_crate::Options")]` that can
 flatten arg structs defined in external crates without requiring them to
 derive `Args`. Generate a runtime adapter that reads the external
 struct's fields via a registry trait. Changes span `clap_derive/src/derives/args.rs`,
-a new trait in `clap_builder`, attribute parsing in `attrs.rs`, code
+a new trait in `clap_builder`, attribute parsing in `attr.rs`, code
 generation templates, and cross-crate integration tests.
 
-### M4: Add typo suggestions for unknown subcommands and flags
+### M4: Add contextual help snippets in error messages
 
-When a user types an unrecognized subcommand or flag, suggest the
-closest valid options using edit distance. Show up to 3 suggestions
-sorted by distance. Requires a string-distance function, candidate
-collection from the `Command` tree and arg list, integration into
-error construction in `error/mod.rs`, formatting in `error/format.rs`,
-and a config knob to disable suggestions.
+When a parse error references a specific argument or subcommand, embed
+the relevant help text inline in the error message instead of only
+suggesting `--help`. For example, a missing required arg error should
+include that arg's short description, valid values, and default. Requires
+changes to `error/format.rs` to fetch arg metadata, integration with
+`output/help.rs` for single-argument formatting, respect for terminal
+width via `builder/styled_str.rs`, and a configuration knob on
+`Command` to disable inline help for brevity.
 
-### M5: Implement environment variable fallback with precedence documentation
+### M5: Implement JSON schema generation for the command tree
 
-Add `Arg::env("VAR_NAME")` support that reads from the environment when
-the flag is not provided on the command line, with clear precedence:
-CLI > env > default. Show the env var name in help output. Requires
-changes to `builder/arg.rs`, `parser/parser.rs` for env lookup during
-parsing, `output/help.rs` to display `[env: VAR_NAME=current]`, and
-`error/format.rs` to indicate when a value came from an env var.
+Add `Command::to_json_schema() -> serde_json::Value` that outputs the
+full command tree as a JSON document: command names, descriptions,
+args with types and constraints (required, default, possible values),
+subcommands, and arg groups. Support filtering hidden commands and
+deprecated args. Requires introspection of `builder/command.rs` and
+`builder/arg.rs` fields, a schema builder that walks the command tree,
+serialization of `ValueParser` type information, `output/` module
+integration for consistent descriptions, and optional `serde`
+feature-gating in the `clap_builder` crate.
 
 ### M6: Add custom error formatting with user-defined templates
 
@@ -237,14 +260,16 @@ Requires shell detection logic, platform-specific path resolution,
 file writing with permission handling, existing-file backup, and
 integration with `clap_complete`'s generator system.
 
-### M8: Add subcommand aliases with visibility control
+### M8: Add help output customization with section reordering and filtering
 
-Implement `Command::visible_alias("ci")` and `Command::hidden_alias("commit-interactive")`
-to support multiple names for subcommands with control over whether
-they appear in help. Visible aliases should show in help and completion;
-hidden aliases should parse silently. Requires changes to
-`builder/command.rs`, the parser for alias resolution, help rendering,
-completion generators, and error suggestions.
+Implement `Command::help_config(HelpConfig)` that controls help output
+layout: reorder sections (usage, description, args, subcommands,
+footer), hide specific sections, set custom section headers, and
+control whether hidden args are shown with `--help-all`. Requires a
+`HelpConfig` struct in `builder/`, integration with the template
+engine in `output/help_template.rs`, changes to `output/help.rs` for
+section rendering control, and derive support via
+`#[command(help_config = ...)]` in `clap_derive/src/derives/parser.rs`.
 
 ### M9: Implement value validation with custom error messages
 

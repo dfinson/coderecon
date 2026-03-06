@@ -98,13 +98,16 @@ The lexer in `detail/input/lexer.hpp` accepts numbers like `007` or
 (except `0` itself or `0.x`). Fix the number-scanning state machine
 to reject leading zeros and emit `parse_error.101` for such inputs.
 
-### N2: Fix from_json not handling std::optional<T> for null values
+### N2: Fix binary_reader not validating BSON document size against consumed bytes
 
-The `from_json` overloads in `detail/conversions/from_json.hpp` do
-not provide a specialization for `std::optional<T>`. Attempting to
-deserialize a JSON null into `std::optional<T>` causes a compilation
-error. Add a `from_json` overload that maps JSON null to
-`std::nullopt` and non-null values to `T`.
+The BSON reader in `detail/input/binary_reader.hpp` reads the 4-byte
+document size prefix but does not validate that the total bytes
+consumed during parsing match the declared size. If the BSON data
+contains extra trailing bytes within the declared document boundary,
+they are silently ignored rather than flagged as corruption. Fix the
+BSON parsing path in `binary_reader.hpp` to verify that the consumed
+byte count matches the declared document size and throw
+`parse_error.110` on mismatch.
 
 ### N3: Fix serializer emitting invalid UTF-8 replacement on lone surrogates
 
@@ -115,12 +118,16 @@ raw bytes instead of the replacement character. Fix the
 `dump_escaped` method to detect unpaired surrogates and apply the
 replacement consistently.
 
-### N4: Fix json_pointer::back() not checking for empty pointer
+### N4: Fix hash function producing different results for equivalent number types
 
-`json_pointer::back()` in `detail/json_pointer.hpp` calls
-`reference_tokens.back()` without checking if the pointer is empty
-(root pointer). This causes undefined behavior. Fix `back()` to throw
-`out_of_range.405` when the pointer has no reference tokens.
+The `hash()` function in `detail/hash.hpp` uses separate
+`std::hash<number_integer_t>` and `std::hash<number_unsigned_t>`
+specializations combined with different `value_t` discriminators for
+integer and unsigned values. This means `json(1)` (signed) and
+`json(1u)` (unsigned) produce different hashes despite comparing
+equal with `operator==`. Fix `hash.hpp` to normalize equivalent
+integer and unsigned values to the same hash by using a unified
+hashing path when the values are numerically equal.
 
 ### N5: Fix ordered_map::erase invalidating iteration order
 

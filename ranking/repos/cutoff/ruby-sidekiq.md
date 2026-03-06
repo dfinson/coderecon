@@ -102,9 +102,15 @@ When a job exceeds 20 retries, the exponential backoff formula in job_retry.rb p
 
 The scheduled set poller in scheduled.rb compares job scores against Time.now.to_f. When the system clock drifts backward (e.g., NTP correction), jobs whose scores fall in the gap between the old and new time are never dequeued until the clock catches up. The comparison should account for backward drift.
 
-### N3 – CSRF token validation fails on dashboard form resubmission
+### N3 – CSRF tag helper does not rotate token per form render
 
-The web dashboard's CSRF protection rejects valid form submissions when a user has two dashboard tabs open. The token rotation logic in csrf_protection.rb invalidates the first tab's token when the second tab loads, causing a 403 on any subsequent form submission from the first tab.
+The web dashboard's `csrf_tag` helper in web/helpers.rb generates a
+CSRF token that is stored in the session but never rotated between
+form renders. When a user has two dashboard tabs open, both tabs share
+the same token. If one tab submits (consuming the token in session
+frameworks that rotate on use), the other tab's form becomes invalid.
+The helper should embed a per-render nonce tied to the session token
+rather than echoing the raw session value.
 
 ### N4 – Fetch strategy does not respect queue weights under low load
 
@@ -114,9 +120,14 @@ The BasicFetch strategy is documented to perform weighted random queue selection
 
 When a server middleware raises and the exception propagates through the chain, the structured logging context (job ID, queue name) set by the processor is cleared before the error handler runs. The error log entry lacks the job context needed for debugging.
 
-### N6 – Client middleware not invoked for ActiveJob-enqueued jobs
+### N6 – Client middleware not invoked for scheduled job promotion
 
-Jobs enqueued through ActiveJob's Sidekiq adapter bypass the client middleware chain because the adapter calls raw Redis LPUSH instead of going through Sidekiq::Client#push. Client middleware registered for logging or enrichment never fires for these jobs.
+When the scheduled poller in scheduled.rb promotes a job from the
+scheduled sorted set into a ready queue, it moves the job directly
+via Redis commands without passing through the client middleware chain.
+Client middleware registered for logging or argument enrichment never
+fires for jobs at their actual execution-time enqueue, only at their
+original scheduling time.
 
 ### N7 – Dead job display truncates large payloads in web UI
 
