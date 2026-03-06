@@ -7,6 +7,7 @@
 | **Language** | C++ |
 | **Scale** | Medium (multi-module project) |
 | **Category** | Testing framework |
+| **Commit** | `0299475a381902f1c81dc8da388edc4b3dea65b6` |
 
 ## Why this repo
 

@@ -13,6 +13,22 @@ You will be given:
 Read the tasks file thoroughly before starting. Understand the repo
 structure, scale, and domain before solving any task.
 
+## Safety: no pushes
+
+Before starting, verify no remotes exist:
+
+```
+git remote
+```
+
+If any remotes are listed, remove them all:
+
+```
+git remote remove <name>
+```
+
+**NEVER run `git push` at any point during this session.**
+
 ## Your job
 
 Work through every task sequentially (N1–N10, M1–M10, W1–W10).
@@ -23,10 +39,18 @@ For EACH task:
 
 ### STEP 1 — SOLVE
 
-Read the code, make edits, and verify they work. Capture a `git diff`.
+Read the code, make edits, and verify they work.
 
-After capturing the diff: `git stash` to restore clean state before
-the next task.
+When the solution is complete:
+
+1. Capture the diff: `git diff`
+2. Commit with a descriptive message:
+   `git add -A && git commit -m "task {heading_id}: <brief description>"`
+   (e.g., `git commit -m "task N1: fix generate_unique_id nondeterminism"`)
+3. Immediately revert the commit to restore clean state:
+   `git reset HEAD~1 --hard`
+
+The working tree must be clean before starting the next task.
 
 ---
 
@@ -114,7 +138,8 @@ Write a JSON file to `../../data/{repo_id}/ground_truth/{heading_id}.json`.
       "query_text": "...",
       "seeds": [],
       "pins": [],
-      "justification": "<why this query + these seeds/pins>"
+      "expected_defs": ["src/routing.py:APIRoute", "src/utils.py:generate_unique_id"],
+      "justification": "..."
     }
   ],
 
@@ -274,21 +299,25 @@ REQUIRED: 2+ symbol names AND 2+ file paths.
 seeds: 2–4 symbol names  pins: 2–4 file paths
 
 **Q_FULL** (combination — all signals):
-Natural developer query. No constraints.
+The query you would actually type if starting this task.
+REQUIRED: at least one symbol name or file path.
 seeds: 2–4 central symbol names  pins: 2–4 key file paths
 
-Each query MUST include a `"justification"` field: a brief explanation
-of why this query text + these seeds/pins would lead to the relevant
-code. This lets a reviewer verify the query is well-formed and the
-seeds/pins are pre-implementation knowledge.
+#### Query fields
 
-#### Non-OK queries (optional — only include those that arise naturally)
+**`expected_defs`** (required on every OK query):
+List which specific defs from your `minimum_sufficient_defs` ∪
+`thrash_preventing_defs` this query should retrieve. Format:
+`"path:def_name"`. Must be a subset of the task's ground truth defs.
 
-- **UNSAT** (up to 2): Factually wrong assumption. seeds: `[]` pins: `[]`
-- **BROAD** (up to 2): 15+ files, 3+ directories. seeds: `[]` pins: `[]`
-- **AMBIG** (up to 2): 2+ possible targets. seeds: `[]` pins: `[]`
-
-SKIP any that feel forced.
+**`justification`** (required on every OK query):
+Must answer three questions in order:
+1. **Rule compliance:** what specific content in the query satisfies
+   the REQUIRED rule? (quote it)
+2. **Target defs:** which defs from `expected_defs` should surface,
+   and why does this query text lead to them?
+3. **Pre-implementation:** why would a developer write this query
+   *before* knowing the answer?
 
 ---
 
@@ -311,14 +340,133 @@ After writing each JSON, re-read it and verify:
 7. **seeds/pins:** pre-implementation knowledge, not hindsight?
 8. **completeness:** exactly 8 OK queries? Exact `query_type` strings?
 9. **solve_notes, confidence, exploration_log** filled in?
+10. **expected_defs:** each query's expected_defs are a valid subset
+    of minimum_sufficient ∪ thrash_preventing?
 
 Fix any issues before moving to the next task.
 
 ---
 
+### STEP 4 — NON-OK QUERIES (after all 30 tasks)
+
+After completing all tasks, write a single file:
+`../../data/{repo_id}/non_ok_queries.json`
+
+Using full knowledge of the repo you gained during solving, write
+queries that the ranker+cutoff pipeline **cannot serve**.
+
+**Minimum 2 per category (6 total). No maximum.** Write as many as
+genuinely pass the acceptance criteria. Quality over quantity — the
+reviewer will reject any that fail.
+
+#### UNSAT — the correct answer set is empty
+
+The query's premise is factually false. The thing it assumes exists
+doesn't exist in this repo.
+
+**Decision test:** Pick the key noun (technology, feature, module)
+your query assumes. Run `grep -ri "<key noun>" .` and
+`find . -name "*<key noun>*"`. If both return **zero relevant
+results**, the query is UNSAT.
+
+**Acceptance criteria:**
+1. The query names or implies a specific technology, feature, or
+   subsystem
+2. That thing does not exist in this repo (grep/find returns nothing)
+3. The assumption is **plausible** — a developer unfamiliar with this
+   specific repo but familiar with the domain might realistically
+   ask it
+4. Not trivially absurd
+
+**Required fields:** `false_assumption`, `evidence_of_absence`
+
+#### BROAD — no cutoff on the ranked list works
+
+Relevant defs exist but are structurally dispersed. For all possible
+cutoff values N, either precision(N) or recall(N) is unacceptably low.
+
+**Decision test:**
+1. List all defs that would need to change or be read
+2. Group them by subsystem (conceptual grouping, not just directory)
+3. Ask: "If I gave someone only ONE of these groups, could they make
+   meaningful progress?" If YES for any group → **not** BROAD (it's a
+   wide OK query). If NO for every group → **BROAD**.
+
+**Acceptance criteria:**
+1. Relevant defs exist (not UNSAT)
+2. They span **3+ unrelated subsystems** (conceptually distinct)
+3. **No subset ≤ ⅓ of the relevant defs constitutes a useful starting
+   point** for the work
+4. The work is **uniform** — each instance is equally important, no
+   natural priority ordering or "start here" def
+
+**Required fields:** `why_no_cutoff`, `dispersion_description`
+
+#### AMBIG — 2+ disjoint complete answers exist
+
+The query maps to 2+ non-overlapping def neighborhoods, each
+independently a complete answer. The query doesn't specify which.
+
+**Decision test:**
+1. Identify 2+ groups of defs that each independently answer the query
+2. Verify the groups are **disjoint** (no def in both)
+3. Verify each group is **complete** — if the user meant that
+   interpretation, this group alone is the full answer
+4. Verify the query text **doesn't favor one group** over another
+
+**Acceptance criteria:**
+1. At least **2 disjoint def groups** can be named with concrete defs
+2. Each group is a **complete** answer (not partial)
+3. Groups are in **different subsystems**
+4. A reasonable developer **could pick either** group based on the
+   query text alone
+
+**Required fields:** `candidate_neighborhoods` (list of
+`{name, defs, why_plausible}`), `why_ambiguous`
+
+#### Non-OK JSON format
+
+```json
+{
+  "repo_id": "python-fastapi",
+  "reviewer_corrections": "",
+  "non_ok_queries": [
+    {
+      "query_type": "UNSAT",
+      "query_text": "Fix the GraphQL subscription resolver timeout",
+      "seeds": [],
+      "pins": [],
+      "false_assumption": "Assumes FastAPI has a GraphQL subsystem with subscription support. It doesn't.",
+      "evidence_of_absence": "No files matching *graphql*. No imports of graphene, strawberry, or ariadne."
+    },
+    {
+      "query_type": "BROAD",
+      "query_text": "Add type annotations to all untyped function parameters",
+      "seeds": [],
+      "pins": [],
+      "why_no_cutoff": "Untyped parameters in ~60 functions across every module. No subsystem is more relevant than another. Any cutoff capturing 80%+ recall also returns hundreds of fully-typed functions.",
+      "dispersion_description": "12+ directories, every module has some. No clustering by score."
+    },
+    {
+      "query_type": "AMBIG",
+      "query_text": "Fix the authentication error handling",
+      "seeds": [],
+      "pins": [],
+      "candidate_neighborhoods": [
+        {"name": "OAuth2 flow", "defs": ["security/oauth2.py:OAuth2PasswordBearer"], "why_plausible": "Most common auth scheme"},
+        {"name": "HTTP Bearer/Basic", "defs": ["security/http.py:HTTPBearer"], "why_plausible": "Separate error paths"}
+      ],
+      "why_ambiguous": "'Authentication error handling' doesn't specify which auth scheme. Three distinct subsystems handle auth differently."
+    }
+  ]
+}
+```
+
+---
+
 ## When you are done
 
-After all 30 tasks, say:
+After all 30 tasks AND the non-OK queries file, say:
 
 ```
 ALL TASKS COMPLETE.

@@ -7,6 +7,7 @@
 | **Language** | TypeScript |
 | **Scale** | Medium (multi-module project) |
 | **Category** | Diagram generation engine |
+| **Commit** | `6e40ff272949ef2eec09c6efd42b6284b3d51148` |
 
 ## Why this repo
 

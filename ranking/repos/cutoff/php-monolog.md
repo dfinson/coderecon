@@ -8,6 +8,7 @@
 | **Scale** | Medium (comprehensive logging library) |
 | **Category** | Logging / Observability |
 | **Set** | Cutoff |
+| **Commit** | `976f90a093b015be5f3fbc7f2479bb2740935243` |
 
 ## Why this repo
 

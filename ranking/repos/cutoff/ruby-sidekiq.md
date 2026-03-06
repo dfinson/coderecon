@@ -6,6 +6,7 @@
 | Scale    | Medium                                              |
 | Category | Background Jobs / Concurrency                       |
 | Set      | cutoff                                              |
+| Commit   | `60bf70dae2792729b0fb1ad4a80a13584b52d141`          |
 
 ## Why this repo
 

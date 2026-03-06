@@ -8,6 +8,7 @@
 | **Scale** | Medium-large |
 | **Category** | Distributed task queue |
 | **Set** | eval |
+| **Commit** | `92c2606aab31a521b3e006e53ca729f2e586d1b6` |
 
 ## Why this repo
 

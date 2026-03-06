@@ -8,6 +8,7 @@
 | **Scale** | Medium |
 | **Category** | CLI framework |
 | **Set** | Cutoff |
+| **Commit** | `ddef2291832331b1a2c5e2931f57ab7e5a4d133b` |
 
 ## Why this repo
 

@@ -8,6 +8,7 @@
 | **Scale** | Medium (multi-module project) |
 | **Category** | Resilience framework |
 | **Set** | Cutoff |
+| **Commit** | `7ddb44ec982dd37533790bb938e8af681292b0e7` |
 
 ## Why this repo
 
