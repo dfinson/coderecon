@@ -43,9 +43,10 @@ def _collect_watch_dirs(
 ) -> list[Path]:
     """Walk the repo tree and collect all directories to watch.
 
-    Respects the directory pruning model implemented by IgnoreChecker.should_prune_dir():
+    Respects the directory pruning model implemented by IgnoreChecker:
     - Tier 0 (HARDCODED_DIRS): Always pruned, never watched
     - Tier 1 (DEFAULT_PRUNABLE_DIRS): Pruned unless negated in .cplignore at the repo root
+    - Path patterns from .cplignore (e.g. ``ranking/clones/``)
 
     Returns a flat list of directories. The repo_root itself is always included.
     Each directory gets a single non-recursive inotify watch.
@@ -53,8 +54,16 @@ def _collect_watch_dirs(
     dirs: list[Path] = [repo_root]
     try:
         for dirpath, dirnames, _filenames in os.walk(repo_root):
-            # Prune in-place: remove dirs we should skip
-            dirnames[:] = [d for d in dirnames if not ignore_checker.should_prune_dir(d)]
+            rel_base = os.path.relpath(dirpath, repo_root)
+            surviving: list[str] = []
+            for d in dirnames:
+                if ignore_checker.should_prune_dir(d):
+                    continue
+                rel_child = os.path.join(rel_base, d) if rel_base != "." else d
+                if ignore_checker.should_prune_dir_path(rel_child):
+                    continue
+                surviving.append(d)
+            dirnames[:] = surviving
             for d in dirnames:
                 dirs.append(Path(dirpath) / d)
     except OSError:

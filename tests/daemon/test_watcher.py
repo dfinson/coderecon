@@ -145,6 +145,33 @@ class TestCollectWatchDirs:
         dirs = _collect_watch_dirs(tmp_path, ignore_checker)
         assert dirs == [tmp_path]
 
+    def test_prunes_cplignore_path_patterns(self, tmp_path: Path) -> None:
+        """Path patterns in .cplignore prune entire subtrees from watch list."""
+        # Create a deep directory tree that should be excluded by path pattern
+        (tmp_path / "ranking" / "clones" / "repo-a" / "src").mkdir(parents=True)
+        (tmp_path / "ranking" / "clones" / "repo-b").mkdir(parents=True)
+        (tmp_path / "ranking" / "src").mkdir(parents=True)
+        (tmp_path / "src").mkdir()
+
+        # Write .cplignore with a path pattern
+        (tmp_path / ".cplignore").write_text("ranking/clones/\n")
+
+        checker = IgnoreChecker(tmp_path, respect_gitignore=False)
+        dirs = _collect_watch_dirs(tmp_path, checker)
+
+        dir_strs = {str(d.relative_to(tmp_path)) for d in dirs} - {"."}
+
+        # ranking/ and ranking/src/ should be watched
+        assert "ranking" in dir_strs
+        assert str(Path("ranking") / "src") in dir_strs
+        # ranking/clones/ and its children should NOT be watched
+        assert str(Path("ranking") / "clones") not in dir_strs
+        assert str(Path("ranking") / "clones" / "repo-a") not in dir_strs
+        assert str(Path("ranking") / "clones" / "repo-b") not in dir_strs
+        assert str(Path("ranking") / "clones" / "repo-a" / "src") not in dir_strs
+        # src/ should still be watched
+        assert "src" in dir_strs
+
 
 class TestCrossFilesystemDetection:
     """Tests for _is_cross_filesystem function."""
