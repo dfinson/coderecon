@@ -411,3 +411,32 @@ definitions. Requires a builder API, ZIP archive creation via
 `ZipFoundation`, manifest generation, image asset processing, animation
 validation, and integration with `DotLottieFile` for round-trip
 verification.
+
+
+## Non-code focused
+
+### N11: Fix outdated or inconsistent metadata in package.json
+
+The project configuration file `package.json` contains metadata that has
+drifted from the actual project state. Audit the file for incorrect
+version constraints, outdated URLs, deprecated configuration keys,
+or missing entries that should be present based on the current
+codebase structure. Fix the inconsistencies.
+
+### M11: Add or improve CI workflow and update related documentation
+
+The CI configuration needs improvement: add a workflow step for
+linting or type-checking that currently only runs locally, ensure
+the CI matrix covers all supported platform/version combinations
+listed in `package.json`, and update `README.md` to document the CI
+process and badge status for contributors.
+
+### W11: Overhaul project configuration, CI, and documentation consistency
+
+Multiple non-code files have drifted from each other and from the
+actual project state. Specifically: `.github/workflows/stale_issues.yml`, `.github/workflows/main.yml`, `package.json`, `.spi.yml`
+need to be audited and synchronized. Version requirements in config
+files should match CI matrix entries, documentation should reflect
+current APIs and configuration options, and build/CI files should
+use consistent tooling versions. Fix all inconsistencies across
+these files to ensure a coherent project configuration.

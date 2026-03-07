@@ -416,3 +416,30 @@ support via `INotification`. Changes span a new project with
 schema builder, attribute processing, resolver adapter, subscription
 mapper, DI registration in GraphQL server, and integration tests
 with schema introspection.
+
+## Non-code focused
+
+### N11: Fix incorrect or outdated content in README.md
+
+The documentation file `README.md` contains descriptions or examples
+that no longer match the current API or behavior. Audit it against
+the actual source code and fix any inaccuracies, broken links, or
+missing information about recent changes.
+
+### M11: Add or improve CI workflow and update related documentation
+
+The CI configuration needs improvement: add a workflow step for
+linting or type-checking that currently only runs locally, ensure
+the CI matrix covers all supported platform/version combinations
+listed in project config, and update README.md to document the CI
+process and badge status for contributors.
+
+### W11: Overhaul project configuration, CI, and documentation consistency
+
+Multiple non-code files have drifted from each other and from the
+actual project state. Specifically: `.github/workflows/triage-issues.yml`, `.github/workflows/ci.yml`, `README.md`, `LICENSE.md`
+need to be audited and synchronized. Version requirements in config
+files should match CI matrix entries, documentation should reflect
+current APIs and configuration options, and build/CI files should
+use consistent tooling versions. Fix all inconsistencies across
+these files to ensure a coherent project configuration.

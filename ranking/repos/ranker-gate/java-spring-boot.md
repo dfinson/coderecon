@@ -379,3 +379,31 @@ Provide a `ServiceClient` abstraction that routes inter-service calls
 within the JVM. Add assertions for distributed tracing spans,
 message delivery, and eventual consistency. Integrate with
 `spring-boot-test` context caching for fast re-execution.
+
+## Non-code focused
+
+### N11: Fix outdated or inconsistent metadata in .idea/inspectionProfiles/Project_Default.xml
+
+The project configuration file `.idea/inspectionProfiles/Project_Default.xml` contains metadata that has
+drifted from the actual project state. Audit the file for incorrect
+version constraints, outdated URLs, deprecated configuration keys,
+or missing entries that should be present based on the current
+codebase structure. Fix the inconsistencies.
+
+### M11: Add or improve CI workflow and update related documentation
+
+The CI configuration needs improvement: add a workflow step for
+linting or type-checking that currently only runs locally, ensure
+the CI matrix covers all supported platform/version combinations
+listed in .idea/inspectionProfiles/Project_Default.xml, and update .github/ISSUE_TEMPLATE/issue.md to document the CI
+process and badge status for contributors.
+
+### W11: Overhaul project configuration, CI, and documentation consistency
+
+Multiple non-code files have drifted from each other and from the
+actual project state. Specifically: `.github/ISSUE_TEMPLATE/config.yml`, `.github/ISSUE_TEMPLATE/issue.md`, `.idea/inspectionProfiles/Project_Default.xml`, `.idea/copyright/profiles_settings.xml`
+need to be audited and synchronized. Version requirements in config
+files should match CI matrix entries, documentation should reflect
+current APIs and configuration options, and build/CI files should
+use consistent tooling versions. Fix all inconsistencies across
+these files to ensure a coherent project configuration.

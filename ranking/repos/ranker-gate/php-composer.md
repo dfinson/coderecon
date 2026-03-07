@@ -394,3 +394,31 @@ within a single command invocation. Support configurable log sinks
 telemetry that records timing for dependency resolution, downloads,
 and autoload generation, and optionally reports anonymized telemetry
 to a configurable endpoint.
+
+## Non-code focused
+
+### N11: Fix outdated or inconsistent metadata in res/composer-schema.json
+
+The project configuration file `res/composer-schema.json` contains metadata that has
+drifted from the actual project state. Audit the file for incorrect
+version constraints, outdated URLs, deprecated configuration keys,
+or missing entries that should be present based on the current
+codebase structure. Fix the inconsistencies.
+
+### M11: Add or improve CI workflow and update related documentation
+
+The CI configuration needs improvement: add a workflow step for
+linting or type-checking that currently only runs locally, ensure
+the CI matrix covers all supported platform/version combinations
+listed in res/composer-schema.json, and update CODE_OF_CONDUCT.md to document the CI
+process and badge status for contributors.
+
+### W11: Overhaul project configuration, CI, and documentation consistency
+
+Multiple non-code files have drifted from each other and from the
+actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/support-request---question.md`, `res/composer-schema.json`, `res/composer-lock-schema.json`
+need to be audited and synchronized. Version requirements in config
+files should match CI matrix entries, documentation should reflect
+current APIs and configuration options, and build/CI files should
+use consistent tooling versions. Fix all inconsistencies across
+these files to ensure a coherent project configuration.

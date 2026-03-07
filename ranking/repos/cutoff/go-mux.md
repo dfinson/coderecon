@@ -351,3 +351,31 @@ matching logic, push promise integration in `mux.go`, Alt-Svc header
 management, route-level push configuration, a push resource registry,
 middleware support for protocol-specific behavior, and test helpers
 for HTTP/2 and QUIC simulation.
+
+## Non-code focused
+
+### N11: Fix outdated or inconsistent metadata in .vscode/mcp.json
+
+The project configuration file `.vscode/mcp.json` contains metadata that has
+drifted from the actual project state. Audit the file for incorrect
+version constraints, outdated URLs, deprecated configuration keys,
+or missing entries that should be present based on the current
+codebase structure. Fix the inconsistencies.
+
+### M11: Add or improve CI workflow and update related documentation
+
+The CI configuration needs improvement: add a workflow step for
+linting or type-checking that currently only runs locally, ensure
+the CI matrix covers all supported platform/version combinations
+listed in .vscode/mcp.json, and update README.md to document the CI
+process and badge status for contributors.
+
+### W11: Overhaul project configuration, CI, and documentation consistency
+
+Multiple non-code files have drifted from each other and from the
+actual project state. Specifically: `.github/workflows/verify.yml`, `.github/workflows/test.yml`, `.vscode/mcp.json`, `README.md`
+need to be audited and synchronized. Version requirements in config
+files should match CI matrix entries, documentation should reflect
+current APIs and configuration options, and build/CI files should
+use consistent tooling versions. Fix all inconsistencies across
+these files to ensure a coherent project configuration.

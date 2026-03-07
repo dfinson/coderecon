@@ -187,3 +187,31 @@ Add distributed tracing support that correlates errors across microservice bound
 ### W10: Add progressive error page with lazy-loaded panels and performance profiling
 
 Implement a progressive error page that loads instantly with critical information and lazily loads additional panels (environment, data tables, full trace) via AJAX. Add performance profiling that measures time spent in each panel's data collection. Support panel prioritization and custom lazy panels. Changes span `PrettyPageHandler`, all templates, `TemplateHelper`, add JavaScript lazy-loading infrastructure, and a profiling module.
+
+## Non-code focused
+
+### N11: Fix outdated or inconsistent metadata in .scrutinizer.yml
+
+The project configuration file `.scrutinizer.yml` contains metadata that has
+drifted from the actual project state. Audit the file for incorrect
+version constraints, outdated URLs, deprecated configuration keys,
+or missing entries that should be present based on the current
+codebase structure. Fix the inconsistencies.
+
+### M11: Add or improve CI workflow and update related documentation
+
+The CI configuration needs improvement: add a workflow step for
+linting or type-checking that currently only runs locally, ensure
+the CI matrix covers all supported platform/version combinations
+listed in .scrutinizer.yml, and update docs/Open Files In An Editor.md to document the CI
+process and badge status for contributors.
+
+### W11: Overhaul project configuration, CI, and documentation consistency
+
+Multiple non-code files have drifted from each other and from the
+actual project state. Specifically: `.github/workflows/tests.yml`, `.github/FUNDING.yml`, `.scrutinizer.yml`, `composer.json`
+need to be audited and synchronized. Version requirements in config
+files should match CI matrix entries, documentation should reflect
+current APIs and configuration options, and build/CI files should
+use consistent tooling versions. Fix all inconsistencies across
+these files to ensure a coherent project configuration.

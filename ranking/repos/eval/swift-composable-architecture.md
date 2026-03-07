@@ -198,3 +198,32 @@ Add a visual debugger that renders the reducer composition as an interactive sta
 ### W10: Add end-to-end integration testing framework for multi-feature flows
 
 Implement an integration testing framework that tests complete user flows spanning multiple TCA features. Add `IntegrationTestStore` that composes multiple feature reducers, simulates navigation between features, asserts on cross-feature state changes, and supports async flow testing with dependency injection. Changes span `TestStore`, `StackReducer`, `PresentationReducer`, navigation, and add `IntegrationTesting/` module.
+
+
+## Non-code focused
+
+### N11: Fix outdated or inconsistent metadata in .spi.yml
+
+The project configuration file `.spi.yml` contains metadata that has
+drifted from the actual project state. Audit the file for incorrect
+version constraints, outdated URLs, deprecated configuration keys,
+or missing entries that should be present based on the current
+codebase structure. Fix the inconsistencies.
+
+### M11: Add or improve CI workflow and update related documentation
+
+The CI configuration needs improvement: add a workflow step for
+linting or type-checking that currently only runs locally, ensure
+the CI matrix covers all supported platform/version combinations
+listed in `.spi.yml`, and update `README.md` to document the CI
+process and badge status for contributors.
+
+### W11: Overhaul project configuration, CI, and documentation consistency
+
+Multiple non-code files have drifted from each other and from the
+actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.yml`, `.github/ISSUE_TEMPLATE/config.yml`, `.spi.yml`, `README.md`
+need to be audited and synchronized. Version requirements in config
+files should match CI matrix entries, documentation should reflect
+current APIs and configuration options, and build/CI files should
+use consistent tooling versions. Fix all inconsistencies across
+these files to ensure a coherent project configuration.

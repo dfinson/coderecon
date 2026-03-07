@@ -234,11 +234,12 @@ All repos generate the same full query set: 8 OK queries + up to 12
 non-OK queries per task. Gate uses all queries from all 78 training
 repos. Cutoff uses only OK queries from cutoff repos.
 
-**Total:** 98 repos, 2,940 tasks, ~26,000+ queries.
+**Total:** 98 repos, 3,234 tasks, ~28,000+ queries.
 
 ### 4.2 Task Generation
 
-30 tasks per repo (10 narrow / 10 medium / 10 wide). Each task is a
+33 tasks per repo (10 narrow / 10 medium / 10 wide + 3 non-code-focused).
+Each task is a
 natural-language description of work — no code, no diffs, no hints.
 
 ### 4.3 Data Collection Pipeline

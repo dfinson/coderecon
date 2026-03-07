@@ -214,3 +214,31 @@ Add `#[AsCommand(since: '5.0', deprecatedAt: '6.0', replacedBy: 'new:command')]`
 ### W10: Add distributed command execution with task queue integration
 
 Implement `Application::dispatch('long:command', $args)` that serializes command invocations to a message queue (via Symfony Messenger) and processes them asynchronously with result collection. Changes span `Application.php` (dispatch mode, result collector), `Messenger/RunCommandMessage.php` (enhanced serialization), `Messenger/RunCommandMessageHandler.php` (async execution), `Command/Command.php` (async result reporting), `Output/BufferedOutput.php` (serializable output capture), `Tester/CommandTester.php` (async testing), and a new `Async/` directory (AsyncResult, ResultCollector, CommandSerializer).
+
+## Non-code focused
+
+### N11: Fix outdated or inconsistent metadata in Tests/Fixtures/input_argument_4.json
+
+The project configuration file `Tests/Fixtures/input_argument_4.json` contains metadata that has
+drifted from the actual project state. Audit the file for incorrect
+version constraints, outdated URLs, deprecated configuration keys,
+or missing entries that should be present based on the current
+codebase structure. Fix the inconsistencies.
+
+### M11: Add or improve CI workflow and update related documentation
+
+The CI configuration needs improvement: add a workflow step for
+linting or type-checking that currently only runs locally, ensure
+the CI matrix covers all supported platform/version combinations
+listed in Tests/Fixtures/input_argument_4.json, and update README.md to document the CI
+process and badge status for contributors.
+
+### W11: Overhaul project configuration, CI, and documentation consistency
+
+Multiple non-code files have drifted from each other and from the
+actual project state. Specifically: `.github/workflows/close-pull-request.yml`, `.github/copilot-instructions.md`, `Tests/Fixtures/input_argument_4.json`, `Tests/Fixtures/input_option_with_default_inf_value.xml`
+need to be audited and synchronized. Version requirements in config
+files should match CI matrix entries, documentation should reflect
+current APIs and configuration options, and build/CI files should
+use consistent tooling versions. Fix all inconsistencies across
+these files to ensure a coherent project configuration.

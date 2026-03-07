@@ -185,3 +185,31 @@ Add the ability to define cross-model validation rules where one model's field r
 ### W10: Add real-time validation event streaming
 
 Implement an event system that emits structured validation events (field validated, coercion applied, default used, error raised) to configurable sinks for monitoring and debugging. Changes span `main.py`, `plugin/`, `_generate_schema.py`, `_model_construction.py`, `type_adapter.py`, `config.py`, and add an events module.
+
+## Non-code focused
+
+### N11: Fix outdated or inconsistent metadata in .hyperlint/.vale.ini
+
+The project configuration file `.hyperlint/.vale.ini` contains metadata that has
+drifted from the actual project state. Audit the file for incorrect
+version constraints, outdated URLs, deprecated configuration keys,
+or missing entries that should be present based on the current
+codebase structure. Fix the inconsistencies.
+
+### M11: Add or improve CI workflow and update related documentation
+
+The CI configuration needs improvement: add a workflow step for
+linting or type-checking that currently only runs locally, ensure
+the CI matrix covers all supported platform/version combinations
+listed in .hyperlint/.vale.ini, and update .hyperlint/style_guide_test.md to document the CI
+process and badge status for contributors.
+
+### W11: Overhaul project configuration, CI, and documentation consistency
+
+Multiple non-code files have drifted from each other and from the
+actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug-v2.yml`, `.github/ISSUE_TEMPLATE/feature_request.yml`, `.hyperlint/.vale.ini`, `.markdownlint.yaml`
+need to be audited and synchronized. Version requirements in config
+files should match CI matrix entries, documentation should reflect
+current APIs and configuration options, and build/CI files should
+use consistent tooling versions. Fix all inconsistencies across
+these files to ensure a coherent project configuration.

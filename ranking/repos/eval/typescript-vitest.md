@@ -180,3 +180,31 @@ Add tools to migrate snapshot files between serializer versions, handle format c
 ### W10: Add multi-project workspace test orchestration
 
 Implement cross-project test execution for monorepos: shared configuration, project dependency ordering, cross-project coverage, and unified reporting. Changes span `packages/vitest/src/node/core.ts` for workspace coordination, `packages/vitest/src/node/projects/` for project resolution, `packages/vitest/src/node/config/` for workspace config, `packages/vitest/src/node/reporters/` for merged output, `packages/coverage-v8/src/` for cross-project coverage, and `packages/vitest/src/node/pools/` for project isolation.
+
+## Non-code focused
+
+### N11: Fix outdated or inconsistent metadata in netlify.toml
+
+The project configuration file `netlify.toml` contains metadata that has
+drifted from the actual project state. Audit the file for incorrect
+version constraints, outdated URLs, deprecated configuration keys,
+or missing entries that should be present based on the current
+codebase structure. Fix the inconsistencies.
+
+### M11: Add or improve CI workflow and update related documentation
+
+The CI configuration needs improvement: add a workflow step for
+linting or type-checking that currently only runs locally, ensure
+the CI matrix covers all supported platform/version combinations
+listed in netlify.toml, and update .claude/agents/vitest-test-writer.md to document the CI
+process and badge status for contributors.
+
+### W11: Overhaul project configuration, CI, and documentation consistency
+
+Multiple non-code files have drifted from each other and from the
+actual project state. Specifically: `docs/guide/recipes.md`, `.github/ISSUE_TEMPLATE/bug_report.yml`, `netlify.toml`, `pnpm-lock.yaml`
+need to be audited and synchronized. Version requirements in config
+files should match CI matrix entries, documentation should reflect
+current APIs and configuration options, and build/CI files should
+use consistent tooling versions. Fix all inconsistencies across
+these files to ensure a coherent project configuration.

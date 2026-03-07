@@ -360,3 +360,31 @@ that produces a complete RBS type definition for the application.
 Support type-checked `params`, association return types, and
 scope chain types. Add CI integration that runs `steep check`
 as part of `rails test`.
+
+## Non-code focused
+
+### N11: Fix outdated or inconsistent metadata in .devcontainer/compose.yaml
+
+The project configuration file `.devcontainer/compose.yaml` contains metadata that has
+drifted from the actual project state. Audit the file for incorrect
+version constraints, outdated URLs, deprecated configuration keys,
+or missing entries that should be present based on the current
+codebase structure. Fix the inconsistencies.
+
+### M11: Add or improve CI workflow and update related documentation
+
+The CI configuration needs improvement: add a workflow step for
+linting or type-checking that currently only runs locally, ensure
+the CI matrix covers all supported platform/version combinations
+listed in .devcontainer/compose.yaml, and update .devcontainer/Dockerfile to document the CI
+process and badge status for contributors.
+
+### W11: Overhaul project configuration, CI, and documentation consistency
+
+Multiple non-code files have drifted from each other and from the
+actual project state. Specifically: `guides/source/association_basics.md`, `guides/source/asset_pipeline.md`, `.devcontainer/compose.yaml`, `.devcontainer/devcontainer.json`
+need to be audited and synchronized. Version requirements in config
+files should match CI matrix entries, documentation should reflect
+current APIs and configuration options, and build/CI files should
+use consistent tooling versions. Fix all inconsistencies across
+these files to ensure a coherent project configuration.

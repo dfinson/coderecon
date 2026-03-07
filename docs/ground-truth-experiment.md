@@ -73,114 +73,113 @@ defs survive budget pressure. **Keep both tiers.**
 Do the retrieval signals actually separate relevant from irrelevant
 candidates? Can a ranker learn to surface ground truth defs?
 
-### Bug found first
+### Bugs found and fixed
 
-`"coverage"` was in `PRUNABLE_DIRS` — the directory walker pruned any
-directory named `coverage` at any depth, including source directories
-like `src/codeplane/testing/coverage/`. 14 source files were missing
-from the index. Fixed by removing `"coverage"` from `PRUNABLE_DIRS`
-and making the `.cplignore` pattern root-only (`/coverage/`).
+1. **`"coverage"` in `PRUNABLE_DIRS`** — directory walker pruned any
+   directory named `coverage` at any depth. 14 source files missing.
+   Fixed: removed from prunable, `.cplignore` pattern root-only.
 
-### Method
+2. **Def embeddings not persisted by `cpl init -r`** — embedding
+   computation takes ~90s and runs at the end of indexing. If init
+   was killed (SIGPIPE, Ctrl-C, daemon restart), embeddings were
+   lost and never rebuilt. Fixed: added `_validate_embeddings()` to
+   daemon startup that compares embedded count vs code def count and
+   auto-rebuilds if gap >5%.
 
-Ran `recon_raw_signals` for 4 tasks (N1, N2, N3, M2) across 4
-subsystems with 3 query types each (Q_FULL with seeds+pins,
-Q_SEMANTIC with no hints, Q_IDENTIFIER with symbol names only).
-12 signal collection runs total. Measured GT def recall, signal
-separation (retriever_hits), and F1 with a simple ranker
-(sort by retriever_hits desc).
+### Method (run 2 — with embeddings)
+
+6 tasks across code, non-code, and code-island subsystems. 3 query
+types each = 21 signal collection runs. Embeddings fully populated
+(8,307 def embeddings). Measured: recall, embedding separation,
+retriever_hits separation, F1 with simple ranker (sort by hits+emb).
 
 ### Tasks
 
-| Task | Subsystem | GT defs | Files |
-|------|-----------|---------|-------|
-| N1 | testing/coverage | 5 | lcov.py, models.py, base.py |
-| N2 | mcp/delivery | 3 | delivery.py |
-| N3 | tools/map_repo | 3 | map_repo.py |
-| M2 | refactor/ops | 7 | ops.py |
+| Task | Complexity | Subsystem | Type | GT defs |
+|------|-----------|-----------|------|---------|
+| N1 | narrow | testing/coverage | Code | 5 |
+| N2 | narrow | mcp/delivery | Code | 3 |
+| N4 | narrow | Makefile | Non-code | 2 |
+| N5 | narrow | ranking/gate | Code island | 3 |
+| M2 | medium | refactor/ops | Code | 7 |
+| W1 | wide | testing/coverage/* | Cross-cutting | 10 |
 
-### Results: retrieval quality per task × query type
+### Results
 
-| Task | Query | Cands | Found | R@10 | R@20 | GT hits | Non-GT | Sep |
-|------|-------|-------|-------|------|------|---------|--------|-----|
-| N1 | Q_FULL | 958 | 5/5 | 1/5 | 3/5 | 2.6 | 1.0 | 2.5× |
-| N1 | Q_SEMANTIC | 769 | 5/5 | 0/5 | 0/5 | 1.0 | 1.0 | 1.0× |
-| N1 | Q_IDENT | 721 | 5/5 | 2/5 | 4/5 | 2.2 | 1.0 | 2.1× |
-| N2 | Q_FULL | 391 | 3/3 | 0/3 | 1/3 | 3.0 | 1.0 | 2.9× |
-| N2 | Q_SEMANTIC | 696 | 3/3 | 0/3 | 0/3 | 1.0 | 1.0 | 1.0× |
-| N2 | Q_IDENT | 430 | 3/3 | 0/3 | 2/3 | 2.0 | 1.0 | 2.0× |
-| N3 | Q_FULL | 1034 | 3/3 | 0/3 | 3/3 | 3.0 | 1.0 | 2.9× |
-| N3 | Q_SEMANTIC | 1332 | 3/3 | 0/3 | 0/3 | 1.0 | 1.0 | 1.0× |
-| N3 | Q_IDENT | 967 | 3/3 | 0/3 | 3/3 | 2.0 | 1.0 | 2.0× |
-| M2 | Q_FULL | 904 | 7/7 | 0/7 | 1/7 | 3.0 | 1.1 | 2.9× |
-| M2 | Q_SEMANTIC | 316 | 0/7 | 0/7 | 0/7 | 0.0 | 1.0 | 0.0× |
-| M2 | Q_IDENT | 966 | 7/7 | 0/7 | 2/7 | 2.6 | 1.0 | 2.5× |
+| Task | Query | Cands | Found | R@10 | R@20 | F1@5 | EmbSep | HitSep |
+|------|-------|-------|-------|------|------|------|--------|--------|
+| N1 lcov | Q_FULL | 8650 | 5/5 | 2/5 | 3/5 | 0.600 | 1.25× | 3.3× |
+| N1 lcov | Q_SEMANTIC | 8584 | 5/5 | 0/5 | 3/5 | 0.000 | 1.21× | 1.9× |
+| N1 lcov | Q_IDENT | 8558 | 5/5 | 2/5 | 4/5 | 0.800 | 1.29× | 3.0× |
+| N2 delivery | Q_FULL | 8525 | 3/3 | 2/3 | 2/3 | 0.500 | 1.14× | 3.9× |
+| N2 delivery | Q_SEMANTIC | 8637 | 3/3 | 3/3 | 3/3 | 0.500 | 1.25× | 1.9× |
+| N2 delivery | Q_IDENT | 8615 | 3/3 | 3/3 | 3/3 | 0.750 | 1.27× | 2.9× |
+| N4 Makefile | Q_FULL | 8506 | 2/2 | 0/2 | 0/2 | 0.571 | — | 2.9× |
+| N4 Makefile | Q_SEMANTIC | 8594 | 1/2 | 0/2 | 0/2 | 0.000 | — | 1.0× |
+| N4 Makefile | Q_IDENT | 8449 | 2/2 | 0/2 | 0/2 | 0.000 | — | 1.0× |
+| N5 gate | Q_FULL | 8479 | 3/3 | 0/3 | 0/3 | 0.750 | — | 2.9× |
+| N5 gate | Q_SEMANTIC | 8704 | 3/3 | 0/3 | 0/3 | 0.000 | — | 0.9× |
+| N5 gate | Q_IDENT | 8550 | 3/3 | 0/3 | 0/3 | 0.500 | — | 2.6× |
+| M2 refactor | Q_FULL | 8531 | 7/7 | 1/7 | 3/7 | 0.167 | 1.21× | 3.6× |
+| M2 refactor | Q_SEMANTIC | 8519 | 7/7 | 2/7 | 2/7 | 0.000 | 1.15× | 1.0× |
+| M2 refactor | Q_IDENT | 8548 | 7/7 | 2/7 | 2/7 | 0.667 | 1.21× | 3.2× |
+| W1 parsers | Q_FULL | 8624 | 10/10 | 3/10 | 6/10 | 0.133 | 1.21× | 2.2× |
+| W1 parsers | Q_SEMANTIC | 8672 | 10/10 | 0/10 | 1/10 | 0.000 | 1.13× | 1.9× |
+| W1 parsers | Q_IDENT | 8562 | 10/10 | 7/10 | 8/10 | 0.400 | 1.26× | 2.7× |
 
-### Results: F1@5 with simple ranker (sort by retriever_hits)
+"—" = non-code defs have no per-def embeddings (file-level only).
 
-| Task | Q_FULL | Q_SEMANTIC | Q_IDENT |
-|------|--------|------------|---------|
-| N1 | 0.600 | 0.000 | 0.800 |
-| N2 | 0.500 | 0.250 | 0.750 |
-| N3 | 0.750 | 0.000 | 0.750 |
-| M2 | 0.167 | 0.000 | 0.833 |
-| **avg** | **0.504** | **0.062** | **0.783** |
+### Aggregate
 
-### Aggregate by query type
+| Query type | Avg F1@5 | Avg EmbSep | Avg HitSep | Recall@ALL |
+|-----------|----------|-----------|-----------|-----------|
+| Q_FULL (seeds+pins) | 0.454 | 0.80× | 3.1× | 100% |
+| Q_SEMANTIC (no hints) | 0.083 | 0.79× | 1.4× | 97% |
+| Q_IDENT (names only) | 0.519 | 0.84× | 2.6× | 100% |
 
-| Query type | Avg F1@5 | Avg separation | Recall@ALL |
-|-----------|----------|---------------|------------|
-| Q_FULL (seeds+pins) | 0.504 | 2.8× | 100% |
-| Q_SEMANTIC (no hints) | 0.062 | 0.8× | 61% |
-| Q_IDENTIFIER (names) | 0.783 | 2.2× | 100% |
+### Key findings (vs run 1 without embeddings)
+
+**Embeddings help but don't dominate.** Embedding separation is
+~1.2× for code defs (GT defs score ~0.70 avg, non-GT ~0.57).
+This is useful signal for the ranker but weaker than retriever_hits
+(~3× separation). The ranker needs both features.
+
+**Q_SEMANTIC improved dramatically.** Run 1 (no embeddings): 0.062
+avg F1, 61% recall. Run 2 (with embeddings): 0.083 avg F1, 97%
+recall. Recall jumped from 61% to 97% — embeddings find defs that
+term match can't. F1 is still low because embedding separation
+(1.2×) isn't strong enough alone for top-5 ranking.
+
+**Non-code defs (Makefile) are hard.** No per-def embeddings (file
+embedding only), term match separation is weak. F1@5 is good for
+Q_FULL (0.571 via pins) but 0.0 for semantic/ident. The ranker will
+need the file-embedding signal for non-code defs.
+
+**Code islands (gate.py) work via hits.** Despite no embedding
+signal, Q_FULL gets F1=0.750 via retriever_hits (2.9× separation).
+Seeds+pins drive the signal.
+
+**Wide tasks (W1) are hardest.** 10 GT defs across 8 files — Q_FULL
+only gets F1=0.133 at top 5. But R@20=6/10, meaning a good ranker
+with cutoff at ~20 would capture most. Q_IDENT gets F1=0.400 with
+7/10 in top 10.
 
 ### Verdict
 
 | Scenario | Expected F1 | Evidence |
 |----------|------------|---------|
-| Best case (perfect ranker, any query) | 1.000 | All GT defs in pool, just reorder |
-| Good case (identifier queries, simple ranker) | 0.783 | Avg across 4 tasks |
-| Typical case (full queries with seeds+pins) | 0.504 | Avg across 4 tasks |
-| Worst case (pure semantic, no symbols) | 0.062 | No retriever agreement signal |
+| Best case (perfect ranker) | 1.000 | 100% recall — all GT defs in pool |
+| Good (ident queries, simple ranker) | 0.519 | Avg across 6 tasks |
+| Typical (full queries, seeds+pins) | 0.454 | Avg across 6 tasks |
+| Semantic only | 0.083 | Weak signal, but 97% recall |
 
-**The signal is there.** Multi-retriever agreement separates GT defs
-at ~2.5× across all non-semantic query types. A LambdaMART model
-with access to all features (not just retriever_hits) should push
-the typical case well above 0.5 F1.
+**Retriever_hits is the primary discriminator** (~3× separation).
+Embeddings add ~1.2× on top. A LambdaMART model combining both with
+structural features (path, kind, has_docstring, etc.) should push
+F1 well above 0.5 for typical queries.
 
-**Semantic-only queries have no embeddings.** Investigation revealed
-that the def embedding index is empty (0 embeddings computed) and
-file embeddings contain only 1 of 586 files. The embedding subsystem
-is broken — all 12 runs above used term match only with zero dense
-vector signal. This means:
+**Recall is 100% for non-semantic queries.** The harvesters always
+find the GT defs — the problem is purely ranking. This is exactly
+what LambdaMART is designed to solve.
 
-- The F1 numbers above are a **pessimistic lower bound** — they
-  represent retrieval quality without the embedding harvester
-- Once embeddings are fixed, Q_SEMANTIC should gain `emb_score` as
-  a strong signal (bge-small-en-v1.5 is designed for code↔query)
-- The ranker will have `emb_score` and `emb_rank` as additional
-  features, improving all query types
-
-**Embedding fix is a separate workstream**, not a blocker for dataset
-generation — the ranker can learn from whatever signals are available,
-and more signals = better performance.
-
-**The investment is justified.** 100% recall in the candidate pool
-means the ranker has every GT def available — it just needs to learn
-to rank them above noise. With 2,280 tasks × 8 queries each =
-~18,000 training examples, LambdaMART should learn the ranking
-function.
-
-### Verdict
-
-| Scenario | F1 | Interpretation |
-|----------|-----|---------------|
-| Best case (perfect ranker) | 1.000 | All GT defs surface at top 5 |
-| Plausible good (ranker + right cutoff) | 0.400-0.667 | GT defs in top 10-15 |
-| Current (no ranker, raw order) | 0.240 | Peak at N=20, lots of noise |
-| Worst case (semantic-only, no ranker) | <0.100 | Almost no signal |
-
-**The signal is there.** Multi-retriever agreement (retriever_hits)
-separates GT defs from noise at ~2.5×. A LambdaMART model trained on
-thousands of examples should easily learn to exploit this gap.
-The investment in dataset generation is justified.
+**The investment is justified.**

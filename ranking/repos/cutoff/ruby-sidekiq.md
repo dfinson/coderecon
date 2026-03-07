@@ -233,3 +233,31 @@ Create a leader election mechanism among Sidekiq processes and build a maintenan
 ### W10 – End-to-end job workflow engine with saga pattern support
 
 Implement a saga/workflow engine on top of Sidekiq that orchestrates multi-step business processes with compensating transactions. This requires a workflow definition DSL, a workflow state machine stored in Redis, client integration for workflow step enqueuing, server middleware for step completion tracking, the retry subsystem triggering compensation on failure, the scheduled poller handling step timeouts, the web dashboard visualizing workflow state and history, the API exposing workflow management operations, and the testing helpers supporting workflow assertions.
+
+## Non-code focused
+
+### N11: Fix outdated or inconsistent metadata in test/cfg/config__FILE__and__dir__.yml
+
+The project configuration file `test/cfg/config__FILE__and__dir__.yml` contains metadata that has
+drifted from the actual project state. Audit the file for incorrect
+version constraints, outdated URLs, deprecated configuration keys,
+or missing entries that should be present based on the current
+codebase structure. Fix the inconsistencies.
+
+### M11: Add or improve CI workflow and update related documentation
+
+The CI configuration needs improvement: add a workflow step for
+linting or type-checking that currently only runs locally, ensure
+the CI matrix covers all supported platform/version combinations
+listed in test/cfg/config__FILE__and__dir__.yml, and update docs/Pro-8.0-Upgrade.md to document the CI
+process and badge status for contributors.
+
+### W11: Overhaul project configuration, CI, and documentation consistency
+
+Multiple non-code files have drifted from each other and from the
+actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`, `test/cfg/config__FILE__and__dir__.yml`, `test/cfg/config_environment.yml`
+need to be audited and synchronized. Version requirements in config
+files should match CI matrix entries, documentation should reflect
+current APIs and configuration options, and build/CI files should
+use consistent tooling versions. Fix all inconsistencies across
+these files to ensure a coherent project configuration.

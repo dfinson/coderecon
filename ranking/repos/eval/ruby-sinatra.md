@@ -202,3 +202,31 @@ Add `desc 'List users'; param :page, Integer, default: 1` annotations that gener
 ### W10: Add multi-tenant support with per-tenant configuration isolation
 
 Implement `tenant { |req| req.host.split('.').first }` with isolated settings, middleware stacks, sessions, and CSRF tokens per tenant. Changes span `base.rb` (tenant resolution in `call!`, settings isolation, middleware scoping), `main.rb` (top-level tenant DSL), rack-protection (per-tenant CSRF tokens in `authenticity_token.rb`, per-tenant sessions in `session_hijacking.rb`), `cookies.rb` (tenant-scoped cookie jar), and `namespace.rb` (tenant-aware namespaces).
+
+## Non-code focused
+
+### N11: Fix outdated or inconsistent metadata in .rubocop.yml
+
+The project configuration file `.rubocop.yml` contains metadata that has
+drifted from the actual project state. Audit the file for incorrect
+version constraints, outdated URLs, deprecated configuration keys,
+or missing entries that should be present based on the current
+codebase structure. Fix the inconsistencies.
+
+### M11: Add or improve CI workflow and update related documentation
+
+The CI configuration needs improvement: add a workflow step for
+linting or type-checking that currently only runs locally, ensure
+the CI matrix covers all supported platform/version combinations
+listed in .rubocop.yml, and update rack-protection/README.md to document the CI
+process and badge status for contributors.
+
+### W11: Overhaul project configuration, CI, and documentation consistency
+
+Multiple non-code files have drifted from each other and from the
+actual project state. Specifically: `.github/workflows/test.yml`, `.github/workflows/release.yml`, `.rubocop.yml`, `.vscode/mcp.json`
+need to be audited and synchronized. Version requirements in config
+files should match CI matrix entries, documentation should reflect
+current APIs and configuration options, and build/CI files should
+use consistent tooling versions. Fix all inconsistencies across
+these files to ensure a coherent project configuration.
