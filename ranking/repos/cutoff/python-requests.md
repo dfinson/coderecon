@@ -87,7 +87,7 @@ The `auth.py` module provides `HTTPBasicAuth`, `HTTPDigestAuth`, and
 `HTTPProxyAuth`, but has no built-in support for Bearer token
 authentication (RFC 6750). Add an `HTTPBearerAuth(AuthBase)` class that
 sets the `Authorization: Bearer <token>` header, supporting both static
-tokens and a callable that returns a token for dynamic refresh.
+tokens and a callable that returns a token for dynamic refresh. Also add a usage entry in `HISTORY.md` documenting the new authentication class with examples.
 
 ### N4: Add Retry-After header parsing to TooManyRedirects exception
 
@@ -205,7 +205,7 @@ provides the same API as `Session` but with `async`/`await` support.
 `AsyncSession.request()`, `send()`, and `resolve_redirects()` should be
 coroutines. Requires an async transport adapter interface, integration
 with `asyncio.get_event_loop()`, async cookie jar operations, and
-async hook dispatch. The existing `Session` API must remain unchanged.
+async hook dispatch. The existing `Session` API must remain unchanged. Also update `requirements-dev.txt` to add async testing dependencies and update `tox.ini` with an async test environment.
 
 ### M6: Add multipart upload progress callbacks
 
@@ -387,30 +387,34 @@ production use. Changes span `sessions.py` (trace context propagation),
 Request/Response), `hooks.py` (trace event hooks), and `utils.py`
 (trace header parsing).
 
-## Non-code focused
+### N11: Add a new release section to `HISTORY.md` with categorized entries
 
-### N11: Fix outdated or inconsistent metadata in tox.ini
+The `HISTORY.md` file uses a flat list of changes per version without
+categorization. Add a new unreleased section with entries grouped
+under Features, Bug Fixes, and Deprecations headings. Include GitHub
+issue and PR cross-references for each entry and add contributor
+attribution.
 
-The project configuration file `tox.ini` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Revise `tox.ini` test environments and update `requirements-dev.txt` dependencies
 
-### M11: Add or improve CI workflow and update related documentation
+The `tox.ini` lacks dedicated environments for type checking,
+security scanning, and documentation building. Add `typecheck`
+(mypy with stubs), `security` (safety + bandit), and `docs` (sphinx)
+environments. Update `requirements-dev.txt` to include the new
+tool versions and remove duplicates already declared in
+`pyproject.toml`. Also update `Makefile` to add `make typecheck`
+and `make security` targets, and update `.coveragerc` to add
+branch coverage settings and exclude test utilities.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in tox.ini, and update docs/Makefile to document the CI
-process and badge status for contributors.
+### W11: Full project configuration and documentation overhaul
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/Bug_report.md`, `.github/ISSUE_TEMPLATE/Custom.md`, `tox.ini`, `.pre-commit-config.yaml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Perform a comprehensive non-code refresh: update `pyproject.toml`
+with current classifiers, PEP 639 license metadata, and modern
+build backend settings. Revise `HISTORY.md` to use Keep a
+Changelog format across all versions. Update `Makefile` with
+consolidated targets for testing, linting, and documentation.
+Restructure `tox.ini` with comprehensive environments. Update
+`requirements-dev.txt` with current dependency versions. Revise
+`MANIFEST.in` to include new package data and exclude development
+files. Update `AUTHORS.rst` formatting and `.pre-commit-config.yaml`
+hook versions. Update `.readthedocs.yaml` build configuration.

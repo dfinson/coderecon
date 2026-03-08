@@ -82,7 +82,7 @@ When stdout is redirected to a file with a narrow encoding (e.g.,
 ASCII), `echo()` silently swallows `UnicodeEncodeError` instead of
 raising a clear error or using a replacement strategy. Fix `echo()` in
 the utils module to apply `errors='replace'` or `errors='backslashreplace'`
-when writing to a non-UTF-8 stream rather than silently dropping output.
+when writing to a non-UTF-8 stream rather than silently dropping output. Also update `CHANGES.rst` to document the new error handling behavior for redirected streams.
 
 ### N4: Add glob expansion support to Path type
 
@@ -191,7 +191,7 @@ using a hierarchical prefix derived from the command path. For example,
 a `--port` option on `myapp server start` would read from
 `MYAPP_SERVER_START_PORT`. Requires changes to context creation to
 track the command path, option resolution to construct the env var
-name, and help text generation to display the expected variable name.
+name, and help text generation to display the expected variable name. Also update the `README.md` examples section to document the environment variable prefix convention.
 
 ### M6: Add retry and timeout decorators for commands that call external services
 
@@ -346,30 +346,31 @@ documentation. Changes span a new documentation generator module,
 the help formatter for structured extraction, the core module for
 metadata access, and the type system for type name rendering.
 
-## Non-code focused
+### N11: Update `CHANGES.rst` with categorized changelog entries for the upcoming release
 
-### N11: Fix outdated or inconsistent metadata in .devcontainer/devcontainer.json
+The `CHANGES.rst` file has grown disorganized with entries lacking consistent
+categorization. Restructure the unreleased section to group changes under
+headings — Bug Fixes, Features, Deprecations, and Breaking Changes. Add
+anchor links for each version section so documentation cross-references
+resolve correctly when the changelog is rendered on ReadTheDocs.
 
-The project configuration file `.devcontainer/devcontainer.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Revise `pyproject.toml` optional dependencies and `.readthedocs.yaml` build config
 
-### M11: Add or improve CI workflow and update related documentation
+The `pyproject.toml` does not declare optional dependency groups for
+development, testing, and documentation tooling, forcing contributors to
+read scattered comments across files. Add `[project.optional-dependencies]`
+groups for `dev`, `test`, and `docs`. Update `.readthedocs.yaml` to
+reference the new `docs` dependency group in its build step and configure
+the Python version and build commands. Also update `.pre-commit-config.yaml`
+to pin hook versions to current releases.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .devcontainer/devcontainer.json, and update docs/virtualenv.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul project metadata, README examples, and CI configuration
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/feature-request.md`, `.github/ISSUE_TEMPLATE/config.yml`, `.devcontainer/devcontainer.json`, `.pre-commit-config.yaml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Perform a comprehensive non-code refresh: update `pyproject.toml` with
+current classifiers, project URLs, and license metadata following PEP 639.
+Revise the `README.md` quickstart examples to show modern usage patterns
+including shell completion setup and type annotations. Update `CHANGES.rst`
+to use a consistent entry format with contributor attribution. Revise
+`.pre-commit-config.yaml` hook versions and add a `ruff` hook. Update
+`.editorconfig` to cover new file types (`.yml`, `.toml`). Update
+`.readthedocs.yaml` to use the build.os key and specify the Python version.

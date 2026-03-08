@@ -209,7 +209,24 @@ The `DotLottieFile` in `Public/DotLottie/DotLottieFile.swift` parses
 `.lottie` archives but does not expose the manifest metadata (author,
 description, version, theme colour). Add read-only properties for
 `author`, `description`, `version`, and `themeColor` parsed from the
-`manifest.json` within the archive.
+`manifest.json` within the archive. Also update `README.md` to
+document the dotLottie format support and the new metadata
+accessors in the "Features" section.
+
+### N11: Fix README.md not documenting rendering engine selection or dotLottie support
+
+The `README.md` documents basic `LottieAnimationView` usage but does
+not explain how to choose between the Core Animation and Main Thread
+rendering engines via `LottieConfiguration.renderingEngine`. The
+dotLottie format (`.lottie` archives) is supported in the codebase
+but not mentioned in the README or any user-facing documentation.
+The `.github/issue_template.md` does not ask reporters to specify
+which rendering engine they are using, making it difficult to
+reproduce engine-specific bugs. The `.spi.yml` file does not
+configure documentation generation targets for Swift Package Index.
+Fix `README.md` to add rendering engine selection and dotLottie
+sections, update `.github/issue_template.md` to include a rendering
+engine field, and configure `.spi.yml` for documentation generation.
 
 ## Medium
 
@@ -287,8 +304,10 @@ instruments the rendering pipeline. Track per-frame render time,
 layer count, path complexity (number of vertices), cache hit rates,
 and dropped frames. Expose metrics via `LottieAnimationView.performanceMetrics`.
 Requires instrumentation in `MainThreadAnimationLayer`,
-`CoreAnimationLayer`, `ShapeItemLayer`, `LRUCache`, and a metrics
-aggregator.
+`CoreAnimationLayer`, `ShapeItemLayer`, `LRUCache`, a metrics
+aggregator, and an update to `Version.xcconfig` to add a
+`PROFILING_ENABLED` build setting that conditionally compiles
+the instrumentation code.
 
 ### M9: Implement animation clipping to arbitrary bezier masks
 
@@ -306,6 +325,23 @@ round-tripping: `decode → modify → encode`. Requires `Encodable`
 conformance on all model types in `Private/Model/` (layers, shapes,
 keyframes, assets, text), careful preservation of unknown JSON keys,
 and validation that re-encoded JSON plays identically.
+
+### M11: Update script/ReleaseInstructions.md and podspec for release workflow
+
+The `script/ReleaseInstructions.md` release guide references a
+manual CocoaPods `pod trunk push` workflow but does not mention
+the Swift Package Manager release process or the
+`.github/workflows/main.yml` CI pipeline. The `lottie-ios.podspec`
+and `Package.swift` specify different minimum iOS deployment
+targets with no documentation explaining the discrepancy. The
+`package.json` (used for the npm/lottie-web compatibility shim
+via `index.js`) has a `version` field that is not kept in sync
+with `Version.xcconfig`. Update `script/ReleaseInstructions.md`
+to include SPM release steps and CI verification, reconcile
+deployment targets between `lottie-ios.podspec` and
+`Package.swift` with an explanatory comment, and add a release
+checklist item to verify `package.json` version matches
+`Version.xcconfig`.
 
 ## Wide
 
@@ -412,31 +448,22 @@ definitions. Requires a builder API, ZIP archive creation via
 validation, and integration with `DotLottieFile` for round-trip
 verification.
 
+### W11: Overhaul README.md, CI workflows, and distribution configuration
 
-## Non-code focused
-
-### N11: Fix outdated or inconsistent metadata in package.json
-
-The project configuration file `package.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
-
-### M11: Add or improve CI workflow and update related documentation
-
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in `package.json`, and update `README.md` to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/workflows/stale_issues.yml`, `.github/workflows/main.yml`, `package.json`, `.spi.yml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The `README.md` is missing documentation for SwiftUI integration
+(`LottieView`), interactive controls (`AnimatedButton`,
+`AnimatedSwitch`), dynamic properties, and the dotLottie format.
+The animated GIF examples in `_Gifs/` are referenced in the README
+but several links are broken because the filenames contain spaces.
+The `.github/workflows/main.yml` CI workflow does not test on
+macOS or build the `Example/` project. The
+`.github/workflows/stale_issues.yml` stale issue bot is configured
+with a 30-day timeout that is too aggressive for feature requests.
+The `lottie-ios.podspec` does not list all source files under
+`Sources/Private/EmbeddedLibraries/` causing CocoaPods builds to
+fail for the ZipFoundation dependency. Overhaul `README.md` with
+complete feature documentation and fix broken `_Gifs/` image links,
+add macOS and example-project build steps to
+`.github/workflows/main.yml`, adjust the stale timeout in
+`.github/workflows/stale_issues.yml`, and fix the
+`lottie-ios.podspec` source file patterns for embedded libraries.

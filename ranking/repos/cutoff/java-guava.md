@@ -68,7 +68,7 @@ guava/src/com/google/common/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -189,7 +189,10 @@ work with `Graph`, `ValueGraph`, and `Network` via the
 `SuccessorsFunction` abstraction, using Kahn's algorithm for O(V+E)
 performance. Changes span `Graphs.java` for the new public API
 method, internal helper classes for in-degree tracking, and
-`Traverser.java` for shared iteration infrastructure.
+`Traverser.java` for shared iteration infrastructure. Also update
+the `README.md` to add a "Graph Algorithms" subsection under the
+feature overview documenting the new `topologicalOrder()` API with
+a usage example.
 
 ### M4: Add EventBus subscriber introspection and priority ordering
 
@@ -372,32 +375,54 @@ Restructure Guava to produce a multi-release JAR with JDK 11, 17, and
 `MoreExecutors`, `SequencedCollection`-backed immutable collections,
 and `ScopedValue`-based context propagation replacing `ThreadLocal`
 in `EventBus`. Changes span `util/concurrent/`, `io/`, `collect/`,
-`eventbus/`, and build configuration.
+`eventbus/`, and build configuration including the parent `pom.xml`
+for multi-release JAR plugin setup, the `guava/pom.xml` for
+`maven-compiler-plugin` multi-release output configuration, and
+`.github/workflows/ci.yml` for JDK 11/17/21 matrix testing.
 
-## Non-code focused
+### N11: Fix pom.xml maven-enforcer-plugin not requiring minimum Maven version
 
-### N11: Fix outdated or inconsistent metadata in futures/listenablefuture1/pom.xml
+The parent `pom.xml` configures numerous Maven plugins but does not
+use `maven-enforcer-plugin` to require a minimum Maven version.
+Building with Maven 3.6.x silently produces incorrect multi-module
+reactor ordering, while 3.8+ handles it correctly. Add a
+`maven-enforcer-plugin` execution in the parent `pom.xml` with a
+`requireMavenVersion` rule requiring `[3.8.0,)`. Also add a
+`requireJavaVersion` rule matching the `surefire.toolchain.version`
+property, and update `CONTRIBUTING.md` to document the minimum
+Maven and JDK versions required for building.
 
-The project configuration file `futures/listenablefuture1/pom.xml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Add Dependabot configuration and update parent pom.xml dependency management
 
-### M11: Add or improve CI workflow and update related documentation
+The repository has a `.github/dependabot.yml` file but it only
+monitors GitHub Actions versions, not Maven dependency updates.
+Update `dependabot.yml` to add a `maven` package ecosystem entry
+with weekly schedule, targeting the parent `pom.xml`. Add a
+`dependabot` label configuration for auto-labeling PRs. Update the
+parent `pom.xml` `<dependencyManagement>` section to pin all test
+dependencies (`junit`, `truth`, `mockito`) to specific versions
+rather than ranges, enabling Dependabot to propose version bumps.
+Add a `.github/workflows/scorecard.yml` OpenSSF Scorecard workflow
+for supply chain security monitoring. Update
+`.github/pull_request_template.md` to include a checklist item for
+dependency version justification.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in futures/listenablefuture1/pom.xml, and update futures/README.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul Maven build configuration and project documentation
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.yaml`, `.github/ISSUE_TEMPLATE/feature_addition_request.yaml`, `futures/listenablefuture1/pom.xml`, `futures/listenablefuture9999/pom.xml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Comprehensively update all non-code project files for modern build
+practices. Restructure the parent `pom.xml` to extract shared
+plugin configuration into `<pluginManagement>`, add
+`maven-wrapper-validation` enforcement, and configure reproducible
+builds via `project.build.outputTimestamp`. Update `guava-bom/pom.xml`
+to include version-aligned entries for all published modules
+(`guava`, `guava-testlib`, `guava-gwt`). Add a
+`.mvn/maven-build-cache-config.xml` for local build caching. Update
+`.github/workflows/ci.yml` to add a JDK compatibility matrix
+(8, 11, 17, 21), add a `mvn verify -Pguava-bom` job for BOM
+validation, and add dependency license scanning. Rewrite
+`CONTRIBUTING.md` to add sections on the code review process, test
+requirements (unit test for every public method), and the release
+process. Update `README.md` to refresh the feature overview,
+add migration examples from `java.util` to Guava equivalents, and
+add a "Version Compatibility" matrix. Add `SECURITY.md` with
+vulnerability reporting instructions.

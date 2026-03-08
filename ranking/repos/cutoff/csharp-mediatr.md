@@ -212,6 +212,22 @@ implementing `IPipelineBehavior<,>`. Non-generic types silently fail at
 runtime during resolution. Fix `AddOpenBehavior` to validate that the
 type has open generic parameters and implements the expected behavior
 interface, throwing `ArgumentException` with a descriptive message.
+Also update `README.md` to document the validation behavior and add
+an example showing the correct open generic type constraint for custom
+pipeline behaviors.
+
+### N11: Update MediatR.csproj packaging and Directory.Build.props build configuration
+
+`MediatR.csproj` embeds the build date via a custom MSBuild target
+that shells out to `git log`, but this fails in CI environments where
+the git history is shallow-cloned with `filter: tree:0`. Fix the
+`EmbedBuildDate` target to handle missing git gracefully by falling
+back to `$([System.DateTime]::UtcNow)`. Also update
+`Directory.Build.props` to set `LangVersion` to `preview` for all
+projects, add `EnforceCodeStyleInBuild` set to `true`, and update
+`NuGet.Config` to add the `dotnet-experimental` feed for preview SDK
+packages. Update `.github/workflows/ci.yml` to add a `dotnet format
+--verify-no-changes` step that enforces code style consistency.
 
 ## Medium
 
@@ -291,7 +307,11 @@ scanning. Requires a new `MediatR.Generators` project, a
 `[GenerateRegistration]` attribute, source generator for scanning
 `IRequestHandler<,>` and `INotificationHandler<>` implementations,
 generated `AddMediatRGenerated()` extension method, and integration
-tests comparing generated output with runtime scanning.
+tests comparing generated output with runtime scanning. Also create a
+`MediatR.Generators.csproj` with analyzer packaging configuration,
+add the new project to `MediatR.slnx`, and update
+`Directory.Build.props` to include shared compiler settings for the
+generator project.
 
 ### M9: Implement request deduplication pipeline behavior
 
@@ -312,6 +332,21 @@ setup in `MediatRServiceCollectionExtensions`, span attributes for
 request type, handler type, and duration, exception recording,
 notification publish spans, and configuration via
 `MediatrServiceConfiguration.EnableTracing`.
+
+### M11: Enhance CI pipeline and NuGet packaging workflow
+
+The `.github/workflows/ci.yml` generates an SBOM and signs NuGet
+packages, but lacks test coverage reporting and release-branch
+protection. Add a code coverage step using `coverlet` with
+`--collect:"XPlat Code Coverage"` and upload the `coverage.cobertura.xml`
+report as a build artifact. Update `.github/workflows/release.yml` to
+add a pre-release validation step that runs `dotnet pack --no-build`
+and validates the `.nupkg` contents with `dotnet-validate`. Also
+update `MediatR.csproj` to add `RepositoryBranch` and
+`RepositoryCommit` package metadata properties, add a
+`.github/workflows/triage-issues.yml` label configuration for
+automatically tagging issues by area (pipeline, DI, notifications),
+and update `Build.ps1` to support a `-Coverage` switch.
 
 ## Wide
 
@@ -404,7 +439,11 @@ behavior execution order, `HandlerAssertions` for asserting handler
 invocations, fake notification publisher for capturing published
 events. Changes span a new project with `MockMediator`, `HandlerSpy`,
 `PipelineRecorder`, assertion helpers, `TestServiceProvider`,
-Moq/NSubstitute integration, and documentation.
+Moq/NSubstitute integration, and documentation. Also add the new
+`MediatR.Testing` project to `MediatR.slnx`, create a
+`MediatR.Testing.csproj` with NuGet packaging metadata, and update
+`README.md` with a testing section documenting the mock mediator
+usage patterns and pipeline verification API.
 
 ### W10: Implement GraphQL integration with MediatR handlers as resolvers
 
@@ -417,29 +456,19 @@ schema builder, attribute processing, resolver adapter, subscription
 mapper, DI registration in GraphQL server, and integration tests
 with schema introspection.
 
-## Non-code focused
+### W11: Add documentation site and restructure solution for multi-package publishing
 
-### N11: Fix incorrect or outdated content in README.md
-
-The documentation file `README.md` contains descriptions or examples
-that no longer match the current API or behavior. Audit it against
-the actual source code and fix any inaccuracies, broken links, or
-missing information about recent changes.
-
-### M11: Add or improve CI workflow and update related documentation
-
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in project config, and update README.md to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/workflows/triage-issues.yml`, `.github/workflows/ci.yml`, `README.md`, `LICENSE.md`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The repository has a `README.md` and `LICENSE.md` at the root but
+lacks a documentation site, contribution guide, and structured
+multi-package publishing workflow. Add a `docs/` directory with a
+DocFX configuration (`docs/docfx.json`) that generates API reference
+docs from the `MediatR.csproj` and `MediatR.Contracts.csproj` XML
+documentation. Create `docs/getting-started.md`,
+`docs/pipeline-behaviors.md`, and `docs/notification-patterns.md`
+guides. Update `MediatR.slnx` to include a `docs` solution folder,
+add a `docs` build step to `.github/workflows/ci.yml` that validates
+the DocFX build, and update `Build.ps1` to include a `-Docs` switch.
+Also update `Directory.Build.props` to set
+`GenerateDocumentationFile` to `true` for all `src/` projects, and
+add a `CONTRIBUTING.md` with build prerequisites referencing
+`NuGet.Config` feed configuration.

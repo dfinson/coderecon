@@ -145,6 +145,9 @@ based on calendar months (Q1 = Jan–Mar). When a fiscal year starts in
 a non-January month (e.g., April for UK financial year), `startOfQuarter()`
 returns incorrect boundaries. Add a `fiscalYearStartMonth` option to
 `Options` trait and use it in the quarter boundary calculations.
+Also update `phpstan.neon` to add the new option type to the
+`ignoreErrors` patterns so static analysis does not flag the dynamic
+property access on `CarbonInterface`.
 
 ### N6: Add `diffInBusinessDays()` to Difference trait
 
@@ -188,6 +191,16 @@ integer number of years, but there is no method that returns a full
 decomposition (years, months, days) suitable for displaying a person's
 exact age. Add `exactAge()` returning a `CarbonInterval` with precise
 year/month/day components, handling leap years correctly.
+
+### N11: Fix `phpunit.xml.dist` missing test suite for CLI tests
+
+The `phpunit.xml.dist` configuration file defines test suites for
+`carbon`, `immutable`, `interval`, `period`, `timezone`,
+`localization`, `laravel`, `doctrine`, and `factory`, but does not
+include a suite for the `Cli/` directory added under `src/Carbon/Cli/`.
+Tests in `tests/Cli/` are never executed by CI. Add a `cli` test suite
+entry in `phpunit.xml.dist` pointing to `tests/Cli`, and update
+`codecov.yml` to include the CLI source path in coverage tracking.
 
 ## Medium
 
@@ -270,7 +283,10 @@ multi-unit output: "2 years, 3 months ago" instead of "2 years ago".
 Add a `parts` option to control the number of units shown, a
 `threshold` option for when to roll up to the next unit, and
 `join` and `separator` options for output formatting. Propagate
-locale-specific conjunctions from `Lang/`.
+locale-specific conjunctions from `Lang/`. Also add a new
+`formatting` test suite in `phpunit.xml.dist` for the granularity
+formatting tests, and update `contributing.md` with examples of how
+contributors can add new locale conjunctions for multi-part diffs.
 
 ### M10: Add clock abstraction with PSR-20 compliance across all factories
 
@@ -280,6 +296,19 @@ for all time-dependent operations. Refactor all `now()` calls,
 `setTestNow()`, and timestamp generation in `Creator`, `Comparison`,
 and `Difference` traits to delegate to a configurable `ClockInterface`,
 enabling dependency-injected time in testing without global state.
+
+### M11: Update CI and static analysis configuration for PSR-20 compliance
+
+The `composer.json` lists `psr/clock` as a dependency but does not
+include `clock` or `psr-20` in the `keywords` array, reducing
+discoverability. The `.github/workflows/tests.yml` CI matrix does not
+run PHPStan as a separate job, relying on a separate `phpstan.yml`
+workflow that can fall out of sync. Update `composer.json` to add
+missing keywords and a `scripts` section for running static analysis.
+Consolidate the PHPStan step into `.github/workflows/tests.yml` as
+an additional matrix entry. Update `phpstan.neon` to raise the
+analysis level from 3 to 5 and remove suppressed error patterns for
+methods that now exist in the codebase.
 
 ## Wide
 
@@ -310,7 +339,12 @@ multiple timezones, timezone abbreviation disambiguation (CST = Central
 vs. China), DST transition prediction, and timezone change history.
 Changes span `CarbonTimeZone`, `Comparison` trait, a new `Timezone/`
 namespace, IANA timezone database parsing, and `Localization` for
-timezone name translations.
+timezone name translations. Also update `composer.json` to add
+`ext-intl` as a suggested dependency for ICU timezone data, add
+exclusion rules in `phpmd.xml` for the new `Timezone/` namespace
+(which legitimately requires high cyclomatic complexity for DST
+tables), and update `psalm.xml` to include the new namespace in
+the project scan paths.
 
 ### W4: Add comprehensive date arithmetic with overflow strategies
 
@@ -381,30 +415,19 @@ Changes span a new `Audit/` namespace, proxy generation for
 `CarbonInterface` methods, `Traits/Modifiers.php` instrumentation,
 `Traits/Units.php`, `Serialization`, and `Factory` wiring.
 
-## Non-code focused
+### W11: Overhaul project configuration and documentation for v4.0 release
 
-### N11: Fix outdated or inconsistent metadata in phpmd.xml
-
-The project configuration file `phpmd.xml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
-
-### M11: Add or improve CI workflow and update related documentation
-
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in phpmd.xml, and update .github/ISSUE_TEMPLATE/bug_report.md to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/dependabot.yml`, `phpmd.xml`, `tests/phpmd-test.xml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Prepare the repository configuration files for a major version bump.
+Update `phpmd.xml` to enable the `CyclomaticComplexity` and
+`ExcessiveMethodLength` rules that are currently excluded, fixing
+the flagged methods or adding targeted `@SuppressWarnings`
+annotations. Raise `phpstan.neon` analysis level from 3 to 6 and
+resolve all new errors, updating `ignoreErrors` patterns only for
+genuine false positives. Raise `psalm.xml` `errorLevel` from 5 to 3
+and address new findings. Update `phpunit.xml.dist` to add
+`cacheDirectory`, enable `failOnRisky`, and reorganise test suites
+into `unit` and `integration` groups. Update `contributing.md` to
+document the new static analysis requirements and the v4.0 branch
+policy. Update `.github/workflows/tests.yml` to add a dedicated
+static-analysis job that runs PHPStan, Psalm, and PHPMD in parallel,
+and update `codecov.yml` to set a minimum coverage threshold of 80%.

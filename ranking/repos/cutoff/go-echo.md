@@ -83,7 +83,7 @@ middleware/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -141,7 +141,9 @@ static files but does not set `Cache-Control`, `ETag`, or
 `Last-Modified` headers for cache control. Browsers re-download files
 on every request. Add `CacheControl` and `MaxAge` configuration options
 to `StaticConfig` that set appropriate cache headers based on the
-served file's modification time.
+served file's modification time. Document the new `CacheControl` and
+`MaxAge` configuration options in `README.md` under the Static Files
+section and add a note to `API_CHANGES_V5.md` about the new fields.
 
 ### N7: Add request body hash computation to body dump middleware
 
@@ -190,6 +192,8 @@ registration. Add an `e.RoutesDocs()` method that returns all route
 metadata in a structured format. Changes span `echo.go` for
 `RouteInfo` metadata, `router.go` for metadata storage, `group.go`
 for metadata propagation, and `route.go` for the documentation output.
+Add a `CHANGELOG.md` entry for the route metadata feature, and update
+`README.md` to document `RouteInfo.Meta` with configuration examples.
 
 ### M2: Add request validation middleware with struct tag support
 
@@ -418,30 +422,47 @@ proto message binding, `response.go` for streaming response support,
 `server.go` for HTTP/2 transport configuration, and `binder.go` for
 protobuf field binding.
 
-## Non-code focused
+### N11: Fix codecov.yml not configuring separate coverage thresholds for middleware/
 
-### N11: Fix outdated or inconsistent metadata in echotest/testdata/test.json
+The `codecov.yml` at the repo root defines global coverage settings but
+does not set separate coverage targets for the core `echo` package
+versus the `middleware/` subpackage. The middleware package has different
+coverage characteristics — many middlewares have edge cases difficult to
+cover in unit tests. Add `flags` and `coverage.status.project` entries
+in `codecov.yml` that set separate thresholds for root `*.go` files and
+`middleware/*.go` files. Update `.github/workflows/echo.yml` to pass
+the correct coverage flag labels when uploading reports.
 
-The project configuration file `echotest/testdata/test.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Restructure developer documentation and project governance
 
-### M11: Add or improve CI workflow and update related documentation
+Create a `CONTRIBUTING.md` with step-by-step guidelines for adding new
+middleware: file naming in `middleware/`, the `Config` struct pattern
+with `ToMiddleware()` method, test file requirements, and the `README.md`
+update checklist. Add a `docs/` directory with `architecture.md`
+describing the `Echo` → `Router` → `Context` request lifecycle and the
+middleware chain execution model. Update `README.md` to add a middleware
+reference table listing all 23 middleware files in `middleware/` with
+one-line descriptions. Update `API_CHANGES_V5.md` to document all v4 to
+v5 breaking changes that are currently missing. Update
+`.github/ISSUE_TEMPLATE.md` to add sections for middleware-specific bug
+reports with required configuration details.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in echotest/testdata/test.json, and update _fixture/_fixture/README.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul CI/CD pipeline and developer tooling
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/workflows/echo.yml`, `.github/workflows/checks.yml`, `echotest/testdata/test.json`, `codecov.yml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Expand `.github/workflows/echo.yml` to add separate jobs for linting
+(the current workflow has no lint job), benchmark comparison against
+the base branch using `go test -bench`, and documentation generation
+verification. Add a `docs/` directory with `migration-v4-to-v5.md`
+covering all API changes from `API_CHANGES_V5.md` with before/after
+code examples, `middleware-guide.md` explaining the `Config` struct
+patterns used across all middlewares with the `ToMiddleware()` method
+convention, and `testing.md` documenting the `echotest/` testing
+utilities. Create a `.golangci.yml` configuration enabling `govet`,
+`errcheck`, `staticcheck`, and `gocritic` linters. Update `Makefile`
+to add `lint`, `bench`, and `docs` targets. Update `.github/stale.yml`
+to better categorize stale issue handling with separate rules for bugs,
+features, and questions. Update `CLAUDE.md` with expanded project-
+specific coding conventions and architectural decision records. Add
+per-package coverage targets to `codecov.yml` as described in N11.
+Update `go.mod` and `go.sum` to document the module's dependency
+policy in comments.

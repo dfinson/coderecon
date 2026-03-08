@@ -90,7 +90,7 @@ user must write a custom callback for range validation. Add `min` and
 `max` parameters to `Option` in `params.py` that generate a
 `click.IntRange` type when the annotated type is `int`, and update
 the `OptionInfo` model in `models.py` to carry the bounds through to
-the click parameter construction in `main.py`.
+the click parameter construction in `main.py`. Also update `mkdocs.yml` to add a documentation page for the new `min`/`max` option parameters.
 
 ### N4: Fix Rich help panel not respecting `no_args_is_help` for TyperGroup
 
@@ -208,7 +208,7 @@ as candidates) or a callable that returns candidates. Wire the source
 through `OptionInfo`/`ArgumentInfo` in `models.py`, convert it to a
 click `shell_complete` callback during parameter construction in
 `main.py`, and register it in the completion system in
-`_completion_shared.py`.
+`_completion_shared.py`. Also update `CONTRIBUTING.md` to document how to test completion sources and add a completion development guide.
 
 ### M6: Add sub-app documentation generation with structured output
 
@@ -394,30 +394,33 @@ metadata), `_completion_shared.py` (translatable completion output),
 `params.py` (translatable default help text), and a new `i18n.py`
 module for translation catalog management.
 
-## Non-code focused
+### N11: Update `CITATION.cff` metadata and revise citation format
 
-### N11: Fix outdated or inconsistent metadata in .pre-commit-config.yaml
+The `CITATION.cff` file contains outdated author information and does
+not follow the latest Citation File Format specification. Update the
+author list with current maintainers, add the `repository-code` and
+`license` fields, include the `doi` identifier, and update the
+`date-released` to the upcoming release date.
 
-The project configuration file `.pre-commit-config.yaml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Restructure `mkdocs.yml` navigation and update `pyproject.toml` documentation dependencies
 
-### M11: Add or improve CI workflow and update related documentation
+The `mkdocs.yml` navigation does not include sections for the newer
+features like completion and Rich integration. Restructure the `nav`
+key to add top-level sections for CLI Features, Completion, Rich
+Output, and Migration Guide. Update `mkdocs.env.yml` with matching
+navigation structure. Add a `docs` optional dependency group in
+`pyproject.toml` with pinned documentation build dependencies. Also
+update `.pre-commit-config.yaml` to add a markdown-link-check hook
+for documentation files.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .pre-commit-config.yaml, and update mkdocs.yml to document the CI
-process and badge status for contributors.
+### W11: Comprehensive project metadata and documentation configuration overhaul
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/config.yml`, `.github/ISSUE_TEMPLATE/privileged.yml`, `.pre-commit-config.yaml`, `data/members.yml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Perform a full non-code refresh: update `pyproject.toml` with current
+classifiers, PEP 639 license metadata, and refined dependency
+constraints. Restructure `mkdocs.yml` with a complete navigation
+overhaul including API reference, tutorials, and migration guides.
+Revise `CONTRIBUTING.md` with updated development setup instructions,
+testing guidelines, and documentation contribution workflow. Update
+`SECURITY.md` with the current vulnerability reporting policy.
+Update `.pre-commit-config.yaml` hook versions and add `ruff` and
+`mdformat` hooks. Revise `CITATION.cff` with current metadata.

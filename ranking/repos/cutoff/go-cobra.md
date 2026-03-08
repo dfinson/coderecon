@@ -69,7 +69,7 @@ cobra/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -121,7 +121,9 @@ generator in `doc/rest_docs.go` omits the deprecation notice entirely.
 `GenReSTCustom` renders Synopsis, Examples, Options, and SEE ALSO
 sections but never checks `cmd.Deprecated`. Fix `GenReSTCustom` to
 include a "Deprecated" section with the deprecation message when the
-field is set, placed before the Synopsis section.
+field is set, placed before the Synopsis section. Also update
+`site/content/user_guide.md` to document the deprecation notice
+rendering across all doc output formats.
 
 ### N7: Fix man page doc generator not rendering Deprecated field
 
@@ -166,7 +168,10 @@ a parent's persistent flag with the same name, commands marked
 registered under a hidden parent. Requires recursive traversal in
 `command.go`, a `ConfigWarning` struct with severity and path,
 integration with `DebugFlags()` output, and checks against
-`flag_groups.go` for groups referencing nonexistent flags.
+`flag_groups.go` for groups referencing nonexistent flags. Add a
+custom linter configuration in `.golangci.yml` to detect calls to
+`ValidateTree()` without error checking, and update `README.md` to
+document the tree validation API with usage examples.
 
 ### M2: Add flag value completion for custom types
 
@@ -376,30 +381,46 @@ propagation, a new telemetry module, the hook system, error handling,
 CLI generator templates for instrumented scaffolding, and optional
 dependency management.
 
-## Non-code focused
+### N11: Fix .github/labeler.yml not labeling PRs that modify the doc/ subpackage
 
-### N11: Fix outdated or inconsistent metadata in .golangci.yml
+The `.github/labeler.yml` defines label rules for file path patterns
+but has no entry for `doc/*.go` — changes to documentation generators
+(`man_docs.go`, `md_docs.go`, `rest_docs.go`, `yaml_docs.go`) are not
+automatically labeled in PRs. Add a `documentation` label rule matching
+`doc/**` and `site/**`, and add a `completion` label rule matching
+`*_completions.go` and `shell_completions.go`. Update the `MAINTAINERS`
+file to use a consistent format with GitHub usernames.
 
-The project configuration file `.golangci.yml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Restructure project documentation and contributor resources
 
-### M11: Add or improve CI workflow and update related documentation
+Rewrite `CONTRIBUTING.md` to include a guide on adding new shell
+completion backends, referencing the existing pattern in
+`fish_completions.go`, `zsh_completions.go`, and
+`powershell_completions.go`. Add a section on the doc generation
+subpackage (`doc/`) explaining how `man_docs.go`, `md_docs.go`,
+`rest_docs.go`, and `yaml_docs.go` share the command traversal logic.
+Update `README.md` to include a compatibility matrix showing which Go
+versions are tested in `.github/workflows/test.yml` and which shell
+completions are supported. Create a `doc/README.md` documenting the doc
+generation API and output formats. Update `Makefile` to add a `docs`
+target that runs all four doc generators and outputs to
+`site/content/`. Add `SECURITY.md` with a vulnerability disclosure
+process and response timeline.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .golangci.yml, and update site/content/user_guide.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul CI pipeline and developer tooling configuration
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/labeler.yml`, `.github/dependabot.yml`, `.golangci.yml`, `.vscode/mcp.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Expand `.github/workflows/test.yml` to add a dedicated lint job using
+`.golangci.yml` configuration, a documentation generation test that
+runs all four doc generators (`man_docs.go`, `md_docs.go`,
+`rest_docs.go`, `yaml_docs.go`) and verifies output, and a completion
+script generation test that produces all four shell scripts and
+validates their syntax. Add `.github/dependabot.yml` with Go module
+dependency update entries on a weekly schedule. Update `Makefile` to
+add `lint`, `generate`, and `verify-generated` targets. Create a
+`site/content/changelog.md` generated from categorized release notes.
+Update `.github/copilot-instructions.md` with project-specific coding
+guidelines for the completion engine and doc generators. Update
+`go.mod` to add comment annotations explaining the minimum Go version
+requirement and the `go.yaml.in/yaml/v3` dependency usage. Add
+`.github/workflows/labeler.yml` verification that the labeler config
+matches the current file structure.

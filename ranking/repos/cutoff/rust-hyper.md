@@ -117,7 +117,7 @@ src/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -184,7 +184,9 @@ the default is `None` (unlimited). Server instances receiving requests
 with thousands of headers consume excessive memory in `httparse`. Set
 a sensible default (e.g., 100) and document the option, matching the
 behavior of the client-side builder where `max_headers` also defaults
-to unlimited.
+to unlimited. Also add the new default value to `CHANGELOG.md` as a
+behavior change and update `docs/MSRV.md` to note that this default
+requires `httparse` version 1.9+.
 
 ### N8: Fix Rewind I/O not correctly replaying partial reads
 
@@ -236,7 +238,10 @@ connections. When the limit is exceeded, return an error through the
 body stream. Integrate with `server/conn/http1.rs` and
 `server/conn/http2.rs` builder options, the `Incoming` body in
 `body/incoming.rs`, and the H1 dispatch in `proto/h1/dispatch.rs`
-for early rejection with `413 Payload Too Large`.
+for early rejection with `413 Payload Too Large`. Also update
+`Cargo.toml` to add the `body-size-limit` feature flag that gates
+the size enforcement code, and document the feature in
+`docs/ROADMAP.md` under the stability section.
 
 ### M3: Implement HTTP/1.1 pipelining support for the server
 
@@ -459,30 +464,48 @@ side metrics, `proto/h1/` and `proto/h2/` for protocol-level metrics,
 `body/` for transfer metrics, `error.rs` for error classification
 metrics, and `common/time.rs` for latency measurement.
 
-## Non-code focused
+### N11: Fix docs/MSRV.md not documenting feature-gated MSRV differences
 
-### N11: Fix outdated or inconsistent metadata in capi/cbindgen.toml
+The `docs/MSRV.md` file states the project's minimum supported Rust
+version but does not document that enabling optional features (such
+as `http2` which depends on the `h2` crate, or `ffi` which requires
+nightly for C-ABI exports) may require a newer Rust version than the
+base MSRV declared in `Cargo.toml`. Audit all optional dependencies
+in `Cargo.toml` for their `rust-version` requirements, and add a
+feature-MSRV compatibility table to `docs/MSRV.md` listing each
+feature flag and its effective MSRV. Also update `CONTRIBUTING.md`
+to require contributors to check feature-MSRV compatibility when
+adding new optional dependencies.
 
-The project configuration file `capi/cbindgen.toml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Add CI benchmark workflow and update Cargo.toml feature documentation
 
-### M11: Add or improve CI workflow and update related documentation
+The `.github/workflows/` directory has a `bench.yml` workflow but it
+only runs on manual dispatch and does not track performance
+regressions across PRs. Update `bench.yml` to run on every PR
+targeting `master`, archive benchmark results as CI artifacts, and
+post a comment with performance comparison against the base branch.
+Update `Cargo.toml` to add documentation comments for each feature
+flag in the `[features]` section explaining what it enables and its
+stability status. Add a `.github/workflows/external-types.toml`
+configuration that lists allowed public-API types. Update
+`CHANGELOG.md` with a "Performance" subsection template for tracking
+benchmark changes per release.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in capi/cbindgen.toml, and update capi/README.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul project documentation and release configuration
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.yml`, `.github/ISSUE_TEMPLATE/feature_request.md`, `capi/cbindgen.toml`, `Cargo.toml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Comprehensively update all non-code project files for the hyper 1.x
+stable release series. Rewrite `docs/ROADMAP.md` to reflect the
+post-1.0 stability guarantees, HTTP/3 timeline, and planned feature
+additions. Update `docs/VISION.md` to describe the three-crate
+ecosystem (hyper, hyper-util, hyper-tls) and separation of concerns.
+Revise `CONTRIBUTING.md` to add sections on the review process,
+bugfix backporting policy, and security-sensitive change procedures.
+Update `Cargo.toml` to reorganize features into groups (`client`,
+`server`, `http1`, `http2`, `ffi`) with inline documentation
+comments. Add a `SECURITY.md` file with vulnerability reporting
+instructions, supported version matrix, and disclosure timeline.
+Update `.github/workflows/CI.yml` to add MIRI testing for unsafe
+code in `proto/h1/io.rs` and `common/buf.rs`, add a semver-checks
+job using `cargo-semver-checks`, and add a docs-deployment job.
+Update `docs/TENETS.md` with correctness-first HTTP implementation
+principles.

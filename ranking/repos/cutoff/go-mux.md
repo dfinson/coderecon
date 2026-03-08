@@ -50,7 +50,7 @@ mux/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -80,7 +80,9 @@ registration silently overwrites the first in the `namedRoutes` map
 in `route.go`. `Router.Get("api")` then returns the wrong route with
 no warning. The existing check in `Name()` only prevents renaming the
 same route. Fix `Name()` to return an error when the name is already
-registered by a different route in the `namedRoutes` map.
+registered by a different route in the `namedRoutes` map. Update
+`doc.go` to document the name uniqueness constraint and the new error
+return behavior.
 
 ### N4: Fix CORSMethodMiddleware not including OPTIONS in the Allow header
 
@@ -156,7 +158,10 @@ of another without `PathPrefix` (warning), and routes with overlapping
 regexp patterns in path variables. Requires path template comparison
 logic in `regexp.go`, a `RouteConflict` struct with severity and
 affected routes, integration with `Router.Walk()` for route collection,
-and clear formatting of conflict reports.
+and clear formatting of conflict reports. Add a "Route Diagnostics"
+section to `README.md` documenting `CheckConflicts()` usage with
+examples, and update the `Makefile` to add a `vet` target that runs
+the conflict checker.
 
 ### M2: Add request body content-type based routing
 
@@ -352,30 +357,42 @@ management, route-level push configuration, a push resource registry,
 middleware support for protocol-specific behavior, and test helpers
 for HTTP/2 and QUIC simulation.
 
-## Non-code focused
+### N11: Fix .github/workflows/test.yml not testing the latest Go versions
 
-### N11: Fix outdated or inconsistent metadata in .vscode/mcp.json
+The test workflow matrix specifies `go: ['1.20','1.21']` but newer Go
+releases (1.22, 1.23) are available. The `go.mod` declares `go 1.20`
+as the minimum version but the CI matrix does not verify compatibility
+with current releases. Update `.github/workflows/test.yml` to add Go
+1.22 and 1.23 to the test matrix. Also add `.editorconfig` rules for
+`*.yml` files to enforce 2-space indentation, consistent with the
+existing workflow file formatting.
 
-The project configuration file `.vscode/mcp.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Add comprehensive project documentation and contributor resources
 
-### M11: Add or improve CI workflow and update related documentation
+Create a `CONTRIBUTING.md` with guidelines for adding new matchers to
+`route.go`, extending the regexp system in `regexp.go`, and writing
+middleware in `middleware.go`. Add a `docs/` directory with
+`architecture.md` describing the Router → Route → regexp matching
+pipeline in `mux.go`, `route.go`, and `regexp.go`. Create a
+`docs/examples.md` with common usage patterns: subrouters, middleware
+chains, path variable extraction, and CORS configuration. Update
+`README.md` to link to the new documentation and add badges for CI
+status from `.github/workflows/test.yml` and Go report card. Update
+the `LICENSE` copyright year to current.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .vscode/mcp.json, and update README.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul CI pipelines and project governance
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/workflows/verify.yml`, `.github/workflows/test.yml`, `.vscode/mcp.json`, `README.md`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Expand `.github/workflows/test.yml` to add a race condition detection
+job (`go test -race`), a static analysis job using `golangci-lint`, and
+a benchmark job that runs `bench_test.go` and compares results with the
+base branch. Add a `.github/workflows/release.yml` for automated GitHub
+release creation with changelog generation from `git log`. Create a
+`.golangci.yml` configuration enabling `govet`, `errcheck`,
+`staticcheck`, `ineffassign`, and `gosec` linters with appropriate
+exclusions for test files. Add a `SECURITY.md` with a vulnerability
+disclosure process and response timeline. Update `Makefile` with
+`lint`, `bench`, and `coverage` targets. Create a
+`.github/copilot-instructions.md` with project-specific coding
+conventions for the router matching logic in `regexp.go` and
+`mux.go`. Update `go.mod` comments to document the minimum Go version
+policy.

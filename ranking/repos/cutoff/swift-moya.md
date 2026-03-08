@@ -149,7 +149,9 @@ request and response headers. The `Configuration` struct has a
 `logOptions` set but no mechanism to redact sensitive headers like
 `Authorization`, `Cookie`, or `Set-Cookie`. Fix by adding a
 `sensitiveHeaders: Set<String>` configuration option and replacing
-their values with `[REDACTED]` in the log output.
+their values with `[REDACTED]` in the log output. Also update
+`docs/Plugins.md` to document the new `sensitiveHeaders`
+configuration option with usage examples.
 
 ### N5: Fix Response.filter(statusCodes:) not including the upper bound of the range
 
@@ -218,6 +220,22 @@ the `RequestTypeWrapper` for stubbed requests does not support
 request flow to apply credentials to the `URLRequest` directly
 before creating the stub response.
 
+### N11: Fix docs/Plugins.md not documenting plugin lifecycle ordering constraints
+
+The `docs/Plugins.md` documentation describes each built-in plugin
+individually but does not explain the order in which plugin hooks
+(`prepare`, `willSend`, `didReceive`, `process`) execute when
+multiple plugins are registered. Users combining
+`AccessTokenPlugin` with `NetworkLoggerPlugin` may see the
+`Authorization` header logged before it is applied, depending on
+plugin order. The `docs/Providers.md` file references plugins but
+does not link to `docs/Plugins.md`. The `.github/Issue_template.md`
+does not ask reporters to list their registered plugins and their
+order. Fix `docs/Plugins.md` to add a "Plugin Ordering" section
+with a lifecycle sequence diagram, add a cross-reference link from
+`docs/Providers.md` to the plugins documentation, and add a
+"Registered plugins" field to `.github/Issue_template.md`.
+
 ## Medium
 
 ### M1: Implement request interceptor plugin for token refresh flow
@@ -238,7 +256,9 @@ automatically sends conditional requests. Requires
 with in-memory default implementation, ETag and Last-Modified
 header extraction, conditional request header injection via
 `prepare`, cache hit/miss metrics, configurable per-endpoint TTL,
-and tests.
+tests, and a new section in `docs/Plugins.md` documenting the
+caching plugin configuration and an update to `Changelog.md`
+with the new feature entry.
 
 ### M3: Implement request batching for multiple concurrent API calls
 
@@ -311,6 +331,27 @@ Requires extending `MoyaProvider.swift` with part-aware progress,
 `MultipartProgress` struct with part name and fraction,
 Alamofire `MultipartFormData` integration for per-part byte
 counting, aggregated total progress, and tests.
+
+### M11: Update docs/MigrationGuides/ and Changelog.md for version migration documentation
+
+The `docs/MigrationGuides/` directory contains seven migration
+guides (`migration_8_to_9.md` through `migration_14_to_15.md`) but
+the guides do not follow a consistent format — some include code
+examples and others only have prose descriptions. The
+`Changelog.md` does not cross-reference migration guides for
+breaking-change entries. The `docs_CN/` Chinese documentation
+directory is missing migration guides entirely (it has a
+`Development.md` not present in `docs/` but lacks the
+`MigrationGuides/` subdirectory). The `Contributing.md` does not
+mention the requirement to update migration guides when introducing
+breaking API changes. The `.circleci/config.yml` CI configuration
+does not verify that documentation builds successfully.
+Standardize all migration guides in `docs/MigrationGuides/` to a
+consistent template, add migration guide cross-references to
+`Changelog.md` breaking-change entries, add Chinese migration
+guide stubs to `docs_CN/`, update `Contributing.md` with migration
+guide requirements, and add a docs build verification step to
+`.circleci/config.yml`.
 
 ## Wide
 
@@ -434,30 +475,28 @@ integration, and test report generation. Changes span
 request/response snapshot serialization, diff output for
 mismatches, XCTest integration, and test examples.
 
-## Non-code focused
+### W11: Overhaul docs/, docs_CN/, and CI configuration
 
-### N11: Fix outdated or inconsistent metadata in .circleci/config.yml
-
-The project configuration file `.circleci/config.yml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
-
-### M11: Add or improve CI workflow and update related documentation
-
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .circleci/config.yml, and update docs/README.md to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.circleci/config.yml`, `.github/Pull_request_template.md`, `.circleci/config.yml`, `.swiftlint.yml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The `docs/` and `docs_CN/` documentation directories are out of
+sync — `docs/` has `Testing.md` but `docs_CN/` does not, while
+`docs_CN/` has `Development.md` but `docs/` does not. The
+`docs/README.md` index page does not link to all documentation
+files. The `docs/Releasing.md` release guide references
+CocoaPods trunk push but does not mention Swift Package Manager
+tagging or the `.circleci/config.yml` CI pipeline. The
+`Vision.md` and `Vision_CN.md` project vision documents reference
+RxSwift but do not mention Combine, which is now a supported
+reactive framework. The `Readme_CN.md` Chinese README is not
+kept in sync with `Readme.md` — it is missing the Combine
+installation instructions. The `.swiftlint.yml` configuration
+has no `excluded` paths for generated files or test fixtures.
+The `codecov.yml` code coverage configuration does not set a
+minimum coverage threshold. The `.github/stale.yml` stale issue
+bot configuration uses a 60-day timeout with no exempt labels.
+Sync `docs/` and `docs_CN/` to have matching files, update
+`docs/README.md` with complete links, update
+`docs/Releasing.md` with SPM release steps, update
+`Vision.md`/`Vision_CN.md` to mention Combine, sync
+`Readme_CN.md` with `Readme.md`, configure `.swiftlint.yml`
+exclusions, set a coverage threshold in `codecov.yml`, and
+add exempt labels to `.github/stale.yml`.

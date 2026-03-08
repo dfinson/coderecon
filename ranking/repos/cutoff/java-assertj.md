@@ -127,7 +127,7 @@ assertj/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -159,7 +159,10 @@ the `format` method uses `String.format` internally. When users provide
 assertion descriptions containing literal `%` characters via `describedAs("100% done")`,
 the formatter throws `java.util.UnknownFormatConversionException`. Fix
 `format` to escape `%` characters in the description text before passing
-to `String.format`.
+to `String.format`. Also update `CONTRIBUTING.md` to add a
+"Error Message Formatting" section documenting the string formatting
+conventions and the requirement to escape user-provided text before
+passing to `String.format`.
 
 ### N4: Fix AbstractDateAssert.isCloseTo not respecting custom date comparator
 
@@ -241,7 +244,10 @@ evaluate a JSONPath expression. Requires a new `AbstractJsonAssert` class
 in `api/`, JSONPath evaluation logic in `internal/Json.java` using the
 library's existing comparison infrastructure, error message factories
 in `error/ShouldHaveJsonPath.java` and `error/ShouldHaveJsonPathValue.java`,
-and integration into `AbstractStringAssert` for fluent chaining.
+and integration into `AbstractStringAssert` for fluent chaining. Also
+add the JSONPath library dependency (`com.jayway.jsonpath:json-path`)
+to `assertj-core/pom.xml` as an `<optional>true</optional>` dependency
+and update `assertj-bom/pom.xml` to include it in the BOM.
 
 ### M2: Add temporal assertion support for java.time.YearMonth
 
@@ -436,30 +442,54 @@ import rewriting, Maven/Gradle plugin for bulk migration, dry-run
 mode with diff output, and integration tests with sample Hamcrest
 test files.
 
-## Non-code focused
+### N11: Fix assertj-bom/pom.xml not listing assertj-guava in the bill of materials
 
-### N11: Fix outdated or inconsistent metadata in .idea/inspectionProfiles/Project_Default.xml
+The `assertj-bom/pom.xml` defines a Maven BOM for consistent version
+management but only includes `assertj-core` — it does not include
+`assertj-guava` as a managed dependency. Projects importing the BOM
+via `<dependencyManagement>` must separately specify the
+`assertj-guava` version, risking version mismatches. Add
+`assertj-guava` to the `assertj-bom/pom.xml`
+`<dependencyManagement>` section with `${project.version}`. Also
+add a comment block in the BOM POM explaining the inclusion criteria
+for managed artifacts.
 
-The project configuration file `.idea/inspectionProfiles/Project_Default.xml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Add binary compatibility checking to CI and update assertj-parent/pom.xml
 
-### M11: Add or improve CI workflow and update related documentation
+The `.github/workflows/binary-compatibility.yml` workflow exists but
+uses an outdated `japicmp-maven-plugin` configuration that does not
+check for `@API(status = INTERNAL)` accidental exposure. Update the
+`assertj-parent/pom.xml` to configure `japicmp-maven-plugin` with
+`<onlyModified>true</onlyModified>` and exclusion patterns for
+internal packages (`org.assertj.core.internal.*`). Update the CI
+workflow to run compatibility checks against the latest released
+version rather than a hardcoded baseline. Add an
+`.editorconfig` rule enforcing 2-space indentation for XML files
+(POM files). Update `.github/dependabot.yml` to add Maven ecosystem
+monitoring with weekly schedule. Add a `RELEASING.md` document
+describing the release process, version bump procedure, and
+compatibility verification steps.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .idea/inspectionProfiles/Project_Default.xml, and update SECURITY.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul Maven build, CI workflows, migration scripts, and documentation
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`, `.idea/inspectionProfiles/Project_Default.xml`, `assertj-tests/pom.xml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Comprehensively update all non-code project files for the AssertJ 4.x
+release. Restructure the root `pom.xml` to add
+`maven-enforcer-plugin` with minimum Maven 3.8.8 and JDK 17 rules.
+Update `assertj-parent/pom.xml` to configure `maven-surefire-plugin`
+with `--add-opens` for JDK 17+ module access, add
+`maven-compiler-plugin` `<release>17</release>` configuration, and
+add `spotless-maven-plugin` for consistent code formatting. Update
+`.github/workflows/main.yml` to add a JDK 17/21 test matrix, add
+a `qodana.yml` code quality scan with baseline, and add a
+`release.yml` workflow for automated Maven Central publishing via
+`maven-deploy-plugin`. Update the migration scripts in `scripts/`
+(`convert-junit-assertions-to-assertj.sh`,
+`convert-junit5-assertions-to-assertj.sh`) to add support for JUnit
+5.10+ assertion patterns and add a new
+`convert-hamcrest-to-assertj.sh` script. Update `README.md` to add
+a migration guide from AssertJ 3.x to 4.x, refresh the feature
+overview, and add a comparison table with other assertion libraries.
+Update `CONTRIBUTING.md` with the updated build process, test naming
+conventions, and PR review checklist. Add `SECURITY.md` with
+vulnerability reporting instructions. Update `CODE_OF_CONDUCT.md`
+to the Contributor Covenant v2.1.

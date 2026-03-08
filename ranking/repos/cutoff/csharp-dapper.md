@@ -99,6 +99,9 @@ synchronous paths.
 Columns like `first_name` fail to map to a property `FirstName`. Fix
 `DefaultTypeMap.cs` to support an underscore-removal convention so
 `first_name` maps to `FirstName` without requiring a custom type map.
+Also update `Readme.md` to document the new underscore-removal
+convention under a "Column Mapping" section, and add an example
+showing both exact-match and underscore-removal behaviour.
 
 ### N5: Fix GridReader.Read<T> not advancing to next result set on empty results
 
@@ -146,6 +149,19 @@ the first element, materializing all rows before discarding them. Fix
 the method in `SqlMapper.cs` to read only the first row from the
 `IDataReader` and immediately dispose the reader.
 
+### N11: Update Dapper.csproj target frameworks and Directory.Build.props packaging metadata
+
+The `Dapper.csproj` still targets `net461` and `netstandard2.0`
+alongside `net8.0`, but the `Directory.Build.props` sets
+`CheckEolTargetFramework` to `false` to suppress end-of-life
+warnings. Add `net9.0` to the `TargetFrameworks` list in
+`Dapper.csproj`, update `Directory.Packages.props` to pin the
+new `Microsoft.Bcl.AsyncInterfaces` version for `netstandard2.0`,
+and update the `PackageReleaseNotes` URL in `Directory.Build.props`
+to point to the latest release page. Also update `global.json` to
+set the minimum SDK version to `9.0.100` with `rollForward` set
+to `latestFeature`.
+
 ## Medium
 
 ### M1: Add QueryUnbufferedAsync<T> streaming support
@@ -191,7 +207,10 @@ uses `SqlBulkCopy` for SQL Server and batched `INSERT` statements for
 other providers. Support column mapping from property names, custom
 batch sizes, and a `CancellationToken`. Changes span `SqlMapper.cs`
 for the public API, a new `BulkInsertHandler.cs` for provider-specific
-logic, and `DefaultTypeMap.cs` for column mapping.
+logic, and `DefaultTypeMap.cs` for column mapping. Also update
+`Dapper.csproj` to add a conditional `PackageReference` for
+`Microsoft.Data.SqlClient` under the bulk-insert feature flag, and
+add the new public API surface to `PublicAPI.Unshipped.txt`.
 
 ### M6: Implement query result caching with TTL support
 
@@ -238,6 +257,18 @@ Changes span `CommandDefinition.cs` for the builder methods,
 `SqlMapper.cs` for hint injection during command preparation, and
 `FeatureSupport.cs` for provider detection.
 
+### M11: Add GitHub Actions CI matrix and update AppVeyor configuration
+
+The CI configuration in `appveyor.yml` runs tests only on Windows with
+local database instances. The `.github/workflows/main.yml` workflow
+runs on Ubuntu but lacks multi-database version testing. Add a test
+matrix to `.github/workflows/main.yml` that runs against PostgreSQL 15
+and 16, MySQL 8.0 and 8.4, and SQL Server 2019 and 2022 using service
+containers. Update `appveyor.yml` to add a `test_script` section that
+runs `dotnet test` with `--logger trx` for structured test output.
+Also add a `.github/FUNDING.yml` sponsorship link and update the
+`nuget.config` to add the `dotnet-tools` feed for CI tool restoration.
+
 ## Wide
 
 ### W1: Implement full async pipeline with IAsyncEnumerable throughout
@@ -270,6 +301,11 @@ custom type handlers, nullable reference types, and records. Requires
 a new `Dapper.AOT/` project with the source generator, integration
 with `SqlMapper.TypeDeserializerCache.cs` to prefer generated mappers,
 and updates to `DefaultTypeMap.cs` and `SqlMapper.cs` for fallback.
+Also add a new `Dapper.AOT.csproj` project file with analyzer
+packaging configuration, update `Dapper.sln` to include the new
+project, add shared build properties in `Directory.Build.props` for
+the source generator output, and register the new package version in
+`version.json`.
 
 ### W4: Add comprehensive diagnostic and tracing system
 
@@ -346,30 +382,17 @@ readers per provider, IL-emit or T4 code generation, integration with
 `SqlMapper.cs` for registration, `DynamicParameters.cs` for parameter
 validation, and `FeatureSupport.cs` for provider capabilities.
 
-## Non-code focused
+### W11: Overhaul documentation site and build automation
 
-### N11: Fix outdated or inconsistent metadata in signatures/version1/cla.json
-
-The project configuration file `signatures/version1/cla.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
-
-### M11: Add or improve CI workflow and update related documentation
-
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in signatures/version1/cla.json, and update docs/index.md to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/workflows/main.yml`, `signatures/version1/cla.json`, `version.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The `docs/` directory contains a `docs.csproj`, `index.md`, and
+sponsor-related markdown, but the documentation site lacks API
+reference generation, versioned docs, and search. Add a DocFX
+configuration (`docs/docfx.json`) that generates API docs from the
+`Dapper.csproj` XML documentation comments, update `docs/index.md`
+with a getting-started guide and migration notes, and add a
+`docs/_config.yml` for GitHub Pages configuration. Update
+`Dapper.sln` to include the docs project in a `Solution Items`
+folder, add a `docs` build step to `.github/workflows/main.yml` that
+runs `docfx build` and deploys to GitHub Pages, and update
+`Directory.Build.props` to set `GenerateDocumentationFile` to `true`
+across all projects so XML docs are always produced.

@@ -201,7 +201,9 @@ strings before serialization, which is error-prone on Windows where
 `path::string()` and `path::u8string()` differ. Add a `to_json`
 overload for `std::filesystem::path` that serializes via
 `path::string()` (or `u8string()` for UTF-8 correctness), guarded
-by the same feature-detection macro used in `std_fs.hpp`.
+by the same feature-detection macro used in `std_fs.hpp`. Also update
+`ChangeLog.md` to document the new overload and update `FILES.md`
+to list `detail/meta/std_fs.hpp` in the filesystem support section.
 
 ## Medium
 
@@ -253,7 +255,10 @@ document against a JSON Schema (draft-07) definition. Support `type`,
 `maximum`, `allOf`, `anyOf`, `oneOf`, `not`, and `$ref` resolution.
 Changes span a new `detail/schema/` directory with a `validator.hpp`,
 modifications to `basic_json` for the public API, and
-`detail/json_pointer.hpp` for `$ref` resolution.
+`detail/json_pointer.hpp` for `$ref` resolution. Also update
+`CMakeLists.txt` to add the new `detail/schema/` headers to the
+install target, and update `docs/README.md` with a "JSON Schema
+Validation" section documenting the supported keywords.
 
 ### M6: Implement efficient binary search for sorted JSON arrays
 
@@ -358,7 +363,10 @@ span splitting `detail/input/binary_reader.hpp` into per-format
 readers, splitting `detail/output/binary_writer.hpp` into per-format
 writers, a new `detail/binary/codec_registry.hpp`, updates to
 `basic_json` for codec-based API, and `detail/input/input_adapters.hpp`
-for peek-ahead support needed by auto-detection.
+for peek-ahead support needed by auto-detection. Also update the
+`Makefile` to add `fuzz_testing_bjdata` target for the BJData codec,
+and update `FILES.md` to document the new `detail/binary/` directory
+structure.
 
 ### W5: Implement JSON-LD context processing and expansion
 
@@ -435,31 +443,44 @@ and evaluator, integration with `basic_json` for the query API,
 and `detail/input/lexer.hpp` for reusing the tokenizer in expression
 parsing.
 
+### N11: Update CITATION.cff metadata and Meson build configuration
 
-## Non-code focused
+The `CITATION.cff` file specifies version `3.12.0` and a fixed
+release date but does not include keywords, a DOI, or contributor
+entries beyond the primary author. Update `CITATION.cff` to add
+relevant keywords (`json`, `c++`, `header-only`, `serialization`),
+add the repository DOI, and list major contributors. Also update
+`meson.build` to set the project version from a single source of
+truth (matching the version in `CMakeLists.txt`) and ensure the
+`Package.swift` Swift package manifest declares the correct minimum
+Swift tools version.
 
-### N11: Fix outdated or inconsistent metadata in tools/amalgamate/config_json_fwd.json
+### M11: Add Makefile targets for binary format testing and update documentation
 
-The project configuration file `tools/amalgamate/config_json_fwd.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+The `Makefile` defines fuzz-testing targets for JSON, BSON, CBOR,
+MessagePack, and UBJSON formats but is missing a target for BJData
+and provides no `run_all_fuzz` aggregate target. Add
+`fuzz_testing_bjdata` and `run_all_fuzz` targets to the `Makefile`.
+Also add a `check-format` target that runs `clang-format --dry-run`
+on all headers in `include/nlohmann/`. Update `docs/README.md` to
+add a "Fuzzing" section documenting how to run the fuzz targets.
+Update `.github/CONTRIBUTING.md` to mention the fuzz-testing
+targets and how to add corpus files. Also update
+`.github/workflows/ubuntu.yml` to add a CI job that runs
+`make check-amalgamation` on every push.
 
-### M11: Add or improve CI workflow and update related documentation
+### W11: Overhaul CI and build configuration across all platforms
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in `tools/amalgamate/config_json_fwd.json`, and update `docs/README.md` to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug.yaml`, `.github/ISSUE_TEMPLATE/config.yml`, `tools/amalgamate/config_json_fwd.json`, `tools/amalgamate/config_json.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The CI configuration spans `.cirrus.yml` (FreeBSD),
+`.github/workflows/ubuntu.yml`, `.github/workflows/macos.yml`,
+`.github/workflows/windows.yml`, and several analysis workflows
+(CodeQL, Semgrep, Flawfinder, Scorecards). Synchronize the compiler
+matrix: add GCC 14 and Clang 18 to the Ubuntu workflow, add an
+Apple Silicon runner to the macOS workflow, and add ARM64 Windows to
+the Windows workflow. Update `CMakeLists.txt` to add a
+`JSON_SystemInclude` option for header-only embedding scenarios.
+Update `.cirrus.yml` to pin the FreeBSD image version and add a
+Meson build task alongside the existing CMake one. Update
+`ChangeLog.md` with a "Build & CI" section, update `.reuse/dep5`
+with copyright info for any new files, and update
+`.github/dependabot.yml` to monitor GitHub Actions version updates.

@@ -90,7 +90,7 @@ src/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -191,7 +191,10 @@ shift to an array of dates and returns the shifted array. Unlike calling
 (`"clamp"` or `"reject"`) for month-end overflow cases. Requires a new
 `transpose/` module under `src/`, integration with `add/` for the
 underlying arithmetic, a new `OverflowPolicy` type in `types.ts`, and
-a corresponding `fp/` curried variant.
+a corresponding `fp/` curried variant. Add a `./transpose` export
+entry to `package.json`'s `exports` map with CJS and ESM sub-paths,
+and document the function with usage examples in `README.md` under the
+"Date Helpers" section.
 
 ### M2: Add ISO 8601 duration parsing function
 
@@ -201,7 +204,10 @@ durations but there is no parser for the reverse direction. Requires a
 new `parseISODuration/` module under `src/`, a parser for the ISO 8601
 duration grammar handling both period and time components, validation
 for negative or fractional values, proper type integration with
-`Duration` from `types.ts`, and an `fp/` curried variant.
+`Duration` from `types.ts`, and an `fp/` curried variant. Update
+`CONTRIBUTING.md` to document the module creation pattern for new
+parser functions, and add a `parseISODuration` entry to the function
+index in `docs/`.
 
 ### M3: Implement scoped default options via createContext
 
@@ -394,30 +400,49 @@ module, integration with `types.ts` types for inference, validators for
 each major type, error message formatting using locale-aware date
 rendering via `format/`, and `fp/` curried variants.
 
-## Non-code focused
+### N11: Fix package.json exports map missing fp/ sub-path entries for recently added functions
 
-### N11: Fix outdated or inconsistent metadata in mise.toml
+The `exports` field in `package.json` has explicit entries for each
+public function with CJS and ESM sub-paths, but several recently added
+functions (e.g., `previousDay`, `nextDay`, `intlFormatDistance`) lack
+corresponding `/fp/previousDay`, `/fp/nextDay`, `/fp/intlFormatDistance`
+sub-path entries. Consumers using the `fp/` curried variants of these
+functions receive a "Package subpath not defined" error. Audit all
+`fp/` wrapper modules under `src/fp/` and add matching CJS and ESM
+sub-path exports to `package.json` for each that currently lacks an
+entry.
 
-The project configuration file `mise.toml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Add CI workflow for bundle size tracking and API diff reporting
 
-### M11: Add or improve CI workflow and update related documentation
+The `.github/workflows/` directory has seven workflow files
+(`node_tests.yaml`, `browser_tests.yaml`, `code_quality.yaml`,
+`coverage.yaml`, `smoke_tests.yaml`, `tz_tests.yaml`,
+`attw_tests.yaml`) but none track bundle size changes or API surface
+changes across PRs. Add a new `.github/workflows/bundle_size.yaml`
+workflow that builds the package, measures the gzip size of
+`cdn.min.js` (referenced as the `jsdelivr` entry in `package.json`),
+compares it with the base branch, and posts a PR comment with the size
+delta. Also add API surface diffing by running `typedoc` (configured in
+`typedoc.json`) against both branches and reporting added/removed
+exports. Add `size-limit` configuration to `package.json` for local
+bundle size checking, and update `pnpm-workspace.yaml` if a new scripts
+workspace is needed for the tooling.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in mise.toml, and update typedoc.json to document the CI
-process and badge status for contributors.
+### W11: Overhaul documentation and developer tooling configuration
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/issue-report.md`, `.github/workflows/code_quality.yaml`, `mise.toml`, `.devcontainer/devcontainer.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Rewrite `CONTRIBUTING.md` to include a locale development guide with
+step-by-step instructions for creating a new locale directory under
+`src/locale/`, referencing the existing locale structure
+(`formatDistance`, `formatRelative`, `localize`, `formatLong`). Add a
+`docs/migration-guide-v3-v4.md` covering API changes, updated import
+paths, and `package.json` export map differences between v3 and v4.
+Update `typedoc.json` to generate per-module documentation pages with
+cross-references between related functions (e.g., linking `addDays` to
+`subDays`, `differenceInDays`). Add a `docs/architecture.md` describing
+the module structure, `fp/` curried variant generation pattern, and
+`_lib/` internal helper conventions. Update `tsconfig.json` references
+to include a new documentation build path. Add missing entries to
+`.prettierrc` for consistent markdown formatting in `docs/` and locale
+`README.md` files. Update `.oxlintrc.json` to enable documentation
+linting rules. Update `babel.config.json` to add a `docs` environment
+for documentation build tooling.

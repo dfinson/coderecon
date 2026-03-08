@@ -210,6 +210,9 @@ symlinks with `realpath()` before applying the exclusion list.
 When two suites share a name, the `--testsuite` CLI filter matches
 only the first one, silently dropping tests. Fix the loader to detect
 and report duplicate test suite names during configuration parsing.
+Also update `phpunit.xsd` to add an XSD `unique` constraint on the
+`name` attribute of `<testsuite>` elements so that XML-level
+validation catches duplicates before the loader runs.
 
 ### N9: Fix JUnitXmlLogger emitting invalid XML for assertion messages with CDATA
 
@@ -227,6 +230,20 @@ rather than simply logging the subscriber failure. Fix the dispatcher
 to catch subscriber exceptions during `Prepared` events and report
 them via a warning instead.
 
+### N11: Fix `phpunit.xsd` schema not validating the `displayDetailsOnPhpunitDeprecations` attribute
+
+The `phpunit.xsd` XML Schema file defines the `phpUnitType` complex
+type with attributes for `beStrictAboutOutputDuringTests`,
+`failOnRisky`, `failOnWarning`, and other settings, but does not
+include the `displayDetailsOnPhpunitDeprecations` attribute that was
+added in PHPUnit 13.1 and is used in the project's own `phpunit.xml`.
+This causes XML validators to report the attribute as invalid. Add
+the missing `xs:attribute` definition to `phpunit.xsd` with
+`type="xs:boolean"` and `default="false"`. Also update
+`schema/13.0.xsd` to add the attribute for consistency, and update
+`DEPRECATIONS.md` to reference the schema version where the attribute
+was introduced.
+
 ## Medium
 
 ### M1: Add configurable assertion failure diff output format
@@ -237,7 +254,9 @@ Changes span `TextUI/Command/Command.php` for argument parsing,
 `TextUI/Configuration/Configuration.php` for the setting,
 `TextUI/Configuration/Merger.php` for CLI-to-config mapping, and
 `Framework/Assert.php` plus `Constraint/IsEqual.php` for invoking the
-selected formatter.
+selected formatter. Also update `.github/workflows/ci.yaml` to add a
+CI matrix entry that runs the test suite with `--diff-format=json` to
+ensure the new output mode does not regress.
 
 ### M2: Implement retry-on-failure support for flaky tests
 
@@ -328,6 +347,21 @@ JSON, serialized PHP, and text snapshot formats. Changes span
 implementation, and `TextUI/Command/Command.php` for
 `--update-snapshots` flag support.
 
+### M11: Update build configuration and CI for PHAR reproducibility
+
+The `build.xml` Ant configuration provides targets for dependency
+installation and PHAR building but does not produce reproducible
+PHAR archives (timestamps and file ordering vary between builds).
+Add a `reproducible-phar` target to `build.xml` that normalises
+file timestamps and sorts entries deterministically. Update
+`composer.json` to add a `scripts.build` command that invokes the
+Ant target for environments without Ant installed. Update
+`.github/workflows/ci.yaml` to add a `phar-build` job that builds
+the PHAR and verifies its checksum matches across two independent
+builds. Update `phpstan.neon` to add the `build/` directory
+to `excludePaths` so the PHAR-scoped source files are not
+analysed alongside the main source.
+
 ## Wide
 
 ### W1: Implement attribute-based test lifecycle hooks with priority ordering
@@ -416,7 +450,11 @@ for tag parsing, `Metadata/` for tag expression evaluation,
 `Runner/Filter/` for tag-based filtering with boolean expressions,
 `TextUI/Command/Command.php` for enhanced `--filter` syntax,
 `TextUI/Configuration/Loader.php` for XML tag groups, and
-`Runner/TestSuiteLoader.php` for tag-based suite pruning.
+`Runner/TestSuiteLoader.php` for tag-based suite pruning. Also update
+`phpunit.xsd` to add a `<tagGroups>` element definition that allows
+named tag groups to be defined in `phpunit.xml`, and update
+`build.xml` to add a `tagged-tests` target that runs only tests
+tagged with `ci` for fast feedback during development.
 
 ### W8: Add mutation testing integration with constraint-aware mutant detection
 
@@ -456,30 +494,22 @@ automatic skip propagation when a dependency suite fails. Changes span
 `Framework/TestCase.php` for cross-suite fixture access,
 and `Event/Events/TestSuite/` for dependency lifecycle events.
 
-## Non-code focused
+### W11: Overhaul project configuration for the 14.0 release
 
-### N11: Fix outdated or inconsistent metadata in tests/_files/configuration.xml
-
-The project configuration file `tests/_files/configuration.xml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
-
-### M11: Add or improve CI workflow and update related documentation
-
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in tests/_files/configuration.xml, and update SECURITY.md to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/1_BUG.md`, `.github/ISSUE_TEMPLATE/2_COMPATIBILITY.md`, `tests/_files/configuration.xml`, `tests/_files/configuration_logging.xml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Prepare the repository's non-code configuration for the PHPUnit 14.0
+major release. Create `schema/14.0.xsd` by copying `schema/13.0.xsd`
+and adding new elements for baseline configuration, tag groups, and
+diff format settings. Update `phpunit.xsd` (the root-level schema)
+to reflect the 14.0 structure. Update `phpunit.xml` to reference
+the new schema via `xsi:noNamespaceSchemaLocation="phpunit.xsd"`
+and set `failOnPhpunitDeprecation="true"`. Update `DEPRECATIONS.md`
+to add a "14.0 Hard Deprecations" section listing features scheduled
+for removal. Update `build.xml` to add a `validate-schema` target
+that runs `xmllint` against the XSD files in `schema/`. Update
+`.github/workflows/ci.yaml` to bump the minimum PHP version to 8.5
+in the matrix and add a schema validation step using the new Ant
+target. Update `.github/CONTRIBUTING.md` to add type-safety
+requirements (all new code must pass PHPStan level 6) and reference
+the updated `DEPRECATIONS.md`. Update `composer.json` to add
+`phpstan/phpstan` to `require-dev` with version `^2.0` and add a
+`scripts.phpstan` entry.

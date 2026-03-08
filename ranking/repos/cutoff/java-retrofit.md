@@ -104,7 +104,7 @@ retrofit-mock/                       # Mock adapter for testing
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -170,7 +170,9 @@ arrays for static headers, but `RequestFactory.Builder` in
 format. A header string without a colon (e.g., `"BearerToken123"`)
 produces an empty header name. Add validation in
 `parseHeaders()` that throws `IllegalArgumentException` for
-malformed header strings.
+malformed header strings. Also add a `CHANGELOG.md` entry under
+the `Unreleased` section documenting the stricter validation as a
+potential breaking change for code relying on malformed headers.
 
 ### N8: Fix OkHttpCall.clone() not resetting execution state
 
@@ -242,6 +244,10 @@ callback. Add a `@Progress` parameter annotation that accepts a
 progress listener. Requires changes to `ParameterHandler` for the
 new handler, `RequestBuilder` for body wrapping, `RequestFactory`
 for annotation parsing, and a new `ProgressListener` interface.
+Also update `build.gradle` to add the new `ProgressListener`
+class to the public API surface tracked by `animal-sniffer-plugin`,
+and update `gradle/libs.versions.toml` if additional dependencies
+are needed for progress event dispatching.
 
 ### M5: Implement typed error body conversion
 
@@ -428,30 +434,57 @@ validation rules for all `http/` annotations, type checking utilities
 mirroring `Utils.java`, error message formatting, compiler plugin
 integration, and test infrastructure for compile-time testing.
 
-## Non-code focused
+### N11: Fix gradle.properties not configuring Gradle build cache for CI reproducibility
 
-### N11: Fix outdated or inconsistent metadata in gradle/libs.versions.toml
+The `gradle.properties` file configures publishing settings
+(`mavenCentralPublishing`, `signAllPublications`) but does not enable
+the Gradle build cache or configure `org.gradle.caching=true` for
+faster CI builds. The `.github/workflows/build.yml` workflow sets
+`GRADLE_OPTS` for JVM tuning but does not cache Gradle's
+`~/.gradle/caches` or `build/` output directories. Add
+`org.gradle.caching=true` and `org.gradle.parallel=true` to
+`gradle.properties`. Update `.github/workflows/build.yml` to use
+`actions/cache` for Gradle caches and wrapper distributions. Also
+add a `.github/workflows/.java-version` entry if missing to pin
+the JDK version used in CI.
 
-The project configuration file `gradle/libs.versions.toml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Add dependency version catalog validation and multi-JDK CI testing
 
-### M11: Add or improve CI workflow and update related documentation
+The `gradle/libs.versions.toml` version catalog defines library
+versions but there is no automated check that all submodules
+actually use the catalog entries (some may hardcode versions in
+their `build.gradle`). Add a Gradle task in the root `build.gradle`
+that validates all dependencies reference the version catalog.
+Update `.github/workflows/build.yml` to add a JDK matrix testing
+job that builds against JDK 8, 11, 17, and 21 using
+`actions/setup-java` with the Temurin distribution. Update
+`settings.gradle` to enable Gradle's type-safe project accessors
+and configure `dependencyResolutionManagement` with
+`repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)`.
+Update `RELEASING.md` to add a pre-release checklist step for
+verifying version catalog consistency.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in gradle/libs.versions.toml, and update README.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul Gradle build, CI workflows, and project documentation
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/workflows/release.yaml`, `.github/workflows/build.yml`, `gradle/libs.versions.toml`, `website/package-lock.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Comprehensively update all non-code project files for the Retrofit
+3.x release. Restructure `build.gradle` to migrate from
+`buildscript` block to the `plugins` DSL, update `errorprone`
+integration to use the latest `errorprone-gradle-plugin` API, and
+add `spotless` formatting enforcement with consistent import
+ordering. Update `gradle/libs.versions.toml` to consolidate all
+version declarations, add version constraint ranges for runtime
+dependencies, and add a `[bundles]` section for common dependency
+groups. Update `settings.gradle` to add
+`dependencyResolutionManagement` and configure the Gradle wrapper
+version. Update `.github/workflows/build.yml` to add a lint job
+(spotless, errorprone), a compatibility job that builds all sample
+projects, and an instrumented test job for the `retrofit-mock`
+module. Update `CHANGELOG.md` to add the v3.x migration section
+with breaking changes categorized by module. Update `RELEASING.md`
+to reflect the automated publishing process via
+`gradle-maven-publish-plugin`. Update `README.md` to refresh the
+quick-start guide, add a converter/adapter comparison table, and
+add a "Migration from Retrofit 2.x" section. Add `SECURITY.md`
+with the Square vulnerability reporting process. Update
+`.editorconfig` to enforce consistent formatting across Gradle
+and Java files.

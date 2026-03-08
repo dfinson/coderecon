@@ -112,7 +112,10 @@ limiting. A broken object whose `inspect` and `to_s` raise exceptions
 with very large messages (e.g., containing a full serialized payload)
 can cause the dashboard page to balloon in size and slow rendering.
 Fix `web/helpers.rb` to truncate `ex.message` in the fallback display
-string to a reasonable maximum (e.g., 200 characters).
+string to a reasonable maximum (e.g., 200 characters). Also update
+`web/views/morgue.html.erb` to add a CSS `max-height` with an
+overflow toggle on the job arguments cell, so that even non-exception
+large payloads render without blowing up the page layout.
 
 ### N4 – Fetch strategy does not respect queue weights under low load
 
@@ -149,7 +152,21 @@ The TSTP signal handler installed by cli.rb calls Thread.new inside a signal tra
 ### N10 – i18n fallback missing for relative time helpers on dashboard
 
 The web helpers that display relative time strings (e.g., "3 hours ago") fall back to English when the selected locale is missing the relative_time key, but the fallback bypasses Rails I18n.fallbacks and instead hard-codes "en", ignoring any configured fallback chain.
+### N11 – Fix web/locales/en.yml missing translation keys for metrics and filtering pages
 
+The `web/locales/en.yml` file does not contain translation keys for
+the metrics page (`web/views/metrics.html.erb`) or the filtering
+page (`web/views/filtering.html.erb`), which were added after the
+initial locale file was created. These pages fall back to hard-coded
+English strings embedded in the ERB templates. Additionally, the
+`.github/ISSUE_TEMPLATE/bug_report.md` template does not ask
+reporters to specify their locale setting, making it difficult to
+reproduce i18n-related dashboard bugs. Fix `web/locales/en.yml` to
+add all missing keys for the metrics and filtering views, update at
+least three other locale files (`web/locales/ja.yml`,
+`web/locales/de.yml`, `web/locales/fr.yml`) with placeholder
+translations, and add a locale field to
+`.github/ISSUE_TEMPLATE/bug_report.md`.
 ## Medium
 
 ### M1 – Add batch job support with completion callbacks
@@ -178,7 +195,7 @@ Extend the launcher shutdown sequence to support a two-phase drain: first stop f
 
 ### M7 – Add cron-like recurring job scheduler
 
-Implement a recurring job system that reads a YAML schedule definition at startup and enqueues jobs at cron-like intervals. The scheduler should use Redis sorted sets to track next-run times, handle leader election among multiple Sidekiq processes to avoid duplicate scheduling, integrate with the existing scheduled poller infrastructure, and display upcoming and past runs in the web dashboard.
+Implement a recurring job system that reads a YAML schedule definition at startup and enqueues jobs at cron-like intervals. The scheduler should use Redis sorted sets to track next-run times, handle leader election among multiple Sidekiq processes to avoid duplicate scheduling, integrate with the existing scheduled poller infrastructure, and display upcoming and past runs in the web dashboard. Also add a `docs/recurring.md` documentation page describing the YAML schedule format and leader election behavior, add a link to it from `README.md`, and add a `Changes.md` entry under a new "Features" heading.
 
 ### M8 – Support encrypted job payloads
 
@@ -191,6 +208,24 @@ Currently jobs within a queue are FIFO. Add an optional priority field to jobs t
 ### M10 – Add structured event hooks for observability
 
 Create an event notification system that fires callbacks at key lifecycle points: job_enqueued, job_start, job_success, job_failure, job_retry, job_dead, process_start, process_quiet, process_stop. Each event should carry structured metadata. Allow user code to subscribe to events, implement a built-in subscriber that emits StatsD metrics, and wire the events into the processor, launcher, and client code paths.
+
+### M11 – Update docs/middleware.md and upgrade guides with middleware chain documentation
+
+The `docs/middleware.md` file documents the middleware concept but
+does not include a diagram of the default middleware chain ordering
+or explain the difference between client and server middleware
+execution sequence. The `docs/7.0-Upgrade.md` guide does not
+mention the breaking change to middleware argument passing
+introduced in version 7. The `docs/internals.md` file references
+the fetch-process-retry cycle but does not link to the middleware
+documentation. The `.github/contributing.md` still references the
+old `bundle exec rake test` command instead of the current test
+command. Update `docs/middleware.md` with an execution-order
+diagram and client vs. server middleware comparison,
+update `docs/7.0-Upgrade.md` with the middleware argument change,
+add cross-references from `docs/internals.md` to
+`docs/middleware.md`, and fix the test command in
+`.github/contributing.md`.
 
 ## Wide
 
@@ -234,30 +269,22 @@ Create a leader election mechanism among Sidekiq processes and build a maintenan
 
 Implement a saga/workflow engine on top of Sidekiq that orchestrates multi-step business processes with compensating transactions. This requires a workflow definition DSL, a workflow state machine stored in Redis, client integration for workflow step enqueuing, server middleware for step completion tracking, the retry subsystem triggering compensation on failure, the scheduled poller handling step timeouts, the web dashboard visualizing workflow state and history, the API exposing workflow management operations, and the testing helpers supporting workflow assertions.
 
-## Non-code focused
+### W11 – Overhaul web/locales/ and docs/ for comprehensive i18n and documentation coverage
 
-### N11: Fix outdated or inconsistent metadata in test/cfg/config__FILE__and__dir__.yml
-
-The project configuration file `test/cfg/config__FILE__and__dir__.yml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
-
-### M11: Add or improve CI workflow and update related documentation
-
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in test/cfg/config__FILE__and__dir__.yml, and update docs/Pro-8.0-Upgrade.md to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`, `test/cfg/config__FILE__and__dir__.yml`, `test/cfg/config_environment.yml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The `web/locales/` directory contains 30 locale files, many of which
+are missing keys that exist in `web/locales/en.yml`, causing mixed-
+language dashboard rendering. The `docs/` directory contains 24
+markdown files with no table of contents or index page linking them
+together. The `docs/webui.md` documentation does not describe the
+metrics page, profiles page, or filtering feature. Several upgrade
+guides (`docs/3.0-Upgrade.md` through `docs/8.0-Upgrade.md`) contain
+broken relative links to other docs pages. The `Changes.md`,
+`Pro-Changes.md`, and `Ent-Changes.md` changelogs follow different
+formatting conventions. The `.github/workflows/ci.yml` CI workflow
+does not run a linting step for the web locale YAML files. Audit all
+30 `web/locales/*.yml` files to add missing keys from `en.yml`, add a
+`docs/README.md` index page linking all documentation files, update
+`docs/webui.md` with metrics and filtering documentation, fix broken
+links across all upgrade guides, standardize changelog formatting
+across all three changelogs, and add a YAML lint step to
+`.github/workflows/ci.yml`.

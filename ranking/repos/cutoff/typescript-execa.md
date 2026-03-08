@@ -179,7 +179,7 @@ execa/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -283,7 +283,9 @@ from Node.js `process.resourceUsage()` captured via IPC from the child
 process. Requires changes to `lib/return/result.js` for the result
 schema, `lib/methods/node.js` for automatic resource collection in
 Node.js subprocesses, `lib/ipc/incoming.js` for internal resource
-messages, and `types/return/result.ts` for TypeScript types.
+messages, and `types/return/result.ts` for TypeScript types. Document
+the new `resourceUsage` property with examples in `readme.md` under the
+Result section, and add a `"resourceUsage"` keyword to `package.json`.
 
 ### M2: Add subprocess retry with configurable backoff
 
@@ -293,7 +295,10 @@ loop wrapper in `lib/methods/main-async.js`, backoff delay computation,
 integration with `lib/return/reject.js` for retry-aware rejection,
 result aggregation across attempts in `lib/return/result.js`, verbose
 logging of retry attempts in `lib/verbose/start.js`, and TypeScript
-types in `types/methods/`.
+types in `types/methods/`. Add a retry-specific test job to
+`.github/workflows/main.yml` that runs retry tests in a separate
+matrix entry, since retry tests are inherently slower and may need
+extended timeouts.
 
 ### M3: Implement per-line transform with line number context
 
@@ -498,30 +503,43 @@ backpressure signaling, `lib/pipe/streaming.js` for Web Stream piping,
 a new `lib/web/` module for SSE and WebSocket bridges, `lib/ipc/` for
 WebSocket-tunneled IPC, and TypeScript types.
 
-## Non-code focused
+### N11: Fix .editorconfig missing explicit settings for TypeScript definition files
 
-### N11: Fix outdated or inconsistent metadata in package.json
+The `.editorconfig` in the repo root defines formatting rules for
+JavaScript files but does not include a section for `*.d.ts` files
+under `types/`. Type definition files may use inconsistent indentation
+compared to their corresponding `.js` source files. Add an `[*.d.ts]`
+section to `.editorconfig` matching the project's tab-based indentation
+style, and verify the `tsconfig.json` `include` paths cover all type
+definition directories under `types/`.
 
-The project configuration file `package.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Restructure documentation with a migration guide and API reference
 
-### M11: Add or improve CI workflow and update related documentation
+Add a `docs/migration-v8-to-v9.md` covering breaking changes between
+execa v8 and v9: the IPC API restructuring in `lib/ipc/`, verbose
+option changes in `lib/verbose/`, and transform system updates in
+`lib/transform/`. Update `readme.md` to link to the migration guide
+and restructure the API overview with categorized function listings
+(execution methods, IPC, pipe, transform, convert, verbose). Add a
+`docs/api-reference.md` providing a structured index of all exported
+functions organized by category with links to the relevant `types/`
+definition files. Update `package.json` to add a `"homepage"` field
+pointing to the documentation and ensure the `"files"` array includes
+the `docs/` directory for npm distribution.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in package.json, and update docs/binary.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul CI pipeline and project configuration files
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/workflows/main.yml`, `.github/security.md`, `package.json`, `tsconfig.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Expand `.github/workflows/main.yml` to split the single `npm test`
+command into separate jobs for type checking (`tsc` and `tsd`),
+linting (`xo`), and unit tests (`c8 ava`), allowing independent
+failure reporting and parallelism. Add a `.github/workflows/release.yml`
+workflow for automated npm publishing with provenance attestation.
+Create a `.github/codecov.yml` with per-module coverage targets for
+`lib/ipc/`, `lib/pipe/`, `lib/terminate/`, and `lib/convert/`. Add a
+`.github/security.md` vulnerability disclosure template with a
+response timeline. Update `package.json` scripts to add `test:types`,
+`test:lint`, and `test:coverage` entries with `c8` threshold
+enforcement. Update `tsconfig.json` to enable
+`exactOptionalPropertyTypes` for stricter type checking across the
+`types/` directory. Add `provenance=true` to `.npmrc` for supply chain
+security.

@@ -138,7 +138,10 @@ rejects origins with paths or query strings.
 logs request/response details as formatted strings. Add structured
 logging using `LoggerMessage.Define` with named fields (`RequestMethod`,
 `RequestPath`, `StatusCode`, `Duration`) so log aggregators can index
-and query individual fields without parsing.
+and query individual fields without parsing. Also update
+`docs/EventSourceAndCounters.md` to document the new structured logging
+fields, their names, types, and usage examples for common log
+aggregation tools.
 
 ### N6: Fix DeveloperExceptionPageMiddleware not escaping HTML in exception details
 
@@ -184,6 +187,19 @@ encoding even for small files. Set `Content-Length` from the file
 length when the response has not yet started and no other transfer
 encoding is configured.
 
+### N11: Fix global.json SDK version constraint blocking local builds
+
+The `global.json` at the repo root pins the SDK to a specific preview
+version (`11.0.100-preview.1.26104.118`) using an exact version match.
+Contributors without that exact preview installed cannot build locally.
+Update `global.json` to use a `rollForward` policy of `latestFeature`
+so compatible SDK versions are accepted, add a `allowPrerelease` flag,
+and update the error message to point to the `restore.sh` /
+`restore.cmd` bootstrapping scripts. Also update
+`.markdownlint.json` to add a rule for validating SDK version
+references in documentation files, and ensure `NuGet.config` includes
+the dotnet-public feed as a fallback source for preview packages.
+
 ## Medium
 
 ### M1: Implement request rate limiting middleware
@@ -224,6 +240,10 @@ transformers (add security schemes, server URLs), operation-level
 transformers (custom parameters, response examples), and schema-level
 transformers (property descriptions, validation rules). Requires
 changes to the document builder, schema generator, and DI registration.
+Also update `Directory.Build.props` to add the new OpenAPI extension
+assembly to the shared framework packaging list, and update
+`eng/Versions.props` to pin the version of the JSON Schema validation
+library used for schema-level transformers.
 
 ### M5: Implement request body validation middleware
 
@@ -283,6 +303,19 @@ Add QUIC transport metrics to the diagnostics middleware using
 metric category. Touches `src/Middleware/HttpLogging/`,
 `src/Middleware/Diagnostics/`, and `src/Hosting/Server.Abstractions/`.
 
+### M11: Add npm workspace build integration for SignalR TypeScript client
+
+The `package.json` at the repo root defines npm workspaces for the
+SignalR TypeScript client (`src/SignalR/clients/ts/`), Blazor JS
+interop, and component custom elements. However, the CI pipeline in
+`.github/workflows/` does not run `npm test` or `npm run lint` for
+these workspaces as part of the main build. Add a CI workflow step
+that runs `npm ci && npm run build && npm run test` for the npm
+workspaces, update `package.json` to add a `typecheck` script using
+`tsc --noEmit`, and update the `eng/targets/Node.Common.targets`
+MSBuild target to invoke npm workspace builds during the solution-level
+build so TypeScript compilation errors are caught alongside C# builds.
+
 ## Wide
 
 ### W1: Implement API versioning across minimal APIs and MVC
@@ -325,7 +358,11 @@ Include trace context propagation (`traceparent` header), span
 attribute enrichment, and configurable sampling. Changes span
 `src/Hosting/`, `src/Middleware/`, `src/Mvc/Mvc.Core/`,
 `src/SignalR/`, `src/Http/Http.Extensions/`, and
-`src/HttpClientFactory/`.
+`src/HttpClientFactory/`. Also add a new CI workflow in
+`.github/workflows/` for tracing integration tests that spins up a
+Jaeger container, update `eng/Dependencies.props` with the
+OpenTelemetry SDK package references, and add a `docs/Tracing.md`
+guide on configuring distributed tracing for ASP.NET Core applications.
 
 ### W5: Implement server-sent events with backpressure
 
@@ -392,30 +429,20 @@ fallback for non-JavaScript clients. Changes span `src/Components/`,
 (tag helpers), `src/SignalR/` (for server interactivity), and
 JavaScript interop.
 
-## Non-code focused
+### W11: Consolidate build infrastructure and documentation across all projects
 
-### N11: Fix outdated or inconsistent metadata in .devcontainer/devcontainer.json
-
-The project configuration file `.devcontainer/devcontainer.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
-
-### M11: Add or improve CI workflow and update related documentation
-
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .devcontainer/devcontainer.json, and update .devcontainer/Dockerfile to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `docs/IssueManagementPolicies.md`, `docs/APIReviewPrinciples.md`, `.devcontainer/devcontainer.json`, `package-lock.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The build system spans `Directory.Build.props`,
+`Directory.Build.targets`, `Directory.Build.BeforeCommonTargets.targets`,
+`eng/Versions.props`, `eng/Version.Details.xml`, `eng/Dependencies.props`,
+and `eng/SharedFramework.External.props`. Several properties are
+duplicated across these files. Consolidate shared MSBuild properties
+into `eng/Common.props`, deduplicate version pins between
+`eng/Versions.props` and `eng/Version.Details.xml`, and update
+`docs/ProjectProperties.md` to document the canonical location for each
+build property. Also update `CONTRIBUTING.md` with a build quickstart
+section referencing `global.json` SDK requirements and `restore.sh`,
+add a `docs/BuildSystem.md` architectural guide explaining the
+relationship between `eng/` targets files and `Directory.Build.props`,
+and update the `AspNetCore.slnx` solution file to include a
+`Solution Items` folder containing all build infrastructure files for
+IDE discoverability.

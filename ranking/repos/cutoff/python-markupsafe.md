@@ -80,7 +80,7 @@ The inherited `str.join()` method does not escape items before joining.
 `Markup(", ").join(["<b>", safe])` produces `<b>, safe` without
 escaping the first element. Override `join()` in the `Markup` class to
 call `self.escape()` on each item that is not already a `Markup`
-instance before delegating to `super().join()`.
+instance before delegating to `super().join()`. Also update `README.md` to document the auto-escaping behavior of the new `join()` override with examples.
 
 ### N4: Fix escape() not handling objects with __html__ returning non-str
 
@@ -190,7 +190,7 @@ specified visible-character length without breaking HTML entities or
 tags. `Markup("Hello &amp; World").truncate(11)` should produce
 `Markup("Hello &amp; Wo...")`, not split the `&amp;` entity. Requires
 entity-aware length calculation, an entity boundary scanner, and
-proper `Markup` return-type preservation.
+proper `Markup` return-type preservation. Also update `pyproject.toml` to add the new `truncate` method to the API reference and update `CHANGES.rst` with a feature entry.
 
 ### M6: Implement a safe string interpolation DSL
 
@@ -346,30 +346,36 @@ with native JS escaping, and a test suite running in Node.js. Changes
 span a new `wasm/` directory, Emscripten build configuration,
 JavaScript wrapper code, npm package metadata, and CI for WASM builds.
 
-## Non-code focused
+### N11: Update `CHANGES.rst` with release notes for new escape modes
 
-### N11: Fix outdated or inconsistent metadata in .devcontainer/devcontainer.json
+The `CHANGES.rst` file needs entries for the upcoming release
+documenting new escape modes, API additions, and C extension
+changes. Add a new version section with categorized entries under
+Features, Bug Fixes, and API Changes headings. Include migration
+notes for any behavioral changes in the escape functions.
 
-The project configuration file `.devcontainer/devcontainer.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Revise `pyproject.toml` build configuration and `MANIFEST.in` package data
 
-### M11: Add or improve CI workflow and update related documentation
+The `pyproject.toml` uses an older build backend configuration and
+does not declare all package data files needed for distribution.
+Update the build system configuration to use current best practices,
+add `[project.optional-dependencies]` groups for `dev` and `test`,
+and update classifiers. Revise `MANIFEST.in` to include type stubs,
+the `py.typed` marker, C extension source files, and benchmark
+scripts. Also update `.readthedocs.yaml` to configure the C
+extension build step and update `.pre-commit-config.yaml` to add
+a `cython-lint` hook for the C extension.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .devcontainer/devcontainer.json, and update docs/Makefile to document the CI
-process and badge status for contributors.
+### W11: Full project configuration and documentation overhaul
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/feature-request.md`, `.github/ISSUE_TEMPLATE/config.yml`, `.devcontainer/devcontainer.json`, `.pre-commit-config.yaml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Perform a comprehensive non-code refresh: update `pyproject.toml`
+with current classifiers, PEP 639 license metadata, and modern
+build backend settings with C extension configuration. Revise
+`README.md` usage examples to cover all escape functions, Markup
+class methods, and format string safety. Update `CHANGES.rst` to
+use consistent formatting with contributor attribution across all
+versions. Configure `.readthedocs.yaml` for C extension builds
+and API reference generation. Update `MANIFEST.in` with
+comprehensive include and exclude patterns. Revise `.editorconfig`
+to cover C source files and type stubs. Update
+`.pre-commit-config.yaml` with current hook versions.

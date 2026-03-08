@@ -100,7 +100,7 @@ The `jsonify` function in `json/__init__.py` always returns a
 `Response` instance, but applications that use custom response classes
 (set via `Flask.response_class`) expect `jsonify` to use their class.
 Fix `jsonify` to use `current_app.response_class` instead of the
-hard-coded `Response` import when constructing the response object.
+hard-coded `Response` import when constructing the response object. Also add a changelog entry in `CHANGES.rst` documenting the fix and its impact on custom response class users.
 
 ### N4: Fix `FlaskCliRunner` not propagating environment variables to commands
 
@@ -222,7 +222,7 @@ error schemas, error code registration, and content negotiation to
 serve HTML or JSON based on the `Accept` header. Changes touch `app.py`
 (error handler selection), `sansio/app.py` (API error handler
 registration), `helpers.py` (error response helpers), and
-`json/provider.py` (error serialization).
+`json/provider.py` (error serialization). Also update `README.md` to add an API error handling example in the quickstart section.
 
 ### M6: Add WebSocket support via ASGI bridge
 
@@ -405,30 +405,35 @@ registration), `blueprints.py` (admin blueprint), `views.py` (admin
 new `admin/` sub-package with modules for views, forms, filters, and
 dashboard.
 
-## Non-code focused
+### N11: Add deprecation notices and migration notes to `CHANGES.rst`
 
-### N11: Fix outdated or inconsistent metadata in .devcontainer/devcontainer.json
+The `CHANGES.rst` file does not include forward-looking deprecation
+notices or migration guidance for the upcoming major release. Add a
+new unreleased section with entries documenting deprecated APIs, their
+replacements, and the planned removal timeline. Use consistent
+reStructuredText formatting with issue cross-references and contributor
+attribution.
 
-The project configuration file `.devcontainer/devcontainer.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Revise `pyproject.toml` dependency groups and `.readthedocs.yaml` versioned docs config
 
-### M11: Add or improve CI workflow and update related documentation
+The `pyproject.toml` lacks structured optional dependency groups for
+testing, documentation, and development tooling. Add
+`[project.optional-dependencies]` groups for `dev`, `test`, and
+`docs` with pinned versions. Update `.readthedocs.yaml` to use the
+new `docs` dependency group, configure multi-version documentation
+builds, and set the build OS and Python version. Also update
+`.pre-commit-config.yaml` to add `ruff` and `blacken-docs` hooks
+and pin existing hook versions.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .devcontainer/devcontainer.json, and update docs/Makefile to document the CI
-process and badge status for contributors.
+### W11: Comprehensive configuration and documentation overhaul
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/feature-request.md`, `.github/ISSUE_TEMPLATE/config.yml`, `.devcontainer/devcontainer.json`, `tests/static/config.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Perform a full non-code refresh: update `pyproject.toml` with
+current classifiers, PEP 639 license metadata, and entry point
+declarations. Revise `CHANGES.rst` to use consistent formatting
+with contributor attribution and issue cross-references across all
+versions. Update `README.md` quickstart examples to show modern
+patterns including async views and type hints. Configure
+`.readthedocs.yaml` for multi-version documentation builds with
+custom build steps. Update `.pre-commit-config.yaml` hook versions
+and add documentation-related hooks. Revise `.editorconfig` to
+cover template file extensions (`.html`, `.j2`).

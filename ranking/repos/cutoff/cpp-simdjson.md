@@ -91,6 +91,9 @@ that returns a longer human-readable explanation (e.g., "The JSON
 document has an improper structure: missing or superfluous commas,
 braces, or brackets") for each `error_code` enum value, usable in
 diagnostic output without requiring users to consult documentation.
+Also update `doc/basics.md` to add a section on error handling that
+lists all error codes with their human-readable descriptions, and
+update `README.md` to cross-reference the new documentation.
 
 ### N2: Fix padded_string move constructor not zeroing source capacity
 
@@ -226,7 +229,10 @@ parameter to parser constructors that is validated during stage-2
 parsing, returns `DEPTH_ERROR` when exceeded, and is queryable via
 `parser.max_depth()`. Requires changes to parser initialization,
 the per-architecture stage-2 implementations, and the on-demand
-iterator's depth tracking.
+iterator's depth tracking. Also update `HACKING.md` to document the
+new `max_depth` parameter and how it interacts with the stage-2
+pipeline, and update `README.md` to include a usage example showing
+how to set a custom depth limit.
 
 ### M7: Implement JSON diff between two dom::documents
 
@@ -349,7 +355,10 @@ streaming, number parsing edge cases, deeply nested structures, and
 unicode string processing. Add a fuzzing driver that integrates with
 libFuzzer and AFL, corpus management, and crash reproduction scripts.
 Changes span the fuzz directory, test infrastructure, build system
-(CMakeLists.txt), and CI configuration.
+(CMakeLists.txt), and CI configuration. Also update
+`.github/workflows/fuzzers.yml` to add CI jobs for the new fuzz
+targets with corpus caching, and update `CONTRIBUTING.md` with
+guidelines on writing and submitting new fuzz targets.
 
 ### W9: Implement language binding generator for Python and Rust
 
@@ -372,30 +381,45 @@ build on significant regressions. Changes span the benchmark directory,
 CI configuration, result storage, statistical comparison, and
 reporting.
 
-## Non-code focused
+### N11: Update Doxyfile and documentation configuration for new API headers
 
-### N11: Fix outdated or inconsistent metadata in .travis.yml
+The `Doxyfile` configures Doxygen documentation generation but its
+`INPUT` paths may not cover all public headers, particularly newer
+additions in `include/simdjson/generic/ondemand/`. Update `Doxyfile`
+to add missing `INPUT` paths, configure `EXCLUDE_PATTERNS` to skip
+internal implementation details, and add `ALIASES` for common
+terminology (e.g., `\simd_note` for SIMD-specific caveats). Also
+update `SECURITY.md` to add a PGP key fingerprint for encrypted
+vulnerability reports and add a disclosure timeline policy.
 
-The project configuration file `.travis.yml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Add architecture-specific CI workflows and update contributor docs
 
-### M11: Add or improve CI workflow and update related documentation
+The `.github/workflows/` directory contains per-architecture CI
+files (e.g., `aarch64.yml`, `s390x.yml`, `ppc64.yml`,
+`loongarch64.yml`) but the `HACKING.md` guide does not document how
+to test on these architectures locally using QEMU or cross-
+compilation toolchains. Add a "Cross-Architecture Testing" section
+to `HACKING.md` documenting QEMU-based testing for ARM64, PPC64,
+and s390x. Update `CONTRIBUTING.md` to describe the CI architecture
+matrix and link to the new `HACKING.md` section. Also update
+`cmake/simdjson-flags.cmake` (in the `cmake/` directory) to add a
+`SIMDJSON_CROSS_COMPILE` option that disables native architecture
+detection, and update `simdjson.pc.in` to include the target
+architecture in the pkg-config metadata.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .travis.yml, and update singleheader/README.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul build and CI configuration across all platforms
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`, `.travis.yml`, `.cirrus.yml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The project has CI configurations in `.appveyor.yml` (Windows),
+`.cirrus.yml` (FreeBSD), `.drone.yml` (ARM), `.travis.yml` (legacy),
+and `.github/workflows/` (40+ workflow files). Audit and consolidate:
+remove the deprecated `.travis.yml` (already migrated to GitHub
+Actions), update `.appveyor.yml` to use the latest Visual Studio
+image and add an ARM64 build target, and update `.cirrus.yml` to
+pin the FreeBSD version. In `CMakeLists.txt`, add a
+`SIMDJSON_ENABLE_BENCHMARKS` option that conditionally includes the
+`benchmark/` directory and update the `simdjson.pc.in` template to
+include `Requires.private` for any optional dependencies. Update
+`doc/performance.md` with current benchmark numbers and platform
+coverage. Update `AI_USAGE_POLICY.md` to add a section on automated
+testing of AI-generated contributions. Finally, update `README.md`
+with a consolidated CI status badge table covering all platforms.

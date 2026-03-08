@@ -116,7 +116,10 @@ set `SO_KEEPALIVE` or the associated parameters (`TCP_KEEPIDLE`,
 `TCP_KEEPINTVL`, `TCP_KEEPCNT`). Add `tcp_keepalive(idle:, interval:,
 count:)` to the DSL in `dsl.rb`, pass the values through
 `Configuration`, and apply them in `Binder#add_tcp_listener` using
-`Socket#setsockopt`.
+`Socket#setsockopt`. Also add a `tcp_keepalive` section to
+`docs/compile_options.md` documenting the new DSL option with
+example values, and update `History.md` with an entry noting the
+new feature.
 
 ### N5: Fix Reactor timeout list not being sorted after client timeout update
 
@@ -168,6 +171,19 @@ Add a `drain_timeout` parameter (defaulting to 30 seconds) that waits
 for active `ThreadPool` tasks to finish before forcibly closing
 connections, and expose it via the DSL.
 
+### N11: Fix docs/signals.md not documenting SIGINFO behavior on BSD systems
+
+The `docs/signals.md` file documents signal handling for `SIGUSR1`,
+`SIGUSR2`, `SIGTERM`, `SIGHUP`, and `SIGINT` but omits `SIGINFO`,
+which is available on BSD-derived systems (macOS, FreeBSD) and can
+be used to print thread backtraces for debugging hung workers.
+The `CONTRIBUTING.md` file also does not mention the requirement
+to update `docs/signals.md` when adding new signal handlers.
+Fix `docs/signals.md` to document `SIGINFO` behavior and
+platform availability, and update `CONTRIBUTING.md` to include
+a checklist item for updating the signals documentation when
+modifying signal handling code.
+
 ## Medium
 
 ### M1: Implement HTTP/2 cleartext upgrade support
@@ -212,7 +228,10 @@ endpoint: request count, request duration histogram, thread pool
 utilisation, connection queue depth, and worker memory usage. Requires
 a new `plugin/prometheus.rb`, metric collection hooks in `Server`,
 `ThreadPool`, and `Cluster`, a minimal Prometheus text format emitter,
-and DSL wiring for `plugin :prometheus, path: '/metrics'`.
+DSL wiring for `plugin :prometheus, path: '/metrics'`, a new
+`docs/stats.md` section documenting the metrics endpoint and
+available metric names, and an update to `README.md` adding the
+prometheus plugin to the built-in plugins list.
 
 ### M6: Implement hot-reload for SSL certificates without restart
 
@@ -257,6 +276,22 @@ memory sharing. Handle the lifecycle correctly: `before_fork` hooks for
 closing database connections, `after_worker_fork` for re-establishing
 them, and `nakayoshi_fork` integration in `Util`. Requires changes to
 `Cluster`, `Launcher`, `DSL`, and `Worker`.
+
+### M11: Overhaul docs/deployment.md and docs/kubernetes.md with modern deployment guidance
+
+The `docs/deployment.md` guide references Capistrano-based deployment
+workflows but does not cover container-based deployments with Docker
+multi-stage builds. The `docs/kubernetes.md` guide does not include
+readiness and liveness probe configuration examples that work with
+puma's built-in control server. The `6.0-Upgrade.md` upgrade guide
+does not mention the removal of `daemonize` and its impact on systemd
+unit files documented in `docs/systemd.md`. The
+`.github/pull_request_template.md` does not ask contributors
+whether documentation updates are needed. Update `docs/deployment.md`
+with Docker deployment patterns, update `docs/kubernetes.md` with
+probe configuration examples, reconcile `6.0-Upgrade.md` with
+`docs/systemd.md` regarding daemonization removal, and add a
+documentation checkbox to `.github/pull_request_template.md`.
 
 ## Wide
 
@@ -359,30 +394,21 @@ in `Server`, `ThreadPool`, `Client`, `Reactor`, a `Tracing` module
 for context propagation, span management, and DSL configuration for
 exporter endpoints.
 
-## Non-code focused
+### W11: Comprehensive overhaul of all documentation and upgrade guides
 
-### N11: Fix outdated or inconsistent metadata in .rubocop_todo.yml
-
-The project configuration file `.rubocop_todo.yml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
-
-### M11: Add or improve CI workflow and update related documentation
-
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .rubocop_todo.yml, and update .devcontainer/Dockerfile to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `docs/testing_test_rackup_ci_files.md`, `.github/ISSUE_TEMPLATE/bug_report.md`, `.rubocop_todo.yml`, `.devcontainer/devcontainer.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The `docs/` directory contains 18 markdown files with inconsistent
+formatting, broken internal cross-references, and outdated
+configuration examples. The `5.0-Upgrade.md` and `6.0-Upgrade.md`
+upgrade guides do not cross-reference each other or link to the
+relevant `docs/` pages. The `docs/architecture.md` architectural
+overview does not include the `Reactor` or `Plugin` components in
+its diagram. The `SECURITY.md` policy references an email address
+but does not mention GitHub's private vulnerability reporting.
+The `.github/workflows/tests.yml` CI matrix does not test against
+JRuby, despite `docs/java_options.md` documenting JRuby-specific
+configuration. Overhaul all `docs/*.md` files for consistent
+formatting and cross-references, update both upgrade guides with
+links to relevant documentation pages, update `docs/architecture.md`
+with a complete component diagram, update `SECURITY.md` with
+GitHub vulnerability reporting instructions, and add JRuby to
+the `.github/workflows/tests.yml` CI matrix.

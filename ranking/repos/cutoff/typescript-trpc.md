@@ -112,7 +112,7 @@ packages/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -162,7 +162,9 @@ structured JSON format suitable for log aggregation services like
 Datadog or CloudWatch. Add a `format: 'structured'` option to
 `LoggerLinkOptions` that outputs each operation as a single JSON line
 with fields for `type`, `path`, `direction`, `elapsedMs`, and
-`status`.
+`status`. Update `eslint.config.js` to add a no-console override for
+the loggerLink source file, since structured mode intentionally writes
+to `process.stdout` directly.
 
 ### N6: Fix subscription cleanup not awaiting async teardown functions
 
@@ -222,6 +224,9 @@ cache size, and stale-while-revalidate semantics. Requires changes to
 `httpBatchLink.ts` for cache lookup/store, a new cache storage
 abstraction in `client/src/internals/`, and integration with the link
 chain so downstream links can signal cache invalidation on mutations.
+Add a `cache` task definition to `turbo.json` for caching test results
+of the new cache module, and add the peer dependency declaration to
+the client `packages/client/package.json`.
 
 ### M2: Add request deduplication to httpLink for concurrent identical queries
 
@@ -426,30 +431,45 @@ namespacing, `resolveResponse.ts` for version detection from headers,
 migration transform infrastructure, client-side version negotiation in
 the links, and type-level version discrimination.
 
-## Non-code focused
+### N11: Fix codecov.yml not configuring per-package coverage thresholds
 
-### N11: Fix outdated or inconsistent metadata in pnpm-lock.yaml
+The `codecov.yml` at the repo root defines global coverage settings but
+does not set per-package coverage targets for `packages/server/`,
+`packages/client/`, `packages/react-query/`, and `packages/next/`. Each
+package has different inherent coverage characteristics — the server
+package has higher coverage expectations than framework adapters. Add
+package-level `flags` and `coverage.status.project` entries in
+`codecov.yml` with appropriate thresholds per package, and update
+`.github/workflows/main.yml` to upload coverage reports with the correct
+flag labels matching each package directory.
 
-The project configuration file `pnpm-lock.yaml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Add comprehensive monorepo developer documentation
 
-### M11: Add or improve CI workflow and update related documentation
+Create a `CONTRIBUTING.md` at the repo root documenting the monorepo
+development workflow: how to use `turbo.json` task pipelines for
+building and testing, the relationship between `pnpm-workspace.yaml`
+packages, `tsconfig.build.json` vs `tsconfig.json` usage for build vs
+editor type checking, and the release process configured in
+`lerna.json`. Add a `docs/architecture.md` describing the package
+dependency graph (server → core, client → core, react-query → client,
+next → react-query + server). Update `README.md` to link to the new
+developer documentation. Update `.github/pull_request_template.md` to
+include a contribution checklist referencing the new guide.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in pnpm-lock.yaml, and update SECURITY.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul CI/CD pipeline and developer tooling configuration
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/2.feature_request.yml`, `.github/ISSUE_TEMPLATE/1.bug_report.yml`, `pnpm-lock.yaml`, `package.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Restructure `.github/workflows/` by consolidating overlapping workflows:
+merge `dependabot-approve.yml` and `lock-issues.yml` into maintenance
+automation, and split `main.yml` into separate `test.yml`, `lint.yml`,
+and `release.yml` workflows with proper job dependencies. Add a
+`turbo.json` pipeline entry for `typecheck` tasks that are currently
+missing from the task graph. Create a `.github/renovate.json`
+configuration to replace the existing `.kodiak.toml` for automated
+dependency updates with auto-merge for patch versions. Update
+`prettier.config.js` and `.prettierignore` to include consistent
+formatting for all `.yml`, `.yaml`, and `.json` configuration files
+across the monorepo. Add a `.github/workflows/docs.yml` that builds
+and deploys documentation from the `www/` directory on pushes to main.
+Update `.vscode/settings.json` with recommended editor settings and
+extensions for the monorepo. Update `vitest.config.ts` to add coverage
+thresholds matching the `codecov.yml` per-package targets.

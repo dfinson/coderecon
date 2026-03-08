@@ -133,7 +133,11 @@ response body, but the response headers are not attached to the
 exception object. Downstream error handlers cannot access rate-limit
 headers (e.g., `Retry-After`, `X-RateLimit-Remaining`). Fix
 `RaiseError` to include the response headers in the raised exception
-via the existing `response` attribute hash.
+via the existing `response` attribute hash. Also update
+`CHANGELOG.md` to document this behavioral change and update
+`docs/middleware/included/raising-errors.md` (or its parent
+`docs/middleware/index.md`) to note that response headers are now
+available on the exception object.
 
 ### N4: Fix NestedParamsEncoder not encoding boolean values correctly
 
@@ -204,6 +208,19 @@ the query contains duplicate keys (e.g., `"a=1&a=2"`), only the
 last value is retained. Fix `decode` to collect duplicate keys into
 arrays, matching the behavior of `NestedParamsEncoder.decode`.
 
+### N11: Fix docs/getting-started/quick-start.md containing outdated default adapter references
+
+The `docs/getting-started/quick-start.md` guide references
+`Faraday.default_adapter = :net_http` as optional, but since Faraday
+2.x the `net_http` adapter is bundled and no longer requires separate
+configuration. The guide also omits the `faraday-net_http` gem
+dependency note that appears in the `README.md`. Additionally, the
+`.rubocop_todo.yml` contains stale `Metrics/MethodLength` exclusions
+for files that were refactored in 2.x. Fix `docs/getting-started/quick-start.md`
+to reflect the current adapter defaults, reconcile the dependency
+instructions with `README.md`, and clean up the stale entries in
+`.rubocop_todo.yml`.
+
 ## Medium
 
 ### M1: Implement request retry middleware with configurable backoff
@@ -214,7 +231,11 @@ retryable status codes, and exception types. Requires a new
 `lib/faraday/request/retry.rb` file, registration in
 `middleware_registry.rb`, `RackBuilder` integration via
 `builder.request :retry`, timeout-aware retry logic, idempotency
-checking (skip retry for POST by default), and spec coverage.
+checking (skip retry for POST by default), spec coverage, a new
+`docs/middleware/included/retry.md` documentation page describing
+configuration options and backoff strategies, an entry in
+`docs/middleware/index.md` linking to the retry docs, and an
+`UPGRADING.md` note for users migrating from third-party retry gems.
 
 ### M2: Add request/response caching middleware with ETag support
 
@@ -297,6 +318,19 @@ JSON responses against a schema. Requires
 files or inline, validation logic with error collection,
 configurable behavior (raise vs. warn), schema caching by URL
 pattern, middleware registration, and specs.
+
+### M11: Update UPGRADING.md and docs/ for middleware deprecation notices
+
+The `UPGRADING.md` file does not document the deprecation of
+positional arguments in `Faraday.new` (keyword arguments are now
+preferred), and the `docs/customization/` section lacks a guide on
+migrating custom middleware from the v1 API to v2. The
+`.github/PULL_REQUEST_TEMPLATE.md` does not include a checklist item
+for updating documentation when adding new middleware. Update
+`UPGRADING.md` with a deprecation table and migration examples,
+add `docs/customization/migration-v1-to-v2.md` covering middleware
+API changes, and add a documentation checklist item to
+`.github/PULL_REQUEST_TEMPLATE.md`.
 
 ## Wide
 
@@ -405,30 +439,19 @@ strategies, `lib/faraday/failover/circuit.rb` for per-backend
 circuit state, `Connection` configuration for backend list,
 automatic retry on backend failure, and specs.
 
-## Non-code focused
+### W11: Overhaul docs/ documentation site and CI configuration
 
-### N11: Fix outdated or inconsistent metadata in .rubocop_todo.yml
-
-The project configuration file `.rubocop_todo.yml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
-
-### M11: Add or improve CI workflow and update related documentation
-
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .rubocop_todo.yml, and update .claude/CLAUDE.md to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/dependabot.yml`, `.github/workflows/publish.yml`, `.rubocop_todo.yml`, `.rubocop.yml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The `docs/` documentation site (served via docsify with
+`docs/index.html`) is missing coverage for several built-in
+middleware and adapter combinations. The `docs/_sidebar.md`
+navigation does not include links for the `Authorization`,
+`Instrumentation`, or `Json` middleware pages. The
+`docs/adapters/index.md` adapter overview does not mention the
+test adapter. The `.github/workflows/ci.yml` CI workflow does not
+run on documentation-only PRs (no path filter), wasting CI minutes,
+and the `.github/workflows/publish.yml` publishing workflow lacks a
+step to validate documentation links. Overhaul `docs/_sidebar.md`
+to include all middleware and adapter pages, add missing
+`docs/adapters/test-adapter.md` and middleware documentation pages,
+add a path filter to `.github/workflows/ci.yml`, and add a
+link-checking step to `.github/workflows/publish.yml`.

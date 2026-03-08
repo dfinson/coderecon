@@ -62,7 +62,7 @@ esm.mjs                 # ESM entry point
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -108,7 +108,10 @@ When a required option (`option.makeOptionMandatory()`) is missing,
 the error message is generic. Add `option.mandatoryMessage(msg)` that
 allows per-option custom error messages (e.g., "The --token option is
 required for authentication. Set it or use TOKEN env var."). Implement
-in `option.js` and use in `command.js` `_parseCommand()`.
+in `option.js` and use in `command.js` `_parseCommand()`. Add the
+`mandatoryMessage(msg: string)` method signature to
+`typings/index.d.ts` and add a type-level test case in
+`typings/index.test-d.ts`.
 
 ### N6: Fix Help.wrap() breaking words inside ANSI escape sequences
 
@@ -164,7 +167,9 @@ options. When `--format json` is set, it could imply `--no-color`.
 When `--output` depends on `--format`, omitting `--format` should
 produce a clear error. Requires post-parse validation in `command.js`,
 dependency graph cycle detection, error messages in `error.js`, and
-help text integration in `help.js`.
+help text integration in `help.js`. Document the `implies()` and
+`dependsOn()` API in `Readme.md` under a new "Option Dependencies"
+section, and add a `CHANGELOG.md` entry describing the feature.
 
 ### M2: Add config file support as a parameter source
 
@@ -354,31 +359,44 @@ middleware, rate limiting, and CORS support. Changes span a new
 parsing, response serialization, `command.js` invocation, and type
 definitions.
 
+### N11: Fix jest.config.js not collecting coverage for all library source files
 
-## Non-code focused
+The `jest.config.js` configuration collects coverage from files in
+`lib/` but the `collectCoverageFrom` patterns omit
+`lib/suggestSimilar.js` and `lib/error.js`. Changes to these files
+show 0% coverage in reports. Add the missing file patterns to
+`collectCoverageFrom` in `jest.config.js`. Also update
+`.github/workflows/tests.yml` to add a coverage upload step and
+publish coverage results as a PR comment.
 
-### N11: Fix outdated or inconsistent metadata in tsconfig.js.json
+### M11: Add comprehensive example documentation and project configuration
 
-The project configuration file `tsconfig.js.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+Create a `docs/examples/` directory with documented usage examples for
+all major features: subcommands, option choices, custom argument
+parsing, error handling, and help customization. Each example should be
+a standalone `.js` file that can be run directly. Update `Readme.md` to
+link to each example with a brief description. Add a `docs:generate`
+script to `package.json` that generates API documentation from
+`typings/index.d.ts`. Update `CONTRIBUTING.md` to include a section on
+how to add and test new examples. Update `tsconfig.json` to include the
+`examples/` directory for type checking. Add missing content to
+`SECURITY.md` with a vulnerability disclosure timeline.
 
-### M11: Add or improve CI workflow and update related documentation
+### W11: Overhaul CI/CD pipeline, documentation, and project configuration
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in `tsconfig.js.json`, and update `docs/terminology.md` to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/dependabot.yml`, `.github/workflows/tests.yml`, `tsconfig.js.json`, `package-support.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Expand `.github/workflows/tests.yml` to add separate jobs for type
+checking (running both `tsconfig.js.json` and `tsconfig.ts.json`), a
+linting job using `eslint.config.js`, and a documentation build
+verification job. Add a `.github/workflows/release.yml` for automated
+npm publishing with provenance. Create a `docs/migration/` directory
+with `v11-to-v12.md` and `v12-to-v13.md` migration guides covering
+API changes, renamed methods, and updated option parsing behavior.
+Update `CHANGELOG.md` structure to follow Keep a Changelog format with
+categorized entries (Added, Changed, Deprecated, Removed, Fixed,
+Security). Update `package.json` to add an `engines` field specifying
+minimum Node.js version, a `packageManager` field, and `funding`
+configuration. Add `.github/dependabot.yml` for automated dependency
+updates on a weekly schedule. Update `.prettierrc.js` to enforce
+consistent formatting across `lib/`, `typings/`, `examples/`, and
+`docs/`. Update `.editorconfig` to add settings for `.mjs` and `.d.ts`
+files.

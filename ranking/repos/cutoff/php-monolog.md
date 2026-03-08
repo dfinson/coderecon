@@ -186,7 +186,10 @@ Swoole servers), the cached data becomes stale when new commits are
 pushed to the repository, causing all log records to report an
 outdated commit hash. Fix `GitProcessor.php` to accept an optional
 TTL parameter that expires the cache after a configurable interval,
-triggering a re-read of git data.
+triggering a re-read of git data. Also update
+`doc/02-handlers-formatters-processors.md` to document the new TTL
+parameter and add a warning about stale data in long-running
+processes.
 
 ### N8: Fix SyslogUdpHandler not splitting messages exceeding UDP max size
 
@@ -217,6 +220,19 @@ entries when the replacement is a lossy representation (plain objects,
 arrays, resource types) so the original data remains available to
 other handlers.
 
+### N11: Fix `phpunit.xml.dist` missing strict test settings and timezone mismatch
+
+The `phpunit.xml.dist` configuration sets `date.timezone` to `UTC`
+via `<ini>` but does not enable `failOnRisky="true"` or
+`failOnWarning="true"`, allowing tests with risky assertions to
+pass silently. The `beStrictAboutTestsThatDoNotTestAnything` is set
+to `false`, masking empty test methods. Fix `phpunit.xml.dist` to
+enable these strict settings. Also update
+`.github/workflows/continuous-integration.yml` to pass
+`--fail-on-risky` as a CLI argument so the setting is enforced
+even if a developer overrides `phpunit.xml.dist` locally, and add
+a `lint` job dependency so tests only run after `lint.yml` passes.
+
 ## Medium
 
 ### M1: Add structured context redaction support to NormalizerFormatter
@@ -228,6 +244,10 @@ Implement a `RedactingNormalizerFormatter` or extend
 dot notation (e.g., `user.credentials.password`). Changes span
 `NormalizerFormatter.php` for the redaction logic and
 `LineFormatter.php` / `JsonFormatter.php` which inherit from it.
+Also update `doc/01-usage.md` to add a "Sensitive Data" section
+explaining how to configure redaction keys, and update
+`doc/message-structure.md` to note that redacted fields retain their
+key names but have substituted values.
 
 ### M2: Implement handler circuit breaker for unreachable services
 
@@ -318,6 +338,20 @@ updating, `GroupHandler.php` for propagation to child handlers,
 `BufferHandler.php` for re-filtering buffered records on level change,
 and `Logger.php` for a `setHandlerLevel(string $handlerClass, Level)`
 convenience method.
+
+### M11: Update documentation and configuration for handler discovery
+
+The `doc/02-handlers-formatters-processors.md` documents handler
+configuration but is missing entries for `SamplingHandler`,
+`OverflowHandler`, and `FallbackGroupHandler` that were added in
+recent releases. Update the documentation to cover these handlers
+with configuration examples. Update `composer.json` to add `psr-3`
+and `observability` to the `keywords` array for better Packagist
+discoverability. Update `UPGRADE.md` to add a "4.0 Migration"
+section documenting the removal of `Monolog\DateTimeImmutable` and
+the `LogRecord` constructor changes. Update `phpstan.neon.dist` to
+remove the `PHPConsoleHandler.php` exclusion (the handler was
+removed in 3.x) and verify analysis still passes.
 
 ## Wide
 
@@ -416,6 +450,10 @@ and schema validation, `Logger.php` for dynamic reconfiguration,
 all handler constructors for factory-based instantiation,
 `Registry.php` for global config propagation, and
 `ResettableInterface.php` for clean handler teardown during reload.
+Also update `UPGRADE.md` to document the new configuration system
+as the recommended approach for Monolog 4.0, and update
+`doc/04-extending.md` to explain how custom handlers integrate with
+the configuration loader's factory pattern.
 
 ### W9: Implement cross-process distributed logging with gRPC transport
 
@@ -444,30 +482,20 @@ for context forwarding through async/buffered paths,
 rendering, and `Registry.php` for trace context sharing across
 loggers.
 
-## Non-code focused
+### W11: Overhaul CI, static analysis, and project documentation
 
-### N11: Fix outdated or inconsistent metadata in _config.yml
-
-The project configuration file `_config.yml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
-
-### M11: Add or improve CI workflow and update related documentation
-
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in _config.yml, and update UPGRADE.md to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/Feature.md`, `.github/ISSUE_TEMPLATE/Bug_Report.md`, `_config.yml`, `.vscode/mcp.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The `.github/workflows/continuous-integration.yml` runs tests and
+PHPStan in a single job matrix. Restructure the workflow to separate
+PHPStan into its own job that runs at level 9 (currently level 8 in
+`phpstan.neon.dist`), resolve or baseline new findings, and add a
+dedicated PHP-CS-Fixer job using `.php-cs-fixer.php`. Update
+`phpunit.xml.dist` to add `failOnRisky="true"`,
+`failOnWarning="true"`, and a `<source>` element with explicit
+inclusion paths. Update `_config.yml` to configure the GitHub Pages
+Jekyll theme with a navigation structure for the `doc/` directory.
+Add a new `doc/05-testing.md` documenting how to use `TestHandler`
+for assertion-based log testing. Update `CHANGELOG.md` with a
+template section for the next unreleased version. Update
+`.github/SECURITY.md` to reference a `SECURITY.md` at the repo root
+for consistency, and update `.github/dependabot.yml` to check
+Composer dependencies weekly.

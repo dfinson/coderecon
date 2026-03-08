@@ -120,7 +120,9 @@ The `rotating_file_sink` in `sinks/rotating_file_sink.h` accepts
 triggers, the sink attempts to rename files with a modular arithmetic
 expression that produces incorrect filenames when `max_files` is zero.
 Fix the constructor to reject `max_files=0` with an
-`spdlog_ex` exception.
+`spdlog_ex` exception. Also update `README.md` to document the
+valid range for `max_files` in the rotating file sink usage example,
+and add a note to the API section clarifying the minimum value.
 
 ### N2: Fix pattern_formatter leaking user-provided custom flags
 
@@ -222,7 +224,11 @@ objects with fields for timestamp, level, logger name, thread ID,
 source location, and message. The formatter must implement the
 `formatter` interface in `formatter.h`, integrate with the
 `logger` class in `logger.h` for per-logger formatter selection,
-and support user-configurable field inclusion/exclusion.
+and support user-configurable field inclusion/exclusion. Also update
+`cmake/spdlog.pc.in` to add the JSON formatter as a noted feature
+of the library, and update `README.md` to add a "JSON Logging"
+section with a usage example showing the `json_formatter`
+configuration.
 
 ### M2: Implement log sampling sink with rate limiting
 
@@ -362,7 +368,10 @@ atomic append mode, `details/os.h` for cross-platform file locking
 primitives, `sinks/rotating_file_sink.h` for multi-process-safe
 rotation coordination, `sinks/daily_file_sink.h` for coordinated
 daily rotation, and `details/registry.h` for shared file handle
-management across loggers.
+management across loggers. Also update `CMakeLists.txt` to add a
+`SPDLOG_ENABLE_FILE_LOCKING` option that conditionally compiles the
+advisory locking code, and update `.github/workflows/linux.yml`
+to add a CI job testing multi-process file logging scenarios.
 
 ### W5: Implement hierarchical logger namespaces with inheritance
 
@@ -439,30 +448,47 @@ enforcement, `sinks/base_sink.h` for tenant-scoped sink lifecycle,
 `details/backtracer.h` for tenant-isolated backtrace buffers,
 and `cfg/` for tenant configuration schema.
 
-## Non-code focused
+### N11: Update cmake pkg-config and CMake config templates for new features
 
-### N11: Fix outdated or inconsistent metadata in appveyor.yml
+The `cmake/spdlog.pc.in` and `cmake/spdlogConfig.cmake.in` templates
+define the pkg-config and CMake package configuration but do not
+expose optional feature flags (such as `SPDLOG_USE_STD_FORMAT` or
+async logging support) to downstream consumers. Update
+`cmake/spdlog.pc.in` to add `Cflags` entries for active compile
+definitions (e.g., `-DSPDLOG_USE_STD_FORMAT` when enabled). Update
+`cmake/spdlogConfig.cmake.in` to export these definitions as
+interface compile definitions on the `spdlog::spdlog` target. Also
+verify that `cmake/utils.cmake` correctly extracts the version from
+`include/spdlog/version.h`.
 
-The project configuration file `appveyor.yml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Add CI coverage for new sink types and update build documentation
 
-### M11: Add or improve CI workflow and update related documentation
+The `.github/workflows/` directory contains CI for Linux, macOS,
+Windows, and Coverity scanning, but some sink types (syslog,
+systemd, TCP/UDP) are only tested on specific platforms. Update
+`.github/workflows/linux.yml` to add a job that builds with
+`-DSPDLOG_BUILD_TESTS_HO=ON` and enables the syslog and systemd
+sink tests. Update `.github/workflows/macos.yml` to add a job
+testing the ostream and callback sinks. Update `README.md` to add
+a "Sink Reference" section with a table listing all available sinks,
+their header paths, and platform requirements. Also update
+`appveyor.yml` to align the Windows CI matrix with the GitHub
+Actions configuration and test the MSVC and wincolor sinks.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in appveyor.yml, and update README.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul build system and packaging across CMake, pkg-config, and CI
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/workflows/windows.yml`, `.github/workflows/macos.yml`, `appveyor.yml`, `.vscode/mcp.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The build configuration spans `CMakeLists.txt`, `cmake/utils.cmake`,
+`cmake/ide.cmake`, `cmake/spdlog.pc.in`, `cmake/spdlogConfig.cmake.in`,
+`cmake/spdlogCPack.cmake`, `cmake/version.rc.in`, and `appveyor.yml`.
+Audit and synchronise all of these: update `CMakeLists.txt` to add
+a `SPDLOG_INSTALL_HEADERS` option for header-only embedding
+scenarios and a `SPDLOG_SYSTEM_INCLUDES` option that marks the
+include directory as `SYSTEM` to suppress warnings in downstream
+builds. Update `cmake/spdlogCPack.cmake` to generate Debian and
+RPM packages with correct dependencies. Update `cmake/version.rc.in`
+to pull the version from the CMake project version. Add a
+`.clang-tidy` configuration update to enable modernize-* checks
+for the source files. Update `.github/workflows/linux.yml` to add
+a packaging CI job that tests CPack generation. Update `README.md`
+with an "Installation" section covering CMake, pkg-config, Conan,
+and vcpkg installation methods.

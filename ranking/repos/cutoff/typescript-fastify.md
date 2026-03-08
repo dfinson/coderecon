@@ -90,7 +90,7 @@ types/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -119,6 +119,8 @@ body in chunks but does not track the total bytes received for logging
 or metrics purposes. Add a `request.bodySize` property that is set
 after body parsing completes, reflecting the actual uncompressed byte
 count, and expose it through the `Request` object in `request.js`.
+Add the `bodySize` property to `types/request.d.ts` and document the
+feature with a usage example in `docs/` under the body parsing guide.
 
 ### N4: Fix error-handler not preserving original error stack trace
 
@@ -190,7 +192,9 @@ for the same path with different versions, selected via `Accept-Version`
 header or URL prefix. Requires a version constraint strategy in
 `route.js`, integration with `find-my-way` router's constraint system,
 version extraction in `handle-request.js`, and TypeScript definitions
-in `types/route.d.ts` for version configuration.
+in `types/route.d.ts` for version configuration. Document the
+versioning API in `docs/` with configuration examples, and update
+`README.md` to mention route versioning support in the features list.
 
 ### M2: Add response compression with content-type awareness
 
@@ -414,30 +418,46 @@ for tenant-isolated plugin contexts, `hooks.js` for tenant lifecycle
 hooks, `decorate.js` for tenant-scoped decorators, `error-handler.js`
 for tenant error handlers, and `types/instance.d.ts` for tenant types.
 
-## Non-code focused
+### N11: Fix .borp.yaml test configuration not separating unit and integration test timeouts
 
-### N11: Fix outdated or inconsistent metadata in .borp.yaml
+The `.borp.yaml` test runner configuration does not distinguish between
+fast unit tests in `test/` and slower integration tests in
+`integration/`. Long-running integration tests may flake in CI due to
+default timeout values. Add a dedicated test pattern for `integration/**`
+with an extended timeout in `.borp.yaml`, and update
+`.github/workflows/ci.yml` to run integration tests as a separate job
+with a higher `timeout-minutes` value.
 
-The project configuration file `.borp.yaml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Add contributor documentation and project governance updates
 
-### M11: Add or improve CI workflow and update related documentation
+Rewrite `CONTRIBUTING.md` to include step-by-step guides for adding new
+hooks to `hooks.js`, defining error codes in `errors.js` with the
+`FST_ERR_*` prefix convention, and creating TypeScript type definitions
+in `types/`. Add a `docs/Guides/Error-Codes.md` listing all `FST_ERR_*`
+codes with descriptions and error resolution guidance. Update
+`README.md` to include badges for CI status from
+`.github/workflows/ci.yml`, npm version, and code coverage. Update
+`.github/dependabot.yml` to add a weekly schedule for npm dependency
+updates and `actions` updates for GitHub Actions workflows. Add a
+plugin development guide to `docs/Guides/Plugin-Development.md`
+explaining the encapsulation model in `plugin-override.js` and
+decorator inheritance via `decorate.js`.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .borp.yaml, and update SPONSORS.md to document the CI
-process and badge status for contributors.
+### W11: Consolidate CI workflows and overhaul developer tooling
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `docs/Reference/Principles.md`, `.github/labeler.yml`, `.borp.yaml`, `package.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Consolidate the 19 GitHub Actions workflow files under
+`.github/workflows/` by merging related workflows: combine
+`coverage-nix.yml` and `coverage-win.yml` into a single cross-platform
+coverage workflow, merge `ci.yml` and `ci-alternative-runtime.yml` into
+one with a runtime matrix, and consolidate `integration.yml` and
+`integration-alternative-runtimes.yml`. Add a `package.json` script for
+validating the TypeScript declarations in `types/` against `fastify.d.ts`.
+Create a `.github/workflows/docs.yml` workflow that builds documentation
+from `docs/` on pushes to main and deploys to GitHub Pages. Update
+`eslint.config.js` to add rules for `lib/` that enforce the `FST_ERR_*`
+error code prefix pattern. Update `.gitpod.yml` to pre-install
+dependencies and start the test watcher. Update `GOVERNANCE.md` to
+document the release process, versioning strategy, and the relationship
+between `package.json` `version` and `build/sync-version.js`. Add
+`.markdownlint-cli2.yaml` ignore patterns for generated documentation
+output.

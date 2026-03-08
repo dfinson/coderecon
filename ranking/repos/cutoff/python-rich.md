@@ -101,7 +101,7 @@ codes but does not allow users to register custom named aliases (e.g.,
 `"brand-primary"` → `"#336699"`). Add a `Color.register_alias(name, color_str)`
 class method that stores aliases in a module-level dictionary consulted
 by `Color.parse()` before falling back to the standard color lookup,
-so themes can define semantic color names.
+so themes can define semantic color names. Also update `CHANGELOG.md` to document the new alias registration API with usage examples.
 
 ### N4: Fix Table not rendering empty cells when show_lines=True
 
@@ -202,7 +202,7 @@ collapsed by default. When rendered, collapsed nodes show a `[+]`
 indicator instead of their children. When used with `Live`, clicking
 or pressing a key toggles expansion. Requires changes to `Tree`
 rendering, guide character logic, and integration with `Live` for
-interactive toggling.
+interactive toggling. Also update `CONTRIBUTING.md` to document the interactive widget testing guidelines.
 
 ### M6: Add word-wrap mode to Text with hyphenation
 
@@ -355,30 +355,34 @@ overlay rendering, `console.py` for screen buffer compositing,
 `segment.py` for z-order layering, `style.py` for notification-level
 theming, and `layout.py` for overlay positioning.
 
-## Non-code focused
+### N11: Restructure `CHANGELOG.md` with categorized change sections
 
-### N11: Fix outdated or inconsistent metadata in faq.yml
+The `CHANGELOG.md` uses a flat list of changes per version without
+categorization. Restructure the unreleased section to group entries
+under Added, Changed, Fixed, and Deprecated headings following
+Keep a Changelog format. Add hyperlinks to GitHub compare URLs for
+each version heading so readers can see the full diff.
 
-The project configuration file `faq.yml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Revise `tox.ini` and `Makefile` to add documentation and benchmark targets
 
-### M11: Add or improve CI workflow and update related documentation
+The `tox.ini` defines basic test environments but lacks dedicated
+environments for documentation building and benchmark runs. Add a
+`docs` environment that builds Sphinx documentation with warnings-as-
+errors, a `bench` environment that runs `asv` benchmarks against the
+current branch, and update the `Makefile` to add `make docs` and
+`make bench` targets. Also update `.readthedocs.yml` to use the
+new tox docs environment and update `.coveragerc` to exclude
+benchmark files from coverage reports.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in faq.yml, and update README.kr.md to document the CI
-process and badge status for contributors.
+### W11: Comprehensive project configuration and documentation overhaul
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`, `faq.yml`, `tox.ini`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Perform a full non-code refresh: update `pyproject.toml` metadata
+with current classifiers, project URLs, and PEP 639 license
+declarations. Revise `CONTRIBUTING.md` to add sections on Rich
+renderable development guidelines and visual regression testing.
+Restructure `CHANGELOG.md` to follow Keep a Changelog format across
+all versions. Update `tox.ini` to add type-checking and linting
+environments. Revise the `Makefile` with consolidated targets.
+Update `.coveragerc` to add branch coverage and exclusion patterns.
+Update `.pre-commit-config.yaml` hook versions and add `ruff`
+formatting hooks.

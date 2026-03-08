@@ -75,7 +75,7 @@ src/main/java/com/fasterxml/jackson/databind/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -121,7 +121,9 @@ When deserialization fails on a deeply nested field, the thrown
 without the full JSON path (e.g., just `"age"` instead of
 `"person.address.age"`). Fix the path tracking in
 `DeserializationContext` to accumulate the full property path using
-the `JsonStreamContext` stack.
+the `JsonStreamContext` stack. Also add a corresponding entry to
+`release-notes/VERSION` documenting the improved error message
+format as a minor behavior change.
 
 ### N6: Fix SerializationContext not invalidating cached serializers on view change
 
@@ -185,7 +187,10 @@ JSON Schema (draft 2020-12) from bean metadata: required fields from
 for descriptions, `@JsonFormat` for format hints, and polymorphic type
 schemas from `@JsonTypeInfo`. Changes span a new `schema/` sub-package,
 `introspect/BeanDescription` for metadata extraction, `type/TypeFactory`
-for type mapping, and `ObjectMapper` for the entry point method.
+for type mapping, and `ObjectMapper` for the entry point method. Also
+add an optional `jackson-databind-jsonschema` dependency entry in
+`pom.xml` and update `README.md` to document the JSON Schema
+generation feature with usage examples.
 
 ### M3: Implement streaming large-collection serialization with backpressure
 
@@ -390,31 +395,49 @@ reading, `deser/ValueInstantiator` for default-value constructors,
 `type/TypeFactory` for Kotlin type mapping, and `ser/` for value
 class handling.
 
+### N11: Fix release-notes/VERSION not separating breaking changes from bug fixes
 
-## Non-code focused
+The `release-notes/VERSION` file lists all changes in a flat format
+without distinguishing breaking API changes from bug fixes and new
+features. When users upgrade between versions, they must read every
+entry to identify breaking changes. Restructure `release-notes/VERSION`
+to use subsection headers (`### Breaking Changes`, `### Bug Fixes`,
+`### New Features`) for each release. Also add a
+`release-notes/MIGRATION.md` template that documents
+migration steps for breaking changes, and update `CONTRIBUTING.md`
+(under `.github/CONTRIBUTING.md` if present) to require contributors
+to categorize their changelog entries.
 
-### N11: Fix outdated or inconsistent metadata in pom.xml
+### M11: Add CodeQL security scanning and update pom.xml security metadata
 
-The project configuration file `pom.xml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+The `.github/workflows/codeql-analysis.yml` workflow runs CodeQL
+but does not include custom query suites for Jackson-specific
+vulnerability patterns (unsafe deserialization, type coercion
+bypasses). Add a `.github/codeql/jackson-queries.ql` custom query
+that detects unvalidated `TypeResolverBuilder` configurations. Update
+`pom.xml` to add `<security>` metadata with CVE disclosure contact
+and security policy URL. Add a `SECURITY.md` file documenting the
+vulnerability reporting process specific to deserialization-related
+security issues. Update `.github/dependabot.yml` to add weekly
+scanning for Maven dependency vulnerabilities and update the
+`<dependencyManagement>` section in `pom.xml` to pin all test
+dependencies with version ranges that exclude known CVEs.
 
-### M11: Add or improve CI workflow and update related documentation
+### W11: Overhaul build configuration, CI workflows, and project documentation
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in `pom.xml`, and update `docs/README.md` to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.yml`, `.github/ISSUE_TEMPLATE/something_else.yml`, `pom.xml`, `.vscode/mcp.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Comprehensively update all non-code project files for the Jackson 3.x
+release. Restructure `pom.xml` to update the Java baseline from 17
+to document the rationale in the `<properties>` comments, add
+`maven-enforcer-plugin` rules for minimum Maven/JDK versions, and
+configure reproducible builds via `project.build.outputTimestamp`.
+Update `.github/workflows/main.yml` to add a JDK 17/21 matrix,
+add a `dep_build_v3.yml` dependent-build verification job, and add
+a `coverage-comment.yml` workflow that posts coverage deltas on PRs.
+Restructure `release-notes/` to add per-major-version migration
+guides with code examples. Update `README.md` to document the 3.x
+API changes, add a feature comparison table between 2.x and 3.x,
+and add links to the migration guide. Update `SECURITY.md` with the
+Jackson security team contact and supported-version matrix. Add a
+`.github/CONTRIBUTING.md` with guidelines on the module system
+(`module-info.java`), testing requirements, and the release
+process.

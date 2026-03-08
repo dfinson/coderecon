@@ -181,7 +181,9 @@ The `absl/strings/ascii.h` header provides `absl::AsciiStrToLower()`
 that returns a new string. Add an in-place variant `AsciiStrToLower(
 std::string* s)` that modifies the string in-place without allocating
 a new one, for use in performance-sensitive code paths. Similarly add
-`AsciiStrToUpper(std::string* s)`.
+`AsciiStrToUpper(std::string* s)`. Also update `FAQ.md` to include
+usage examples for the new in-place variants alongside the existing
+copy-returning overloads.
 
 ### N6: Fix StatusOr move-assignment not clearing the error on value assignment
 
@@ -289,6 +291,9 @@ but not custom value validation (e.g., `--port` must be 1–65535). Add
 parsing and `absl::ParseFlagValidator` for compile-time registration.
 Requires validator storage in the flag registry, validation callback
 invocation in `ParseCommandLine()`, and error reporting integration.
+Also update `CONTRIBUTING.md` with guidelines for writing and
+registering custom flag validators, and add a validator example to
+the `CMake/README.md` build instructions.
 
 ### M8: Add absl::Hash support for heterogeneous lookup keys
 
@@ -365,7 +370,10 @@ Extend `absl/flags/` with subcommand support: `myapp build --jobs 4`,
 routing in `ParseCommandLine()`, per-subcommand flag namespacing, help
 text generation with subcommand listing, completion generation, and
 nested subcommand hierarchies. Changes span `flags/flag.h`, `flags/parse.cc`,
-`flags/usage.cc`, and a new `flags/subcommand.h`.
+`flags/usage.cc`, and a new `flags/subcommand.h`. Also update
+`CMakeLists.txt` to add the new `flags/subcommand.h` to the
+`absl_cc_library` target and update `README.md` with a subcommand
+quickstart section.
 
 ### W6: Add a safe subset of absl::strings for untrusted input processing
 
@@ -417,31 +425,45 @@ integration in `base/`, `flat_hash_map` allocator support tests,
 `Cord` arena-allocated node support, debug-mode poisoning for freed
 memory, and thread-safety annotations.
 
+### N11: Update CMake build configuration and documentation for new modules
 
-## Non-code focused
+The `CMakeLists.txt` at the project root includes each `absl/` module
+via `add_subdirectory()`, but the `CMake/README.md` instructions do not
+clearly document how downstream consumers should selectively link
+individual Abseil targets. Update `CMake/README.md` to add a
+cheat-sheet table mapping public header directories to their CMake
+target names (e.g., `absl/strings/ → absl::strings`). Also update
+`CMake/AbseilHelpers.cmake` to add a comment block documenting the
+available helper macros (`absl_cc_library`, `absl_cc_test`) with their
+parameters, and update `UPGRADES.md` to note any recent build option
+changes such as the `ABSL_PROPAGATE_CXX_STD` flag.
 
-### N11: Fix outdated or inconsistent metadata in .vscode/mcp.json
+### M11: Add CI sanitizer matrix and contributor testing guide
 
-The project configuration file `.vscode/mcp.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+The `ci/` directory contains per-platform build scripts (e.g.,
+`ci/linux_clang-latest_libcxx_asan_bazel.sh` for ASAN,
+`ci/linux_clang-latest_libcxx_tsan_bazel.sh` for TSAN) but these are
+not consistently documented. Add a new section to `CONTRIBUTING.md`
+that documents the CI sanitizer matrix — listing each
+`ci/linux_*.sh` script, the sanitizer it enables, the toolchain it
+uses, and how contributors can reproduce the CI locally. Update
+`FAQ.md` with a "How do I run sanitizer builds?" entry cross-
+referencing the new `CONTRIBUTING.md` section. Also update
+`.github/PULL_REQUEST_TEMPLATE.md` to add a checkbox asking whether
+sanitizer CI passed.
 
-### M11: Add or improve CI workflow and update related documentation
+### W11: Overhaul build system and packaging across CMake, Bazel, and Conan
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in `.vscode/mcp.json`, and update `ABSEIL_ISSUE_TEMPLATE.md` to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/config.yml`, `.github/ISSUE_TEMPLATE/00-bug_report.yml`, `.vscode/mcp.json`, `ABSEIL_ISSUE_TEMPLATE.md`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The project supports three build systems — CMake (`CMakeLists.txt`,
+`CMake/AbseilHelpers.cmake`, `CMake/AbseilDll.cmake`), Bazel
+(`BUILD.bazel`, `MODULE.bazel`), and Conan (`conanfile.py`) — but
+they are not consistently maintained. Synchronize the list of public
+libraries across all three systems, ensuring that new modules added
+via `absl_cc_library` in CMake are also exported in the Bazel
+`cc_library` rules and the Conan `cpp_info.components` mapping.
+Update `CMakeLists.txt` to add an `ABSL_INSTALL_PKGCONFIG` option
+that generates a `pkg-config` `.pc` file. Update `MODULE.bazel` to
+declare minimum Bazel version and toolchain requirements. Update
+`README.md` with a unified build matrix covering CMake, Bazel, and
+Conan installation paths, and add a `SECURITY.md` file documenting
+the project's vulnerability reporting process.

@@ -193,6 +193,21 @@ indicator views accumulate in `Indicator.swift`. Fix the indicator to
 remove its view from the superview when animation stops due to
 cancellation.
 
+### N11: Fix CHANGELOG.md missing entries for cache serialization format changes
+
+The `CHANGELOG.md` does not document the `CacheSerializer` format
+change that added scale-factor preservation (N4) or the
+`DiskStorage` file-size fix (N3). Users upgrading between minor
+versions have no way to know that the on-disk cache format changed
+and may encounter deserialization errors from stale cache entries.
+The `.github/ISSUE_TEMPLATE.md` also does not ask reporters to
+specify their Kingfisher version or whether they have cleared the
+disk cache after upgrading. Fix `CHANGELOG.md` to add entries for
+both the serializer and disk-storage changes under an
+"Important Notes" section, and update `.github/ISSUE_TEMPLATE.md`
+to include Kingfisher version, Swift version, and cache-cleared
+fields.
+
 ## Medium
 
 ### M1: Add cache size reporting API to ImageCache
@@ -210,8 +225,11 @@ Add a versioned metadata header to disk cache entries so that format
 changes across Kingfisher versions don't silently corrupt cached data.
 On startup, `DiskStorage` should detect old-format entries and
 migrate or discard them. Add a `DiskStorage.MetadataVersion` enum,
-update `CacheSerializer.swift` to write version headers, and modify
-`DiskStorage.swift` to read and validate headers on retrieval.
+update `CacheSerializer.swift` to write version headers, modify
+`DiskStorage.swift` to read and validate headers on retrieval,
+add a `CHANGELOG.md` entry describing the versioned cache format
+and migration behavior, and update `docs/deployment.md` with
+guidance on cache migration during app updates.
 
 ### M3: Implement download priority escalation for deduplicated requests
 
@@ -249,8 +267,10 @@ Extend the image processing pipeline to detect and decode HEIF/HEIC
 images. Update `ImageFormat.swift` to recognize the `heic` magic
 bytes, add HEIF decoding in `ImageDrawing.swift` using
 `CGImageSourceCreateWithData`, update `CacheSerializer.swift` to
-serialize HEIF data, and ensure all built-in `ImageProcessor`
-implementations in `ImageProcessor.swift` handle HEIF input.
+serialize HEIF data, ensure all built-in `ImageProcessor`
+implementations in `ImageProcessor.swift` handle HEIF input, and
+update `README.md` to list HEIF/HEIC in the supported formats
+section.
 
 ### M7: Implement animated WebP playback in AnimatedImageView
 
@@ -290,6 +310,24 @@ queue data structure, update `ImagePrefetcher.swift` to query
 `ImageCache` before enqueuing, modify `ImageDownloader.swift` to
 accept priority-ordered tasks, and update `KingfisherManager.swift`
 to surface prefetch progress to callers.
+
+### M11: Update docs/architecture.md and README.md to document cache and networking features
+
+The `docs/architecture.md` file describes the original module
+layout but does not cover the `SwiftUI/` directory, the
+`FormatIndicatedCacheSerializer`, or the `ImagePrefetcher`
+component. The `README.md` "Features" list does not mention
+progressive JPEG support or the prefetcher API. The
+`CONTRIBUTING.md` file does not describe how to run the test
+suite on different platforms (iOS vs macOS vs tvOS) or reference
+the `fastlane/Fastfile` CI configuration. The
+`.github/workflows/build.yaml` and `.github/workflows/test.yaml`
+CI workflows do not test on watchOS. Update `docs/architecture.md`
+with SwiftUI and prefetcher sections, update `README.md` with
+complete feature coverage, update `CONTRIBUTING.md` with
+platform-specific testing instructions referencing
+`fastlane/Fastfile`, and add watchOS to the CI test matrix in
+`.github/workflows/test.yaml`.
 
 ## Wide
 
@@ -417,30 +455,25 @@ caching into `ImageCache.swift` and `DiskStorage.swift` with
 per-variant cache keys, and add `.enableContentNegotiation` to
 `KingfisherOptionsInfo.swift`.
 
-## Non-code focused
+### W11: Overhaul documentation, CONTRIBUTING.md, and CI/distribution pipeline
 
-### N11: Fix outdated or inconsistent metadata in Kingfisher.json
-
-The project configuration file `Kingfisher.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
-
-### M11: Add or improve CI workflow and update related documentation
-
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in Kingfisher.json, and update docs/deployment.md to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/workflows/build.yaml`, `.github/workflows/test.yaml`, `Kingfisher.json`, `.spi.yml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The `docs/` directory contains seven markdown files that are not
+cross-linked and have no index page. The `docs/build-system.md` file
+describes the Xcode project structure but does not mention Swift
+Package Manager or the `Package.swift` / `Package@swift-5.9.swift`
+dual-manifest setup. The `docs/testing.md` guide does not explain
+how to run tests via `fastlane` or how the
+`.github/workflows/test.yaml` CI pipeline works. The
+`Kingfisher.podspec` and `Package.swift` specify different minimum
+deployment targets with no documentation explaining why. The
+`CONTRIBUTING.md` does not describe the branch naming convention
+or the release process. The `.spi.yml` Swift Package Index
+configuration does not include documentation generation targets.
+Add a `docs/README.md` index page linking all documentation files,
+update `docs/build-system.md` to cover SPM and CocoaPods
+side-by-side, update `docs/testing.md` with CI pipeline context
+and `fastlane/Fastfile` reference, reconcile deployment targets
+between `Kingfisher.podspec` and `Package.swift` with
+documentation explaining the rationale, update `CONTRIBUTING.md`
+with branching and release process, and configure `.spi.yml` for
+documentation generation.

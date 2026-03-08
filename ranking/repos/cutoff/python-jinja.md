@@ -97,7 +97,7 @@ The built-in tests in `tests.py` include `is iterable`, `is sequence`,
 and `is string`, but there is no `is mapping` test to check whether a
 value implements the `Mapping` ABC. Add a `test_mapping` function to
 `tests.py` that returns `True` for dict-like objects, and register it
-in `DEFAULT_TESTS` in `defaults.py`.
+in `DEFAULT_TESTS` in `defaults.py`. Also add a documentation entry in `CHANGES.rst` describing the new `is mapping` test with usage examples.
 
 ### N4: Fix `FileSystemLoader` not normalizing path separators on Windows
 
@@ -227,7 +227,7 @@ with the target object, attribute name, and denial reason on each
 blocked access. The callback should receive structured data including
 the template name and line number. Changes touch `sandbox.py` (audit
 hook infrastructure), `runtime.py` (context propagation), and
-`environment.py` (callback configuration).
+`environment.py` (callback configuration). Also update `README.md` to document the audit logging feature and add a security considerations section.
 
 ### M6: Add AST-level template linting for common template mistakes
 
@@ -427,30 +427,35 @@ injection), `environment.py` (profiler lifecycle management),
 `bccache.py` (cache timing), and a new `profiler.py` module for data
 collection, aggregation, and output formatting.
 
-## Non-code focused
+### N11: Add migration notes and deprecation notices to `CHANGES.rst`
 
-### N11: Fix outdated or inconsistent metadata in .devcontainer/devcontainer.json
+The `CHANGES.rst` file does not include forward-looking deprecation
+notices or migration guidance for upcoming breaking changes. Add a
+new section for the upcoming release with entries documenting deprecated
+APIs, their replacements, and the planned removal timeline. Include
+cross-references to the relevant documentation pages for migration
+instructions.
 
-The project configuration file `.devcontainer/devcontainer.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Update `pyproject.toml` build configuration and `.readthedocs.yaml` for API docs
 
-### M11: Add or improve CI workflow and update related documentation
+The `pyproject.toml` uses an older build backend configuration and
+lacks optional dependency groups for documentation tooling. Add
+`[project.optional-dependencies]` groups for `docs` and `dev`.
+Update `.readthedocs.yaml` to use the new dependency group,
+configure the build OS, and add a custom build step for API
+reference generation via `sphinx-autodoc`. Also update
+`.pre-commit-config.yaml` to add template-syntax checking hooks
+and pin existing hook versions.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .devcontainer/devcontainer.json, and update docs/Makefile to document the CI
-process and badge status for contributors.
+### W11: Full documentation and configuration overhaul across non-code files
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/feature-request.md`, `.github/ISSUE_TEMPLATE/config.yml`, `.devcontainer/devcontainer.json`, `.pre-commit-config.yaml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Perform a comprehensive non-code refresh: update `CHANGES.rst` to
+use consistent formatting with contributor attribution and issue
+cross-references. Revise `README.md` to update the quickstart
+examples with modern async template rendering patterns. Update
+`pyproject.toml` with current classifiers, PEP 639 license metadata,
+and restructured dependency groups. Configure `.readthedocs.yaml`
+for multi-version documentation builds. Update `.pre-commit-config.yaml`
+with current hook versions and add Jinja2 template linting hooks.
+Revise `.editorconfig` to cover template file extensions (`.j2`,
+`.jinja2`, `.html`).

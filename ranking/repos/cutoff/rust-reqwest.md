@@ -77,7 +77,7 @@ reqwest/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -105,7 +105,10 @@ When proxy credentials contain special characters like `@` or `:` in
 the password (e.g., `http://user:p@ss:word@proxy:8080`), the URL parser
 in `proxy.rs` splits incorrectly at the embedded `@`. Fix the proxy
 URL parsing to properly handle URL-encoded credentials and decode
-them before sending the `Proxy-Authorization` header.
+them before sending the `Proxy-Authorization` header. Also update
+the proxy configuration section in `README.md` to document the
+required URL-encoding format for special characters in proxy
+credentials.
 
 ### N4: Fix redirect policy not restoring original request method after 307/308 redirects on the blocking client
 
@@ -219,7 +222,9 @@ server advertises `Alt-Svc: h3=":443"`. Cache Alt-Svc records per
 origin, support max-age expiry, and fall back to HTTP/2 on QUIC failure.
 Requires Alt-Svc header parsing, a cache module, integration with
 `h3_client.rs`, connection selection logic in `connect.rs`, and
-configuration knobs on `ClientBuilder`.
+configuration knobs on `ClientBuilder`. Also update `Cargo.toml` to
+add the `http3` feature flag documentation in `[package.metadata.docs.rs]`
+and ensure the `h3` feature properly gates the new Alt-Svc dependencies.
 
 ### M5: Implement streaming multipart upload with progress callbacks
 
@@ -396,30 +401,44 @@ runtime capability queries. Changes span `async_impl/`, `blocking/`,
 refactoring, trait-based abstraction for platform-specific behavior,
 and a comprehensive cross-platform test suite.
 
-## Non-code focused
+### N11: Fix Cargo.toml feature documentation not listing all optional TLS backend combinations
 
-### N11: Fix outdated or inconsistent metadata in Cargo.toml
+The `Cargo.toml` `[features]` section defines multiple TLS backend
+combinations (`rustls`, `native-tls`, `native-tls-vendored`,
+`native-tls-no-alpn`, `native-tls-vendored-no-alpn`, `rustls-no-provider`)
+but the `[package.metadata.docs.rs]` section uses `all-features = true`
+without documenting which features are mutually exclusive. Add
+comments to `Cargo.toml` clarifying which TLS features conflict,
+update the feature table in `README.md` to document all TLS backend
+options with a compatibility matrix, and add a `cfg` check in the
+crate root that emits a `compile_error!` when incompatible TLS
+features are enabled simultaneously.
 
-The project configuration file `Cargo.toml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Add WASM target CI testing and update Cargo.toml WASM metadata
 
-### M11: Add or improve CI workflow and update related documentation
+The CI workflow in `.github/workflows/ci.yml` does not test the WASM
+target despite `wasm32-unknown-unknown` being listed in
+`[package.metadata.docs.rs]` targets. Add a CI job that builds and
+tests the `wasm` module using `wasm-pack test --headless --chrome`.
+Update `Cargo.toml` to add `wasm-bindgen-test` as a `[target.'cfg(target_arch = "wasm32")'.dev-dependencies]` entry. Add a
+`CHANGELOG.md` entry documenting the improved WASM testing coverage.
+Update `.github/workflows/ci.yml` with the new `wasm-test` job that
+installs `wasm-pack`, runs the WASM tests, and is included in the
+required CI checks.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in Cargo.toml, and update README.md to document the CI
-process and badge status for contributors.
+### W11: Restructure Cargo.toml features and overhaul project documentation
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/dependabot.yml`, `.github/workflows/ci.yml`, `Cargo.toml`, `examples/wasm_github_fetch/Cargo.toml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Reorganize the `Cargo.toml` feature hierarchy to group TLS backends,
+compression codecs, and protocol versions into feature groups with
+clear documentation comments. Add a `[package.metadata.features]`
+section listing recommended feature combinations for common use
+cases (minimal, full, WASM, blocking-only). Rewrite `README.md` to
+include a feature comparison table, migration guide from v0.12 to
+v0.13, and platform support matrix (native, WASM, Android). Update
+`CHANGELOG.md` to consolidate all v0.13.x entries with
+cross-references to relevant issues. Add a `CONTRIBUTING.md` file
+with build instructions for each target platform, feature-flag
+testing requirements, and TLS backend testing procedures. Update
+`.github/workflows/ci.yml` to add a feature-matrix job that tests
+key feature combinations (`default`, `rustls`, `native-tls`,
+`blocking+json`, `http3`, `wasm`) across platforms.

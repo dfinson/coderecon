@@ -96,7 +96,9 @@ without defining a separate `--no-verbose` flag. Add a configurable
 negation prefix (defaulting to `--no-`) that automatically generates
 the negated form for boolean flags, so `--no-verbose` sets the flag
 to `false`. Implement in `Option.hpp` flag processing and integrate
-with help text display.
+with help text display. Also update `README.md` to document the
+negation prefix feature with a usage example, and add a note in
+`CHANGELOG.md` under the next release section.
 
 ### N4: Fix Range validator not handling floating-point edge cases
 
@@ -195,6 +197,9 @@ subcommands, options, and their metadata (choices, file types, custom
 completions). Requires traversal of the command tree, format-specific
 script templates, and integration with the `App` introspection API.
 Touches `App.hpp`, a new `Completion.hpp` header, and the formatter.
+Also update `docs/mainpage.md` with a "Shell Completion" section
+documenting the generation API and supported shells, and add the
+new `Completion.hpp` header to `CHANGELOG.md`.
 
 ### M5: Implement option value callbacks with ordering guarantees
 
@@ -282,7 +287,10 @@ hierarchies with cross-references, option tables with types/defaults/
 validators, environment variable documentation, and exit code
 documentation. Changes span a new `DocGen.hpp` module, the formatter
 (structured extraction), `App.hpp` metadata access, validator display
-names, and a man page formatting engine.
+names, and a man page formatting engine. Also update `CMakeLists.txt`
+to add an `install(FILES)` rule for the new `DocGen.hpp` header and
+add a `CLI11_DOCS` CMake option to control documentation generation
+at build time.
 
 ### W4: Implement comprehensive input validation framework
 
@@ -353,30 +361,41 @@ system for offline fallback. Changes span a new `RemoteConfig.hpp`
 module, `Config.hpp` integration, `App.hpp` option resolution,
 networking (HTTP client), caching, error handling, and serialization.
 
-## Non-code focused
+### N11: Fix .codecov.yml coverage ignore paths and update CI configuration
 
-### N11: Fix outdated or inconsistent metadata in azure-pipelines.yml
+The `.codecov.yml` file ignores `tests`, `examples`, `book`, `docs`,
+`test_package`, and `fuzz` directories for coverage reporting, but
+does not ignore `scripts/` or `single-include/` (which is generated).
+Update `.codecov.yml` to add `scripts` and `single-include` to the
+ignore list. Also update `.codacy.yml` to exclude the same directories
+from static analysis. Finally, verify that `.pre-commit-config.yaml`
+includes a hook for running `cmake-format` using the rules defined in
+`.cmake-format.yaml`.
 
-The project configuration file `azure-pipelines.yml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Add meson build options for new features and update documentation
 
-### M11: Add or improve CI workflow and update related documentation
+The `meson.build` and `meson_options.txt` files define the Meson build
+configuration but do not expose feature toggles for optional components
+like extra validators or JSON support. Add `cli11_extra_validators`
+and `cli11_json_support` options to `meson_options.txt` and wire them
+into `meson.build` with conditional source inclusion. Update
+`docs/mainpage.md` to add a "Build System" section documenting both
+CMake and Meson build options. Also update `CMakePresets.json` to add
+a `ci-meson` preset that mirrors the Meson defaults, and add a note
+to `CHANGELOG.md` about the new Meson options.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in azure-pipelines.yml, and update docs/mainpage.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul CI pipelines and build configuration across all systems
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `azure-pipelines.yml`, `.github/dependabot.yml`, `azure-pipelines.yml`, `CPPLINT.cfg`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The CI configuration spans `azure-pipelines.yml`,
+`.github/workflows/tests.yml`, `.github/workflows/build.yml`, and
+`.github/codecov.yml`, but they have divergent compiler matrix
+coverage: Azure tests C++14/17 while GitHub Actions tests C++20+.
+Unify the compiler and standard matrix across all CI systems. Update
+`azure-pipelines.yml` to add a C++20 MSVC job matching the GitHub
+Actions matrix. Update `.github/workflows/tests.yml` to add a Meson
+build step that exercises the `meson.build` configuration. Add a
+CI step in `.github/workflows/build.yml` that verifies the
+`CMakePresets.json` presets build correctly. Update `CHANGELOG.md`
+with a "CI Improvements" section, and update `.github/CONTRIBUTING.md`
+to document the full CI matrix and how contributors can trigger
+specific CI jobs.

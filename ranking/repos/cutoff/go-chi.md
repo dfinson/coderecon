@@ -89,7 +89,7 @@ chi/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -119,7 +119,8 @@ responses based on the `Accept-Encoding` request header but does not
 add `Vary: Accept-Encoding` to the response. Downstream caches may
 serve compressed content to clients that do not support it. Fix the
 compressor to always set the `Vary` header when compression is
-potentially applied.
+potentially applied. Add a `CHANGELOG.md` entry documenting this
+behavioral change for users relying on response header inspection.
 
 ### N4: Fix RouteContext.URLParam returning empty string for regex-constrained parameters
 
@@ -195,7 +196,9 @@ or the parent router's middleware stack. Requires a middleware-carrying
 wrapper in `mux.go`, integration with `tree.go`'s `addRoute` to attach
 per-endpoint middleware, execution in the correct order during
 `routeHTTP`, and interaction with `chain.go` for composing the
-per-route chain with the global stack.
+per-route chain with the global stack. Document the `With()` chaining
+API in `README.md` under the Middleware section with usage examples,
+and add a `_examples/per-route-middleware/main.go` example.
 
 ### M2: Add route grouping with shared prefix and error handler
 
@@ -406,30 +409,45 @@ route coverage instrumentation, `tree.go` for route enumeration,
 `middleware/wrap_writer.go` for response capture, and example tests
 in `_examples/`.
 
-## Non-code focused
+### N11: Fix CONTRIBUTING.md not documenting the middleware contribution process
 
-### N11: Fix outdated or inconsistent metadata in .vscode/mcp.json
+The `CONTRIBUTING.md` provides general contribution guidelines but does
+not explain how to add a new middleware to the `middleware/` subpackage.
+Add an "Adding Middleware" section with instructions for file naming
+conventions, the `func(next http.Handler) http.Handler` signature
+pattern, test file requirements in `middleware/`, and the documentation
+update checklist for `README.md`. Also update `SECURITY.md` to include
+a response timeline for vulnerability reports.
 
-The project configuration file `.vscode/mcp.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Add CI linting and project configuration improvements
 
-### M11: Add or improve CI workflow and update related documentation
+Update `.github/workflows/ci.yml` to add a separate linting job using
+`golangci-lint` (the current workflow only runs `go test`), a benchmark
+comparison job that runs against the base branch, and a coverage
+reporting job that uploads results. Add a `.golangci.yml` configuration
+file enabling `govet`, `errcheck`, `staticcheck`, and `gocritic`
+linters with exclusions for test files and `_examples/`. Create a
+`GOVERNANCE.md` describing the project decision-making process and
+maintainer responsibilities. Update `go.mod` to add a comment
+documenting the four-version Go support policy referenced in the
+existing module comment. Add a `Makefile` `lint` target that wraps
+`golangci-lint run ./...`.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .vscode/mcp.json, and update SECURITY.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul documentation, examples, and developer tooling
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/workflows/ci.yml`, `.github/copilot-instructions.md`, `.vscode/mcp.json`, `_examples/rest/routes.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Rewrite `README.md` to include a comprehensive middleware reference
+table listing all 28 middlewares in `middleware/` with their purpose,
+configuration options, and example usage snippets. Add a `docs/`
+directory with `architecture.md` describing the radix trie
+implementation in `tree.go`, the `Mux` dispatch pipeline in `mux.go`,
+and the `Context` URL parameter system in `context.go`. Create a
+`docs/migration-v4-to-v5.md` covering the module path change from
+`github.com/go-chi/chi` to `github.com/go-chi/chi/v5` and API
+differences. Update each example in `_examples/` with detailed
+comments explaining the demonstrated patterns. Add a `testdata/`
+README explaining the test fixtures. Update `CHANGELOG.md` to follow
+Keep a Changelog format with categorized entries (Added, Changed,
+Fixed, Security). Add `.github/FUNDING.yml` to configure GitHub
+Sponsors. Create a `.github/copilot-instructions.md` with
+project-specific guidelines for the radix tree implementation in
+`tree.go` and middleware authoring patterns.

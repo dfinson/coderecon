@@ -88,7 +88,7 @@ values (seconds, milliseconds, etc.) but does not support human-readable
 string formats like `"2h 30m"` or ISO 8601 duration format
 (`"PT2H30M"`). Add a `format` parameter to `TimeDelta` that accepts
 `"iso8601"` or a custom format string pattern, implementing the
-serialization in `_serialize` and deserialization in `_deserialize`.
+serialization in `_serialize` and deserialization in `_deserialize`. Also add a changelog entry in `CHANGELOG.rst` documenting the new format parameter with usage examples.
 
 ### N4: Fix `ValidationError` messages not including field path for nested errors
 
@@ -206,7 +206,7 @@ improving performance when validating large invalid payloads. Requires
 changes to the `ErrorStore` in `error_store.py` (error counting and
 limit checking), the field-level validation loop in `schema.py`
 (early termination), and `@validates_schema` hooks in `decorators.py`
-(respecting the limit).
+(respecting the limit). Also update `RELEASING.md` to document performance testing steps for bulk validation changes.
 
 ### M6: Add schema-to-JSON-Schema generation
 
@@ -382,30 +382,34 @@ detection (diff between original model and loaded data). Changes span
 `validate.py` (database-aware validators like unique checks), a new
 `orm.py` module for ORM integration, and `exceptions.py` (ORM errors).
 
-## Non-code focused
+### N11: Restructure `AUTHORS.rst` and add a maintainers section
 
-### N11: Fix outdated or inconsistent metadata in tox.ini
+The `AUTHORS.rst` file is a flat list of contributor names without
+organization. Restructure it to separate Core Maintainers from
+Contributors, add GitHub handles alongside names, and include a brief
+description of each maintainer's area of responsibility. Update the
+formatting to use consistent reStructuredText list markup.
 
-The project configuration file `tox.ini` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Revise `tox.ini` test environments and update `RELEASING.md` release process
 
-### M11: Add or improve CI workflow and update related documentation
+The `tox.ini` does not include dedicated environments for type checking
+or documentation building. Add `typecheck` (mypy), `docs` (sphinx),
+and `lint` (ruff) environments with appropriate dependency lists.
+Update `RELEASING.md` to include steps for running the new tox
+environments before release, add a release checklist section, and
+document the version bumping procedure. Also update
+`.readthedocs.yml` to reference the tox docs environment and
+update `.pre-commit-config.yaml` hook versions.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in tox.ini, and update docs/dashing.json to document the CI
-process and badge status for contributors.
+### W11: Full project configuration and documentation overhaul
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/dependabot.yml`, `.github/workflows/build-release.yml`, `tox.ini`, `.pre-commit-config.yaml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Perform a comprehensive non-code refresh: update `pyproject.toml`
+with current classifiers, PEP 639 license metadata, and restructured
+optional dependency groups. Revise `CONTRIBUTING.rst` to add sections
+on schema development guidelines, test writing conventions, and
+documentation contribution workflow. Restructure `AUTHORS.rst` with
+maintainer roles and responsibilities. Update `tox.ini` with
+comprehensive test environments. Revise `RELEASING.md` with a
+detailed release checklist. Update `SECURITY.md` with the current
+vulnerability disclosure policy. Update `.pre-commit-config.yaml`
+hook versions and add `ruff` formatting hooks.

@@ -92,7 +92,7 @@ clap/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -128,7 +128,9 @@ Elvish syntax (backticks, single quotes, or dollar signs), the
 generated completion script in `clap_complete/src/aot/shells/elvish.rs`
 produces syntax errors because descriptions are inserted into Elvish
 string literals without escaping. Fix the elvish generator to escape
-special characters in descriptions before emitting them.
+special characters in descriptions before emitting them. Also update
+the shell-specific documentation in `README.md` to note the supported
+character set for descriptions in generated Elvish completions.
 
 ### N5: Fix error format not showing valid values for custom `PossibleValuesParser` failures
 
@@ -259,7 +261,10 @@ writes the completion script to the appropriate config directory
 prints instructions for sourcing. Support `--dry-run` to preview.
 Requires shell detection logic, platform-specific path resolution,
 file writing with permission handling, existing-file backup, and
-integration with `clap_complete`'s generator system.
+integration with `clap_complete`'s generator system. Also update
+`CONTRIBUTING.md` with platform-specific testing guidelines for
+the install paths and add a CI job in `.github/workflows/ci.yml`
+that validates install-path resolution on Linux, macOS, and Windows.
 
 ### M8: Add help output customization with section reordering and filtering
 
@@ -408,30 +413,46 @@ code. Changes span a new `clap_compat` crate, proc-macro re-exports,
 API adapters in `clap_builder`, a source-rewriting tool, and
 comprehensive test suites covering both legacy APIs.
 
-## Non-code focused
+### N11: Fix CHANGELOG.md not linking release version headers to GitHub compare URLs
 
-### N11: Fix outdated or inconsistent metadata in clap_derive/Cargo.toml
+The `CHANGELOG.md` uses `[Unreleased]` and versioned headers like
+`[4.5.60]` but several recent releases are missing their
+corresponding compare-URL references at the bottom of the file
+(e.g., `[4.5.60]: https://github.com/clap-rs/clap/compare/v4.5.59...v4.5.60`).
+Audit all version headers in `CHANGELOG.md` against the reference
+link section at the bottom and add missing compare URLs. Also fix
+the `[Unreleased]` link to compare against the latest released tag
+rather than a hardcoded old tag.
 
-The project configuration file `clap_derive/Cargo.toml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Add cargo-deny CI enforcement and update deny.toml license policy
 
-### M11: Add or improve CI workflow and update related documentation
+The `deny.toml` configuration file defines license and advisory
+policies, but the CI workflow in `.github/workflows/ci.yml` does
+not run `cargo deny check` as a required job. Add a `deny` job to
+the CI workflow that runs `cargo deny check licenses advisories`
+on every PR. Update `deny.toml` to explicitly list allowed licenses
+for all workspace crates, add the `[advisories]` section with a
+configured vulnerability database URL, and add `[sources]` policy to
+restrict crate registries. Also update `Cargo.toml` workspace metadata
+to include `license` fields in all sub-crate manifests
+(`clap_builder/Cargo.toml`, `clap_derive/Cargo.toml`,
+`clap_complete/Cargo.toml`, `clap_lex/Cargo.toml`) that reference
+the workspace license.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in clap_derive/Cargo.toml, and update clap_derive/README.md to document the CI
-process and badge status for contributors.
+### W11: Prepare workspace for v5 release across all non-code configuration files
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.yml`, `.github/ISSUE_TEMPLATE/feature_request.yml`, `clap_derive/Cargo.toml`, `Cargo.toml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Prepare the clap workspace for the v5 major release by updating all
+non-code configuration and documentation files. Update the workspace
+`Cargo.toml` to bump `rust-version` (MSRV) from `1.74` to `1.80`
+and update the `workspace.package` edition to `2024`. Update
+`CHANGELOG.md` to finalize the `5.0.0` section with all breaking
+changes and migration notes. Revise `CONTRIBUTING.md` to document
+the v5 branching strategy and deprecation removal process. Update
+`deny.toml` to add new workspace members (`clap_complete_nushell`,
+`clap_mangen`) to the license audit scope. Update `release.toml`
+with the v5 version bump configuration for all crates. Update
+`CITATION.cff` with the new version and release date. Revise
+`.github/workflows/ci.yml` to add a `msrv` job that tests against
+the new MSRV and update the `rust-next` workflow to test against
+the latest nightly. Update `README.md` badges to reflect the new
+MSRV and link to the v5 migration guide.

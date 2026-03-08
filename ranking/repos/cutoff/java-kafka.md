@@ -87,7 +87,7 @@ server-common/            # Server utilities — event queue, timeline data stru
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -125,7 +125,10 @@ declaring config dependencies via `dependents()`, but does not validate
 that referenced config keys actually exist in the same `ConfigDef`.
 A typo in a dependent reference silently produces a broken config
 definition. Add validation in `ConfigDef.validate()` that all
-`dependents` keys exist in the config definition.
+`dependents` keys exist in the config definition. Also update
+`docs/configuration/` documentation pages to add a "Config
+Dependencies" subsection explaining how dependent configs are
+validated and what errors to expect on misconfiguration.
 
 ### N5: Add Header.toString() with value decoding
 
@@ -268,6 +271,9 @@ plaintext in `server.properties` and Connect worker configs. Add a
 a master key, with support for AES-256-GCM encryption, key rotation,
 and integration with the existing `ConfigProvider` SPI. Touches
 `common/config/`, the config provider framework, and documentation.
+Also update `config/server.properties` to add commented-out example
+configuration for the encryption provider, and update
+`docs/security/` documentation with a "Config Encryption" guide.
 
 ### M10: Add Streams topology optimization hints
 
@@ -389,30 +395,61 @@ request processing pipeline, metrics collection, and the admin client.
 Changes span `server/`, `server-common/`, `clients/admin/`, `common/`,
 and configuration.
 
-## Non-code focused
+### N11: Fix checkstyle/suppressions.xml not suppressing false positives in generated protocol code
 
-### N11: Fix outdated or inconsistent metadata in streams/quickstart/pom.xml
+The `checkstyle/suppressions.xml` defines suppression rules for
+checkstyle violations but does not include suppressions for
+automatically generated protocol classes under
+`clients/src/generated/`. These generated files trigger
+`MagicNumber`, `LineLength`, and `ParameterNumber` violations that
+are false positives and add noise to the build output. Add
+suppression entries in `checkstyle/suppressions.xml` matching the
+`clients/src/generated/**/*.java` pattern for the specific check
+modules. Also update `checkstyle/import-control.xml` to add an
+`<allow>` rule for the generated protocol package imports.
 
-The project configuration file `streams/quickstart/pom.xml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Add Gradle build cache configuration and update CI workflow parallelism
 
-### M11: Add or improve CI workflow and update related documentation
+The `build.gradle` configures `maxTestForks` based on available
+processors but does not enable Gradle's local or remote build
+caching, causing full rebuilds on every CI run. Add
+`org.gradle.caching=true` to `gradle.properties`. Configure the
+build cache in `settings.gradle` with a local cache directory and
+optional remote cache endpoint for CI. Update
+`.github/workflows/ci.yml` to add `actions/cache` for Gradle
+caches (`~/.gradle/caches`, `~/.gradle/wrapper`), reduce CI wall-
+clock time by splitting the test job into per-module parallel jobs
+(`clients`, `streams`, `connect`, `server`), and add a `rat` job
+that runs Apache Rat license header checks as a separate CI step.
+Update `gradle/dependencies.gradle` to pin the `grgit` plugin
+version used for license checking. Add a
+`.github/workflows/stale.yml` workflow update to auto-close stale
+issues after 90 days.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in streams/quickstart/pom.xml, and update release/README.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul Gradle build, checkstyle rules, CI workflows, and documentation
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/workflows/pr-update.yml`, `.github/workflows/pr-labels-cron.yml`, `streams/quickstart/pom.xml`, `tests/setup.cfg`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Comprehensively update all non-code project files for the Kafka
+4.x release. Restructure `build.gradle` to migrate to the
+`plugins` DSL for all plugin applications, update
+`spotless` configuration to enforce consistent Java formatting
+across all 30+ modules, and add `errorprone` static analysis.
+Update `checkstyle/checkstyle.xml` to upgrade to Checkstyle 10.x
+rules, add `MissingJavadocMethod` checks for public APIs, and
+update `import-control*.xml` files to reflect the KRaft module
+reorganization. Update `gradle/dependencies.gradle` to use a
+Gradle version catalog (`libs.versions.toml`) instead of the
+current `ext` variables approach. Update `.github/workflows/ci.yml`
+to add JDK 17/21 matrix testing, add a `docker_build_and_test.yml`
+job that validates the official Docker image build, and add a
+`generate-reports.yml` workflow for automated test report
+publication. Update `config/server.properties` and
+`config/controller.properties` to add KRaft-mode configuration
+examples with inline documentation comments. Update
+`docs/operations/` documentation with a "Configuration Reference"
+page auto-generated from `ConfigDef` declarations.
+Update `CONTRIBUTING.md` to add sections on the KRaft development
+workflow, integration test requirements, and the protocol
+versioning process. Update `README.md` to refresh the architecture
+overview, add a quick-start guide for KRaft mode, and update the
+build instructions. Add `Vagrantfile` updates for the development
+VM to include JDK 21 and Docker for integration testing.

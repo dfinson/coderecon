@@ -93,7 +93,10 @@ string-distance matching so the error message includes a "Did you mean
 'Active'?" suggestion when the string representation of the value is
 close to a valid enum member name. This requires modifying the
 `IsValid()` override and the default error message template in
-`LanguageManager`.
+`LanguageManager`. Also update `docs/built-in-validators.md` to
+document the new suggestion feature, including an example of the
+updated error message format and configuration options for disabling
+suggestions.
 
 ### N2: Fix PrecisionScaleValidator not handling negative decimal values symmetrically
 
@@ -176,6 +179,18 @@ based on the object being validated. Add a `WithSeverity(Func<T, Severity>)`
 overload that defers severity evaluation to validation time, storing the
 delegate in `RuleComponent` alongside the existing fixed-severity path.
 
+### N11: Update FluentValidation.csproj packaging and ReadTheDocs configuration
+
+The `FluentValidation.csproj` has `EnablePackageValidation` set twice
+(duplicate property). Remove the duplicate, add a `PackageIcon`
+property referencing `fv-small.png`, and set `MinVerTagPrefix` to `v`
+for automatic version calculation from git tags. Also update
+`.readthedocs.yaml` to use Python 3.12 and Ubuntu 24.04, update
+`docs/requirements_rtd.txt` to pin `sphinx>=7.0` and
+`sphinx-rtd-theme>=2.0`, and update `docs/conf.py` to set the
+`project` variable and `html_logo` path. Ensure `nuget.config`
+includes the `dotnet-public` feed as a package source.
+
 ## Medium
 
 ### M1: Implement ruleset inheritance for nested validators
@@ -205,7 +220,11 @@ subclasses at compile-time and generates optimised `Validate()` methods
 that avoid runtime expression compilation and reflection. Requires a
 new `FluentValidation.SourceGenerator` project, analysis of `RuleFor()`
 calls, code generation for each rule chain, and integration with the
-existing `AbstractValidator` base class via partial methods.
+existing `AbstractValidator` base class via partial methods. Also
+add the new project to `FluentValidation.sln`, create a
+`FluentValidation.SourceGenerator.csproj` with analyzer packaging
+configuration, and update `src/Directory.Build.props` to include shared
+compiler settings for the generator project.
 
 ### M4: Add differential validation to report only changed-field errors
 
@@ -272,6 +291,19 @@ failure property names within the scope. Auto-dispose the scope via
 class, `RuleBase` path construction, and the `ChildValidatorAdaptor`
 to use scopes instead of manual chain manipulation.
 
+### M11: Update CI workflow and Sphinx documentation build pipeline
+
+The `.github/workflows/ci.yml` workflow runs `./build.ps1` but does
+not build or validate the documentation site. Add a `docs` job to
+`.github/workflows/ci.yml` that runs `make html` using the
+`docs/Makefile`, validates all internal links, and checks for Sphinx
+warnings treated as errors. Update `docs/Makefile` to add a
+`linkcheck` target that runs `sphinx-build -b linkcheck`. Also add a
+`.github/workflows/lock.yml` schedule entry for Dependabot-style
+dependency lock file updates, and update `build.ps1` to include a
+`-Docs` switch that builds the Sphinx site locally for contributor
+preview.
+
 ## Wide
 
 ### W1: Implement a rule metadata extraction and documentation system
@@ -283,7 +315,10 @@ severity, error code, and custom messages. Use this model to generate
 Markdown documentation, OpenAPI schema extensions, and client-side
 validation rules. Changes span `AbstractValidator`, every built-in
 validator in `Validators/`, `RuleBase`, `RuleComponent`, and a new
-`Metadata/` namespace.
+`Metadata/` namespace. Also generate a `docs/rule-reference.md` file
+from the metadata model, update `docs/index.rst` to include the new
+page in the table of contents, and update `Changelog.txt` with a
+release note entry for the new metadata extraction feature.
 
 ### W2: Add full async pipeline with cancellation support
 
@@ -374,30 +409,18 @@ validators from reusable rule fragments. Changes span `AbstractValidator`,
 `IncludeRule` in `Internal/`, `RuleBase`, `PropertyRule`, the fluent
 extensions, and the DI registration in `AssemblyScanner`.
 
-## Non-code focused
+### W11: Restructure documentation site and project upgrade guides
 
-### N11: Fix outdated or inconsistent metadata in global.json
-
-The project configuration file `global.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
-
-### M11: Add or improve CI workflow and update related documentation
-
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in global.json, and update docs/di.md to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `docs/specific-properties.md`, `.github/ISSUE_TEMPLATE/config.yml`, `global.json`, `src/FluentValidation.Tests/xunit.runner.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The `docs/` directory contains individual upgrade guides
+(`upgrading-to-8.md` through `upgrading-to-12.md`), built-in validator
+docs, and Sphinx configuration across `conf.py`, `index.rst`,
+`Makefile`, and `make.bat`. Consolidate the upgrade guides into a
+versioned `docs/migration/` subdirectory, update `docs/index.rst` to
+reference the new paths, and add a `docs/CHANGELOG.md` generated from
+`Changelog.txt` with proper Markdown heading structure. Update
+`.readthedocs.yaml` to enable PDF and EPUB output formats, add a
+`docs/api.rst` page that auto-documents the public API using
+`sphinx-csharp`, and update `FluentValidation.sln` to include the
+`docs/` directory as a solution folder for IDE navigation. Also update
+the `.github/README.md` and `.github/CONTRIBUTING.md` with links to
+the restructured documentation site.

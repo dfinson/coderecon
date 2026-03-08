@@ -184,7 +184,23 @@ properties, and populate them from the health metrics in
 but omits the `ResiliencePipeline` name from the tags. When multiple
 pipelines use the same strategy type, events are indistinguishable.
 Fix `TelemetryUtil.cs` to include the pipeline instance name from
-`ResilienceContext.Properties`.
+`ResilienceContext.Properties`. Also update `eng/Common.props` to add
+a `<DefineConstants>` entry for `TELEMETRY_V2` that gates the new
+telemetry tag enrichment behind a build-time constant.
+
+### N11: Update stryker mutation testing configuration and CI linting workflow
+
+The `eng/stryker-config.json` targets `net10.0` and ignores `block`
+and `statement` mutations, but does not exclude the `Simmy/` chaos
+engineering directory which has intentionally non-deterministic
+behaviour that produces false-positive mutation survivors. Add
+`"Simmy"` to the `ignore-methods` list and add
+`"src/Polly.Core/Simmy/**"` to a new `mutate` exclusion pattern.
+Also update `.github/workflows/lint.yml` to run `dotnet format
+--verify-no-changes` on pull requests, add a `.markdownlint.json`
+rule to enforce consistent heading styles across `docs/` markdown
+files, and update `.github/workflows/mutation-tests.yml` to upload
+the Stryker HTML report as a build artifact.
 
 ## Medium
 
@@ -199,7 +215,10 @@ Changes span `DelayBackoffType.cs` for the new enum value,
 `RetryHelper.cs` for the calculation, `RetryStrategyOptions.cs` for
 the new `Increment` property, `RetryConstants.cs` for defaults, and
 `RetryResilienceStrategy.cs` for wiring the increment into delay
-generation.
+generation. Also add a `docs/strategies/retry-progressive.md`
+documentation page explaining the progressive backoff algorithm with
+timing diagrams, and update `docs/toc.yml` to include the new page
+under the Resilience strategies section.
 
 ### M2: Implement circuit breaker manual health reset with cold-start protection
 
@@ -295,6 +314,21 @@ Changes span `ResilienceStrategyOptions.cs` for the weight property,
 `ResiliencePipeline.cs` for the selection algorithm, and telemetry
 for weight-based metrics.
 
+### M11: Update CI build workflow and DocFX documentation configuration
+
+The `.github/workflows/build.yml` matrix runs on `windows-latest`,
+`macos-latest`, and `ubuntu-latest` but does not include a documentation
+build step. Add a `docs` job to `.github/workflows/build.yml` that
+runs `docfx build docs/docfx.json` and validates the generated API
+docs. Update `docs/docfx.json` to add the `Polly.Extensions` and
+`Polly.Testing` projects to the metadata `src` list so their APIs
+appear in the generated documentation. Also update
+`docs/toc.yml` to add an "Extensions" and "Testing" navigation entry,
+add `docs/extensibility/custom-strategies.md` with a guide on
+creating custom resilience strategies, and update
+`Directory.Build.props` to set `GenerateDocumentationFile` to `true`
+for all `src/` projects.
+
 ## Wide
 
 ### W1: Implement distributed circuit breaker with shared state
@@ -351,7 +385,14 @@ expressions, and hot-reload via `IOptionsMonitor`. Changes span a new
 `Configuration/` directory, `ResiliencePipelineBuilder.cs` for the
 configuration binding, each strategy's options class for serialization
 attributes, `Registry/` for configuration-based pipeline registration,
-and validation logic for configuration schema.
+and validation logic for configuration schema. Also update
+`CHANGELOG.md` with a feature entry documenting the new configuration
+support, add a `docs/advanced/configuration.md` guide with JSON and
+YAML examples, update `package-readme.md` to highlight the
+configuration-driven pipeline feature, update `mdsnippets.json` to
+include the `Configuration/` directory in snippet extraction, and add
+a `polly-configuration` group to `.github/dependabot.yml` for tracking
+configuration library dependency updates.
 
 ### W6: Add request hedging with circuit-breaker-aware endpoint selection
 
@@ -410,30 +451,21 @@ Changes span new `ExecutionLog/` infrastructure, integration with
 `ResilienceContext.cs` for log correlation, `Telemetry/` for log-based
 metrics reconstruction, and `Registry/` for log configuration.
 
-## Non-code focused
+### W11: Overhaul project documentation and release management infrastructure
 
-### N11: Fix outdated or inconsistent metadata in samples/Chaos/appsettings.json
-
-The project configuration file `samples/Chaos/appsettings.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
-
-### M11: Add or improve CI workflow and update related documentation
-
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in samples/Chaos/appsettings.json, and update docs/index.md to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `docs/pipelines/index.md`, `docs/pipelines/resilience-pipeline-registry.md`, `samples/Chaos/appsettings.json`, `samples/Chaos/appsettings.Development.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The repository has extensive documentation across `docs/`, `README.md`,
+`CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, and
+`package-readme.md`, but they reference different versions and have
+inconsistent formatting. Consolidate release documentation by updating
+`CHANGELOG.md` to follow Keep a Changelog format with `[Unreleased]`
+and version-tagged sections, update `package-readme.md` to
+auto-include code snippets via `mdsnippets.json` configuration, and
+add a `docs/community/release-process.md` guide documenting the
+release workflow. Update `.github/workflows/release.yml` to
+automatically extract the latest `CHANGELOG.md` section as GitHub
+Release notes, update `.github/workflows/after-release.yml` to bump
+the version in `Directory.Packages.props`, and add a
+`.github/workflows/gh-pages.yml` step that deploys the DocFX
+documentation site to GitHub Pages on each release tag. Also update
+`Polly.slnx` to include `docs/` and `eng/` as solution folders for
+IDE navigation.

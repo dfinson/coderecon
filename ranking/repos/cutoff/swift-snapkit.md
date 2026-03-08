@@ -147,7 +147,9 @@ margin variants like `topMargin`, `leadingMargin`, etc.) but the macOS
 involving margin attributes falls through to the `@unknown default`
 case and is described as "unknown". Fix the macOS branch in
 `Debugging.swift` to include descriptions for all margin attributes
-available on macOS 10.11+.
+available on macOS 10.11+. Also update `Documentation/SnapKit 3.0
+Migration Guide.md` to note the macOS margin attribute support
+and add a macOS debugging section.
 
 ### N8: Fix ConstraintInsets.init ignoring directional insets on RTL
 
@@ -175,6 +177,21 @@ force-unwrap crash because `ConstraintMakerRelatable` accesses
 `view.superview!` without a guard. Fix `ConstraintMakerRelatable.swift`
 to throw a descriptive precondition failure or assertion instead of
 force-unwrapping, providing the view's description in the error message.
+
+### N11: Fix CONTRIBUTING.md not explaining macOS testing or CI pipeline
+
+The `CONTRIBUTING.md` file describes how to open the Xcode project
+and run tests but does not explain how to test macOS-specific
+constraint behavior or mention the `.travis.yml` CI configuration.
+The `ISSUE_TEMPLATE.md` does not ask reporters to specify their
+platform (iOS vs macOS vs tvOS), which is critical for reproducing
+platform-specific layout bugs. The `CodeSnippets/SnapKit Constraint
+Make.codesnippet` and `CodeSnippets/SnapKit Constraint
+Remake.codesnippet` Xcode code snippets use outdated syntax that
+does not include `.labeled()` for debugging. Fix `CONTRIBUTING.md`
+to add macOS testing instructions and `.travis.yml` CI context,
+update `ISSUE_TEMPLATE.md` with a platform field, and update both
+code snippets to include `.labeled()` in the example closures.
 
 ## Medium
 
@@ -246,8 +263,9 @@ accepts a `snp.makeConstraints` closure for its underlying UIView.
 Support dynamic constraint updates via SwiftUI state bindings.
 Requires a new `SnapKitRepresentable.swift`, integration with
 `ConstraintMaker.swift` for constraint rebuilding on state changes,
-and updates to `ConstraintViewDSL.swift` to support the representable
-lifecycle.
+updates to `ConstraintViewDSL.swift` to support the representable
+lifecycle, and a new "SwiftUI Integration" section in `README.md`
+documenting the `SnapKitView` wrapper with usage examples.
 
 ### M8: Implement constraint conflict detection and reporting
 
@@ -279,6 +297,27 @@ conditions. Requires a new `ConstraintCondition.swift` for condition
 evaluation, changes to `ConstraintMakerRelatable.swift` for the
 branching API, and updates to `ConstraintMaker.swift` to evaluate
 conditions and install only the active branch.
+
+### M11: Update Documentation/ and README.md for modern SnapKit API
+
+The `Documentation/SnapKit 3.0 Migration Guide.md` is the only
+documentation file and covers only the 2.x → 3.0 migration.
+There is no migration guide for users upgrading from 3.x to the
+current version. The `README.md` does not document the
+`.labeled()` debugging feature, `snp.updateConstraints`, or the
+safe area layout guide support. The
+`SnapKitPlayground.playground/Contents.swift` playground file
+contains examples that may not compile against the current API.
+The `SnapKit.podspec` and `Package.swift` specify different
+Swift version requirements with no documentation explaining why.
+The `.travis.yml` CI configuration references Xcode versions
+that may be outdated. Add a `Documentation/SnapKit 5.0
+Migration Guide.md` covering all API changes since 3.0, update
+`README.md` with `labeled()`, `updateConstraints`, and safe area
+documentation, update the playground to compile with the current
+API, reconcile Swift version requirements between
+`SnapKit.podspec` and `Package.swift`, and update `.travis.yml`
+with current Xcode versions.
 
 ## Wide
 
@@ -409,30 +448,30 @@ category, adaptive attribute resolution in `ConstraintAttributes.swift`,
 and integration with `ConstraintConfig.swift` for global
 accessibility policy settings.
 
-## Non-code focused
+### W11: Overhaul README.md, CodeSnippets, playground, and Documentation
 
-### N11: Fix outdated or inconsistent metadata in .travis.yml
-
-The project configuration file `.travis.yml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
-
-### M11: Add or improve CI workflow and update related documentation
-
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .travis.yml, and update README.md to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/copilot-instructions.md`, `.travis.yml`, `.vscode/mcp.json`, `README.md`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The `README.md` serves as the primary user-facing documentation but
+lacks a complete API reference, platform support matrix (iOS, macOS,
+tvOS), and installation instructions for Swift Package Manager
+(only CocoaPods and Carthage are covered). The `CodeSnippets/`
+directory contains two Xcode code snippets (`SnapKit Constraint
+Make.codesnippet` and `SnapKit Constraint Remake.codesnippet`) that
+do not include `updateConstraints` or safe-area examples. The
+`SnapKitPlayground.playground/` playground has a single
+`Contents.swift` file that demonstrates basic usage but does not
+cover `remakeConstraints`, `updateConstraints`, layout guides, or
+macOS usage. The `Documentation/SnapKit 3.0 Migration Guide.md`
+is the only migration guide and uses outdated Swift 2-era syntax
+in examples. The `CONTRIBUTING.md` does not describe the code
+review process or reference the `.github/copilot-instructions.md`
+configuration. The `.travis.yml` CI configuration does not
+include a step to verify the playground compiles.
+Overhaul `README.md` with SPM installation instructions, a
+platform support matrix, and a full API reference with examples.
+Add `updateConstraints` and safe-area code snippets to
+`CodeSnippets/`. Expand the playground with `remakeConstraints`,
+`updateConstraints`, layout guide, and macOS examples. Update
+`Documentation/SnapKit 3.0 Migration Guide.md` with modern Swift
+syntax. Update `CONTRIBUTING.md` to describe the review process
+and link to `.github/copilot-instructions.md`. Add a playground-
+build step to `.travis.yml`.

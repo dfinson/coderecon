@@ -119,7 +119,7 @@ crossbeam/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -140,7 +140,10 @@ length as `tail.wrapping_sub(head)` using relaxed loads of `head`
 and `tail`. Under concurrent push/pop, `head` can be read after
 `tail`, producing a negative (wrapped) count. Fix `len` to use
 acquire ordering and read `head` before `tail` to ensure a
-consistent lower bound.
+consistent lower bound. Also add a note to `CHANGELOG.md` under the
+next release section documenting the memory ordering change as a
+semantic fix that may affect downstream code relying on the previous
+relaxed behavior.
 
 ### N3: Fix Backoff::is_completed always returning false after reset
 
@@ -268,6 +271,10 @@ Requires a hash table with bucket arrays in a new source file,
 epoch-guarded insert/remove/get operations using `crossbeam-epoch`,
 resizing logic with atomic bucket migration, iterator support with
 guard pinning, and `Cargo.toml` manifest for the new crate or module.
+Also update the workspace `Cargo.toml` to add the new crate to the
+`[workspace]` members list, add a re-export in the umbrella crate's
+`src/lib.rs`, and update `README.md` to document the new data
+structure in the feature overview table.
 
 ### M6: Add Parker::park_timeout with spurious-wakeup-safe API
 
@@ -428,30 +435,47 @@ and composable nested transactions. Changes span a new
 transaction log with rollback, workspace manifest, and stress tests
 verifying serializability.
 
-## Non-code focused
+### N11: Fix CHANGELOG.md not documenting MSRV policy changes across sub-crate releases
 
-### N11: Fix outdated or inconsistent metadata in Cargo.toml
+The `CHANGELOG.md` documents feature changes but does not track
+minimum supported Rust version (MSRV) bumps per sub-crate release.
+When `crossbeam-epoch` or `crossbeam-channel` bump their `rust-version`
+in their per-crate `Cargo.toml`, the root `CHANGELOG.md` does not
+mention it, surprising downstream users who pin MSRV. Add an "MSRV
+Changes" subsection to each release in `CHANGELOG.md` that lists
+per-crate MSRV changes. Also update the root `README.md` to link to
+the "Compatibility" section and add an MSRV badge that reflects the
+workspace-level `rust-version` from `Cargo.toml`.
 
-The project configuration file `Cargo.toml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Add no_std CI testing matrix and update per-crate Cargo.toml metadata
 
-### M11: Add or improve CI workflow and update related documentation
+The CI workflow in `.github/workflows/ci.yml` tests standard builds
+but does not test `no_std` configurations, despite several crates
+(`crossbeam-epoch`, `crossbeam-queue`, `crossbeam-utils`) supporting
+`no_std` via `default-features = false`. Add a CI job matrix that
+tests each crate with `--no-default-features` on a `thumbv7m-none-eabi`
+target. Update per-crate `Cargo.toml` files
+(`crossbeam-epoch/Cargo.toml`, `crossbeam-queue/Cargo.toml`,
+`crossbeam-utils/Cargo.toml`) to add `categories = ["no-std"]`
+metadata. Update `.clippy.toml` to add lint rules for `no_std`
+compatibility checking. Add a `no_std` section to `README.md`
+documenting which crates and features are available without `std`.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in Cargo.toml, and update crossbeam-deque/README.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul workspace configuration and release infrastructure
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/dependabot.yml`, `.github/workflows/ci.yml`, `Cargo.toml`, `.taplo.toml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Restructure the crossbeam workspace release process across all
+non-code files. Update the root `Cargo.toml` to add
+`[workspace.lints]` shared lint configuration, eliminating
+per-crate `.clippy.toml` duplication. Add a `release.toml`
+configuration for `cargo-release` with per-crate version bump
+rules, pre-release hooks that update `CHANGELOG.md`, and
+post-release hooks that create GitHub releases. Update
+`.github/workflows/ci.yml` to add MIRI testing for unsafe code
+in `crossbeam-epoch` and `crossbeam-deque`. Add a
+`.github/workflows/release.yml` workflow that automates crate
+publishing in dependency order using `tools/publish.sh`. Update
+`CHANGELOG.md` with a standardized format across all sub-crates.
+Update `README.md` to include a workspace crate dependency diagram
+and per-crate feature matrix. Update `.rustfmt.toml` to enforce
+consistent formatting across all crates. Add `SECURITY.md` with
+vulnerability reporting instructions for unsafe code issues.
