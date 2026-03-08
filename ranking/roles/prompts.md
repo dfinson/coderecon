@@ -6,7 +6,7 @@ Open the chat with cwd set to the clone directory
 
 ---
 
-## Training — Auditor
+## Auditor
 
 ```
 Read ../../../roles/auditor.md — those are your instructions.
