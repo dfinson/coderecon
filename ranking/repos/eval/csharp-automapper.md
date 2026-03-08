@@ -84,15 +84,15 @@ In `Internal/LockingConcurrentDictionary.cs`, `GetOrAdd` wraps the value factory
 
 ### N8: Fix `ProxyGenerator` not forwarding interface default method implementations
 
-`Execution/ProxyGenerator.cs` generates proxy types that implement interfaces but only creates stub properties. When the destination interface has default method implementations (C# 8+), calling those methods on the proxy throws `NotImplementedException` because the generated type does not inherit the interface defaults.
+`Execution/ProxyGenerator.cs` generates proxy types that extend `ProxyBase` and implement interfaces. The `GenerateFields` method iterates interface properties via `GetProperties()` and creates full backing-field property implementations using `PropertyEmitter`, but only processes properties and `INotifyPropertyChanged` events. When the destination interface declares non-property methods (including C# 8+ default interface method implementations), the proxy type does not explicitly implement them. While default methods are callable through the interface reference, calling them on the concrete proxy type fails. Add method forwarding in `ProxyGenerator` so that interface methods without default implementations produce a descriptive exception and default implementations remain accessible through the concrete type.
 
-### N9: Fix `ObjectFactory` ignoring parameterless private constructors
+### N9: Fix `ObjectFactory` not providing descriptive errors for types with only parameterized constructors
 
-`Execution/ObjectFactory.cs` uses `ConstructorInfo` lookups filtered to public constructors. If the only parameterless constructor is private or internal, `ObjectFactory` falls through to `FormatterServices.GetUninitializedObject`, bypassing any logic in the private constructor. It should respect `BindingFlags.NonPublic` when `CreateUsingServiceLocatorOrDefault` is invoked with `allowPrivate: true`.
+`Execution/ObjectFactory.cs` calls `type.GetConstructor(Internal.TypeExtensions.InstanceFlags, ...)` which includes `BindingFlags.NonPublic`, so it already finds private and internal parameterless constructors. However, when the type has no parameterless constructor and all constructors have required (non-optional) parameters, `CallConstructor` falls through to `InvalidType` with a generic error message that doesn't indicate which constructors were found or what parameters are required. Improve the error message in `ObjectFactory.CallConstructor` to list available constructors and their parameter types, and suggest using `.ConstructUsing()` or adding a parameterless constructor.
 
-### N10: Fix `TypeMapPlanBuilder` not emitting null-check for value-type source with `Nullable<T>` wrapper
+### N10: Fix `NullableSourceMapper` not emitting null-check before accessing `.Value`
 
-In `Execution/TypeMapPlanBuilder.cs`, when building the map expression for `Nullable<T> → T`, the builder does not insert a `HasValue` guard. If the source is `null`, the compiled delegate throws `InvalidOperationException` instead of returning `default(T)` or applying the configured null substitution.
+In `Mappers/NullableSourceMapper.cs`, `MapExpression` accesses `ExpressionBuilder.Property(sourceExpression, "Value")` directly without first checking `HasValue`. While `ExpressionBuilder.NullCheckSource` (called from `TypeMapPlanBuilder` at line 74) guards nullable reference types, the guard condition at line 105 of `ExpressionBuilder.cs` skips value types that are not nullable via `sourceType.IsValueType && !sourceType.IsNullableType()`. When `NullableSourceMapper` unwraps to `.Value`, the expression type becomes the underlying non-nullable value type, and downstream null-checks no longer apply. Insert a `HasValue` guard in `NullableSourceMapper.MapExpression` that returns `default(T)` or applies the configured null substitution when the source `Nullable<T>` has no value.
 
 ### N11: Fix `ISSUE_TEMPLATE.md` missing fields for performance regression reports
 
@@ -108,9 +108,9 @@ When mapping `DerivedSrc → DerivedDest`, AutoMapper must currently have an exp
 
 When `ReverseMap` is used with collection members (e.g., `List<ChildDto> → List<Child>`), the current reverse mapping creates new destination collection elements instead of matching by key and updating in place. Implement key-based matching using a configurable `EqualityComparison` on `MappingExpression`, applied during `CollectionMapper` execution and wired through `ReverseMapExpression`.
 
-### M3: Add mapping diagnostic trace for debugging complex type maps
+### M3: Add human-readable mapping diagnostic plan on top of existing `BuildExecutionPlan`
 
-Implement a `MapperConfiguration.BuildExecutionPlan(typeof(Src), typeof(Dest))` diagnostic that returns a human-readable tree of the compiled mapping plan: source member → destination member, value resolvers applied, type converters, conditions, and null substitutions. Changes span `TypeMapPlanBuilder`, `ExpressionBuilder`, `ProfileMap`, and a new `DiagnosticPlan` model. Update `README.md` with diagnostic trace usage examples and add a troubleshooting guide to `docs/source/`.
+`MapperConfiguration.BuildExecutionPlan(Type, Type)` already exists as a public API (line 185 of `MapperConfiguration.cs`) and returns a raw `LambdaExpression` representing the compiled mapping plan. Implement a higher-level `MapperConfiguration.GetDiagnosticPlan(typeof(Src), typeof(Dest))` that walks the expression tree returned by `BuildExecutionPlan` and produces a human-readable tree showing: source member → destination member, value resolvers applied, type converters, conditions, and null substitutions. Changes span `TypeMapPlanBuilder` (to annotate expression nodes), `ExpressionBuilder`, `ProfileMap`, and a new `DiagnosticPlan` model. Update `README.md` with diagnostic plan usage examples and add a troubleshooting guide to `docs/source/`.
 
 ### M4: Implement conditional profile activation based on runtime context
 
@@ -124,9 +124,9 @@ Add `Profile.When(Func<ResolutionContext, bool> predicate)` that activates or de
 
 `MapperConfiguration` rebuilds all type maps on `Seal()`. Add lazy per-`TypePair` plan caching in `ProfileMap` using the existing `LockingConcurrentDictionary`, with cache invalidation when `Features` change or an `IObjectMapper` is added. Changes span `ProfileMap`, `TypeMap`, `TypeMapPlanBuilder`, and `LockingConcurrentDictionary`.
 
-### M7: Add annotation-driven value converter discovery
+### M7: Add annotation-driven value converter discovery with automatic DI resolution
 
-Extend the annotation system to support `[ValueConverter(typeof(MyConverter))]` on destination properties for automatic converter wiring. Requires changes to `Configuration/Annotations/ValueConverterAttribute.cs`, `TypeMapConfiguration.ApplyAnnotations`, `MappingExpression`, and `PropertyMap` to resolve and apply converters from attributes during configuration.
+The existing `Configuration/Annotations/ValueConverterAttribute.cs` supports `[ValueConverter(typeof(MyConverter))]` on destination properties and wires converters through `IMemberConfigurationProvider.ApplyConfiguration`. However, converter instances are created via `Activator.CreateInstance` without DI support, and there is no way to specify converter constructor parameters or use converters registered in the service provider. Extend `ValueConverterAttribute` to support DI-resolved converter instantiation, add an optional `ConverterParameters` property for passing configuration to the converter, and update `PropertyMap` to resolve converters through `ServiceCtor` when available. Changes span `Configuration/Annotations/ValueConverterAttribute.cs`, `MappingExpression`, `PropertyMap`, and `ServiceCollectionExtensions` for converter registration.
 
 ### M8: Implement `Map<TDest>(object source)` with runtime source-type resolution and caching
 
@@ -174,13 +174,13 @@ Implement an `IMapperDiagnostics` interface exposing per-type-map execution coun
 
 Add `MapAsync<TDest>(source)` that supports `IAsyncValueResolver` and `IAsyncTypeConverter`. Requires async versions of `Mapper`, `ResolutionContext`, `TypeMapPlanBuilder` (to emit async/await expression trees), `MappingExpression` (for `ResolveUsing<IAsyncValueResolver>`), and `CollectionMapper` (for parallel async element mapping).
 
-### W8: Add cross-profile circular reference handling with identity map
+### W8: Add configurable cross-profile circular reference handling with depth-limited identity map
 
-Implement an identity map in `ResolutionContext` that tracks already-mapped source objects across all type maps to handle circular references. Requires changes to `ResolutionContext` (identity map dictionary), `Mapper.Map` (lookup before mapping), `TypeMapPlanBuilder` (emit identity map checks), `ProfileMap` (configure circular reference depth limit), and `CollectionMapper` (check map for collection elements).
+`ResolutionContext` already has an `InstanceCache` dictionary, `GetDestination`/`CacheDestination` methods, and `TypeDepth` tracking, and `TypeMapPlanBuilder.CheckForCycles` automatically sets `PreserveReferences = true` when cycles are detected. However, the current implementation has limitations: the identity map only activates when `CheckForCycles` detects a static cycle in type maps, missing dynamically circular object graphs; depth limits are per-`TypeMap` (`MaxDepth`) with a hardcoded fallback of 10 for value types; and there is no global configuration for identity map behavior. Implement a configurable `PreserveReferencesPolicy` at the profile level (always, never, auto), add a global `MaxDepth` setting in `ProfileMap`, extend `ResolutionContext` to support a configurable depth limit across all type maps, update `CollectionMapper` to check the identity map for collection elements before mapping, and add `TypeMapPlanBuilder` support for emitting depth-limit guards with configurable overflow behavior (throw, return null, return default).
 
 ### W9: Implement convention-based mapping with pluggable naming strategies
 
-Extend `Conventions.cs` to support fully pluggable naming strategies beyond the built-in `PascalCase`/`LowerUnderscoreCase`. Add an `INamingConvention` pipeline where multiple naming conventions are composed (prefix stripping, suffix mapping, acronym expansion). Changes span `Conventions`, `INamingConvention`, `ProfileMap.MatchMembers`, `TypeMapConfiguration`, `MemberConfigurationExpression`, and `ConfigurationValidator`.
+Extend `Configuration/Conventions.cs` to support fully pluggable naming strategies beyond the built-in `PascalCaseNamingConvention`/`LowerUnderscoreNamingConvention`. Add an `INamingConvention` pipeline where multiple naming conventions are composed (prefix stripping, suffix mapping, acronym expansion). Changes span `Conventions.cs` (pipeline composition in `MemberConfiguration`), `INamingConvention` (extended interface with pipeline support), `ProfileMap.MapDestinationPropertyToSource` (to apply convention pipeline during member matching), `TypeMapConfiguration`, `MemberConfigurationExpression`, and `ConfigurationValidator`.
 
 ### W10: Add distributed mapping configuration with remote profile loading
 
