@@ -368,23 +368,30 @@ The reviewer verifies this analysis.
    lines that were changed in the task commit diff.
 3. Excludes any test functions the executor wrote as part of the task
    (new tests are in the diff — they're not pre-existing ground truth).
-4. Constructs `diff_seeds` (changed symbol names from the diff) and
+4. Constructs a single `test_query` describing the full diff:
+   `"Find tests that verify the behavior of {symbols} in {files}"`
+   where symbols and files come from the diff. One query per task —
+   all changed symbols and files in one sentence. This enables the
+   embedding harvester to find semantically relevant tests.
+5. Constructs `diff_seeds` (changed symbol names from the diff) and
    `diff_pins` (changed file paths from the diff).
-5. Records all of this in the `test_selection` field of the ground
+6. Records all of this in the `test_selection` field of the ground
    truth JSON.
 
 **What the reviewer verifies:**
 
-1. `relevant_preexisting_tests` only contains tests that actually
+1. `test_query` accurately describes the changed symbols and files.
+2. `relevant_preexisting_tests` only contains tests that actually
    exist in the pre-change codebase (not new tests).
-2. The `covers_changed_lines` reference real line numbers from the diff.
-3. `diff_seeds` and `diff_pins` match the actual diff content.
-4. `new_tests_excluded` lists all new test functions from the diff.
+3. The `covers_changed_lines` reference real line numbers from the diff.
+4. `diff_seeds` and `diff_pins` match the actual diff content.
+5. `new_tests_excluded` lists all new test functions from the diff.
 
 **Ground truth labels:**
 
 | Field | What it contains | Source |
 |-------|-----------------|--------|
+| `test_query` | Natural language query describing the full diff | Executor constructs from diff |
 | `relevant_preexisting_tests` | Pre-existing test DefFacts that cover changed lines | Executor analyzes coverage + diff |
 | `import_graph_test_files` | Test files that import changed modules | Executor identifies from imports |
 | `diff_seeds` | Changed symbol names | Executor extracts from diff |

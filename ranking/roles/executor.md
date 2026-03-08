@@ -205,6 +205,7 @@ Write a JSON file to `../../data/{repo_id}/ground_truth/{heading_id}.json`.
   "test_selection": {
     "coverage_available": true,
     "coverage_file": "{heading_id}_coverage.json",
+    "test_query": "Find tests that verify the behavior of process_request and TokenExpiredError in src/auth/middleware.py",
     "diff_seeds": ["process_request", "TokenExpiredError"],
     "diff_pins": ["src/auth/middleware.py"],
     "relevant_preexisting_tests": [
@@ -228,6 +229,13 @@ Write a JSON file to `../../data/{repo_id}/ground_truth/{heading_id}.json`.
 > Leave `reviewer_corrections` empty. The reviewer (Role 3) fills it.
 
 #### Test selection field details
+
+**`test_query`**: A single natural language query describing what
+changed, constructed from your diff. Format:
+`"Find tests that verify the behavior of {symbol1}, {symbol2} in {file1}, {file2}"`
+where symbols and files come from your diff hunks. One query per task
+— all changed symbols and files go into one sentence. This query
+enables the embedding harvester to find semantically relevant tests.
 
 **`diff_seeds`**: The names of symbols you changed (from your diff).
 Extract function/class/method names from the diff hunks. These are
