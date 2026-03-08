@@ -8,7 +8,7 @@ directly in the output files.
 ## Inputs
 
 You will be given:
-1. A path to a **tasks markdown file** describing the repo and 30 tasks
+1. A path to a **tasks markdown file** describing the repo and 33 tasks
 2. Access to the **cloned repository** you are currently working inside
 3. Ground truth JSON files at `../../data/{repo_id}/ground_truth/{heading_id}.json`
    produced by the task executor (Role 2)
@@ -16,9 +16,84 @@ You will be given:
 Read the tasks file first to understand the repo and all tasks. Then
 review each ground truth JSON.
 
+## Schema reference
+
+Every task JSON must conform to this structure. Reject or fix any
+deviations (missing fields, wrong types, extra fields).
+
+```json
+{
+  "task_id": "{repo_id}/{heading_id}",
+  "task_complexity": "narrow" | "medium" | "wide",
+  "task_text": "string",
+  "diff": "string (raw git diff)",
+  "solve_notes": "string (1-3 sentences)",
+  "exploration_log": {
+    "search_sequence": [{"action": "str", "result": "str", "reasoning": "str"}],
+    "dead_ends": [{"explored": "str", "why_irrelevant": "str"}],
+    "key_decisions": [{"decision": "str", "alternatives": ["str"], "reasoning": "str"}],
+    "aha_moment": "string",
+    "hindsight": "string"
+  },
+  "confidence": "high" | "medium" | "low",
+  "minimum_sufficient_defs": [
+    {"path": "str", "name": "str", "kind": "str", "start_line": int, "reason": "edited:... or read:..."}
+  ],
+  "thrash_preventing_defs": [
+    {"path": "str", "name": "str", "kind": "str", "start_line": int, "reason": "read:..."}
+  ],
+  "tier_difference_reasoning": "string",
+  "excluded_defs": [
+    {"path": "str", "name": "str", "kind": "str", "start_line": int, "reason": "str"}
+  ],
+  "queries": [
+    {
+      "query_type": "Q_SEMANTIC|Q_LEXICAL|Q_IDENTIFIER|Q_STRUCTURAL|Q_NAVIGATIONAL|Q_SEM_IDENT|Q_IDENT_NAV|Q_FULL",
+      "query_text": "string",
+      "seeds": ["string"],
+      "pins": ["string"],
+      "expected_defs": ["path:name"],
+      "justification": "string"
+    }
+  ],
+  "test_selection": {
+    "coverage_available": bool,
+    "coverage_skip_reason": "string | null",
+    "test_query": "string | null",
+    "diff_seeds": ["string"] | null,
+    "diff_pins": ["string"] | null,
+    "relevant_preexisting_tests": [
+      {"test_path": "str", "test_name": "str", "test_kind": "str",
+       "start_line": int, "covers_changed_lines": [int], "reason": "str"}
+    ],
+    "import_graph_test_files": ["string"],
+    "new_tests_excluded": ["string"]
+  },
+  "reviewer_corrections": "string"
+}
+```
+
+**Non-OK queries** (`non_ok_queries.json`) must have:
+```json
+{
+  "repo_id": "string",
+  "reviewer_corrections": "string",
+  "non_ok_queries": [
+    {
+      "query_type": "UNSAT|BROAD|AMBIG",
+      "query_text": "string",
+      "seeds": [], "pins": [],
+      // UNSAT: "false_assumption", "evidence_of_absence"
+      // BROAD: "why_no_cutoff", "dispersion_description"
+      // AMBIG: "candidate_neighborhoods" [{name, defs, why_plausible}], "why_ambiguous"
+    }
+  ]
+}
+```
+
 ## Your job
 
-For EACH task (N1–N10, M1–M10, W1–W10):
+For EACH task (N1–N11, M1–M11, W1–W11):
 
 ### 1. Read the executor's output
 
