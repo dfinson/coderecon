@@ -18,23 +18,66 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Detect stage from PR labels
+      - name: Detect stage from linked issue
         id: stage
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          LABELS=$(gh pr view ${{ github.event.pull_request.number }} --json labels -q '.labels[].name' || echo "")
-          echo "labels=$LABELS" >> "$GITHUB_OUTPUT"
+          PR_NUM=${{ github.event.pull_request.number }}
+          PR_BODY=$(gh pr view "$PR_NUM" --json body -q '.body')
+
+          # Copilot PRs link back to the issue. Extract the issue number.
+          # Pattern: "Fixes #N", "Closes #N", or "Resolves #N" or just "#N"
+          ISSUE_NUM=$(echo "$PR_BODY" | grep -oP '(?:Fixes|Closes|Resolves|fixes|closes|resolves)\s*#\K\d+' | head -1)
+
+          if [[ -z "$ISSUE_NUM" ]]; then
+            # Fallback: look for any #N reference
+            ISSUE_NUM=$(echo "$PR_BODY" | grep -oP '#\K\d+' | head -1)
+          fi
 
           CURRENT="unknown"
-          for STAGE in auditor executor-a executor-b executor-c reviewer; do
-            if echo "$LABELS" | grep -q "gt:${STAGE}"; then
-              CURRENT="$STAGE"
-              break
+          if [[ -n "$ISSUE_NUM" ]]; then
+            echo "Linked issue: #$ISSUE_NUM"
+            ISSUE_LABELS=$(gh issue view "$ISSUE_NUM" --json labels -q '.labels[].name' 2>/dev/null || echo "")
+
+            for STAGE in auditor executor-a executor-b executor-c reviewer; do
+              if echo "$ISSUE_LABELS" | grep -q "gt:${STAGE}"; then
+                CURRENT="$STAGE"
+                break
+              fi
+            done
+          fi
+
+          # Fallback: check PR labels too
+          if [[ "$CURRENT" == "unknown" ]]; then
+            PR_LABELS=$(gh pr view "$PR_NUM" --json labels -q '.labels[].name' 2>/dev/null || echo "")
+            for STAGE in auditor executor-a executor-b executor-c reviewer; do
+              if echo "$PR_LABELS" | grep -q "gt:${STAGE}"; then
+                CURRENT="$STAGE"
+                break
+              fi
+            done
+          fi
+
+          # Fallback: check PR title
+          if [[ "$CURRENT" == "unknown" ]]; then
+            PR_TITLE=$(gh pr view "$PR_NUM" --json title -q '.title')
+            if echo "$PR_TITLE" | grep -qi "auditor"; then
+              CURRENT="auditor"
+            elif echo "$PR_TITLE" | grep -qi "executor.*session.*a\|session.*a.*narrow\|(N task"; then
+              CURRENT="executor-a"
+            elif echo "$PR_TITLE" | grep -qi "executor.*session.*b\|session.*b.*medium\|(M task"; then
+              CURRENT="executor-b"
+            elif echo "$PR_TITLE" | grep -qi "executor.*session.*c\|session.*c.*wide\|(W task"; then
+              CURRENT="executor-c"
+            elif echo "$PR_TITLE" | grep -qi "reviewer"; then
+              CURRENT="reviewer"
             fi
-          done
+          fi
+
           echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
-          echo "Detected stage: $CURRENT"
+          echo "issue_num=${ISSUE_NUM:-}" >> "$GITHUB_OUTPUT"
+          echo "Detected stage: $CURRENT (issue: ${ISSUE_NUM:-none})"
 
       - name: Squash merge the PR
         if: steps.stage.outputs.current != 'unknown'
@@ -43,7 +86,14 @@ jobs:
         run: |
           sleep 5
           gh pr merge ${{ github.event.pull_request.number }} --squash --delete-branch || \
-            echo "Merge failed or already merged"
+            echo "Merge may have already happened"
+
+      - name: Close linked issue
+        if: steps.stage.outputs.current != 'unknown' && steps.stage.outputs.issue_num != ''
+        env:
+          GH_TOKEN: ${{ secrets.GT_PAT }}
+        run: |
+          gh issue close ${{ steps.stage.outputs.issue_num }} || true
 
       - name: Read pipeline config
         if: steps.stage.outputs.current != 'unknown'
@@ -59,7 +109,9 @@ jobs:
             exit 1
           fi
 
-      - name: Create executor issues (after auditor)
+      # ── After auditor: create 3 executor issues ──
+
+      - name: Create executor issues
         if: steps.stage.outputs.current == 'auditor'
         env:
           GH_TOKEN: ${{ secrets.GT_PAT }}
@@ -110,6 +162,8 @@ jobs:
           create_executor_issue "c" "W" "W1 through W10 and W11" "N and M" \
             "After all W tasks, execute STEP 4 (non-OK queries)."
 
+      # ── After any executor: check if all 3 done ──
+
       - name: Check all executors done
         if: contains(steps.stage.outputs.current, 'executor')
         id: check-executors
@@ -131,7 +185,7 @@ jobs:
 
           echo "all_done=$ALL_DONE" >> "$GITHUB_OUTPUT"
 
-      - name: Create reviewer issue (all executors done)
+      - name: Create reviewer issue
         if: contains(steps.stage.outputs.current, 'executor') && steps.check-executors.outputs.all_done == 'true'
         env:
           GH_TOKEN: ${{ secrets.GT_PAT }}
@@ -170,6 +224,8 @@ jobs:
             }' | gh api --method POST "/repos/${REPO}/issues" --input -
 
           echo "Created reviewer issue"
+
+      # ── After reviewer: export ground truth to codeplane ──
 
       - name: Export ground truth to codeplane
         if: steps.stage.outputs.current == 'reviewer'
