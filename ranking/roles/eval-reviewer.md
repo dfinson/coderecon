@@ -57,7 +57,17 @@ Verify the output:
 - If any tasks are missing, note which ones and why (combined
   markers? missing start/end?)
 
-**Step 3 — Report:**
+**Step 3 — Clean up the export:**
+
+After verifying the traces JSONL was written correctly, delete the
+chat export JSON — it's large and the traces JSONL contains everything
+we need:
+
+```bash
+rm <path_to_exported_chat.json>
+```
+
+**Step 4 — Report:**
 
 Include the trace extraction results in your final report.
 
