@@ -213,3 +213,5 @@ benchmarking/**/results/*_raw.json
 ranking/infra/terraform.tfvars
 ranking/infra/.terraform/
 ranking/infra/terraform.tfstate*
+ranking/infra/codeplane_wheel/
+ranking/infra/.terraform.lock.hcl
