@@ -194,7 +194,6 @@ Write a JSON file to `../../data/{repo_id}/ground_truth/{heading_id}.json`.
       "query_text": "...",
       "seeds": [],
       "pins": [],
-      "expected_defs": ["src/routing.py:APIRoute", "src/utils.py:generate_unique_id"],
       "justification": "..."
     }
   ],
@@ -427,19 +426,17 @@ seeds: 2–4 central symbol names  pins: 2–4 key file paths
 
 #### Query fields
 
-**`expected_defs`** (required on every OK query):
-List which specific defs from your `minimum_sufficient_defs` ∪
-`thrash_preventing_defs` this query should retrieve. Format:
-`"path:def_name"`. Must be a subset of the task's ground truth defs.
-
 **`justification`** (required on every OK query):
-Must answer three questions in order:
+Must answer two questions in order:
 1. **Rule compliance:** what specific content in the query satisfies
    the REQUIRED rule? (quote it)
-2. **Target defs:** which defs from `expected_defs` should surface,
-   and why does this query text lead to them?
-3. **Pre-implementation:** why would a developer write this query
+2. **Pre-implementation:** why would a developer write this query
    *before* knowing the answer?
+
+The ground truth defs for each query are the task's full
+`minimum_sufficient_defs` ∪ `thrash_preventing_defs`. Every query
+for a given task targets the same def set — the ranker must learn
+to retrieve the full ground truth regardless of query formulation.
 
 ---
 
@@ -462,8 +459,6 @@ After writing each JSON, re-read it and verify:
 7. **seeds/pins:** pre-implementation knowledge, not hindsight?
 8. **completeness:** exactly 8 OK queries? Exact `query_type` strings?
 9. **solve_notes, confidence, exploration_log** filled in?
-10. **expected_defs:** each query's expected_defs are a valid subset
-    of minimum_sufficient ∪ thrash_preventing?
 
 Fix any issues before moving to the next task.
 

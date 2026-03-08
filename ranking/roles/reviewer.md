@@ -52,7 +52,6 @@ deviations (missing fields, wrong types, extra fields).
       "query_text": "string",
       "seeds": ["string"],
       "pins": ["string"],
-      "expected_defs": ["path:name"],
       "justification": "string"
     }
   ],
@@ -135,11 +134,9 @@ For each of the 8 OK queries:
 - Does it avoid the FORBIDDEN patterns for its type?
 - Are seeds pre-implementation knowledge (not hindsight)?
 - Are pins pre-implementation knowledge (not hindsight)?
-- Does `expected_defs` list valid defs from the task's ground truth?
-- Does the justification answer all three required questions:
+- Does the justification answer both required questions:
   1. Rule compliance (quotes specific satisfying content)?
-  2. Target defs (names defs from expected_defs and explains why)?
-  3. Pre-implementation (explains why a developer would write this
+  2. Pre-implementation (explains why a developer would write this
      before knowing the answer)?
 
 **Detect forced queries.** Some query types don't apply naturally to
@@ -149,8 +146,8 @@ Signs a query was forced:
 - The query text is vague or generic to satisfy the REQUIRED rule
   without genuinely targeting the task's defs
 - The justification stretches to explain relevance
-- `expected_defs` is a weak match (the query would realistically
-  surface many irrelevant defs before the expected ones)
+- The query would realistically surface many irrelevant defs
+  before the task's ground truth defs
 - Q_STRUCTURAL names a symbol with a relationship that doesn't
   meaningfully exist in the code (e.g., "callers of X" when X has
   no callers)
