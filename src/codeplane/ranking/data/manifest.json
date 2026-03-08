@@ -1,0 +1,10 @@
+{
+  "model_version": null,
+  "dataset_version": null,
+  "trained_at": null,
+  "git_sha": null,
+  "metrics": {},
+  "repos_trained": 0,
+  "queries_trained": 0,
+  "notes": "Placeholder — populated after first training run"
+}
