@@ -103,6 +103,9 @@ source = "vcs"
 [tool.hatch.build.targets.wheel]
 packages = ["src/codeplane"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"src/codeplane/ranking/data" = "codeplane/ranking/data"
+
 [tool.ruff]
 target-version = "py312"
 line-length = 100
