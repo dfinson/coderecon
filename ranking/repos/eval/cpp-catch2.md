@@ -68,7 +68,7 @@ The benchmark subsystem in `benchmark/catch_benchmark.hpp` is always compiled ev
 
 ### N4: Fix JSON reporter not escaping Unicode control characters
 
-In `internal/catch_jsonwriter.cpp`, the JSON string escaping handles quotes and backslashes but does not escape Unicode control characters (U+0000–U+001F) as required by the JSON specification. Characters like `\t` and `\n` embedded in test names produce invalid JSON output. Update `docs/reporters.md` with JSON reporter output format specification.
+In `internal/catch_jsonwriter.cpp`, the `needsEscape` function handles only the six named escape sequences (`\"`, `\\`, `\b`, `\f`, `\n`, `\r`, `\t`) but does not escape the remaining Unicode control characters (U+0000–U+001F) required by the JSON specification. Characters such as U+0001 (SOH) through U+0008 (BS), U+000B (VT), U+000E–U+001F embedded in test names or captured output produce invalid JSON. Extend `needsEscape` and `makeEscapeStringRef` to emit `\uXXXX` sequences for all unhandled control characters. Update `docs/reporters.md` with JSON reporter output format specification.
 
 ### N5: Fix `StringRef` comparison not being `constexpr` when possible
 
@@ -76,23 +76,23 @@ In `internal/catch_stringref.hpp`, the `operator==` for `StringRef` performs a l
 
 ### N6: Add wildcard negation support in test spec tag expressions
 
-The test spec parser in `internal/catch_test_spec_parser.cpp` supports `[tag]` inclusion and `~[tag]` exclusion, but does not support negated wildcard patterns like `~[slow*]` to exclude all tags matching a prefix. The `WildcardPattern` in `internal/catch_wildcard_pattern.hpp` only handles positive matches.
+The test spec parser in `internal/catch_test_spec_parser.cpp` supports `[tag]` inclusion and `~[tag]` exclusion, but does not support negated wildcard patterns like `~[slow*]` to exclude all tags matching a prefix. The `TestSpec::TagPattern` in `catch_test_spec.hpp` performs an exact `std::find` for a tag literal and does not use `WildcardPattern`, so a pattern such as `[slow*]` or `~[slow*]` will only match a test whose tag is literally `"slow*"`. Extend `TagPattern::matches` in `catch_test_spec.cpp` to use `WildcardPattern` (from `internal/catch_wildcard_pattern.hpp`) when the tag string contains `*` characters, enabling wildcard inclusion and exclusion.
 
-### N7: Fix `TextFlow::Column` not handling embedded ANSI escape codes in width calculation
+### N7: Fix `TextFlow::Column` width calculation for multi-byte UTF-8 characters
 
-In `internal/catch_textflow.cpp`, the `Column` text wrapper calculates line width by counting characters, but ANSI color codes (e.g., `\033[31m`) are counted as visible characters, causing lines to wrap too early when the console reporter uses colored output.
+In `internal/catch_textflow.cpp`, `AnsiSkippingString::preprocessString` and its iterator advance one byte at a time, counting each byte as one visible character via `m_size`. Multi-byte UTF-8 sequences (e.g., two-byte Latin Extended or three-byte CJK characters) are therefore counted as 2–4 visible characters each, causing `Column::calcLength` to calculate an inflated line width and wrap lines too early when test names or section names contain non-ASCII Unicode text. Fix the byte-counting in `preprocessString` and the `advance` method to skip UTF-8 continuation bytes (0x80–0xBF) so that `m_size` and `lineLength` reflect codepoint count rather than byte count.
 
-### N8: Fix `GENERATE` macro not deterministic across platforms with same seed
+### N8: Fix `GENERATE(random(...))` for `long double` not deterministic across platforms
 
-In `generators/catch_generators.cpp`, the `GeneratorTracker` uses `std::mt19937` but the generator index tracking varies across platforms due to different `SECTION` evaluation orders, causing `GENERATE(random(...))` to produce different sequences on Linux vs macOS with the same `--rng-seed`.
+In `generators/catch_generators_random.cpp`, the `long double` specialization of `RandomFloatingGenerator` uses `std::uniform_real_distribution<long double>` to sample values, but the C++ standard does not guarantee identical output sequences across standard library implementations (e.g., libstdc++ vs libc++). All other floating-point types use the portable `Catch::uniform_floating_point_distribution`. Replace the `std::uniform_real_distribution<long double>` in `RandomFloatingGenerator<long double>::PImpl` with `Catch::uniform_floating_point_distribution<long double>` so that `GENERATE(random(x, y))` for `long double` produces identical sequences on all platforms with the same `--rng-seed`.
 
 ### N9: Add elapsed time display to TAP reporter output
 
 The TAP reporter in `reporters/catch_reporter_tap.cpp` outputs `ok`/`not ok` lines but does not include execution time for individual test cases. Add `# time=<ms>` directives after each test line, following the TAP 13 specification for timing metadata.
 
-### N10: Fix `catch_sharding.hpp` not distributing tests evenly when count is not divisible by shard count
+### N10: Fix missing CLI validation that `--shard-index` is less than `--shard-count`
 
-In `internal/catch_sharding.hpp`, the `createShard` function uses modulo-based distribution that can produce shards with significantly different test counts when the total is not evenly divisible. The last shard may get up to `shard_count - 1` fewer tests than others.
+In `internal/catch_commandline.cpp`, the `setShardIndex` handler validates only that the value is a non-negative integer but does not check that it is less than the configured shard count. When a user passes `--shard-index N` where `N >= --shard-count`, the `createShard` function in `internal/catch_sharding.hpp` is called with `shardIndex >= shardCount`, triggering `assert(shardCount > shardIndex)` in debug builds and undefined behaviour in release builds. Add a post-parse validation step (after both options are parsed) that returns a `runtimeError` when `shardIndex >= shardCount`.
 
 ### N11: Fix `docs/release-notes.md` not documenting matcher API breaking changes
 
@@ -120,9 +120,9 @@ Extend `benchmark/detail/catch_benchmark_stats.hpp` to support custom key-value 
 
 Add `PARALLEL_SECTION("name")` that allows independent sections within a test case to execute concurrently using `std::thread`. Requires extending the section tracker in `internal/catch_test_case_tracker.cpp`, adding synchronization for assertion reporting in `internal/catch_run_context.cpp`, and ensuring reporters handle interleaved section results correctly.
 
-### M6: Add JUnit reporter support for test suite properties and system-out
+### M6: Add user-defined properties API to JUnit reporter
 
-Extend `reporters/catch_reporter_junit.cpp` to emit `<properties>` elements from user-defined metadata and capture `<system-out>` / `<system-err>` per test case using the output redirect in `internal/catch_output_redirect.cpp`. Requires adding a metadata API accessible from test cases and integrating it with the JUnit XML writer. Update `docs/reporters.md` with JUnit reporter properties documentation and CI integration examples.
+The JUnit reporter in `reporters/catch_reporter_junit.cpp` already emits `<system-out>` / `<system-err>` per test case and a `<properties>` block with built-in fields (`random-seed`, `filters`). What is missing is a user-facing API that lets test authors attach arbitrary key-value metadata to a test case (e.g., `CATCH_TEST_PROPERTY("ticket", "PROJ-123")`), have those pairs stored as `<property>` elements inside the per-`<testsuite>` `<properties>` block, and be accessible to other reporters. Requires adding a property-recording API in `interfaces/` or `internal/catch_test_case_info.hpp`, propagating collected properties through `TestCaseStats`, wiring them into the JUnit XML writer, and exposing them in at least the JSON reporter output. Update `docs/reporters.md` with the new API and CI integration examples.
 
 ### M7: Implement generator shrinking for property-based testing
 
@@ -168,7 +168,7 @@ Add `--profile` mode that tracks timing for each test case, section, assertion, 
 
 ### W6: Add data-driven testing with external data sources
 
-Implement `TEST_CASE_DATA("name", "data.csv")` and `TEST_CASE_DATA("name", "data.json")` that load test parameters from external files. Requires CSV/JSON parsers (extending `catch_jsonwriter` for reading), a data-driven test registrar in `internal/`, parameter injection into test functions, per-row reporting in all reporters, and `--data-dir` CLI option for base path configuration.
+Implement `TEST_CASE_DATA("name", "data.csv")` and `TEST_CASE_DATA("name", "data.json")` that load test parameters from external files at test registration time. Requires a new CSV parser and a new JSON reader module in `internal/` (distinct from the write-only `internal/catch_jsonwriter.cpp`), a data-driven test registrar that generates one virtual test case per data row in `internal/catch_test_case_registry_impl.cpp`, parameter injection into test functions via a typed accessor, per-row reporting in all reporters (`reporters/catch_reporter_console.cpp`, `catch_reporter_junit.cpp`, `catch_reporter_json.cpp`, `catch_reporter_xml.cpp`), and a `--data-dir` CLI option in `internal/catch_commandline.cpp` for base path configuration.
 
 ### W7: Implement fuzzing mode with corpus management
 
