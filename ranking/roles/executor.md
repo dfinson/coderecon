@@ -13,34 +13,12 @@ You will be given:
 Read the tasks file thoroughly before starting. Understand the repo
 structure, scale, and domain before solving any task.
 
-## Safety: no pushes
-
-Before starting, verify no remotes exist:
-
-```
-git remote
-```
-
-If any remotes are listed, remove them all:
-
-```
-git remote remove <name>
-```
-
-**NEVER run `git push` at any point during this session.**
+The auditor has already removed git remotes and created the output
+directory. Do not re-run those steps.
 
 ## Your job
 
-Before starting any tasks, create the output directory:
-
-```
-mkdir -p ../../data/{repo_id}/ground_truth
-```
-
-> **{repo_id}** is the markdown filename without `.md` (e.g.,
-> `python-fastapi` from `python-fastapi.md`).
-
-Work through every task sequentially (N1–N10, M1–M10, W1–W10).
+Work through the tasks you were assigned (one tier per session).
 
 **CRITICAL: Complete ALL steps (1 → 1b → 2 → 3) for ONE task before
 starting the next task. Write the JSON IMMEDIATELY after solving each

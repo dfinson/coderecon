@@ -26,6 +26,31 @@ Compare the output with the **Commit** field in the tasks file's
 metadata table. If they don't match, stop and report the mismatch.
 Do not proceed with an audit against the wrong code.
 
+## Pre-flight: remove remotes
+
+Verify no git remotes exist:
+
+```
+git remote
+```
+
+If any remotes are listed, remove them all:
+
+```
+git remote remove <name>
+```
+
+This prevents accidental pushes during executor sessions.
+
+## Pre-flight: create output directory
+
+```
+mkdir -p ../../data/{repo_id}/ground_truth
+```
+
+> **{repo_id}** is the markdown filename without `.md` (e.g.,
+> `python-fastapi` from `python-fastapi.md`).
+
 ## Pre-flight: clean copilot instructions
 
 Check if `.github/copilot-instructions.md` exists. If it does:

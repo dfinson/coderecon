@@ -30,6 +30,7 @@ This keeps context manageable (~150-200K tokens per session).
 Read ../../../roles/executor.md — those are your instructions.
 Your tasks file is ../../../repos/{SET}/{REPO_NAME}.md
 Execute tasks N1 through N10 and N11 only. Skip all M and W tasks.
+Do NOT touch, read, or modify any ground truth files from other sessions.
 Begin.
 ```
 
@@ -39,6 +40,7 @@ Begin.
 Read ../../../roles/executor.md — those are your instructions.
 Your tasks file is ../../../repos/{SET}/{REPO_NAME}.md
 Execute tasks M1 through M10 and M11 only. Skip all N and W tasks.
+Do NOT touch, read, or modify any ground truth files from other sessions.
 Begin.
 ```
 
@@ -48,6 +50,7 @@ Begin.
 Read ../../../roles/executor.md — those are your instructions.
 Your tasks file is ../../../repos/{SET}/{REPO_NAME}.md
 Execute tasks W1 through W10 and W11 only. Skip all N and M tasks.
+Do NOT touch, read, or modify any ground truth files from other sessions.
 After all W tasks, execute STEP 4 (non-OK queries).
 Begin.
 ```
