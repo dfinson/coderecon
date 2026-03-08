@@ -121,7 +121,11 @@ def create_fork(upstream: str, user: str) -> str:
 
 
 def setup_fork_branch(fork: str, commit: str) -> None:
-    """Create the gt-generation branch at the specified commit."""
+    """Create the gt-generation branch at the specified commit.
+
+    Forks often don't include older commits, so we clone from upstream,
+    add the fork as a remote, and push the branch to it.
+    """
     # Check if branch already exists
     result = subprocess.run(
         f'gh api "/repos/{fork}/git/ref/heads/{BASE_BRANCH}" -q .ref',
@@ -131,12 +135,30 @@ def setup_fork_branch(fork: str, commit: str) -> None:
         print(f"  Branch {BASE_BRANCH} already exists")
         return
 
-    # Create branch at the exact commit
-    data = {"ref": f"refs/heads/{BASE_BRANCH}", "sha": commit}
-    run(
-        f'gh api --method POST "/repos/{fork}/git/refs" '
-        f'-f ref="refs/heads/{BASE_BRANCH}" -f sha="{commit}"'
-    )
+    # The fork may not have the commit. Clone upstream, push to fork.
+    upstream = fork.split("/")[1]  # e.g. "fiber"
+    owner = fork.split("/")[0]  # e.g. "dfinson"
+
+    # Get upstream owner from the fork's parent
+    parent_info = run(f'gh api "/repos/{fork}" -q .parent.full_name')
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        repo_path = Path(tmpdir) / "repo"
+        # Clone from upstream (has all commits)
+        run(
+            f"git clone --bare https://github.com/{parent_info}.git {repo_path}",
+            capture=False,
+        )
+        # Create the branch at the target commit
+        run(f"cd {repo_path} && git branch {BASE_BRANCH} {commit}", capture=False)
+        # Push to the fork
+        token = run("gh auth token")
+        run(
+            f"cd {repo_path} && git push "
+            f"https://x-access-token:{token}@github.com/{fork}.git "
+            f"{BASE_BRANCH}",
+            capture=False,
+        )
     print(f"  Created branch {BASE_BRANCH} at {commit[:8]}")
 
 
@@ -297,13 +319,18 @@ def create_auditor_issue(fork: str, meta: dict) -> int:
 
 
 def enable_actions(fork: str) -> None:
-    """Enable GitHub Actions on the fork."""
+    """Enable GitHub Actions and Issues on the fork."""
+    # Issues are disabled by default on forks — we need them for copilot-swe-agent
+    run(
+        f'gh api --method PATCH "/repos/{fork}" -f has_issues=true',
+        check=False,
+    )
     run(
         f'gh api --method PUT "/repos/{fork}/actions/permissions" '
         f'-f enabled=true -f allowed_actions=all',
         check=False,
     )
-    print("  Actions enabled")
+    print("  Actions + Issues enabled")
 
 
 def disable_branch_protection(fork: str) -> None:
