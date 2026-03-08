@@ -78,7 +78,9 @@ without any delay. When an upstream fails, instant retries to the
 remaining upstreams create burst load that can cascade failures.
 Add a `retry_delay` field to the `Handler` struct and a corresponding
 Caddyfile option that introduces a configurable pause between retry
-attempts, with optional exponential backoff.
+attempts, with optional exponential backoff. Update the `README.md`
+to document the new `retry_delay` option in the reverse proxy
+configuration examples.
 
 ### N3: Fix reverse proxy health check not respecting `tls_server_name`
 
@@ -180,6 +182,9 @@ method, path, query, and selected headers. Add Vary header handling
 for content negotiation. Add `cache` Caddyfile directive and JSON
 config. This involves a new handler module, cache storage layer,
 and Caddyfile adapter integration in `caddyconfig/httpcaddyfile/`.
+Update `.github/CONTRIBUTING.md` to document the caching module's
+test patterns and add a caching-specific Caddyfile example in the
+`README.md`.
 
 ### M4: Add CORS handler module with preflight handling
 
@@ -335,7 +340,10 @@ configurable timeout, migrates persistent connections (WebSocket, SSE)
 to the new config, and rolls back if the new config fails health checks.
 Currently config reload is instantaneous but drops in-flight requests.
 This spans the config loader, listener management, connection tracking,
-and admin API.
+and admin API. Update `.goreleaser.yml` to document graceful reload
+behavior in the generated man pages, and update
+`.github/workflows/ci.yml` to add a reload integration test that
+validates zero dropped requests during config transitions.
 
 ### W9: Add multi-site deployment templating
 
@@ -358,28 +366,53 @@ file I/O, request matching, and adds record/replay modules.
 
 ## Non-code focused
 
-### N11: Fix outdated or inconsistent metadata in .golangci.yml
+### N11: Fix outdated `.pre-commit-config.yaml` hook versions
 
-The project configuration file `.golangci.yml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+The `.pre-commit-config.yaml` pins `golangci/golangci-lint` at
+`v1.52.2` but the `.golangci.yml` uses the v2 config format
+(`version: "2"`), making the `golangci-lint-config-verify`
+pre-commit hook fail on validation. The `gitleaks` hook is pinned
+at `v8.16.3` and `jumanjihouse/pre-commit-hooks` (for `shellcheck`)
+at `3.0.0` — the `jumanjihouse` organization is deprecated and no
+longer maintained. Update all hook versions to current releases,
+replace the `jumanjihouse` shellcheck hook with the official
+`shellcheck-py/shellcheck-py` repository, and verify the
+`golangci-lint-config-verify` hook passes with the v2
+`.golangci.yml` format.
 
-### M11: Add or improve CI workflow and update related documentation
+### M11: Improve GoReleaser release pipeline and add download verification docs
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .golangci.yml, and update README.md to document the CI
-process and badge status for contributors.
+The `.goreleaser.yml` generates cosign signatures (`.sig`) and SBOMs
+for binaries, and the release `before.hooks` generate man pages
+(`go run cmd/caddy/main.go manpage`) and bash completions but omit
+zsh and fish completions. Add zsh and fish completion generation to
+the GoReleaser `before.hooks` section. The `README.md` does not
+document how users should verify downloaded binaries using the
+cosign signatures and SBOM artifacts attached to releases — add a
+"Verifying Downloads" section with cosign verification commands.
+Update `.github/CONTRIBUTING.md` to reference the tag-based release
+pipeline described in `.github/workflows/release.yml` (which uses
+a verify-tag job with GPG signature and approval checks). Update
+`.github/workflows/release.yml` to add a post-release step that
+comments on the associated release proposal issue with published
+artifact checksums.
 
-### W11: Overhaul project configuration, CI, and documentation consistency
+### W11: Comprehensive CI hardening and developer documentation overhaul
 
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/config.yml`, `.github/ISSUE_TEMPLATE/ISSUE.yml`, `.golangci.yml`, `.goreleaser.yml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The `.github/workflows/ci.yml` runs tests on linux/mac/windows with
+Go 1.26 and build tags `nobadger,nomysql,nopgx` but has no
+integration test job that starts Caddy with a Caddyfile and verifies
+actual HTTP serving. The `.github/CONTRIBUTING.md` covers PR
+etiquette thoroughly but does not document local development setup:
+required build tags, the vendor workflow described in
+`.goreleaser.yml`, or the `.pre-commit-config.yaml` hooks. Add a
+`.github/workflows/integration.yml` that starts Caddy with sample
+Caddyfiles and runs curl-based smoke tests for reverse proxy, file
+server, and TLS termination. Restructure `.github/CONTRIBUTING.md`
+to add a "Development Environment" section covering build tags,
+vendor workflow, pre-commit setup, and the `.editorconfig` settings.
+Update `.golangci.yml` to add `gocritic`, `revive`, and `nakedret`
+linters (currently 20+ linters are enabled but these three are
+missing). Add a `SECURITY.md` at the repository root for GitHub's
+security advisory feature (currently only `.github/SECURITY.md`
+exists). Update `README.md` with a "Building from Source" section.

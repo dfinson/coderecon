@@ -70,7 +70,7 @@ googlemock/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -97,7 +97,10 @@ Death tests (`EXPECT_DEATH`) fork the test process, and the child
 inherits all open file descriptors from the parent. This can cause
 resource leaks and test interference. Add `O_CLOEXEC` handling and
 explicit fd closing in the death test child setup. Support both
-`fork()` and `clone()` backends.
+`fork()` and `clone()` backends. Also update `docs/advanced.md`
+death test documentation to describe the new fd-closing behavior
+and add a note to `docs/faq.md` about file descriptor handling
+in death tests.
 
 ### N4: Fix `EXPECT_THROW` not checking exception message content
 
@@ -161,6 +164,9 @@ parameter combinations before test instantiation. Currently
 product, forcing users to skip invalid combos inside the test body.
 Add a predicate-based filter in `gtest-param-util.h` that excludes
 combinations during generation. Include the filter in test name output.
+Also update `docs/advanced.md` parameterized testing section with
+`Where()` usage examples and add a Bazel test target in `BUILD.bazel`
+for the new combination filter tests.
 
 ### M2: Add async test support with timeout
 
@@ -329,30 +335,43 @@ capture for UI tests, and HTML failure reports with expandable
 details. Requires diff algorithms, HTML generation, screenshot
 infrastructure, and integration with the test runner output system.
 
-## Non-code focused
+### N11: Fix `docs/primer.md` and `docs/advanced.md` not documenting the full matcher list
 
-### N11: Fix outdated or inconsistent metadata in .vscode/mcp.json
+The `docs/primer.md` introduction references matchers but does not link
+to a complete list. The `docs/advanced.md` matchers section omits
+several matchers added in recent releases (e.g., `WhenSorted`,
+`IsSupersetOf`, `WhenDynamicCastTo`). Update `docs/advanced.md` to
+include all matchers from `gmock-matchers.h` with usage examples.
+Update `docs/primer.md` to add a cross-reference link to the matchers
+section. Update `docs/gmock_cheat_sheet.md` to include the missing
+matchers in its quick-reference table.
 
-The project configuration file `.vscode/mcp.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Modernize build system configuration across CMake and Bazel
 
-### M11: Add or improve CI workflow and update related documentation
+The `CMakeLists.txt`, `BUILD.bazel`, and `MODULE.bazel` configurations
+have inconsistent option naming and missing feature parity. Add a
+`GTEST_HAS_PTHREAD` option to `CMakeLists.txt` that mirrors the Bazel
+`has_pthread` config. Update `MODULE.bazel` to declare all transitive
+dependencies explicitly for Bzlmod compatibility. Add a
+`googletest_deps.bzl` entry for the `re2` dependency when
+`GTEST_HAS_ABSL` is enabled. Update `WORKSPACE.bzlmod` to use the
+latest Bazel module resolution. Update `ci/linux-presubmit.sh` and
+`ci/macos-presubmit.sh` to test both CMake and Bazel build paths
+in the presubmit pipeline.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .vscode/mcp.json, and update docs/primer.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul CI pipeline, documentation site, and contributor workflow
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/10-feature_request.yml`, `.github/ISSUE_TEMPLATE/config.yml`, `.vscode/mcp.json`, `docs/primer.md`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Consolidate the CI infrastructure and documentation. Migrate
+`ci/linux-presubmit.sh`, `ci/macos-presubmit.sh`, and
+`ci/windows-presubmit.bat` into GitHub Actions workflows under
+`.github/` with matrix builds for GCC, Clang, and MSVC across
+multiple C++ standards (C++14, C++17, C++20). Add a
+`.github/workflows/docs.yml` that builds the `docs/` Jekyll site
+(configured via `docs/_config.yml`) and deploys to GitHub Pages.
+Update `CONTRIBUTING.md` to document the new CI pipeline, add a
+DCO (Developer Certificate of Origin) sign-off requirement, and
+include a section on running tests locally with both CMake and
+Bazel. Update `docs/quickstart-cmake.md` and
+`docs/quickstart-bazel.md` to reflect the modernized build
+configuration. Add a `docs/platforms.md` update with the
+current platform support matrix.

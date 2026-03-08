@@ -105,7 +105,7 @@ When binding configuration properties to Java records using
 with a single component as a scalar value rather than a composite.
 This causes `BindException` when the record component is itself a
 complex type. Fix the `JavaBeanBinder` and `ValueObjectBinder` to
-correctly detect record types regardless of component count.
+correctly detect record types regardless of component count. Also update `gradle.properties` to add a `recordBindingFixVersion` property tracking the minimum Java version tested for record binding, and add a note in `CONTRIBUTING.adoc` under "Code Conventions" about testing record-based `@ConfigurationProperties` classes.
 
 ### N5: Fix Logback auto-configuration ignoring custom appender patterns in native image
 
@@ -183,7 +183,7 @@ Add properties under `spring.http.client.retry.*` for max-attempts,
 backoff-delay, retryable status codes, and timeout-per-attempt.
 Create a `RetryableClientHttpRequestFactoryDecorator` that wraps
 configured factories with retry logic. Register Micrometer metrics
-for retry count and timeout events.
+for retry count and timeout events. Also document the new `spring.http.client.retry.*` properties in the `README.adoc` "Getting Started" section with a usage example, and update `CONTRIBUTING.adoc` to mention the retry integration test requirements under the testing conventions.
 
 ### M3: Implement startup time analysis actuator
 
@@ -380,30 +380,14 @@ within the JVM. Add assertions for distributed tracing spans,
 message delivery, and eventual consistency. Integrate with
 `spring-boot-test` context caching for fast re-execution.
 
-## Non-code focused
+### N11: Align `gradle.properties` tool versions with `CONTRIBUTING.adoc` conventions
 
-### N11: Fix outdated or inconsistent metadata in .idea/inspectionProfiles/Project_Default.xml
+The `gradle.properties` file declares `checkstyleToolVersion=10.12.4` and `javaFormatVersion=0.0.47`, but `CONTRIBUTING.adoc` references the Spring JavaFormat project for code formatting without specifying which version is enforced, and does not mention the Checkstyle version at all. This causes confusion when contributors run `./gradlew checkstyleMain checkstyleTest` locally and get different results than CI. Update `gradle.properties` to bump `checkstyleToolVersion` to the latest stable release compatible with Java 17+. Add a "Tool Versions" table to `CONTRIBUTING.adoc` listing the Checkstyle version, Spring JavaFormat version, and `nullabilityPluginVersion` that contributors should expect, with instructions for verifying local tool alignment via `./gradlew properties | grep Version`.
 
-The project configuration file `.idea/inspectionProfiles/Project_Default.xml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Extend `CONTRIBUTING.adoc` with module organization guide and integration test instructions
 
-### M11: Add or improve CI workflow and update related documentation
+The current `CONTRIBUTING.adoc` covers code formatting, Checkstyle, Javadoc conventions, and DCO sign-off, but does not explain the project's module layout or how to write and run integration tests. Add a "Project Structure" section documenting the directory hierarchy: `core/` (spring-boot, spring-boot-autoconfigure, spring-boot-test), `module/` (actuator, embedded servers, technology integrations), `starter/` (starter POMs), `platform/` (BOM and dependency management), `buildSrc/` and `build-plugin/` (Gradle conventions), and `integration-test/` and `smoke-test/` (test suites). Explain the auto-configuration naming conventions linking `spring-boot-autoconfigure` condition classes to technology-specific modules under `module/`. Add an "Integration Testing" sub-section with instructions for running tests in the `integration-test/` directory, including how to use `./gradlew :integration-test:test` and how to configure test containers. Cross-reference the `README.adoc` getting-started section for new contributors.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .idea/inspectionProfiles/Project_Default.xml, and update .github/ISSUE_TEMPLATE/issue.md to document the CI
-process and badge status for contributors.
+### W11: Create an architecture decision record (ADR) system with seed ADRs
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/config.yml`, `.github/ISSUE_TEMPLATE/issue.md`, `.idea/inspectionProfiles/Project_Default.xml`, `.idea/copyright/profiles_settings.xml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The Spring Boot project has no formal record of its architectural decisions. Significant design choices — the Gradle multi-module structure under `core/`/`module/`/`starter/`/`platform/`, the `@ConditionalOn*` annotation-driven auto-configuration system, the embedded server abstraction hierarchy (`WebServerFactory` in `module/spring-boot-web-server/`), and the relaxed property binding mechanism in `core/spring-boot/` — are documented only implicitly in code and scattered Javadoc. Create an `architecture/decisions/` directory at the repository root with a `0001-record-architecture-decisions.md` template following the Michael Nygard ADR format (Title, Status, Context, Decision, Consequences). Seed the directory with four ADRs: `0002-gradle-multi-module-layout.md` explaining the `core`/`module`/`starter`/`platform` split, `0003-conditional-autoconfiguration.md` documenting the `@ConditionalOn*` system, `0004-embedded-server-abstraction.md` covering the `WebServerFactory` hierarchy, and `0005-relaxed-property-binding.md` describing the property binding strategy. Add a `README.md` index to the decisions directory. Update `CONTRIBUTING.adoc` to require ADRs for significant architectural changes and link to the `architecture/decisions/` directory.

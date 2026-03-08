@@ -66,7 +66,7 @@ src/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -200,7 +200,11 @@ Support the same `MaxRetryCount` and `MaxRetryDelay` settings used
 by `SaveChanges`. Add diagnostics events in
 `EFCore.Relational/Diagnostics/` for retry attempts on bulk
 operations. Update all relational providers (`EFCore.SqlServer/`,
-`EFCore.Sqlite.Core/`) to route through the retry pipeline.
+`EFCore.Sqlite.Core/`) to route through the retry pipeline. Also
+add a "Resiliency and Retry" section to `README.md` documenting
+the retry configuration settings, and update
+`docs/getting-and-building-the-code.md` with instructions for
+testing retry behaviour locally using transient-fault injection.
 
 ### M4: Add bulk operations support
 
@@ -289,6 +293,10 @@ from database metadata to XML doc comments, stored procedure and
 function scaffolding, view scaffolding with auto-detected key
 properties, and incremental scaffolding that updates only changed
 entities. Add T4 template support for custom code generation.
+Update `Directory.Build.targets` to include a new `EFScaffold`
+MSBuild target that runs the scaffold command as a post-build step,
+and add a `docs/scaffolding.md` guide documenting the new code
+generation workflow and template customisation options.
 
 ### W2: Add multi-tenancy support at the EF Core level
 
@@ -387,30 +395,58 @@ integration and a standalone API. Handle heterogeneous transactions
 in-doubt transactions. Implement timeout-based resolution and manual
 intervention tooling. Surface diagnostic events for each phase.
 
-## Non-code focused
+### N11: Fix `Directory.Packages.props` not pinning transitive `System.Text.Json` version
 
-### N11: Fix outdated or inconsistent metadata in .devcontainer/devcontainer.json
+The central package management file `Directory.Packages.props` sets
+`CentralPackageTransitivePinningEnabled` to `true`, but the
+`System.Text.Json` entry uses a variable reference
+`$(SystemTextJsonVersion)` resolved from `eng/Versions.props`. When
+building out-of-tree (e.g., specification tests run in isolation),
+`eng/Versions.props` is not imported and the version resolves to
+empty, causing NuGet restore to silently pick the lowest compatible
+version. Fix the conditional import guard in
+`Directory.Packages.props` so that a fallback version is always
+defined, and add a `<When>` block to `Directory.Build.props` that
+emits a build error when the resolved `System.Text.Json` version
+is below the minimum supported version.
 
-The project configuration file `.devcontainer/devcontainer.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Add a CI matrix for provider-specific test sharding in `azure-pipelines.yml`
 
-### M11: Add or improve CI workflow and update related documentation
+The current `azure-pipelines.yml` runs all provider tests
+(SQL Server, SQLite, Cosmos) sequentially in one stage, producing
+long build times and opaque failures. Refactor the pipeline into a
+multi-stage matrix: add separate `SqlServer`, `Sqlite`, and
+`Cosmos` stages that each filter the test projects via
+`--filter Category=<provider>`. Add a final `Merge` stage that
+collects results. Update `NuGet.config` to add a dedicated
+`dotnet-testing` feed for test infrastructure packages. Add a
+`docs/ci-pipeline.md` guide that documents the matrix layout,
+explains how to add a new provider stage, and describes the
+test-category tagging convention. Update the `eng/Versions.props`
+`<PreReleaseVersionLabel>` to include a short commit hash so
+artifact version is traceable from the pipeline.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .devcontainer/devcontainer.json, and update .devcontainer/docker-compose.yml to document the CI
-process and badge status for contributors.
+### W11: Overhaul build infrastructure for multi-TFM and AOT readiness
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `azure-pipelines.yml`, `test/EFCore.AspNet.Specification.Tests/README.md`, `.devcontainer/devcontainer.json`, `azure-pipelines.yml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Modernise the repo build infrastructure across multiple non-code
+files. In `Directory.Build.props`, add a
+`<DefaultTargetFrameworks>` property that centralises the TFM list
+(`net10.0;net9.0;net8.0`) and conditional properties for AOT and
+trimming analysis, replacing the per-project duplication. In
+`Directory.Build.targets`, add a `ValidateBuildEnvironment`
+target that checks the installed SDK version against
+`global.json` and emits a human-readable error when the SDK is
+too old. In `Directory.Packages.props`, add `<PackageVersion>`
+entries for the three new AOT analyzer packages and remove
+the obsolete `DotNetAnalyzers.DocumentationAnalyzers` reference
+that is already superseded by the Roslyn built-in analyzers in
+.NET 9+. Update `NuGet.config` to remove the deprecated
+`dotnet8-transport` and `dotnet9-transport` feeds since those SDK
+versions are out of support. Update `eng/Versions.props` to add
+a `<MinimumSdkVersion>` property and wire it into the validation
+target. Add a new `docs/build-infrastructure.md` that documents
+the purpose of every `Directory.Build.*` and `eng/*.props` file,
+the central package management strategy, and the expected CI
+contract for contributors. Finally, update `README.md` to replace
+the stale "Daily builds" section with a link to the new
+build-infrastructure guide.

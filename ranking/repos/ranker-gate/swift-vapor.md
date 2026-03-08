@@ -65,7 +65,7 @@ Sources/Vapor/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -210,7 +210,10 @@ identification by IP address, API key header, or authenticated user.
 Store counters in an in-memory store (default) or Redis (via
 protocol). Return standard `429 Too Many Requests` with
 `Retry-After` and `X-RateLimit-Remaining` headers. Allow route
-groups to declare their own limits.
+groups to declare their own limits. Update `README.md` to add a
+"Rate Limiting" section under the feature list with a minimal
+configuration example. Update `.github/contributing.md` to document
+how to test middleware in isolation using `XCTVapor`.
 
 ### M6: Add multipart file upload streaming with progress
 
@@ -271,6 +274,10 @@ content negotiation (`Accept: application/vnd.api.v1+json`). Routes
 should be registerable per version. Add automatic OpenAPI spec
 generation per version. Support version deprecation warnings in
 response headers. Include a version migration guide generator.
+Update `.spi.yml` to declare versioned documentation URLs so
+Swift Package Index links to the correct version-specific docs.
+Update `README.md` to add an "API Versioning" section with a
+quick-start example showing how to register versioned routes.
 
 ### W2: Implement cross-origin request forgery (CSRF) protection framework
 
@@ -380,30 +387,55 @@ at startup, failing fast with descriptive errors for missing
 required values. Support per-environment overrides (development,
 staging, production) and encrypted local secret storage.
 
-## Non-code focused
+### N11: Fix `.github/dependabot.yml` grouping all Swift dependencies into one PR
 
-### N11: Fix outdated or inconsistent metadata in .spi.yml
+The `.github/dependabot.yml` groups all Swift package updates under
+a single `dependencies` group with `patterns: ["*"]`, meaning a
+breaking update to any single dependency blocks version bumps for
+all others in the same PR. Split the Swift ecosystem grouping into
+separate groups by criticality: `swift-nio-*` packages (swift-nio,
+swift-nio-ssl, swift-nio-http2, swift-nio-extras) in a `nio` group,
+security-related packages (swift-crypto, swift-certificates,
+swift-asn1) in a `security` group, and remaining packages
+(routing-kit, console-kit, async-kit, multipart-kit, websocket-kit)
+individually. Add `ignore` conditions for major version bumps on
+stable packages to reduce CI noise from dependabot PRs.
 
-The project configuration file `.spi.yml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Add architecture documentation and update contributor guides
 
-### M11: Add or improve CI workflow and update related documentation
+Create an `ARCHITECTURE.md` at the repository root describing
+Vapor's request pipeline (routing → middleware → handler →
+response), the role of each module directory under `Sources/Vapor/`
+(Routing/, Middleware/, Content/, Auth/, Sessions/, Validation/,
+WebSocket/, HTTP/), key extension points (`Middleware` protocol,
+`Content` protocol, `Authenticatable`), and the relationship to
+external dependencies like SwiftNIO and async-http-client. Update
+`.github/contributing.md` to reference the new architecture doc and
+add a Docker-based local development setup section (the current
+guide only mentions Xcode). Update `.github/CODEOWNERS` to assign
+module-specific reviewers for `Sources/Vapor/WebSocket/`,
+`Sources/Vapor/Auth/`, and `Sources/Vapor/HTTP/Server/` so PRs
+touching those subsystems are automatically routed to domain
+experts. Add a Swift-DocC catalog stub under `Sources/Vapor/` for
+future API documentation generation.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .spi.yml, and update README.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul repository documentation and CI configuration
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/dependabot.yml`, `.github/workflows/test.yml`, `.spi.yml`, `.vscode/mcp.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The `README.md` (125 lines) provides badges and sponsor links but
+lacks a structured "Getting Started" guide with code examples.
+Add sections for routing, middleware, content encoding, and
+WebSocket setup with runnable code snippets. Create a
+`CHANGELOG.md` at the repository root tracking breaking changes
+across Vapor 4.x releases — currently no changelog exists and
+release notes are only on GitHub Releases. Update `.spi.yml` to
+declare supported platforms (`macOS`, `iOS`, `tvOS`, `watchOS`,
+`Linux`) and add the documentation URL. Update
+`.github/workflows/test.yml` to add a documentation generation job
+using Swift-DocC that builds API docs and catches broken doc
+comments in CI. Create a `SECURITY.md` at the repo root
+consolidating the vulnerability disclosure instructions currently
+scattered between `README.md` ("contact security@vapor.codes") and
+`AGENTS.md` ("automated scanning" policy). Update `AGENTS.md` to
+add a section on AI-assisted PR review policies and triage bot
+permissions, reflecting the expanded guidance in
+`.github/contributing.md`.

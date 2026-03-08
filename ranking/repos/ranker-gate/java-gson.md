@@ -84,7 +84,7 @@ After calling `skipValue()` to skip a large nested JSON object,
 `JsonReader.getPath()` reports the wrong line number in subsequent
 error messages. The line counter does not track newlines within the
 skipped content. Fix `skipValue()` to correctly count newlines even
-when skipping.
+when skipping. Also add an entry to `CHANGELOG.md` under "Unreleased" documenting the line-number tracking fix in `skipValue()`.
 
 ### N4: Fix `TypeToken` failing for intersection types in generic bounds
 
@@ -132,7 +132,7 @@ Annotate all public API methods with `@Nullable` and `@NonNull`
 `JsonElement`, `JsonObject`, `JsonArray`, `TypeAdapter`, `TypeToken`,
 and all public interfaces. This requires auditing each method's actual
 null behavior and fixing any methods whose behavior contradicts the
-annotation.
+annotation. Also update the "Requirements" section in `README.md` to document the new `org.jspecify:jspecify` compile-time dependency and add the corresponding `<dependency>` entry to the `gson/pom.xml` `<dependencyManagement>` block.
 
 ### M3: Implement custom `TypeAdapter` composition
 
@@ -222,30 +222,14 @@ Implement security-oriented deserialization limits configurable via `GsonBuilder
 
 Build an internal testing framework that generates random `JsonElement` trees (objects, arrays, primitives, nulls, nested to arbitrary depth), serializes them with `Gson.toJson()`, deserializes the output back with `Gson.fromJson()`, and asserts structural equality. Cover edge cases: Unicode surrogates, extremely large numbers, deeply nested structures, duplicate keys, and all `JsonPrimitive` numeric types. Integrate this as a reproducible test suite that can be run with a fixed seed and report minimal failing cases.
 
-## Non-code focused
+### N11: Add `<dependencyManagement>` section to the root POM for test dependencies
 
-### N11: Fix outdated or inconsistent metadata in test-jpms/pom.xml
+The root `pom.xml` declares modules (`gson`, `extras`, `metrics`, `proto`, `test-jpms`, `test-graal-native-image`, `test-shrinker`) but has no centralized `<dependencyManagement>` section for shared test dependencies. Each submodule independently declares its own version of `com.google.truth:truth`, `junit:junit`, and `com.google.guava:guava-testlib`, leading to version drift across modules. Add a `<dependencyManagement>` block to the root `pom.xml` that pins all shared test dependency versions in one place, and update each submodule POM to remove the explicit `<version>` tags for managed dependencies.
 
-The project configuration file `test-jpms/pom.xml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Overhaul `Troubleshooting.md` and cross-reference from `README.md`
 
-### M11: Add or improve CI workflow and update related documentation
+The current `Troubleshooting.md` covers `ClassCastException`, `InaccessibleObjectException`, and ProGuard/R8 issues, but is missing sections for several common runtime problems: `JsonSyntaxException` caused by malformed input with helpful recovery suggestions, `IllegalStateException` from `JsonReader` when the expected and actual token types differ, and `StackOverflowError` from circular references during serialization. Add these three new sections to `Troubleshooting.md` with symptoms, reasons, and solution sub-headings matching the existing format. Update `README.md` to add a "Troubleshooting" link in the table of contents that points to `Troubleshooting.md`. Also add a note in `GsonDesignDocument.md` under the serialization semantics section explaining why circular reference detection is not built into the core serializer.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in test-jpms/pom.xml, and update test-jpms/README.md to document the CI
-process and badge status for contributors.
+### W11: Create a MkDocs-based documentation site consolidating all Markdown guides
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`, `test-jpms/pom.xml`, `pom.xml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The repository has documentation spread across top-level Markdown files (`README.md`, `UserGuide.md`, `GsonDesignDocument.md`, `Troubleshooting.md`, `ReleaseProcess.md`, `CHANGELOG.md`) with no unified navigation or search. Create a `mkdocs.yml` configuration at the repository root using the Material for MkDocs theme, and add a `docs/` directory that reorganizes the existing content into sections: Getting Started (from `README.md`), User Guide (from `UserGuide.md`), Design (from `GsonDesignDocument.md`), Troubleshooting (from `Troubleshooting.md`), Release Process (from `ReleaseProcess.md`), and Changelog (from `CHANGELOG.md`). Add a GitHub Actions workflow in `.github/workflows/docs.yml` that builds the MkDocs site and deploys it to GitHub Pages on pushes to `main`. Update the root `README.md` to link to the deployed documentation site URL. Ensure all internal cross-references between documents use relative MkDocs links.

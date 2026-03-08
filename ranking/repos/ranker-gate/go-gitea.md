@@ -150,6 +150,9 @@ field to the `Release` struct and a cron task in `services/cron/`
 that publishes releases when their scheduled time is reached.
 Update `services/release/release.go` to handle the scheduling logic
 and `routers/api/v1/repo/release.go` to expose the field in the API.
+Update the `Makefile` to add a `release-schedule` target for testing
+the scheduling cron locally, and document the scheduling feature in
+`CONTRIBUTING.md`'s Release Cycle section.
 
 ### M2: Add saved replies for issue and PR comments
 
@@ -211,6 +214,9 @@ mirror push logic in `services/mirror/mirror_push.go` to apply
 the filters when building the refspec list. Add filter configuration
 fields to the push mirror API in `routers/api/v1/repo/mirror.go`
 and the web UI form in `routers/web/repo/setting/` templates.
+Update `CONTRIBUTING.md`'s API section to document the new mirror
+filter fields, and add filter parameter validation to the
+`pull-compliance.yml` CI workflow.
 
 ### M8: Add deploy key scoping with read/write per-branch permissions
 
@@ -263,6 +269,9 @@ timestamp fields. Add a searchable admin UI in `routers/web/admin/`,
 API endpoints in `routers/api/v1/admin/`, and retention policy
 configuration. Hook into the notification service
 (`services/notify/`) to capture events across all subsystems.
+Add audit log configuration documentation to `docker/README.md`
+for container deployments, and update the `Dockerfile` to expose
+an audit log volume mount point.
 
 ### W2: Implement secret scanning for committed credentials
 
@@ -368,28 +377,54 @@ runner, web UI, API, and storage for logs and artifacts.
 
 ## Non-code focused
 
-### N11: Fix outdated or inconsistent metadata in templates/swagger/v1_input.json
+### N11: Pin apk package versions in `Dockerfile` and `Dockerfile.rootless`
 
-The project configuration file `templates/swagger/v1_input.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+Both `Dockerfile` and `Dockerfile.rootless` use `apk --no-cache add`
+without version pins for security-sensitive packages. The main
+`Dockerfile` installs `bash`, `ca-certificates`, `curl`, `gettext`,
+`git`, `linux-pam`, `openssh`, `s6`, `sqlite`, `su-exec`, and
+`gnupg` unpinned; `Dockerfile.rootless` has a similar unversioned
+set. This makes container builds non-reproducible and vulnerable to
+supply-chain attacks via compromised Alpine 3.23 packages. Pin all
+`apk add` packages to specific versions in both Dockerfiles. Update
+`docker/README.md` to document the version pinning policy and the
+process for updating pinned versions during Alpine upgrades.
 
-### M11: Add or improve CI workflow and update related documentation
+### M11: Harden the Crowdin translation pipeline and CI compliance checks
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in templates/swagger/v1_input.json, and update CLAUDE.md to document the CI
-process and badge status for contributors.
+The `crowdin.yml` syncs only `/options/locale/locale_en-US.json` as
+the translation source. The `.github/workflows/cron-translations.yml`
+uses unpinned GitHub Actions (`crowdin/github-action@v2`,
+`appleboy/git-push-action@v1.2.0`) instead of SHA-pinned references,
+creating a supply-chain risk — contrast with the `release-tag-version.yml`
+workflow which correctly pins `crazy-max/ghaction-import-gpg@v6` and
+uses GPG signing. Pin all GitHub Actions in `cron-translations.yml`
+to SHA commits. Add a validation step in
+`.github/workflows/pull-compliance.yml` — which already has
+`lint-backend`, `lint-templates`, `lint-yaml`, and `lint-json` jobs —
+that checks whether PRs adding new UI template strings have
+corresponding entries in the `locale_en-US.json` source file. Update
+`CONTRIBUTING.md`'s Translation section to document the locale
+validation requirement for PRs that add user-facing strings.
 
-### W11: Overhaul project configuration, CI, and documentation consistency
+### W11: Makefile and CI pipeline refactoring with composite action extraction
 
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/ui.bug-report.yaml`, `.github/ISSUE_TEMPLATE/bug-report.yaml`, `templates/swagger/v1_input.json`, `.devcontainer/devcontainer.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The `Makefile` (839 lines) encodes the entire build system — Go
+backend compilation with `CGO_EXTRA_CFLAGS` and `GOEXPERIMENT=jsonv2`,
+frontend bundling via pnpm, four lint targets (`lint-backend`,
+`lint-templates`, `lint-yaml`, `lint-json`), testing, Docker builds
+with `DOCKER_IMAGE`/`DOCKER_TAG` variables, and xgo cross-compilation
+for releases. The `.github/workflows/pull-compliance.yml` duplicates
+many of these as separate CI jobs that each independently install Go
+(via `actions/setup-go@v6` with `go-version-file: go.mod`), Node 24
+(via `actions/setup-node@v6` with pnpm cache), and Python 3.14 (via
+`astral-sh/setup-uv@v7`). Extract common setup steps into a
+composite action at `.github/actions/setup-gitea/action.yml` that
+handles Go, Node/pnpm, and Python/uv installation with caching.
+Refactor `pull-compliance.yml` jobs to use the composite action.
+Add a `Makefile` target `ci-local` that runs the same lint and test
+sequence as CI for local pre-push validation. Update `.golangci.yml`
+to expand the `gocritic` enabled checks beyond the single
+`equalFold` check currently configured. Update `CONTRIBUTING.md` to
+document `make ci-local` and the composite action structure. Add
+Makefile header comments documenting all public targets.

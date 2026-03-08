@@ -100,7 +100,10 @@ set (in `NewProgram`). There is no `ProgramOption` to inject a logger
 programmatically. Add a `WithLogger(logger)` option in `options.go`
 so callers can provide their own logger instance without relying on
 environment variables. This should integrate with the existing
-`setLogger` call on `cursedRenderer` in `Run()`.
+`setLogger` call on `cursedRenderer` in `Run()`. Update the
+`README.md` debugging section to document the new `WithLogger`
+option alongside the existing `TEA_TRACE` environment variable
+reference.
 
 ### N6: Add `tea.Tick` with custom ID for cancellable timers
 
@@ -160,7 +163,9 @@ interactive sub-models (e.g., a form with multiple text inputs). Provide
 `FocusNext`, `FocusPrev` commands and a `Focusable` interface that
 models can implement. Tab and Shift-Tab should navigate between focusable
 sub-models. Track which sub-model has focus and only forward key events
-to the focused model.
+to the focused model. Add a "Focus Management" section to the
+`README.md` documenting the `Focusable` interface and Tab/Shift-Tab
+navigation pattern with code examples.
 
 ### M2: Add built-in animation support
 
@@ -286,6 +291,9 @@ padding). Support runtime theme switching (light/dark mode toggle),
 theme inheritance (base theme + overrides), and theme loading from
 TOML/YAML config files. Integrate with Lipgloss for style application.
 Changes span all components, rendering, and add a theme module.
+Add sample theme files under a `themes/` directory, document the
+theming system in `README.md`, and update `.golangci.yml` to include
+the new package paths in lint coverage.
 
 ### W7: Implement multi-window TUI framework
 
@@ -326,28 +334,49 @@ registry.
 
 ## Non-code focused
 
-### N11: Fix outdated or inconsistent metadata in .golangci.yml
+### N11: Add `errcheck` linter to `.golangci.yml` and expand `Taskfile.yaml`
 
-The project configuration file `.golangci.yml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+The `.golangci.yml` enables many linters (`bodyclose`, `gosec`,
+`misspell`, `wrapcheck`, etc.) but omits `errcheck`, meaning
+unchecked errors — such as the bare channel sends in `handleSignals`
+(see N1) — pass CI undetected. Add `errcheck` to the `enable` list
+in `.golangci.yml` and configure exclusion rules for intentional
+discards (e.g., `fmt.Fprintf` in View rendering). Update
+`Taskfile.yaml` (which currently only has `lint` and `test` tasks)
+to add a `lint-strict` task that runs `golangci-lint run
+--enable-all` for pre-release validation.
 
-### M11: Add or improve CI workflow and update related documentation
+### M11: Add fuzz testing CI workflow and improve release configuration
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .golangci.yml, and update README.md to document the CI
-process and badge status for contributors.
+The CI has `build.yml`, `coverage.yml`, and `lint.yml` (all using
+reusable workflows from `charmbracelet/meta`) but no fuzz testing.
+Create `.github/workflows/fuzz.yml` that runs Go fuzz targets in
+`commands_test.go` and `exec_test.go` with a configurable time
+budget on pushes to main. Update `Taskfile.yaml` to add `fuzz` and
+`coverage` tasks (`go test -fuzz=. -fuzztime=30s ./...` and
+`go test -coverprofile=coverage.out ./...`). Update `.goreleaser.yml`
+— which currently only includes from the remote
+`charmbracelet/meta/main/goreleaser-lib.yaml` — to add a local
+changelog generation block and attach SBOM artifacts to releases.
+Update the `README.md` badges section to add a coverage badge from
+the `coverage.yml` workflow alongside the existing Build Status badge.
 
-### W11: Overhaul project configuration, CI, and documentation consistency
+### W11: Comprehensive documentation and CI overhaul for v2
 
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/bug.yml`, `.golangci.yml`, `Taskfile.yaml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The `README.md` tutorial covers the basic Elm Architecture pattern
+but does not document the v2 declarative `tea.View` API, the new
+color profiling system (the `colorprofile` dependency in `go.mod`),
+or the keyboard/mouse event types defined in `key.go` and `mouse.go`.
+Restructure the README to add "Core Concepts" sections covering
+`tea.View` struct fields (`AltScreen`, `MouseMode`, `Cursor`), input
+event types (`KeyPressMsg`, `MouseClickMsg`), and the renderer
+pipeline (`cursed_renderer.go` vs `nil_renderer.go`). Update
+`UPGRADE_GUIDE_V2.md` — whose migration checklist currently covers
+import paths, View changes, and key/mouse messages — to add sections
+for the color profile system and the new `tea.View` cursor API.
+Add `.github/workflows/compatibility.yml` that tests against Go
+1.22, 1.23, and 1.24 (the current `build.yml` only tests the latest
+Go version via `charmbracelet/meta`). Update `.golangci.yml` to
+enable `gocritic` and `errcheck` linters. Expand `Taskfile.yaml`
+with comprehensive local CI-equivalent tasks (`lint`, `test`, `fuzz`,
+`coverage`, `vet`).

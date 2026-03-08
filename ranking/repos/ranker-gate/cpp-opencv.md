@@ -78,7 +78,7 @@ modules/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -110,7 +110,9 @@ When reading a 16-bit RGBA PNG file with `cv::imread` using
 `IMREAD_UNCHANGED`, the alpha channel is silently discarded. The PNG
 decoder in `modules/imgcodecs/src/grfmt_png.cpp` only preserves alpha
 for 8-bit images. Fix the PNG reader to retain the alpha channel for
-16-bit images and return a 4-channel `CV_16UC4` Mat.
+16-bit images and return a 4-channel `CV_16UC4` Mat. Also update the
+`doc/` API reference for `cv::imread` to document 16-bit alpha channel
+support and add a note to `doc/tutorials/` about reading RGBA images.
 
 ### N5: Fix `cv::warpAffine` producing black border artifacts at image edges
 
@@ -210,7 +212,9 @@ classes following the existing codec pattern (e.g., `grfmt_png.cpp`).
 Register the codec with the decoder/encoder factory in
 `loadsave.cpp`. Support 8-bit and 10-bit images, alpha channel,
 and ICC color profile embedding. Add signature-based format detection
-for AVIF files.
+for AVIF files. Also update `cmake/OpenCVFindAVIF.cmake` to detect
+the system libavif library and version, and add codec documentation
+to `doc/tutorials/` describing AVIF usage and build requirements.
 
 ### M7: Implement video stabilization module
 
@@ -345,30 +349,43 @@ matching for track recovery after occlusion). Include evaluation
 metrics (MOTA, IDF1). Changes span the DNN module, add a tracking
 module, association algorithms, and evaluation tools.
 
-## Non-code focused
+### N11: Fix `.editorconfig` inconsistencies with actual source formatting conventions
 
-### N11: Fix outdated or inconsistent metadata in apps/interactive-calibration/defaultConfig.xml
+The `.editorconfig` specifies `indent_size = 4` for all files but
+several modules under `modules/` use 2-space indentation in headers.
+The `[{CMakeLists.*,*.cmake}]` section correctly uses 2-space indent
+but there is no rule for Python files under `platforms/scripts/` or
+JavaScript files under `platforms/js/`. Add `.editorconfig` sections
+for `*.py` (4-space indent, PEP 8), `*.js` (2-space indent), and
+`*.java` (4-space indent). Update `.gitattributes` to ensure
+consistent line endings for all non-code file types (`.yml`, `.md`,
+`.cmake`, `.json`).
 
-The project configuration file `apps/interactive-calibration/defaultConfig.xml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Add CMake find-module and CI support for new codec dependencies
 
-### M11: Add or improve CI workflow and update related documentation
+The `cmake/` directory contains find-modules for many libraries
+(`OpenCVFindAVIF.cmake`, `FindCUDNN.cmake`, `FindONNX.cmake`, etc.)
+but several are outdated or missing version range support. Update
+`cmake/OpenCVFindAVIF.cmake` to support `find_package` version ranges
+and add a `AVIF_MIN_VERSION` variable to `cmake/OpenCVMinDepVersions.cmake`.
+Update the root `CMakeLists.txt` to expose an `OPENCV_ENABLE_AVIF`
+option. Add a CI matrix entry in `.github/workflows/PR-4.x.yaml` that
+builds with AVIF enabled on Ubuntu and tests codec round-trip. Update
+`CONTRIBUTING.md` to document how to add new codec dependencies.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in apps/interactive-calibration/defaultConfig.xml, and update apps/opencv_stitching_tool/README.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul CI workflows, build system documentation, and platform configs
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/documentation.yml`, `.github/ISSUE_TEMPLATE/bug_report.yml`, `apps/interactive-calibration/defaultConfig.xml`, `samples/dnn/models.yml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Modernize the CI and platform support infrastructure. Refactor
+`.github/workflows/4.x.yml` and `.github/workflows/PR-4.x.yaml` to
+use reusable workflows with a build matrix covering GCC, Clang, and
+MSVC across Ubuntu, macOS, and Windows. Add a
+`.github/workflows/docs.yml` that builds Doxygen documentation from
+`doc/Doxyfile.in` and deploys to GitHub Pages on tagged releases.
+Update `platforms/js/` build scripts to support Emscripten 3.x and
+add a wasm32 CI job. Update `platforms/android/` Gradle configuration
+in `support/build.gradle` to target SDK 34. Overhaul `doc/Doxyfile.in`
+to enable `EXTRACT_ALL`, add `DOT_GRAPH_MAX_NODES` limit, and
+configure `HTML_EXTRA_STYLESHEET` to use `doc/stylesheet.css`.
+Update `cmake/OpenCVPackaging.cmake` and `cmake/OpenCVInstallLayout.cmake`
+to support CPack-based binary packaging with `.deb`, `.rpm`, and
+`.msi` generators.

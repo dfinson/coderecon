@@ -56,7 +56,7 @@ src/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -208,7 +208,9 @@ truncation with configurable max length. Redact sensitive headers
 (`Authorization`, `Cookie`, custom patterns). Format as structured
 JSON context on the log record. Add request correlation IDs that
 propagate through redirects and retries so a full request chain
-can be traced.
+can be traced. Update `docs/request-options.rst` to document
+the new logging-related request options and add a configuration
+example to `docs/quickstart.rst`.
 
 ### M7: Implement request rate limiting middleware
 
@@ -270,7 +272,10 @@ request playback (replay recorded requests for regression testing),
 request diffing (compare two requests/responses side by side),
 traffic inspection UI (browser-based), and mock server generation
 (auto-generate `MockHandler` stacks from recorded traffic). Each
-tool should be usable independently or together.
+tool should be usable independently or together. Update the
+`Makefile` with targets for recording and replaying traffic, and
+add a `docs/testing.rst` section covering mock server generation
+from recorded sessions.
 
 ### W3: Implement HTTP/2 server push handler
 
@@ -373,30 +378,41 @@ keep-alive). In strict mode, reject non-compliant responses
 that Guzzle currently tolerates. Add a `ComplianceReport` that
 lists deviations found per-response.
 
-## Non-code focused
+### N11: Fix deprecated PHPUnit configuration in `phpunit.xml.dist`
 
-### N11: Fix outdated or inconsistent metadata in psalm-baseline.xml
+The current `phpunit.xml.dist` uses the `<filter><whitelist>` element
+which was removed in PHPUnit 10, and the root attribute
+`convertDeprecationsToExceptions` which no longer exists. Migrate
+the coverage configuration to use the modern `<source>` element
+format, remove all deprecated attributes from the `<phpunit>` root
+element (`backupGlobals`, `convertDeprecationsToExceptions`), and
+ensure the test suite configuration remains compatible with both
+PHPUnit 9.x and 10.x.
 
-The project configuration file `psalm-baseline.xml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Update Sphinx documentation and modernize `Makefile` targets
 
-### M11: Add or improve CI workflow and update related documentation
+The `docs/overview.rst` still references Guzzle 6.x API patterns
+and outdated handler examples. Rewrite it to cover the v7 middleware
+pipeline and `HandlerStack` architecture. Add new `Makefile` targets
+for running Psalm (`make static-psalm`), generating Clover XML
+coverage reports (`make coverage-clover`), and running all static
+analysis tools in parallel (`make static-all`). Update
+`docs/conf.py` with the current project version string and
+`docs/requirements.txt` with pinned Sphinx dependency versions.
+Add a `docs/migration.rst` guide covering the v6-to-v7 upgrade
+path with before/after code examples.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in psalm-baseline.xml, and update UPGRADING.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul project infrastructure and contributor documentation
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`, `psalm-baseline.xml`, `package-lock.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Update `Dockerfile` from the outdated PHP 7.3 base image to PHP 8.3
+with a multi-stage build that installs dependencies and runs the
+test suite during image construction. Modernize `composer.json` by
+adding a `scripts` section with `test`, `lint`, `analyze`, and
+`cs-fix` commands. Migrate `phpstan.neon.dist` to enable level 9
+and remove the baseline file dependency. Update `psalm.xml` to use
+strict mode with no baseline. Refresh `UPGRADING.md` with a new
+section preparing users for v8.0 breaking changes. Add a
+`CONTRIBUTING.md` file documenting the PR workflow, coding standards
+enforced by `.php-cs-fixer.dist.php`, and the CI pipeline stages.
+Update `.editorconfig` with PHP-specific indentation and trailing
+whitespace settings for consistent formatting across contributors.

@@ -59,7 +59,7 @@ src/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -99,7 +99,9 @@ at ~100 levels deep. Add a recursion depth limit with a clear error.
 because the compile-time format string parser in `compile.h` does not
 handle runtime width references. Only static widths are supported in
 compiled format strings. Extend the compiled format handler to resolve
-dynamic width and precision arguments at runtime.
+dynamic width and precision arguments at runtime. Also update
+`doc/syntax.md` to document dynamic width support in compiled format
+strings and add an example to `doc/api.md`.
 
 ### N6: Fix `ranges.h` tuple formatting with `const`-qualified pair element types
 
@@ -167,7 +169,9 @@ Improve compile-time format string validation to catch more errors:
 type mismatch between format specifier and argument type, width/precision
 specifiers on types that don't support them, and invalid format spec
 combinations. Produce clear `static_assert` messages that identify the
-problematic argument position and explain the issue.
+problematic argument position and explain the issue. Also update
+`ChangeLog.md` with the new validation rules and add a CI workflow
+step in `.github/workflows/lint.yml` to run the improved checks.
 
 ### M4: Implement custom format specification parsing for user types
 
@@ -326,30 +330,37 @@ patterns. The composed format string should be compiled into a single
 optimized formatting function. Changes span the compile-time parser,
 code generator, type system, and add composition primitives.
 
-## Non-code focused
+### N11: Fix `.clang-format` config not enforcing consistent include ordering
 
-### N11: Fix outdated or inconsistent metadata in support/AndroidManifest.xml
+The `.clang-format` configuration uses `BasedOnStyle: Google` but does
+not specify `IncludeBlocks` or `IncludeCategories`, causing includes to
+be sorted inconsistently across the codebase. Add `IncludeBlocks: Regroup`
+and define `IncludeCategories` that prioritize `fmt/` headers, then
+system headers. Update `.clang-tidy` to add the
+`llvm-include-order` check. Update `CONTRIBUTING.md` to document the
+expected include ordering convention.
 
-The project configuration file `support/AndroidManifest.xml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Overhaul documentation site configuration and API docs
 
-### M11: Add or improve CI workflow and update related documentation
+The `support/mkdocs.yml` configuration is missing navigation structure,
+search configuration, and versioning support. Add a `nav:` section that
+organizes `doc/api.md`, `doc/syntax.md`, and `doc/get-started.md` into
+a logical hierarchy. Add `markdown_extensions` for code highlighting and
+admonitions. Update `doc/api.md` to include all public API functions with
+cross-references. Update `.github/workflows/doc.yml` to deploy the
+documentation site on tagged releases and add link-checking validation.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in support/AndroidManifest.xml, and update README.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul CI workflows, build system options, and project metadata
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/dependabot.yml`, `.github/workflows/windows.yml`, `support/AndroidManifest.xml`, `.cmake-format.yaml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Consolidate and modernize the CI pipeline and build configuration.
+Refactor `.github/workflows/linux.yml`, `macos.yml`, and `windows.yml`
+to use a shared reusable workflow with a matrix strategy, reducing
+duplication. Add a `.github/workflows/release.yml` that automates
+version bumping in `CMakeLists.txt` and changelog generation from
+`ChangeLog.md`. Update `CMakeLists.txt` to add `FMT_INSTALL`,
+`FMT_PEDANTIC`, and `FMT_WERROR` options with proper descriptions.
+Update `.cmake-format.yaml` to enforce consistent CMake formatting
+rules. Update `.github/dependabot.yml` to track GitHub Actions
+versions. Update `.github/issue_template.md` and
+`.github/pull_request_template.md` to use YAML-based issue forms
+with structured fields for bug reports and feature requests.

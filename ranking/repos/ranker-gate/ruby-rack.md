@@ -57,7 +57,7 @@ lib/rack/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -167,6 +167,9 @@ request logs with fields: timestamp, method, path, status, duration_ms,
 request_id, user_agent, client_ip, and response_size. Support log
 enrichment via a callback that adds custom fields (user_id, tenant, etc.).
 Add correlation with upstream request IDs from `X-Request-Id` headers.
+Update `README.md` to document the new middleware and add an entry to
+`CHANGELOG.md` under the `### Added` section following the Keep a
+Changelog format.
 
 ### M3: Implement ETag generation with content-aware hashing
 
@@ -289,7 +292,11 @@ restarting the server process. Use `Listen` gem integration (optional
 dependency) or polling-based file watching. Maintain in-flight request
 safety by draining active requests before swapping the stack. Add
 a development overlay page showing the current middleware stack order
-and configuration, accessible at `/_rack/middleware`.
+and configuration, accessible at `/_rack/middleware`. Update
+`UPGRADE-GUIDE.md` with a migration section for applications switching
+to the reloadable builder, add the `listen` gem as an optional
+development dependency in `Gemfile` and `rack.gemspec`, and document
+the overlay page in `README.md`.
 
 ### W5: Add comprehensive multipart streaming parser with disk spooling
 
@@ -361,30 +368,44 @@ interactive debugger page with source context, request details,
 and environment inspection. Support error grouping and rate-limited
 logging to prevent log flooding from repeated errors.
 
-## Non-code focused
+## Non-code
 
-### N11: Fix outdated or inconsistent metadata in .rubocop.yml
+### N11: Fix `.github/workflows/test.yaml` not testing against Ruby 3.4 release builds
 
-The project configuration file `.rubocop.yml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+The CI workflow in `.github/workflows/test.yaml` defines a Ruby version
+matrix that includes `ruby-head` and `truffleruby-head` but does not
+include the `3.4` stable release, which shipped several breaking changes
+to the `Regexp` engine affecting `Rack::Multipart` boundary parsing.
+Add `3.4` to the matrix, pin the `bundler-cache` action version, and
+update the `continue-on-error` conditional to no longer skip `2.4`
+and `2.5` (which are past EOL and should be removed from the matrix).
 
-### M11: Add or improve CI workflow and update related documentation
+### M11: Overhaul `rack.gemspec` metadata, `CHANGELOG.md` formatting, and `CONTRIBUTING.md` guidelines
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .rubocop.yml, and update SECURITY.md to document the CI
-process and badge status for contributors.
+Update `rack.gemspec` metadata to include `funding_uri` pointing to
+the project's Open Collective page and add `documentation_uri`
+pointing to the versioned RubyDoc. Reformat `CHANGELOG.md` to
+strictly follow the Keep a Changelog 1.1.0 format — add missing
+`### Deprecated` and `### Removed` sections, normalize link
+references, and add release date annotations to all version headers.
+Revise `CONTRIBUTING.md` to document the current branch strategy
+(PRs target `main`, backports to `3-x-stable`), add a DCO sign-off
+requirement, and include a section on running the `.rubocop.yml`
+linter configuration locally before submitting.
 
-### W11: Overhaul project configuration, CI, and documentation consistency
+### W11: Modernize CI pipeline, linter config, `Rakefile`, and developer documentation
 
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/dependabot.yml`, `.github/workflows/depsreview.yaml`, `.rubocop.yml`, `config/external.yaml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Rewrite `.github/workflows/test.yaml` to use a reusable workflow
+pattern with separate jobs for lint (`.rubocop.yml` enforcement),
+test (matrix across Ruby 2.7–3.4 and JRuby), and documentation
+generation. Add a new `.github/workflows/docs.yaml` workflow that
+builds YARD documentation from `lib/rack/` and deploys to GitHub
+Pages using the `docs/` directory. Update `Rakefile` to add a
+`rake rubocop` task that runs the `.rubocop.yml` configuration with
+auto-correct, a `rake changelog` task that validates `CHANGELOG.md`
+format, and a `rake release:prepare` task that updates version
+references in `rack.gemspec`, `README.md`, and `UPGRADE-GUIDE.md`.
+Revise `.rubocop.yml` to enable `Naming/MethodParameterName`,
+`Style/StringLiterals`, and `Layout/MultilineMethodCallIndentation`
+cops. Update `SECURITY.md` with a disclosure timeline and PGP key
+for encrypted vulnerability reports.

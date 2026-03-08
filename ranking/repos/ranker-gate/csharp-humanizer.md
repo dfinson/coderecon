@@ -52,7 +52,7 @@ src/Humanizer/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -104,7 +104,7 @@ The `DateTimeHumanizeStrategy/` directory has `DefaultDateTimeHumanizeStrategy` 
 
 ### M2: Add SI decimal unit support to `ByteSize`
 
-The `ByteSize` struct in `Bytes/ByteSize.cs` uses 1024-based binary units (KB, MB, GB) but labels them with SI-style names, conflating IEC binary and SI decimal conventions. Add proper dual-mode support: IEC binary units (KiB, MiB, GiB — powers of 1024) and SI decimal units (kB, MB, GB — powers of 1000). The `Humanize()` and `ToString()` methods on `ByteSize` should accept a format flag to select the unit system. Update `ByteSizeExtensions.cs` to provide `.Humanize(ByteSizeUnit.SI)` and `.Humanize(ByteSizeUnit.IEC)` overloads. Extend `IFormatter.DataUnitHumanize` in the `Localisation/Formatters/` module to include the new unit symbols.
+The `ByteSize` struct in `Bytes/ByteSize.cs` uses 1024-based binary units (KB, MB, GB) but labels them with SI-style names, conflating IEC binary and SI decimal conventions. Add proper dual-mode support: IEC binary units (KiB, MiB, GiB — powers of 1024) and SI decimal units (kB, MB, GB — powers of 1000). The `Humanize()` and `ToString()` methods on `ByteSize` should accept a format flag to select the unit system. Update `ByteSizeExtensions.cs` to provide `.Humanize(ByteSizeUnit.SI)` and `.Humanize(ByteSizeUnit.IEC)` overloads. Extend `IFormatter.DataUnitHumanize` in the `Localisation/Formatters/` module to include the new unit symbols. Also update `docs/index.md` to add a "Byte Size Formatting" entry linking to a new `docs/byte-size.md` page documenting the dual-mode unit system with examples, and update the `NuSpecs/Humanizer.Core.nuspec` release notes to reflect the new `ByteSizeUnit` API surface.
 
 ### M3: Add configurable Oxford comma and conjunction support to collection humanization
 
@@ -163,7 +163,7 @@ configurations for use in configuration files.
 
 ### W3: Add comprehensive number formatting across cultures
 
-Extend number humanization to cover ordinal suffixes ("1st", "2nd"), approximate descriptions ("about a dozen", "nearly a hundred"), digit grouping with culture-specific separators, fraction-to-words ("three quarters"), and percentage humanization ("42%" → "forty-two percent"). Each feature must respect the localization system, with per-language overrides for ordinal suffixes, approximate-quantity thresholds, and fraction vocabulary. Add formatters for at least ten languages.
+Extend number humanization to cover ordinal suffixes ("1st", "2nd"), approximate descriptions ("about a dozen", "nearly a hundred"), digit grouping with culture-specific separators, fraction-to-words ("three quarters"), and percentage humanization ("42%" → "forty-two percent"). Each feature must respect the localization system, with per-language overrides for ordinal suffixes, approximate-quantity thresholds, and fraction vocabulary. Add formatters for at least ten languages. Also add a `docs/number-formatting.md` documentation page covering all new number formatting features with examples for each supported culture, update `readme.md` to include a "Number Formatting" section in the feature overview, and update `azure-pipelines.yml` to add a dedicated test stage for culture-dependent number formatting tests that runs with explicit `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false`.
 
 ### W4: Implement a string difference humanizer
 
@@ -193,30 +193,60 @@ Implement `DataTable.Humanize()` that formats tabular data for human consumption
 
 Add `Measure.From(1500, Unit.Gram).Humanize()` → `"1.5 kilograms"`. Support length, mass, volume, temperature, area, speed, and data-transfer-rate dimensions. Implement automatic unit scaling (grams → kilograms → tonnes), configurable precision, and both full-word and abbreviated output. Include bidirectional conversion within a dimension and parsing from formatted strings back to values. Localize unit names, symbols, and decimal formatting for all supported cultures.
 
-## Non-code focused
+### N11: Fix `version.json` pre-release branding for release branches
 
-### N11: Fix outdated or inconsistent metadata in azure-pipelines.yml
+The Nerdbank.GitVersioning configuration in `version.json` sets the
+version to `3.1.0-dev.{height}`, but release branches matching the
+`publicReleaseRefSpec` pattern `^refs/heads/rel/v\d+\.\d+` still
+produce packages with the `-dev` suffix because the `version` field
+is not overridden per-branch. Add a `pathFilters` array to the
+`version.json` to exclude `docs/`, `NuSpecs/`, and `*.md` files
+from version height calculation so that documentation-only commits
+do not bump the package version. Also add a `release` object with
+`branchName` set to `^refs/heads/rel/v\d+\.\d+` and
+`versionIncrement` set to `build` so that release branches
+automatically drop the `-dev` pre-release tag.
 
-The project configuration file `azure-pipelines.yml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Consolidate and expand the `docs/` documentation site
 
-### M11: Add or improve CI workflow and update related documentation
+The `docs/` directory contains topic pages (`string-humanization.md`,
+`string-truncation.md`, etc.) but is missing coverage for several
+major features and has no unified navigation. Add the following
+new documentation pages: `docs/byte-size.md` covering `ByteSize`
+formatting, `docs/collection-humanization.md` covering collection
+formatters, and `docs/metric-numerals.md` covering metric prefix
+conversion. Update `docs/index.md` to add entries for the three
+new pages under appropriate headings. Update `docs/_config.yml` to
+add a `navigation` key listing all pages in logical order so the
+Jekyll site renders a sidebar table of contents. Update
+`docs/installation.md` to document the supported TFMs listed in
+`src/Directory.Build.props` and reference the `src/nuget.config`
+trusted-signer configuration. Finally, update `readme.md` to
+replace inline feature descriptions with links to the corresponding
+`docs/` pages to reduce duplication.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in azure-pipelines.yml, and update docs/index.md to document the CI
-process and badge status for contributors.
+### W11: Overhaul CI pipeline, NuSpec packaging, and build properties
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `azure-pipelines.yml`, `.github/dependabot.yml`, `azure-pipelines.yml`, `version.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Modernise the repository build infrastructure across multiple
+non-code files. In `azure-pipelines.yml`, split the single `Build`
+stage into three stages — `Build`, `Test`, and `Pack` — with the
+`Test` stage running on a matrix of `windows-latest`, `ubuntu-latest`,
+and `macos-latest` images to validate cross-platform behaviour.
+Add a `PublishCodeCoverageResults` step that uploads Cobertura XML
+to Azure Pipelines. In `src/Directory.Build.props`, add
+`<EnablePackageValidation>true</EnablePackageValidation>` and
+`<PackageValidationBaselineVersion>` set to the last stable release
+so that unintentional API breaking changes are caught at pack time.
+In `src/Directory.Build.targets`, add a `GenerateReleaseNotes`
+target that reads `release_notes.md` and embeds it as the NuGet
+package release notes. In `src/Directory.Packages.props`, pin the
+`Polyfill` package to a stable release (removing the `-beta`
+suffix) and add `<PackageVersion>` entries for
+`Microsoft.NET.Test.Sdk` so test projects inherit a single version.
+Update every `.nuspec` file under `NuSpecs/` to add a
+`<readme>` element pointing to the per-locale README and a
+`<license type="expression">MIT</license>` element replacing the
+deprecated `<licenseUrl>`. Update `global.json` to pin the SDK to
+`10.0.100` and add a `"msbuild-sdks"` section for the Nerdbank
+GitVersioning SDK. Add a `docs/ci-and-packaging.md` guide that
+documents the pipeline stages and NuSpec conventions.

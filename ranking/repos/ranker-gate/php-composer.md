@@ -62,7 +62,7 @@ src/Composer/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -90,7 +90,9 @@ via `$io->writeError()` includes the password in cleartext. A user
 running Composer in CI with verbose output inadvertently exposes
 repository credentials in build logs. Mask the password value in
 the error output before logging, consistent with how `Svn::cleanEnv`
-already handles environment variables.
+already handles environment variables. Update
+`doc/05-repositories.md` to document the credential masking behavior
+for SVN repositories and add a note about safe CI logging practices.
 
 ### N4: Fix `BumpCommand` not skipping packages with branch-alias constraints
 
@@ -201,7 +203,10 @@ semver level. Display a color-coded semver column (red for major,
 yellow for minor, green for patch) in the default table output.
 Add `--format=markdown` for pasting into pull request descriptions.
 Determine semver level by comparing the locked version against the
-latest available version using `VersionParser`.
+latest available version using `VersionParser`. Update
+`CHANGELOG.md` with the new filtering flags and add documentation
+for `--major-only`, `--minor-only`, `--patch-only`, and
+`--format=markdown` to `doc/03-cli.md`.
 
 ### M5: Add configurable retry and mirror fallback to Downloader
 
@@ -395,30 +400,43 @@ telemetry that records timing for dependency resolution, downloads,
 and autoload generation, and optionally reports anonymized telemetry
 to a configurable endpoint.
 
-## Non-code focused
+### N11: Fix inconsistent formatting in `CHANGELOG.md`
 
-### N11: Fix outdated or inconsistent metadata in res/composer-schema.json
+Recent entries in `CHANGELOG.md` use `### [version] YYYY-MM-DD`
+headers, but older entries below the fold use `#### version` without
+brackets and with inconsistent date formats (mixed ISO 8601 and
+spelled-out month names). Standardize all version headers to use
+`### [version] YYYY-MM-DD` format with consistent heading levels.
+Ensure every entry has a bulleted list with uniform indentation
+(two-space indent for continuation lines). Add missing links to
+GitHub issue and PR references throughout the file.
 
-The project configuration file `res/composer-schema.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Update user documentation and refresh CI configuration
 
-### M11: Add or improve CI workflow and update related documentation
+Add documentation for the `verify-downloads` and `max-depth`
+configuration options to `doc/06-config.md` with usage examples
+and default values. Update `doc/04-schema.md` to document the
+`extra.license-policy` field schema for the license compliance
+feature. Add a new `doc/dev/plugin-development.md` guide covering
+the plugin capability model, lifecycle hooks (`activate`,
+`deactivate`, `uninstall`), and testing strategies for plugin
+authors. Update `phpunit.xml.dist` to add a dedicated `integration`
+test group and configure the `<coverage>` element with branch
+coverage reporting enabled.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in res/composer-schema.json, and update CODE_OF_CONDUCT.md to document the CI
-process and badge status for contributors.
+### W11: Modernize project tooling and contributor documentation
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/support-request---question.md`, `res/composer-schema.json`, `res/composer-lock-schema.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Migrate `.php-cs-fixer.php` rules to enforce PHP 8.x coding
+standards including `readonly` property formatting,
+`enum` case declarations, and named argument alignment. Update
+`phpunit.xml.dist` from the PHPUnit 9 `<filter>` element to the
+PHPUnit 10+ `<source>` element format. Add a comprehensive
+`CONTRIBUTING.md` covering the development workflow, running the
+test suite, SAT solver debugging tips, and repository driver
+testing procedures. Refresh `README.md` with updated CI badges,
+installation instructions for PHP 8.x, and a quick-start guide.
+Update `doc/00-intro.md` and `doc/01-basic-usage.md` to reflect
+Composer 2.x defaults and behavior changes. Add enforcement
+procedures to `CODE_OF_CONDUCT.md`. Update `composer.json` with a
+`scripts` section defining `test`, `lint`, `cs-fix`, and `phpstan`
+commands for contributor convenience.

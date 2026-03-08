@@ -83,7 +83,9 @@ On Windows, ripgrep looks for the global ignore file at
 `$HOME/.rgignore` but `$HOME` is not standard on Windows. The lookup
 should also check `%USERPROFILE%\.rgignore` and
 `%APPDATA%\ripgrep\ignore`. Fix the global ignore file discovery in
-the `ignore` crate to use platform-appropriate paths.
+the `ignore` crate to use platform-appropriate paths. Also update
+`FAQ.md` to expand the "Does ripgrep support configuration files?"
+entry with platform-specific ignore file paths for Windows.
 
 ### N4: Fix `--hidden` flag not searching inside `.git/hooks/`
 
@@ -161,7 +163,9 @@ match the `python` file type when `--type python` is used. This
 requires adding shebang-based matching to the `Types` matcher alongside
 extension matching, reading the first line of each file during
 traversal in `crates/ignore/src/walk.rs`, and adding a
-`--type-shebang` toggle flag in the CLI.
+`--type-shebang` toggle flag in the CLI. Also update `GUIDE.md` to
+add a "Shebang-based file type detection" subsection under the existing
+"Manual filtering: file types" section explaining the new behavior.
 
 ### M3: Implement parallel directory traversal with work stealing
 
@@ -336,28 +340,42 @@ and result ranking.
 
 ## Non-code focused
 
-### N11: Fix outdated or inconsistent metadata in Cargo.toml
+### N11: Update `RELEASE-CHECKLIST.md` to add PCRE2 verification step
 
-The project configuration file `Cargo.toml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+The `RELEASE-CHECKLIST.md` documents the full release process including
+dependency updates, crate ordering, tag creation, and Homebrew formula
+updates, but does not include a step to verify that the `pcre2` feature
+compiles and passes tests before publishing. The PCRE2 feature is
+optional and has caused release issues in the past (e.g., static
+compilation on macOS aarch64 per CHANGELOG entry BUG #3155). Add a
+checklist item after the "Run `cargo package`" step to run
+`cargo test --features pcre2` and verify PCRE2 builds on all release
+targets.
 
-### M11: Add or improve CI workflow and update related documentation
+### M11: Add `rustfmt.toml` enforcement to CI and document code style in `GUIDE.md`
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in Cargo.toml, and update GUIDE.md to document the CI
-process and badge status for contributors.
+The `rustfmt.toml` file sets `max_width = 79`,
+`use_small_heuristics = "max"`, and `edition = "2024"`, but the CI
+workflow (`.github/workflows/ci.yml`) does not run `cargo fmt --check`
+to enforce these settings. Add a `rustfmt` job to
+`.github/workflows/ci.yml` that runs `cargo fmt --all -- --check` and
+fails on formatting violations. Also add a "Code style" section to
+`GUIDE.md` (after the existing "Common options" section) documenting
+the project's formatting conventions and how contributors should run
+`cargo fmt` before submitting PRs.
 
-### W11: Overhaul project configuration, CI, and documentation consistency
+### W11: Add cross-platform release artifact verification with CI and documentation
 
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.yml`, `.github/ISSUE_TEMPLATE/feature_request.md`, `Cargo.toml`, `.cargo/config.toml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The release process spans `RELEASE-CHECKLIST.md` (manual steps),
+`.github/workflows/release.yml` (automated build matrix),
+`Cargo.toml` (version and feature definitions), `CHANGELOG.md`
+(release notes), and the `ci/sha256-releases` script (checksum
+computation). Currently there is no automated verification that
+release artifacts are functional after build. Add an integration test
+job to `.github/workflows/release.yml` that downloads each built
+artifact, runs `rg --version` and a basic search test, and verifies
+the SHA256 checksum matches. Update `RELEASE-CHECKLIST.md` to
+reference this new verification step. Add a "Release verification"
+section to `FAQ.md` explaining how users can verify downloaded
+binaries. Update `Cargo.toml`'s `exclude` list to ensure the new
+test fixtures are not included in the published crate.

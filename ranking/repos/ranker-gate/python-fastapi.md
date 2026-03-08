@@ -350,42 +350,47 @@ dependencies/ordering, and plugin configuration via the app's settings.
 Changes span the application class, router, middleware stack, and a
 new plugin registry module.
 
-## Non-code focused
+### N11: Fix incomplete CITATION.cff metadata
 
-### N11: Fix `.pre-commit-config.yaml` missing hook for example snippet validation
+`CITATION.cff` declares an empty `identifiers:` key with no entries
+and omits the `date-released` field. The CFF 1.2.0 specification
+requires `date-released` for valid software citations, and an empty
+`identifiers` list is a schema violation that causes `cffconvert
+--validate` to fail. Add the missing `date-released`, populate or
+remove the `identifiers` key, and consider adding `version` so
+citation tooling can generate correct references.
 
-The `.pre-commit-config.yaml` defines hooks for code formatting and linting
-but does not validate the Python code snippets embedded in documentation
-markdown files under `docs/en/docs/`. Broken examples (syntax errors,
-references to removed APIs) are only caught when users report them. Add a
-`pre-commit` hook entry that runs `ruff check` on fenced Python code blocks
-extracted from `docs/en/docs/**/*.md`. Also add a `[tool.ruff.per-file-overrides]`
-section in `pyproject.toml` to configure relaxed lint rules (e.g., allow
-`import fastapi` without installing it) for the extracted doc snippets.
+**Gold files:** `CITATION.cff`
 
-### M11: Add CI workflow for public API backward-compatibility checking
+### M11: Align release-build Python version with CI test matrix
 
-FastAPI's `.github/workflows/test.yml` runs tests but does not detect
-accidental breaking changes to the public API surface. Add a new
-`.github/workflows/api-compat.yml` workflow that: (1) extracts the public
-API signature from the `fastapi` package on the base branch and the PR
-branch, (2) diffs the signatures to detect removed or changed public
-symbols, and (3) fails the PR check if breaking changes are found without
-a corresponding entry in a new `BREAKING_CHANGES.md` file. Update
-`CONTRIBUTING.md` to document the breaking-change annotation process, and
-add the new workflow to the required status checks list in the repo's
-branch protection documentation.
+`.python-version` is set to `3.11`, and `.github/workflows/publish.yml`
+reads it via `python-version-file: ".python-version"` to build and
+publish releases. However, the test matrix in
+`.github/workflows/test.yml` covers Python 3.10, 3.12, 3.13, and
+3.14 — but never 3.11. The Python version used to build and publish
+the package to PyPI is not tested in CI, so version-specific build
+or packaging issues would go undetected until after release.
 
-### W11: Restructure multi-locale documentation build pipeline and CI integration
+**Gold files:** `.python-version`, `.github/workflows/publish.yml`,
+`.github/workflows/test.yml`
 
-The documentation build spans twelve `mkdocs.yml` files (one per locale
-under `docs/{lang}/mkdocs.yml`), the `build-docs.yml` and `deploy-docs.yml`
-CI workflows, and the `scripts/` directory. Several issues exist across
-these files: (1) the `docs/en/mkdocs.yml` `nav` section is missing entries
-for recently added tutorial pages; (2) three locale `mkdocs.yml` files
-(`docs/de/mkdocs.yml`, `docs/tr/mkdocs.yml`, `docs/uk/mkdocs.yml`)
-reference theme extensions that no longer exist in the latest MkDocs
-Material version; (3) `build-docs.yml` does not cache the `mkdocs-material`
-package, causing slow CI runs; and (4) `.github/labeler.yml` is missing
-glob patterns for the newer locale directories. Fix all four issues across
-the affected YAML and markdown files.
+### W11: Close dependency-update and labeler coverage gaps
+
+`.github/dependabot.yml` monitors `github-actions` (daily) and `uv`
+(monthly) ecosystems but has no entry for the `pre-commit` ecosystem,
+even though `.pre-commit-config.yaml` pins external repos like
+`pre-commit/pre-commit-hooks` at `rev: v6.0.0` — these pinned
+versions will never receive automatic update PRs. The
+`.github/labeler.yml` defines rules for `docs`, `lang-all`, and
+`internal` labels, but changes to root-level community-health files
+(`SECURITY.md`, `CITATION.cff`, `CONTRIBUTING.md`) do not match any
+rule — they fall outside both the `internal` glob (`.github/**`,
+`scripts/**`) and the `docs` glob (`docs/en/docs/**`, `docs_src/**`).
+Additionally, `pyproject.toml`'s `[tool.pdm.build] source-includes`
+lists `tests/`, `docs_src/`, `scripts/` but excludes `CITATION.cff`
+and `SECURITY.md`, so these project metadata files are omitted from
+the source distribution.
+
+**Gold files:** `.github/dependabot.yml`, `.pre-commit-config.yaml`,
+`.github/labeler.yml`, `pyproject.toml`

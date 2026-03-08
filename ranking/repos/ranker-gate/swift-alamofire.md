@@ -57,7 +57,7 @@ Source/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -175,7 +175,12 @@ system. Verify that the server's certificate has valid Signed Certificate
 Timestamps (SCTs) from recognized CT logs. Support both embedded SCTs
 (in the certificate) and SCTs delivered via TLS extension. Add a
 `CertificateTransparencyEvaluator` that composes with existing trust
-evaluators.
+evaluators. Update `.jazzy.yaml` to add the new
+`CertificateTransparencyEvaluator` to a dedicated "Security" custom
+category so it appears alongside `ServerTrustEvaluation` in the
+generated API docs. Add a "Certificate Transparency" section to
+`Documentation/AdvancedUsage.md` explaining how to enable and
+configure CT verification.
 
 ### M2: Add response caching with ETags and conditional requests
 
@@ -388,32 +393,59 @@ differences for download destinations. Ensure `ParameterEncoding`,
 `ResponseSerialization`, `HTTPHeaders`, and `Validation` work
 identically across platforms. Add CI matrix entries for Ubuntu and
 Windows. Ship platform-specific `ServerTrustEvaluating` conformances
-that use the platform's native TLS stack.
+that use the platform's native TLS stack. Update
+`.github/workflows/ci.yml` to add Linux (Ubuntu 22.04) and Windows
+(Server 2022) runners to the CI matrix alongside existing macOS jobs.
+Update `Package.swift` platform specifications to document Linux and
+Windows as supported platforms in code comments.
 
-## Non-code focused
+### N11: Fix `.jazzy.yaml` generating flat symbol list without category groupings
 
-### N11: Fix outdated or inconsistent metadata in .spi.yml
+The `.jazzy.yaml` configuration specifies `xcodebuild_arguments` with
+the `Alamofire iOS` scheme and `Alamofire.xcworkspace`, but the project
+has moved to SPM-based builds via `Package.swift`. The generated API
+documentation at `https://alamofire.github.io/Alamofire/` renders all
+public symbols in a single flat list without logical grouping. Update
+`.jazzy.yaml` to use `--spm-module Alamofire` instead of
+`xcodebuild_arguments`, add custom category groupings for
+`Authentication/`, `ServerTrustEvaluation`, `RequestInterceptor`,
+`ResponseSerialization`, and `EventMonitor` so related symbols
+appear together. Fix the `root_url` to use the current GitHub Pages
+path and update the `theme` from `fullwidth` to `apple` for
+consistency with modern Jazzy output.
 
-The project configuration file `.spi.yml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Update `CONTRIBUTING.md` and CI workflow for contributor onboarding
 
-### M11: Add or improve CI workflow and update related documentation
+The `CONTRIBUTING.md` references the Firewalk test server for running
+automated tests but does not include Docker-based setup instructions,
+making it difficult for new contributors to run the test suite. Add a
+"Docker Test Setup" section to `CONTRIBUTING.md` with step-by-step
+instructions for starting Firewalk in a container. Update
+`.github/workflows/ci.yml` to add a SwiftFormat lint job that checks
+all Swift sources against the rules in `.swiftformat` (currently
+`--swiftversion 6.0`, `--commas inline`, `--extensionacl
+on-declarations`, etc.) and fails on formatting violations. Add a
+new `.github/PULL_REQUEST_TEMPLATE.md` checklist item requiring
+contributors to confirm that public API changes include corresponding
+updates to `Documentation/Usage.md` or
+`Documentation/AdvancedUsage.md`.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .spi.yml, and update docs/undocumented.json to document the CI
-process and badge status for contributors.
+### W11: Overhaul `Documentation/` guides and release configuration
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`, `.spi.yml`, `.jazzy.yaml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The `Documentation/Usage.md` (1087 lines) and
+`Documentation/AdvancedUsage.md` (1551 lines) cover the current
+synchronous callback API thoroughly but lack async/await examples
+that reflect modern Swift usage patterns. Add async/await code
+examples to every major section in `Usage.md` (requests, downloads,
+uploads, streaming) alongside the existing callback examples.
+Create `Documentation/Alamofire 5.12 Migration Guide.md` following
+the format of existing migration guides (`Alamofire 5.0 Migration
+Guide.md`, etc.) documenting API changes since 5.11. Update
+`CHANGELOG.md` to add a template section for the next release with
+proper semantic versioning headers matching the existing format
+(the changelog tracks releases from 3.x through 5.11.x). Update
+`Alamofire.podspec` to align `deployment_target` values with those
+in `Package.swift` (iOS 12, macOS 10.13, tvOS 12, watchOS 4) since
+the podspec currently declares iOS 10.0 and macOS 10.12. Update
+`README.md` to refresh the Quick Start section and CI badge URLs
+to point to the current `ci.yml` workflow.

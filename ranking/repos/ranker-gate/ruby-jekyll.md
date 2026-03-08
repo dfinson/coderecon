@@ -61,7 +61,7 @@ lib/jekyll/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -206,7 +206,10 @@ time spent in each pipeline phase (read, generate, render, write) and
 per-converter/generator timing. Add a `--profile` flag that outputs a
 build performance report showing the slowest pages, converters, and
 generators. Store profiling data in `.jekyll-cache/profile.json` for
-trend analysis across builds.
+trend analysis across builds. Add `concurrent-ruby` as a runtime
+dependency in `jekyll.gemspec` and `Gemfile` for thread-safe profiling
+counters. Document the `--profile` flag in `docs/_docs/` and add a
+`History.markdown` entry.
 
 ### M7: Implement cross-collection Liquid query filters
 
@@ -279,7 +282,10 @@ directories for layouts, includes, assets, and sass. Override resolution
 walks the chain from site → theme → parent_theme for each requested
 file. Add a `jekyll theme:diff` command that shows which theme files
 are overridden locally. Support theme configuration namespacing so
-parent and child themes can define independent config blocks.
+parent and child themes can define independent config blocks. Document
+the theme inheritance system in `docs/_docs/themes.md`, add a
+`History.markdown` entry for the new feature, and update the
+`jekyll.gemspec` description to mention multi-level theme support.
 
 ### W4: Implement real-time collaborative preview server
 
@@ -357,30 +363,46 @@ and generate an HTML report at `_test/visual/report.html` with
 side-by-side comparisons. Run as part of theme CI to catch unintended
 style regressions.
 
-## Non-code focused
+## Non-code
 
-### N11: Fix outdated or inconsistent metadata in .rubocop_todo.yml
+### N11: Fix `.github/workflows/ci.yml` not running tests on documentation changes
 
-The project configuration file `.rubocop_todo.yml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+The CI workflow in `.github/workflows/ci.yml` uses a `paths-ignore`
+filter that skips the entire test suite when only files under `docs/`
+are modified. However, the `docs/` directory contains a Jekyll site
+(`docs/_config.yml`) that is built as part of the `profile-docs`
+Earthfile target, meaning documentation-only changes can break the
+docs build without CI catching it. Remove `docs/**` from the
+`paths-ignore` list and add a separate `docs` job that runs
+`script/profile-docs` only when `docs/` files change.
 
-### M11: Add or improve CI workflow and update related documentation
+### M11: Overhaul `jekyll.gemspec` metadata, `Earthfile` targets, and `.codeclimate.yml` thresholds
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .rubocop_todo.yml, and update .devcontainer/Dockerfile to document the CI
-process and badge status for contributors.
+Update `jekyll.gemspec` to add `funding_uri` and `wiki_uri` metadata,
+pin `required_rubygems_version` to `>= 3.3.0` to match current
+Bundler practices, and move the `s.files` shell-out from
+`` `git ls-files` `` to `Dir.glob` for reproducible builds. Rewrite
+the `Earthfile` to add Ruby 3.4 and 3.5 build targets, remove the
+obsolete Ruby 2.5 target, add a `+lint` target that runs the
+`.rubocop.yml` and `.rubocop_todo.yml` configurations, and add a
+`+benchmark` target. Revise `.codeclimate.yml` to raise the
+`method-complexity` threshold from 15 to 20 for the converters
+module and update the `rubocop` plugin channel from `rubocop-0-60`
+to `rubocop-1-57`.
 
-### W11: Overhaul project configuration, CI, and documentation consistency
+### W11: Revamp CI/CD, linter config, `Rakefile`, and contributor documentation
 
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/bug_report.yml`, `.github/ISSUE_TEMPLATE/feature_request.md`, `.rubocop_todo.yml`, `.devcontainer/devcontainer.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Restructure `.github/workflows/` to split `ci.yml` into three
+workflows: `test.yml` (unit tests), `cucumber.yml` (integration
+features), and `lint.yml` (RuboCop + spelling). Add a new
+`.github/workflows/release.yml` that automates gem publishing to
+RubyGems when a version tag is pushed. Update `Rakefile` to add
+a `rake docs:build` task that runs the Jekyll docs site build from
+`docs/`, a `rake release:prepare` task that bumps the version in
+`lib/jekyll/version.rb` and updates `History.markdown`, and a
+`rake lint` task unifying `.rubocop.yml` enforcement. Revise
+`.rubocop.yml` to enable `Metrics/PerceivedComplexity` and
+`Naming/PredicateName` cops, and clean out resolved entries from
+`.rubocop_todo.yml`. Update `.github/CONTRIBUTING.markdown` to
+document the Earthfile-based local development workflow and add
+a DCO requirement. Add a `SECURITY.markdown` file if missing.

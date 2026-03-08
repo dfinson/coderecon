@@ -66,7 +66,7 @@ src/Illuminate/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -218,7 +218,9 @@ the timeout. Support shared and exclusive lock modes. Implement
 grammar-specific lock SQL in `MySqlGrammar`, `PostgresGrammar`,
 and `SQLiteGrammar`. Expose through the `Connection` class.
 Add an Artisan middleware trait to prevent concurrent command
-execution using advisory locks.
+execution using advisory locks. Update `config/database.php` to
+add `advisory_lock` configuration keys with default timeout values
+for each supported driver.
 
 ### M6: Implement connection-level query timeout with per-query override
 
@@ -315,7 +317,10 @@ index hints (queries with full table scans), and slow queries above
 a threshold. Store profiling data via a `ProfileStore` interface
 with database and file drivers. Add a Blade component for rendering
 query timelines in development. Cross-cuts Database, Http,
-Queue, Console, Events, and View subsystems.
+Queue, Console, Events, and View subsystems. Update
+`docker-compose.yml` to add a Jaeger service for trace collection
+and update `config/database.php` with profiler configuration
+defaults (`profiler.enabled`, `profiler.slow_threshold`).
 
 ### W4: Add multi-tenancy support across database, cache, queue, and filesystem
 
@@ -388,31 +393,41 @@ transfers to the authenticated session. Integrate with notifications
 to send login alerts via mail and SMS. Touches Auth, Session, Routing,
 Notifications, and Mail subsystems.
 
+### N11: Fix `docker-compose.yml` using deprecated `version` key and end-of-life MySQL image
 
-## Non-code focused
+Docker Compose V2 ignores the top-level `version` field and emits a
+warning on every invocation. The `mysql/mysql-server:5.7` image is no
+longer maintained and unavailable for ARM64 (Apple Silicon). Remove
+the `version: '3'` line, upgrade the MySQL service from
+`mysql/mysql-server:5.7` to `mysql:8.0` with appropriate
+configuration (`--default-authentication-plugin=mysql_native_password`
+for backwards compatibility), and uncomment the PostgreSQL service
+block so the full test suite can run against both database engines.
 
-### N11: Fix outdated or inconsistent metadata in pint.json
+### M11: Update framework configuration defaults and release documentation
 
-The project configuration file `pint.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+Add new configuration keys to `config/database.php` for advisory lock
+timeout defaults and connection-level query timeout values per driver.
+Update `config/cache.php` to include a `limiter` section with sliding
+window rate limiter options (window size, limit, and storage driver).
+Revise `CHANGELOG.md` to document the recently added database
+features (advisory locks, query timeout, query profiler) with
+accurate version markers and migration notes. Update `RELEASE.md` to
+clarify the versioning policy for configuration file changes and add
+a checklist for config-stub updates that must accompany new features.
 
-### M11: Add or improve CI workflow and update related documentation
+### W11: Overhaul framework CI configuration and quality tooling
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in `pint.json`, and update `README.md` to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/SUPPORT.md`, `.github/ISSUE_TEMPLATE/Bug_report.yml`, `pint.json`, `.styleci.yml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Update `pint.json` to add PHP 8.2-specific rules including
+`readonly` property formatting, `enum` case spacing, and
+disjunctive normal form type formatting. Extend
+`phpstan.src.neon.dist` paths to cover recently added subsystems
+(`Concurrency`, `ContextualBinding`). Update `.styleci.yml` finder
+exclusions for new JavaScript build output directories. Modernize
+`phpunit.xml.dist` to use PHPUnit 11.x `<source>` element instead
+of the deprecated coverage configuration. Add development services
+to `docker-compose.yml` including Redis, Meilisearch, and MinIO for
+comprehensive local testing. Update `composer.json` `autoload-dev`
+paths and add a `scripts` section with `test`, `lint`, `pint`, and
+`phpstan` commands. Refresh `README.md` contributing section and
+`RELEASE.md` with the current release workflow.

@@ -347,42 +347,47 @@ structured data. Add an async event stream for pool state changes.
 Support export to Prometheus format. This touches the connection pool,
 transport layer, client API, and adds a monitoring module.
 
-## Non-code focused
+### N11: Fix README dependency list drift from pyproject.toml
 
-### N11: Fix `mkdocs.yml` nav ordering and add missing documentation pages
+`README.md`'s "Dependencies" section lists `sniffio` as a core
+dependency ("Async library autodetection"), but `pyproject.toml`
+`[project] dependencies` does not include `sniffio`. Conversely,
+`anyio` is declared in `pyproject.toml` as a core dependency but is
+not mentioned in the README's dependency list. Reconcile the README
+to match the actual package metadata.
 
-The `mkdocs.yml` navigation does not include pages for `environment_variables.md`
-or `compatibility.md` in the nav tree, even though these files exist in the
-`docs/` directory. Users browsing the docs site can only reach them via
-search. Additionally, the `theme` section references a custom `css/custom.css`
-but does not set `locale` for MkDocs' built-in search plugin, causing
-search tokenization issues for non-ASCII characters. Fix the nav to
-include all existing doc pages, and add `locale: en` to the search plugin
-configuration in `mkdocs.yml`.
+**Gold files:** `README.md`, `pyproject.toml`
 
-### M11: Add CI workflow for automated changelog validation and release-note linting
+### M11: Reconcile diverging duplicate contributing guides
 
-The `publish.yml` workflow handles PyPI publishing but does not verify that
-`CHANGELOG.md` has been updated when a PR modifies source files under
-`httpx/`. Add a new `.github/workflows/changelog-check.yml` workflow that
-runs on pull requests, checks whether `CHANGELOG.md` has a new entry when
-any `httpx/**/*.py` file is modified, and validates the entry format
-(expects `## [version]` headers and `- description (#PR)` bullet items).
-Also update `CONTRIBUTING.md` to document the required changelog format,
-and add a `[tool.changelog]` section in `pyproject.toml` with the
-validation regex pattern for CI to reference.
+Two contributing guides exist: `docs/contributing.md` (233 lines,
+rendered on the mkdocs documentation site via `mkdocs.yml` nav) and
+`.github/CONTRIBUTING.md` (237 lines, shown in GitHub's UI). They
+started identical but have drifted: the `.github/` version uses
+`scripts/test -- tests/test_multipart.py` (with `--` separator),
+while `docs/contributing.md` omits the `--` and adds extra context
+about pytest argument passing. Surrounding prose also differs.
+Consolidate to a single source of truth — either make one a symlink
+or redirect, or extract shared content.
 
-### W11: Overhaul project metadata, CI matrix, and documentation build configuration
+**Gold files:** `docs/contributing.md`, `.github/CONTRIBUTING.md`,
+`mkdocs.yml`
 
-The project's non-code infrastructure has several issues spanning multiple
-config and documentation files. In `pyproject.toml`: the
-`[project.classifiers]` list is missing the `Framework :: AnyIO` classifier,
-`[project.urls]` still points to the old documentation domain, and the
-`[tool.hatch.build]` section does not exclude benchmark files from the
-sdist. In `.github/workflows/test-suite.yml`: the test matrix does not
-include Python 3.13, and the httpcore dependency pin uses an older version.
-In `mkdocs.yml`: the `markdown_extensions` list is missing
-`pymdownx.tabbed` which is needed for the tabbed code examples in
-`docs/async.md`. In `.github/dependabot.yml`: the update schedule for
-GitHub Actions is set to `weekly` but should be `monthly` to reduce noise.
-Fix all four files to address these issues.
+### W11: Update stale mkdocs extension and doc-build tooling config
+
+`mkdocs.yml` uses the deprecated `codehilite` extension with
+`css_class: highlight`, but `requirements.txt` pins
+`mkdocs-material==9.6.18` which ships `pymdownx.highlight` as the
+standard code-highlighting extension since mkdocs-material 7.x.
+`requirements.txt` also pins `mkautodoc==0.2.0`, whose last release
+was in 2020 and which has known compatibility issues with modern
+mkdocs-material themes. CI runs `scripts/build` (which calls
+`mkdocs build`) but `scripts/check` only runs `ruff` + `mypy` —
+doc-build validation is absent from the lint step, so rendering
+regressions from the deprecated extension go undetected. The
+`pyproject.toml` `[tool.hatch.metadata.hooks.fancy-pypi-readme]`
+substitution pattern also hard-codes `master` branch paths for image
+URLs in the generated PyPI readme.
+
+**Gold files:** `mkdocs.yml`, `requirements.txt`, `scripts/check`,
+`pyproject.toml`

@@ -68,7 +68,7 @@ Sources/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -157,7 +157,11 @@ vulnerability database. Query the Swift Package Index's security
 advisories API. Report affected packages, severity, CVE IDs, and
 fixed versions. Support `--severity=high` threshold filtering and
 `--ignore=CVE-2024-XXXX` for acknowledged issues. Return non-zero
-exit code for CI integration.
+exit code for CI integration. Update `CONTRIBUTING.md` to add a
+"Security Auditing" section documenting the new `swift package
+audit` workflow for contributors reviewing dependency updates.
+Add a `Documentation/SecurityAuditing.md` guide with examples of
+running the audit command and interpreting its output.
 
 ### M2: Add build caching with remote cache support
 
@@ -259,7 +263,12 @@ licenses. Support `--format json|text|sarif` output for CI
 integration. Generate a combined license attribution file suitable
 for app distribution. Changes span `Sources/Commands/` for the
 new subcommand, `Sources/PackageLoading/` for license detection,
-and `Sources/Workspace/` for dependency metadata access.
+and `Sources/Workspace/` for dependency metadata access. Update
+`CMakeLists.txt` to add the new license-scanning source files to
+the CMake build so the feature compiles on Windows via the CMake
+path. Add a `Documentation/LicenseCompliance.md` guide explaining
+how to configure license policies and integrate audit-licenses
+into CI pipelines.
 
 ### W4: Implement distributed build with remote caching
 
@@ -346,31 +355,62 @@ dry-run resolution, `Sources/Commands/Utilities/APIDigester.swift`
 for symbol diffing, and `Sources/Build/BuildPlan/` for rebuild
 scope estimation.
 
+### N11: Fix `.swiftformat` configuration not matching current Swift version
 
-## Non-code focused
+The `.swiftformat` file specifies `--swiftversion 5.9` but the
+`Package.swift` declares `swift-tools-version:6.1` and the project
+has adopted Swift 6 language features including
+`MemberImportVisibility`. Update `--swiftversion` to `6.0` in
+`.swiftformat` so SwiftFormat correctly handles Swift 6 syntax
+(e.g., `sending` parameter modifier, `~Copyable` constraints).
+Update `.editorconfig` to ensure `indent_size = 4` and
+`trim_trailing_whitespace = true` are consistent across all file
+types, matching the `--indent 4` rule implied by the existing
+`.swiftformat`. Verify that the `--maxwidth 120` setting in
+`.swiftformat` aligns with the line-length guidance in
+`CONTRIBUTING.md`.
 
-### N11: Fix outdated or inconsistent metadata in .devcontainer/devcontainer.json
+### M11: Update `CONTRIBUTING.md` and PR workflow documentation
 
-The project configuration file `.devcontainer/devcontainer.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+The `CONTRIBUTING.md` (515 lines) covers development setup for
+macOS via Xcode and command-line Swift but is outdated regarding
+the CMake build path on Windows and Linux. Add a "CMake Build"
+section documenting how to build using `CMakeLists.txt` with the
+required `find_package` dependencies (SwiftSystem, TSC, LLBuild,
+ArgumentParser, SwiftDriver, SwiftCollections, SwiftCrypto,
+SwiftCertificates, SwiftASN1, SwiftBuild) as declared in the
+project's `CMakeLists.txt`. Update the Xcode setup instructions
+for Swift 6.1+ toolchains. Add troubleshooting guidance for
+common build failures related to `MemberImportVisibility` and
+`swiftLanguageMode`. Update `.github/PULL_REQUEST_TEMPLATE.md` to
+add checkboxes requiring contributors to confirm: documentation
+updates for public API changes, `CHANGELOG.md` entry for
+user-visible changes, and API compatibility verification via
+`swift package diagnose-api-breaking-changes`. Update
+`.github/dependabot.yml` to add Swift package ecosystem monitoring
+with weekly schedule, matching the existing GitHub Actions
+monitoring.
 
-### M11: Add or improve CI workflow and update related documentation
+### W11: Overhaul `Documentation/` directory and project configuration
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in `.devcontainer/devcontainer.json`, and update `.devcontainer/docker-compose.yaml` to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/BUG_REPORT.yml`, `.github/ISSUE_TEMPLATE/FEATURE_REQUEST.yml`, `.devcontainer/devcontainer.json`, `Utilities/config.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The `Documentation/` directory contains subdirectories (`Design/`,
+`PackageRegistry/`, `ReleaseNotes/`) and standalone files
+(`libSwiftPM.md`, `README.md`) but lacks a unified index and
+consistent structure. Update `Documentation/README.md` to serve
+as a table of contents linking all subdocuments with one-line
+descriptions. Update `CHANGELOG.md` (464 lines) to adopt a
+standardized format with Swift Evolution proposal references in
+a consistent `[SE-NNNN]` format — the current entries mix
+`[#NNNN]` GitHub PR references with `[SE-NNNN]` proposal
+references inconsistently. Update `CMakeLists.txt` to add a
+`docs` custom target that generates API documentation using
+Swift-DocC, gated behind a `BUILD_DOCS` CMake option. Create a
+`Documentation/MIGRATION.md` guide for users upgrading across
+Swift tools-version boundaries (5.9 → 6.0 → 6.1 → 6.2) covering
+manifest syntax changes, deprecated APIs, and
+`swiftLanguageModes` migration. Update
+`.github/workflows/pull_request.yml` to add a documentation
+build verification step that compiles Swift-DocC docs and fails
+on broken doc comments. Review `.license_header_template` and
+update the copyright year range to include 2025 (currently
+referencing "2014-2024 Apple Inc.").

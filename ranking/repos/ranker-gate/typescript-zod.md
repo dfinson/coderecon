@@ -84,7 +84,10 @@ When validation fails inside a nested object within a discriminated union,
 the error path does not include the discriminator key's value. The error
 message says "Invalid input" without indicating which branch of the union
 failed. Include the matched discriminator value in the error path so
-users can identify which variant had the validation failure.
+users can identify which variant had the validation failure. Also update
+the "Error handling" section in `packages/docs/content/error-customization.mdx`
+to document the new discriminator path behavior with a before/after
+example showing the improved error path output for discriminated unions.
 
 ### N4: Fix `.catch()` fallback not invoked during async parsing
 
@@ -157,7 +160,11 @@ heuristic in `ZodUnion._parse()` that identifies the branch whose
 validation progressed furthest (fewest or latest-path issues) and
 surfaces only that branch's errors. Add a `closest_match` option to the
 union definition, a new `invalid_union_closest` code in `ZodIssueCode`
-in `ZodError.ts`, and a default message in `errors.ts`.
+in `ZodError.ts`, and a default message in `errors.ts`. Update
+`packages/docs/content/error-formatting.mdx` to add a "Union errors"
+subsection demonstrating how the new `invalid_union_closest` issue code
+appears in formatted output and how to use `.format()` and `.flatten()`
+with closest-match union errors.
 
 ### M2: Add size constraint methods to `ZodMap`
 
@@ -252,7 +259,11 @@ the target coercion type. Update the coercion branches in `ZodString`,
 `ZodNumber`, `ZodBigInt`, `ZodBoolean`, and `ZodDate` in `types.ts` to
 emit this issue code instead of `invalid_type` when coercion fails. Add
 a default message in `errors.ts` and update `helpers/parseUtil.ts` to
-include the raw value in the issue context.
+include the raw value in the issue context. Also update the "Coercion"
+subsection of `packages/docs/content/api.mdx` to document the new
+`invalid_coercion` error code, explain when it is emitted instead of
+`invalid_type`, and add a code example showing how to access the
+original raw value from the issue context.
 
 ## Wide
 
@@ -363,28 +374,50 @@ introduces new utility functions in the helpers module.
 
 ## Non-code focused
 
-### N11: Fix outdated or inconsistent metadata in .devcontainer/devcontainer.json
+### N11: Fix `vitest.config.ts` not enabling coverage reporting and align `biome.jsonc` formatter settings with project conventions
 
-The project configuration file `.devcontainer/devcontainer.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+The root `vitest.config.ts` configures test execution but does not enable
+coverage collection — there is no `coverage` property in the `test` block.
+When contributors run `pnpm test`, no coverage report is generated, making
+it difficult to assess untested code paths. Add a `coverage` configuration
+to `vitest.config.ts` that uses the `v8` provider with `text` and `lcov`
+reporters, excludes `packages/docs/` and `packages/bench/`, and sets a
+minimum threshold of 80% for branches. Additionally, the `biome.jsonc`
+file sets `lineWidth: 120` in the formatter block but the `trailingCommas`
+setting under `javascript.formatter` uses `"es5"` which conflicts with
+the `noTrailingCommas` rule active in the linter section for JSON files.
+Harmonize the Biome configuration so that the JavaScript and JSON trailing
+comma settings are consistent and document the chosen convention in a
+comment at the top of `biome.jsonc`.
 
-### M11: Add or improve CI workflow and update related documentation
+### M11: Add TypeScript version matrix validation and circular dependency check to the CI workflow
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .devcontainer/devcontainer.json, and update rfcs/index.md to document the CI
-process and badge status for contributors.
+The `.github/workflows/test.yml` CI workflow tests against TypeScript
+`"5.5"` and `"latest"` in its matrix but does not test against the
+minimum TypeScript version declared in `packages/zod/package.json`'s
+`peerDependencies` (currently `>=5.5`). If the minimum peer dependency
+changes, the CI matrix falls out of sync. Add a job step that reads the
+minimum TypeScript version from `package.json` and injects it into the
+matrix dynamically. Also, the `check-circular` job in the same workflow
+installs dependencies with `pnpm install` but does not run `pnpm build`
+before checking circular dependencies, so the check runs against stale
+build artifacts. Add a `pnpm build` step before `pnpm check:circular`.
+Finally, update the workflow `name` fields to include the pnpm version
+for traceability.
 
-### W11: Overhaul project configuration, CI, and documentation consistency
+### W11: Overhaul project documentation to accurately reflect the v3/v4 dual-version architecture
 
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/workflows/claude.yml`, `.github/workflows/claude-code-review.yml`, `.devcontainer/devcontainer.json`, `pnpm-lock.yaml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The `README.md` at the repository root directs users to `zod.dev/api`
+for documentation but does not mention the v3/v4 split, the monorepo
+structure under `packages/`, or the different import paths (`zod` vs
+`zod/v4` vs `zod/mini`). Update `README.md` to add a "Packages" section
+explaining the monorepo layout, a version migration callout, and badges
+for the `check-circular` and `lint` CI jobs (currently only the `test`
+badge is shown). Update `CONTRIBUTING.md` to document the pnpm workspace
+setup, the `vitest` test runner (replacing references to older tooling),
+and add a "Docs development" section explaining the `packages/docs/`
+Next.js site. Review and update the `packages/docs/content/api.mdx` and
+`packages/docs/content/error-customization.mdx` doc pages to ensure all
+code examples reference the correct import paths for both v3 and v4 and
+that the `z.coerce` section in `api.mdx` documents the coercion failure
+error codes introduced by recent changes.

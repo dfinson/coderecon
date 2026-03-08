@@ -62,7 +62,7 @@ Src/Newtonsoft.Json/
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -155,7 +155,12 @@ Add `JsonConvert.SerializeObjectAsync` and `DeserializeObjectAsync`
 that work with `Stream` and use async I/O. The async path should
 not buffer the entire JSON in memory. Support `CancellationToken`
 for cancellation. The async reader/writer should yield periodically
-to avoid blocking the thread pool on large documents.
+to avoid blocking the thread pool on large documents. Also update
+`Doc/SerializingJSON.aml` to add an "Async Serialization" section
+documenting the new async API with usage examples, and update
+`Src/Newtonsoft.Json/Newtonsoft.Json.csproj` to conditionally
+reference `System.IO.Pipelines` for `net6.0` and above targets
+that support async streaming.
 
 ### M2: Add support for `System.Text.Json` JsonDocument interop
 
@@ -253,7 +258,11 @@ configuration. Respect `[JsonProperty]` attributes, `[JsonConverter]`
 annotations, `Required` settings, `NullValueHandling`, and custom
 contract resolvers. Support recursive types, generic types, inheritance
 (`$ref`, `allOf`), and enum schemas. Add schema validation for
-`JToken` instances.
+`JToken` instances. Also update `CONTRIBUTING.md` to add a
+"Schema Module" section describing the architecture and
+contribution guidelines for schema-related changes, and add
+documentation entries in `Doc/JsonSchema.aml` covering the schema
+generation API with worked examples for common type hierarchies.
 
 ### W2: Implement source generator for compile-time serialization
 
@@ -374,31 +383,64 @@ appropriate writer based on output target. Support `Stream`,
 with `JsonTextWriter` including formatting, string escaping, and
 comment writing.
 
+### N11: Fix `Build/version.json` and `.csproj` version drift
 
-## Non-code focused
+The version metadata is split between `Build/version.json`
+(which declares `Major: 13, Release: 5, Prerelease: beta1`) and
+`Src/Newtonsoft.Json/Newtonsoft.Json.csproj` (which declares
+`VersionPrefix` `11.0.1` with `VersionSuffix` `beta2`). These two
+sources of truth disagree on both the major version and the
+pre-release label, causing the build script `Build/build.ps1` to
+stamp NuGet packages with a version derived from `version.json`
+while the assembly version comes from the `.csproj`. Fix the drift
+by updating `Build/version.json` to match the `.csproj`
+(`Major: 11, Release: 0, Prerelease: beta2`) and add a
+`<Target Name="ValidateVersionConsistency">` in
+`Src/Directory.Build.props` that reads `version.json` at build time
+and emits a build error if the major or pre-release fields
+diverge from the `.csproj` properties.
 
-### N11: Fix outdated or inconsistent metadata in azure-pipelines.yml
+### M11: Modernise the `Doc/` SHFB documentation project and add missing topics
 
-The project configuration file `azure-pipelines.yml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+The `Doc/` directory uses Sandcastle Help File Builder (`.shfbproj`)
+with `.aml` topic files, but several topics are outdated or missing.
+Update `Doc/doc.shfbproj` to target the latest SHFB version and
+remove the build warning suppressions that hide broken cross-
+references. Add three new `.aml` topic files:
+`Doc/AsyncSerialization.aml` covering the async serialization API,
+`Doc/DiscriminatorDeserialization.aml` covering the discriminator-
+based polymorphic deserialization pattern, and
+`Doc/JsonMergePatch.aml` covering RFC 7396 merge-patch usage.
+Update `Doc/doc.content` to include the new topics in the table of
+contents under a "Modern Patterns" heading. Update `CONTRIBUTING.md`
+to add a "Documentation" section that explains the `.aml` format
+and how to preview the SHFB output locally. Update `README.md` to
+link to the generated documentation site rather than embedding
+API examples inline.
 
-### M11: Add or improve CI workflow and update related documentation
+### W11: Overhaul build infrastructure, CI pipeline, and project configuration
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in `azure-pipelines.yml`, and update `README.md` to document the CI
-process and badge status for contributors.
-
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `azure-pipelines.yml`, `.github/workflows/codeql.yml`, `azure-pipelines.yml`, `Src/Newtonsoft.Json.Tests/large.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Modernise the repository build infrastructure across multiple
+non-code files. In `azure-pipelines.yml`, replace the single-job
+pipeline with a multi-stage layout: a `Build` stage that builds all
+TFMs, a `Test` stage with a matrix across `windows-2022`,
+`ubuntu-latest`, and `macos-latest`, and a `Pack` stage that
+creates NuGet packages and publishes them as pipeline artifacts.
+Add a `PublishCodeCoverageResults` step using Cobertura format.
+In `Src/Newtonsoft.Json/Newtonsoft.Json.csproj`, remove the
+legacy `net20`, `net35`, and `net40` TFMs that are no longer
+supported by the .NET SDK, add `net9.0` to the
+`<TargetFrameworks>` list, and replace the hard-coded
+`<AssemblyVersion>` and `<FileVersion>` with properties derived
+from `Build/version.json` via an MSBuild `ReadLinesFromFile` task
+so that version metadata has a single source of truth. In
+`Src/Directory.Build.props`, remove the individual per-package
+version properties and migrate to Central Package Management by
+adding `<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>`
+and a `<PackageVersion>` item group. Update `Src/NuGet.Config`
+to add a `<trustedSigners>` section matching the signature
+fingerprints from nuget.org. Update `Src/global.json` to pin the
+SDK to `10.0.100`. In `Build/version.json`, add a `Build` field
+so that CI can inject a build number without modifying the file.
+Add a `Doc/build-infrastructure.md` guide documenting the purpose
+of every build-related file and the CI pipeline contract.

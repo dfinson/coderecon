@@ -68,7 +68,7 @@
 
 ## Tasks
 
-30 tasks (10 narrow, 10 medium, 10 wide).
+33 tasks (11 narrow, 11 medium, 11 wide).
 
 ## Narrow
 
@@ -163,7 +163,9 @@ broadcasts the expected data when a controller action runs, test
 WebSocket authentication flows, and test channel rejection. Add
 `assert_broadcast_on(channel, data)` that works in integration tests
 (not just channel unit tests). Support testing multiple concurrent
-connections.
+connections. Update `guides/source/testing.md` to document the new
+Action Cable integration test assertions and add a section to
+`CONTRIBUTING.md` on writing Action Cable tests.
 
 ### M2: Add database query analytics in development
 
@@ -266,7 +268,11 @@ from routes and controllers, request/response body validation against
 the schema, API versioning through URL prefix or header, hypermedia
 links in responses (JSON:API or HAL), and a built-in API documentation
 viewer. Changes span routing, controller rendering, serialization,
-and the generator templates.
+and the generator templates. Update `Rakefile` to add an
+`openapi:generate` task, add API mode setup instructions to
+`CONTRIBUTING.md`, and revise the `guides/source/api_app.md` guide
+to document schema generation, versioning, and the built-in
+documentation viewer.
 
 ### W2: Add comprehensive audit logging framework
 
@@ -361,30 +367,46 @@ Support type-checked `params`, association return types, and
 scope chain types. Add CI integration that runs `steep check`
 as part of `rails test`.
 
-## Non-code focused
+## Non-code
 
-### N11: Fix outdated or inconsistent metadata in .devcontainer/compose.yaml
+### N11: Fix `.devcontainer/Dockerfile` using outdated base image and missing `libsqlite3-dev`
 
-The project configuration file `.devcontainer/compose.yaml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+The `.devcontainer/Dockerfile` specifies a base image variant
+`ARG VARIANT="4.0.1"` but does not install `libsqlite3-dev`, causing
+Active Record SQLite adapter tests to fail in Codespaces. The
+`apt-get install` list includes `sqlite3` (the CLI) but not the
+development headers. Add `libsqlite3-dev` to the install list.
+Additionally, pin the MariaDB client package version to avoid
+compatibility issues with the `mysql:latest` image declared in
+`.devcontainer/compose.yaml`. Update `.devcontainer/compose.yaml`
+to use a specific MySQL image tag instead of `latest`.
 
-### M11: Add or improve CI workflow and update related documentation
+### M11: Overhaul `Brewfile` dependencies, `.rubocop.yml` cops, and `rails.gemspec` metadata
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .devcontainer/compose.yaml, and update .devcontainer/Dockerfile to document the CI
-process and badge status for contributors.
+Update `Brewfile` to add `libsqlite3` and replace the `xquartz` cask
+(no longer needed since macOS 10.15) with `chromedriver` for system
+test support. Revise `.rubocop.yml` to enable the
+`Rails/PluckInWhere` and `Performance/CollectionLiteralInLoop` cops
+across all framework gems, add `7_*_release_notes.md` to the
+`CHANGELOG.md` exclusion pattern, and remove the blanket
+`Performance` exclusion for test files. Update `rails.gemspec`
+metadata to add `funding_uri`, and propagate `rubygems_mfa_required`
+to each sub-gem’s gemspec (`actioncable.gemspec`,
+`activerecord.gemspec`, etc.).
 
-### W11: Overhaul project configuration, CI, and documentation consistency
+### W11: Modernize CI/CD, devcontainer, release tooling, and contributor docs
 
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `guides/source/association_basics.md`, `guides/source/asset_pipeline.md`, `.devcontainer/compose.yaml`, `.devcontainer/devcontainer.json`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Rewrite `.github/workflows/` to consolidate the labeler, stale-issue,
+and more-info-needed workflows into a single `triage.yml`. Add a new
+`.github/workflows/ci-matrix.yml` that runs each framework gem’s test
+suite as a separate job with proper service containers (using versions
+from `.devcontainer/compose.yaml`). Update `.devcontainer/Dockerfile`
+to support ARM64 builds by adding a multi-arch `FROM` directive and
+using `docker buildx`. Revise `.devcontainer/compose.yaml` to add
+a `valkey` service replacing the current Redis/Valkey hybrid and
+pin all service image tags. Update `RELEASING_RAILS.md` to document
+the new `tools/releaser` gem workflow, add a post-release checklist
+for updating `RAILS_VERSION`, `Gemfile.lock`, and the `guides/`
+version selector. Revise `CONTRIBUTING.md` to link to the devcontainer
+setup, add a section on using `Brewfile` for macOS development, and
+document the `Rakefile` task inventory for new contributors.

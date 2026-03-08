@@ -347,47 +347,48 @@ observability middleware stack, per-view tracing decorators, and a
 diagnostics management command. Changes span middleware, database
 backends, template engine, cache framework, and settings.
 
-## Non-code focused
+### N11: Fix incomplete JavaScript tooling files in MANIFEST.in
 
-### N11: Fix `pyproject.toml` metadata and update `.pre-commit-config.yaml` hook versions
+`MANIFEST.in` includes `Gruntfile.js` and `package.json` for the source
+distribution but omits `eslint.config.mjs`, `eslint-recommended.js`, and
+`globals.js`. Since `eslint.config.mjs` imports both `globals.js` and
+`eslint-recommended.js` (lines 1–2), the JavaScript lint configuration
+shipped in the sdist is incomplete — running `npm test` (which executes
+`eslint .` via the `pretest` script in `package.json`) from an sdist
+would fail because ESLint cannot resolve its config imports.
 
-The `pyproject.toml` `[project.classifiers]` list is missing the
-`Framework :: Django :: 5.2` classifier for the latest release series, and
-the `[project.urls]` section uses a legacy URL for the release notes page.
-Additionally, `.pre-commit-config.yaml` pins several hooks to outdated
-revisions — `blacken-docs` is two major versions behind and no longer
-compatible with the current `black` version, causing pre-commit failures
-for new contributors. Update the classifiers and URLs in `pyproject.toml`,
-bump the hook revisions in `.pre-commit-config.yaml`, and update the
-`zizmor.yml` configuration to include the newly added CI workflow files
-(`benchmark.yml`, `check-migrations.yml`) in its scan targets.
+**Gold files:** `MANIFEST.in`, `eslint.config.mjs`
 
-### M11: Add CI workflow for automated benchmark regression detection on pull requests
+### M11: Reconcile Python version and dependency divergence in doc builds
 
-Django has a `.github/workflows/benchmark.yml` but it only runs on the
-`main` branch on a schedule. Add a new `.github/workflows/pr-benchmark.yml`
-workflow that runs a subset of performance benchmarks on pull requests
-targeting `django/db/` and `django/template/`, compares results against
-a baseline stored in the repository, and posts a comment with the
-regression report. Update `docs/Makefile` to add a `benchmark-baseline`
-target that generates the baseline data file. Also add a
-`docs/internals/benchmarking.txt` documentation page explaining how
-contributors should interpret benchmark results, and update
-`.readthedocs.yml` to exclude the benchmark data directory from the
-documentation build.
+`.readthedocs.yml` builds documentation with Python `3.12`, while
+`.github/workflows/docs.yml` uses Python `3.14`. Both install from
+`docs/requirements.txt` (which pins `Sphinx>=4.5.0`). Since RTD sets
+`fail_on_warning: true`, Python-version-sensitive Sphinx deprecation
+warnings could pass in CI on 3.14 but fail on RTD with 3.12, or vice
+versa. The `tox.ini` `[testenv:docs]` adds a third inconsistent
+environment — it installs bare `Sphinx` (unpinned) plus `pyenchant`
+and `sphinxcontrib-spelling` directly instead of using
+`docs/requirements.txt`, so `tox -e docs` may use a different Sphinx
+major version than either CI or RTD.
 
-### W11: Overhaul documentation build pipeline across `docs/Makefile`, ReadTheDocs, and CI
+**Gold files:** `.readthedocs.yml`, `.github/workflows/docs.yml`,
+`tox.ini`, `docs/requirements.txt`
 
-The documentation infrastructure spans `docs/Makefile`,
-`.readthedocs.yml`, and several `.github/workflows/` files (`docs.yml`,
-`linters.yml`), and has accumulated configuration drift. Specifically:
-(1) `docs/Makefile` still references a `SPHINXBUILD` variable pointing to
-`python -m sphinx` without activating the virtualenv, breaking local doc
-builds when Sphinx is not installed globally; (2) `.readthedocs.yml`
-specifies a Python version that is no longer supported by ReadTheDocs'
-build images; (3) `.github/workflows/docs.yml` does not cache pip
-dependencies, causing slow CI runs; and (4) `.github/workflows/linters.yml`
-runs `blacken-docs` but does not install the same version pinned in
-`.pre-commit-config.yaml`, leading to inconsistent formatting. Fix all
-four files to resolve these issues and ensure a consistent doc build
-across local, CI, and ReadTheDocs environments.
+### W11: Eliminate flake8 version drift across linting environments
+
+`tox.ini` `[testenv:flake8]` requires `flake8 >= 3.7.0` (a minimum
+from 2019), while `.pre-commit-config.yaml` pins flake8 at
+`rev: 7.3.0`, and `.github/workflows/linters.yml` installs flake8
+unpinned via `pip install flake8`. All three read rule configuration
+from `.flake8` (which uses `per-file-ignores` with `W601` — a rule
+whose semantics changed between flake8 major versions). The wide
+version range means local tox runs, pre-commit hooks, and CI may
+enforce different rule sets. Similarly, `.editorconfig` and `.flake8`
+both encode `max_line_length = 88` / `max-line-length = 88` to match
+black's default, but `tox.ini` `[testenv:black]` runs black with no
+explicit `--line-length` — if black's default changes, all four files
+would need coordinated updates.
+
+**Gold files:** `tox.ini`, `.pre-commit-config.yaml`,
+`.github/workflows/linters.yml`, `.flake8`, `.editorconfig`

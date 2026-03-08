@@ -75,7 +75,11 @@ enumType[item])`. For numeric TypeScript enums, `Object.keys()` returns
 both the string keys and the numeric reverse-mapped values. The mapped
 values then include both the numeric values and the original string
 keys, so `isEnum()` accepts values it should reject. Fix `isEnum()` to
-filter out reverse-mapped entries when validating numeric enums.
+filter out reverse-mapped entries when validating numeric enums. Also
+update the pipes section of `CONTRIBUTING.md` (under "Coding Rules") to
+add a note about the reverse-mapping pitfall for numeric enums and how
+contributors should test pipe behavior with both string and numeric enum
+types.
 
 ### N3: Fix `@UseInterceptors()` ordering with global interceptors
 
@@ -123,7 +127,12 @@ only applies the default when the value is `null`, `undefined`, or
 `NaN`. When a query parameter is present but empty (e.g., `?name=`),
 the pipe passes through the empty string `""` instead of the default
 value. Add an `includeEmptyStrings` option that treats empty strings as
-missing values and applies the default.
+missing values and applies the default. Also update the `Readme.md` to
+add `DefaultValuePipe` to the "Built-in pipes" feature list in the
+Description section (currently only `ValidationPipe` and `ParseIntPipe`
+are mentioned), and add a JSDoc example block to the
+`default-value.pipe.ts` source file showing the new
+`includeEmptyStrings` option.
 
 ### N9: Fix `ExceptionFilter` not catching errors from async guards
 
@@ -169,7 +178,11 @@ may never complete, leaving the process hanging. Add a configurable
 `shutdownTimeout` option to the `Server` base class. When the timeout
 expires during `close()`, force-disconnect the transport and log a
 warning. Implement the timeout in `ServerTCP`, `ServerRedis`, and
-`ServerKafka`.
+`ServerKafka`. Also add a `shutdown-timeout` parameter to the
+`.circleci/config.yml` that configures the CI test job's `no_output_timeout`
+to match the new default shutdown timeout, and update
+`CONTRIBUTING.md` section "Development Setup" to document how to test
+graceful shutdown behavior locally.
 
 ### M3: Add request-scoped provider lazy initialization to the DI container
 
@@ -383,31 +396,54 @@ gateway `@SubscribeMessage()` handlers and microservice
 in `WebSocketsController` and the `Server` base class, with version
 extraction from message metadata or headers.
 
-
 ## Non-code focused
 
-### N11: Fix outdated or inconsistent metadata in renovate.json
+### N11: Fix `.circleci/config.yml` Node.js version parameters lagging behind LTS schedule
 
-The project configuration file `renovate.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+The `.circleci/config.yml` defines four Node.js version parameters:
+`legacy-node-version` (`18.20`), `maintenance-node-version` (`20.18`),
+`active-node-version` (`22.11`), and `current-node-version` (`23.3`).
+Node.js 18 reached end-of-life in April 2025 but is still listed as
+`legacy-node-version` and the `build` job defaults to the
+`maintenance-node-version` image. Update the parameters to drop
+Node.js 18 support, promote 20.x to legacy, 22.x to maintenance, and
+add Node.js 24.x as current. Also add a comment block at the top of the
+config documenting the Node.js release schedule mapping and update the
+`check-legacy-node-version` pipeline parameter description. Finally,
+update `package.json` to set the `engines.node` field to `>=20` to
+match the new minimum.
 
-### M11: Add or improve CI workflow and update related documentation
+### M11: Consolidate linting configuration and align `eslint.config.mjs` with `tsconfig.json` project references
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in `renovate.json`, and update `Readme.md` to document the CI
-process and badge status for contributors.
+The `eslint.config.mjs` enables `recommendedTypeChecked` rules with
+`projectService: true` and `tsconfigRootDir`, but the root
+`tsconfig.json` excludes `**/*.spec.ts` in its `exclude` array while
+`tsconfig.spec.json` includes them. This means ESLint's type-aware rules
+cannot resolve types in spec files, causing spurious
+`@typescript-eslint/no-unsafe-*` errors during `npm run lint:spec`.
+Create a `tsconfig.eslint.json` that extends `tsconfig.json` but
+includes both source and spec files, then reference it from
+`eslint.config.mjs`. Also consolidate the three parallel `lint:packages`,
+`lint:integration`, and `lint:spec` npm scripts in `package.json` into
+a single `lint` script using ESLint's `overrides` pattern instead of
+three separate concurrently invocations, and update `CONTRIBUTING.md`
+(section "Development Setup") to document the new unified lint command.
 
-### W11: Overhaul project configuration, CI, and documentation consistency
+### W11: Modernize project documentation and release tooling configuration
 
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.circleci/config.yml`, `.github/ISSUE_TEMPLATE/Bug_report.yml`, `renovate.json`, `.circleci/config.yml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The `Readme.md` (note: lowercase "eadme") references CircleCI build
+badges pointing to the `master` branch, but the default branch is now
+`master` and the CircleCI badge token placeholder (`?token=abc123def456`)
+is not a real token — the badge never renders. Fix the badge URLs,
+remove the placeholder token, and update all badge links to use the
+current default branch. The `CONTRIBUTING.md` file references `npm` for
+all setup commands but the project uses `lerna` for monorepo management
+— add a "Monorepo structure" section explaining the `lerna.json`
+configuration, how `packages/` are linked, and how to add a new package.
+Update `lerna.json` to use the `"useWorkspaces": true` configuration
+for npm workspace integration instead of relying on the legacy
+`"packages"` field. Review and update the `gulpfile.js` to add JSDoc
+comments explaining each gulp task, and add a `DEVELOPMENT.md` at the
+repository root documenting the build pipeline (TypeScript compilation,
+gulp tasks, lerna publish flow) with a step-by-step guide for running
+tests locally.

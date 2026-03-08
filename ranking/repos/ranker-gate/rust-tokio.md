@@ -91,7 +91,9 @@ The waiter node is removed from the linked list on drop, but the stored
 permit has already been consumed and is not returned to the `Notify` state
 machine. Fix the waiter's drop logic in `notify.rs` to re-dispatch the
 permit to the next waiter in the list when the notification was delivered
-but not observed.
+but not observed. Also update `docs/contributing/pull-requests.md` to
+add a note about cancellation-safety testing requirements for changes
+to synchronization primitives.
 
 ### N3: Fix `TcpListener::accept` not respecting runtime shutdown
 
@@ -196,7 +198,9 @@ duration histogram, I/O driver event count, timer wheel size, thread
 pool utilization) through the `tracing` subscriber system. Emit
 metrics as `tracing` events with structured fields so any tracing
 subscriber (e.g., tracing-opentelemetry) can collect them. Add
-configurable emission intervals.
+configurable emission intervals. Also update `.github/labeler.yml`
+to add an `R-metrics` label with path entries for the new runtime
+metrics module files (e.g., `tokio/src/runtime/metrics/*`).
 
 ### M5: Add cooperative budget tracking for user-spawned blocking tasks
 
@@ -374,28 +378,47 @@ events through a bounded channel returned from the watch call.
 
 ## Non-code focused
 
-### N11: Fix outdated or inconsistent metadata in Cargo.toml
+### N11: Update `deny.toml` to add license exceptions for new optional dependencies
 
-The project configuration file `Cargo.toml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+The `deny.toml` file configures `cargo-deny` with an allow-list of
+`MIT` and `Apache-2.0` licenses plus a single exception for
+`unicode-ident` (Unicode-3.0). The `[bans]` section sets
+`multiple-versions = "allow"` and `wildcards = "deny"`, and
+`[sources]` blocks unknown registries and git sources. As Tokio adds
+optional dependencies for features like `io-uring` (which pulls in
+crates with ISC or BSD-2-Clause licenses), these will cause
+`cargo deny check` failures in the `audit.yml` CI workflow. Add the
+necessary license exceptions to `deny.toml` for `io-uring` ecosystem
+crates and add a comment documenting the policy for evaluating new
+license exceptions.
 
-### M11: Add or improve CI workflow and update related documentation
+### M11: Add spellcheck enforcement to CI and expand the custom dictionary
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in Cargo.toml, and update docs/contributing/reviewing-pull-requests.md to document the CI
-process and badge status for contributors.
+The workspace `Cargo.toml` configures `[workspace.metadata.spellcheck]`
+pointing to `spellcheck.toml`, which enables Hunspell with `en_US` and
+a custom dictionary `spellcheck.dic`. However, no CI workflow runs
+`cargo-spellcheck` to enforce documentation spelling. Add a
+`spellcheck` job to `.github/workflows/ci.yml` that runs
+`cargo spellcheck check` and fails on unknown words. Update
+`CONTRIBUTING.md` to document how contributors should run
+`cargo spellcheck` locally and add new terms to `spellcheck.dic`.
+Review and expand `spellcheck.dic` with common Tokio-specific terms
+(e.g., epoll, kqueue, IOCP, io_uring, mio) that are currently missing.
 
-### W11: Overhaul project configuration, CI, and documentation consistency
+### W11: Add FreeBSD CI parity with cross-compilation support and documentation
 
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `docs/contributing/how-to-specify-crates-dependencies-versions.md`, `.github/ISSUE_TEMPLATE/bug_report.md`, `Cargo.toml`, `stress-test/Cargo.toml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Tokio's FreeBSD testing is configured in `.cirrus.yml` (Cirrus CI with
+FreeBSD 14.3 VMs, running both 64-bit and 32-bit targets) separately
+from the main `.github/workflows/ci.yml` (GitHub Actions for Linux,
+macOS, Windows). The `Cross.toml` enables passthrough of `RUSTFLAGS`
+and `RUST_BACKTRACE` for cross-compiled builds but does not cover
+FreeBSD targets. Unify the CI configuration by adding a FreeBSD
+cross-compilation job to `.github/workflows/ci.yml` using
+`cross-rs/cross` with a FreeBSD target, reducing reliance on Cirrus CI.
+Update `Cross.toml` to add a `[target.x86_64-unknown-freebsd]` section.
+Add a "Platform support" section to `CONTRIBUTING.md` documenting
+which platforms are tested in CI and how to run platform-specific tests
+locally. Update `SECURITY.md` to note that security fixes are verified
+across all CI platforms including FreeBSD. Update the `deny.toml`
+`[sources]` section if the FreeBSD cross toolchain requires additional
+registry sources.

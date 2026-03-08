@@ -71,7 +71,9 @@ Currently users must write `#[serde(skip_serializing_if = "is_default")]`
 and define a helper function. Add a built-in `skip_serializing_if_default`
 attribute that skips serialization when the field value equals its
 `Default::default()`. The field type must impl both `Default` and
-`PartialEq`.
+`PartialEq`. Also update `crates-io.md` to add an example demonstrating
+the new `skip_serializing_if_default` attribute in the "Serde in action"
+code block.
 
 ### N3: Fix error span pointing to wrong field with `#[serde(rename_all)]`
 
@@ -151,7 +153,9 @@ variant use `Default::default()` during deserialization. This requires
 changes in `serde_derive/src/internals/attr.rs` (variant-level default
 parsing), `serde_derive/src/de/struct_.rs` (default generation for
 variant fields), and `serde_derive/src/internals/check.rs`
-(validation for the new usage).
+(validation for the new usage). Also update `CONTRIBUTING.md` to add
+a testing instruction for running variant-level default tests under
+the `test_suite` directory alongside the existing test commands.
 
 ### M2: Implement `deserialize_in_place` for enum types
 
@@ -354,31 +358,44 @@ between the format's native types and serde's data model. Support
 deriving both serde and the native traits from a single struct
 definition. This crosses derive macros, data model mapping, and adds
 per-format bridge modules.
-
 ## Non-code focused
 
-### N11: Fix outdated or inconsistent metadata in serde_core/Cargo.toml
+### N11: Update `crates-io.md` to document supported data formats and feature flags
 
-The project configuration file `serde_core/Cargo.toml` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+The `crates-io.md` file (rendered as the crate README on crates.io)
+contains a "Serde in action" example using `serde_json` and links to
+external resources, but does not document the crate's feature flags
+(`std`, `alloc`, `rc`, `unstable`) or the relationship between the
+`serde`, `serde_core`, and `serde_derive` crates. Add a "Feature
+flags" section to `crates-io.md` describing each feature flag defined
+in the workspace `Cargo.toml`, and add a "Crate organization" section
+explaining the split between `serde` (public facade), `serde_core`
+(core traits), and `serde_derive` (proc macros).
 
-### M11: Add or improve CI workflow and update related documentation
+### M11: Add MSRV policy documentation and enforce it in CI
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in serde_core/Cargo.toml, and update serde_core/README.md to document the CI
-process and badge status for contributors.
+The `Cargo.toml` workspace configuration does not specify a
+`rust-version` field, and `CONTRIBUTING.md` does not mention the
+minimum supported Rust version. The CI workflow
+(`.github/workflows/ci.yml`) tests against Rust 1.56.0 and 1.60.0 in
+the `build` job matrix but this MSRV is not documented anywhere.
+Add a `rust-version` field to each crate's `Cargo.toml`, document the
+MSRV policy in `CONTRIBUTING.md` alongside the existing test
+instructions, and add a dedicated `msrv` job to
+`.github/workflows/ci.yml` that uses `cargo +<msrv> check` to prevent
+accidental MSRV regressions.
 
-### W11: Overhaul project configuration, CI, and documentation consistency
+### W11: Add `serde_test` crate with documentation, CI coverage, and workspace integration
 
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `.github/ISSUE_TEMPLATE/4-other.md`, `.github/ISSUE_TEMPLATE/2-suggestion.md`, `serde_core/Cargo.toml`, `Cargo.toml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+The `test_suite/` directory contains integration tests but there is no
+public testing utility crate for downstream users to verify their
+`Serialize`/`Deserialize` impls. Create a new `serde_test` crate in
+the workspace that provides `assert_tokens`, `assert_ser_tokens`, and
+`assert_de_tokens` helpers. Register the crate in the workspace
+`Cargo.toml` `members` list and add a `[patch.crates-io]` entry.
+Add a `serde_test` section to `CONTRIBUTING.md` with instructions for
+running serde_test's own test suite. Update `crates-io.md` to link to
+the new crate. Add a `serde_test` build step to
+`.github/workflows/ci.yml` in both the `stable` and `nightly` jobs.
+Update `README.md` to list `serde_test` in the project structure
+overview.

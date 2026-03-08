@@ -93,7 +93,7 @@ option for maximum cache size.
 When a `Call` is cancelled via `call.cancel()`, the `EventListener`
 receives `callFailed` but not `callEnd`. The contract says `callEnd`
 is always the last event. Fix the cancellation path to emit `callEnd`
-after `callFailed` when the call is cancelled.
+after `callFailed` when the call is cancelled. Also add an entry to `CHANGELOG.md` under the next unreleased version documenting the `EventListener` lifecycle fix.
 
 ### N4: Fix certificate pinning bypass on redirects to different hosts
 
@@ -161,7 +161,7 @@ retry on connection failures, 5xx responses, and configurable
 status codes. Use exponential backoff with jitter. Add a
 `RetryPolicy` interface with a default implementation, configurable
 via `OkHttpClient.Builder.retryPolicy()`. Respect `Retry-After`
-headers. Track retry count in the response for observability.
+headers. Track retry count in the response for observability. Also update `README.md` to document the new retry API in the "Features" overview, and add a recipe to `docs/recipes.md` showing how to configure retry policies with examples for idempotent and non-idempotent requests.
 
 ### M2: Add HTTP/3 (QUIC) transport support
 
@@ -365,30 +365,14 @@ transformed bodies can optionally be stored post-transformation.
 Expose per-stage metrics (bytes processed, time spent) through the
 `EventListener`.
 
-## Non-code focused
+### N11: Fix `mkdocs.yml` missing navigation entries for docs pages
 
-### N11: Fix outdated or inconsistent metadata in .devcontainer/devcontainer.json
+The `mkdocs.yml` configuration defines the Material theme, extra CSS, and markdown extensions, but does not include a `nav:` section mapping all pages in the `docs/` directory. As a result, pages like `docs/recipes.md`, `docs/releasing.md`, `docs/works_with_okhttp.md`, and the `docs/security/` and `docs/contribute/` directories are not reachable from the documentation site's navigation sidebar. Add a complete `nav:` section to `mkdocs.yml` that lists all existing documentation pages organized into logical groups (Getting Started, Recipes, Security, Contributing, Changelogs, Releasing). Verify that the `site_name`, `repo_url`, and `edit_uri` fields are consistent with the current GitHub repository URL.
 
-The project configuration file `.devcontainer/devcontainer.json` contains metadata that has
-drifted from the actual project state. Audit the file for incorrect
-version constraints, outdated URLs, deprecated configuration keys,
-or missing entries that should be present based on the current
-codebase structure. Fix the inconsistencies.
+### M11: Expand `CONTRIBUTING.md` with multi-module build instructions and Gradle property guide
 
-### M11: Add or improve CI workflow and update related documentation
+The current `CONTRIBUTING.md` covers CLA requirements, basic `./gradlew clean check`, and Android test setup, but does not explain how to build and test individual modules in the multi-module project. Add a "Module Build Guide" section documenting how to run checks for specific modules (e.g., `./gradlew :okhttp:check`, `./gradlew :mockwebserver-junit5:check`, `./gradlew :okhttp-tls:check`). Add a "Gradle Properties Reference" section explaining each flag in `gradle.properties` (`androidBuild`, `graalBuild`, `loomBuild`, `containerTests`, `okhttpModuleTests`, `okhttpDokka`) with descriptions of what they enable and when contributors should set them. Also document how to enable the Gradle configuration cache and troubleshoot common serialization issues with `org.gradle.configuration-cache.problems=fail`.
 
-The CI configuration needs improvement: add a workflow step for
-linting or type-checking that currently only runs locally, ensure
-the CI matrix covers all supported platform/version combinations
-listed in .devcontainer/devcontainer.json, and update regression-test/README.md to document the CI
-process and badge status for contributors.
+### W11: Create a unified release engineering guide and update `mkdocs.yml` navigation
 
-### W11: Overhaul project configuration, CI, and documentation consistency
-
-Multiple non-code files have drifted from each other and from the
-actual project state. Specifically: `docs/recipes.md`, `.github/ISSUE_TEMPLATE/bug_report.md`, `.devcontainer/devcontainer.json`, `.junit.run/Not Slow.run.xml`
-need to be audited and synchronized. Version requirements in config
-files should match CI matrix entries, documentation should reflect
-current APIs and configuration options, and build/CI files should
-use consistent tooling versions. Fix all inconsistencies across
-these files to ensure a coherent project configuration.
+Release-related documentation is scattered across `docs/releasing.md` (release steps), `CHANGELOG.md` (version history with 800+ lines), `CONTRIBUTING.md` (committer's guides), and `build.gradle.kts` (publishing plugins: `maven-publish`, `dokka`, `binary-compatibility-validator`). Create a comprehensive `docs/release-engineering.md` that consolidates the full release lifecycle: version numbering conventions (matching the `CHANGELOG.md` format), changelog entry formatting rules, the Gradle publishing pipeline configuration, API binary compatibility validation using the `binary-compatibility-validator` plugin, MkDocs documentation site deployment via `deploy_website.sh`, and post-release verification steps. Update `mkdocs.yml` to add the new page to the navigation structure. Add a cross-reference from `CONTRIBUTING.md`'s "Committer's Guides" section to the new release engineering document.
