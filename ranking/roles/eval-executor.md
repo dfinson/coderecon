@@ -73,8 +73,50 @@ in `executor.md`. Follow them verbatim.
 
 ## When you are done
 
-After all tasks AND the non-OK queries file, say:
+After all tasks AND the non-OK queries file:
+
+### Export and parse your chat traces
+
+**Step 1 — Export the chat session:**
+
+Run the VS Code command to export this chat:
+
+```
+workbench.action.chat.export
+```
+
+> This will prompt the user to save the file. Wait for confirmation.
+
+**Step 2 — Run the trace parser:**
+
+```bash
+python3 ../../../infra/parse_traces.py \
+  <path_to_exported_chat.json> \
+  --output ../../../data/{repo_id}/traces.jsonl
+```
+
+Replace `{repo_id}` with the repo name (e.g., `python-pydantic`).
+Replace `<path_to_exported_chat.json>` with the path the user saved
+the export to.
+
+Verify the output:
+- The script should report how many tasks were extracted
+- The count should match the number of tasks with markers (should be 33)
+- If any tasks are missing, note which ones
+
+**Step 3 — Clean up:**
+
+Delete the chat export JSON — it's large and the traces JSONL has
+everything we need:
+
+```bash
+rm <path_to_exported_chat.json>
+```
+
+**Step 4 — Report:**
 
 ```
 ALL EVAL TASKS COMPLETE.
+Traces extracted: <count>/33 tasks
+Traces output: ../../../data/{repo_id}/traces.jsonl
 ```

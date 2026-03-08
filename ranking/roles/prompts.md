@@ -19,7 +19,7 @@ Replace `{REPO_NAME}` with e.g. `python-fastapi`.
 
 ---
 
-## Training — Executor
+## Executor
 
 ```
 Read ../../../roles/executor.md — those are your instructions.
@@ -29,7 +29,7 @@ Begin.
 
 ---
 
-## Training — Reviewer
+## Reviewer
 
 ```
 Read ../../../roles/reviewer.md — those are your instructions.
@@ -46,17 +46,5 @@ Begin.
 Read ../../../roles/eval-executor.md — those are your instructions.
 It references executor.md which you must also read.
 Your tasks file is ../../../repos/eval/{REPO_NAME}.md
-Begin.
-```
-
----
-
-## Eval — Reviewer
-
-```
-Read ../../../roles/eval-reviewer.md — those are your instructions.
-It references reviewer.md which you must also read.
-The tasks file is ../../../repos/eval/{REPO_NAME}.md
-The ground truth outputs are at ../../../data/{REPO_NAME}/ground_truth/
 Begin.
 ```

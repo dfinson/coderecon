@@ -54,33 +54,33 @@ src/AutoMapper/
 
 ## Narrow
 
-### N1: Fix `ReverseMap` not honoring `ForPath` mappings
+### N1: Fix `ReverseMap` not honoring `ForPath` mappings with complex source expressions
 
-When a `TypeMapConfiguration` declares `ForPath(dest => dest.Address.City, opt => opt.MapFrom(src => src.City))` and then calls `ReverseMap()`, the reverse map does not generate the correct source expression for the nested path. The `PathMap` entries are skipped when `MappingExpression.ReverseMapExpression` iterates `PathMaps` in `TypeMapConfiguration`. Update `docs/source/` with corrected `ForPath` + `ReverseMap` usage examples.
+When a `TypeMapConfiguration` declares `ForPath(dest => dest.Address.City, opt => opt.MapFrom(src => src.City))` and then calls `ReverseMap()`, the reverse map may not generate the correct source expression for the nested path. In `ReverseMapCore`, each `PathConfigurationExpression` in `_memberConfigurations` is reversed via its `Reverse()` method which calls `PathConfigurationExpression.Create`. When the original source expression is not a simple member path, `Create` returns `null` and the reversed configuration is silently dropped by the `.Where(m => m != null)` filter. Update `docs/source/Reverse-Mapping-and-Unflattening.md` with corrected `ForPath` + `ReverseMap` usage examples documenting this limitation.
 
 ### N2: Fix `NullsafeQueryRewriter` dropping method-call arguments for parameterised projections
 
 In `QueryableExtensions/NullsafeQueryRewriter.cs`, when the projection tree contains a `MethodCallExpression` whose arguments themselves contain member accesses on nullable navigations, the rewriter wraps the receiver but does not recursively visit the argument sub-expressions, producing an invalid expression tree that throws at query execution.
 
-### N3: Fix `ConfigurationValidator` not reporting unmapped `PathMap` members
+### N3: Fix `ConfigurationValidator` not validating `PathMap` member type compatibility
 
-`ConfigurationValidator.Validate` checks `PropertyMaps` for unresolved mappings but skips `PathMaps`. When a `ForPath` target references a destination member that does not exist, `AssertConfigurationIsValid()` passes without error instead of reporting the invalid path.
+`ConfigurationValidator.AssertConfigurationIsValid` calls `TypeMap.GetUnmappedPropertyNames`, which accounts for `PathMap` first members (excluding them from the unmapped set at line 158 of `TypeMap.cs`). However, the validator does not verify that intermediate members along a `PathMap`'s member chain have compatible types or that configured `MapFrom` source expressions produce a type assignable to the final path member. Add type-compatibility validation for `PathMap` chains in `ConfigurationValidator` so that `AssertConfigurationIsValid()` reports mismatched types along `ForPath` paths.
 
-### N4: Fix `CollectionMapper` not preserving existing destination list when `UseDestinationValue` is set
+### N4: Fix `CollectionMapper` unconditionally clearing destination when `UseDestinationValue` is set
 
-In `Mappers/CollectionMapper.cs`, `MapCollection` clears and repopulates the destination collection even when the member map has `UseExistingValue = true`. The mapper should merge items into the existing collection rather than replacing it.
+In `Mappers/CollectionMapper.cs`, `MapCollectionCore` checks `memberMap is { MustUseDestination: true }` to reuse the existing destination collection reference. However, it then unconditionally emits `Call(destination, clearMethod)` (around line 83), clearing the destination collection before re-adding mapped items, even when `UseDestinationValue` is configured on the member map. The mapper should skip the `Clear` call when `mustUseDestination` is true to preserve existing items and append mapped source items instead.
 
 ### N5: Add `[MapAtRuntime]` annotation support for constructor parameters
 
-The `Annotations/MapAtRuntimeAttribute.cs` is defined and works for property members, but `ConstructorMap.ApplyAnnotations` in `ConstructorMap.cs` does not scan constructor parameter attributes, so runtime-resolved constructor parameters cannot be declared via the attribute.
+The `Configuration/Annotations/MapAtRuntimeAttribute.cs` attribute implements `IMemberConfigurationProvider` and works for property members via `ApplyConfiguration`. However, `ConstructorMap` (in `ConstructorMap.cs`) has no logic to scan constructor parameter custom attributes — its `AddParameter` method resolves parameters by name and type matching without checking for annotation attributes like `MapAtRuntimeAttribute`. Add attribute scanning in `ConstructorMap.AddParameter` so that `[MapAtRuntime]` on constructor parameters marks them for runtime resolution.
 
-### N6: Fix `EnumToEnumMapper` not handling `[Flags]` composite values
+### N6: Fix `EnumToEnumMapper` not handling `[Flags]` composite values when member names differ
 
-`Mappers/EnumToEnumMapper.cs` only maps single enum values through `Enum.ToObject`. When the source value is a bitwise combination of flags, the mapper produces an invalid destination value because it does not decompose and re-compose flag bits for enums whose underlying names differ.
+`Mappers/EnumToEnumMapper.cs` converts the source enum to a string via `ObjectToString` and then calls `Enum.TryParse` (case-insensitive) on the destination type. When the source is a `[Flags]` composite value, `ToString()` produces a comma-separated list (e.g., `"Read, Write"`), which `TryParse` can parse only if the destination enum has identically-named members. When flag member names differ between source and destination, `TryParse` fails and the fallback `Convert(sourceExpression, destinationType)` performs a raw numeric cast, which produces incorrect results if the underlying integer values also differ. Add flag-aware decomposition that maps individual flag bits by name and re-composes the destination value.
 
 ### N7: Fix `LockingConcurrentDictionary` potential deadlock under recursive `GetOrAdd`
 
-In `Internal/LockingConcurrentDictionary.cs`, `GetOrAdd` acquires a lock per bucket-hash. If the value factory itself triggers another `GetOrAdd` on the same dictionary with a key that hashes to the same bucket, the thread deadlocks on the same `Lock` instance.
+In `Internal/LockingConcurrentDictionary.cs`, `GetOrAdd` wraps the value factory in `Lazy<TValue>` with the default `LazyThreadSafetyMode.ExecutionAndPublication`, which holds an internal lock during factory execution. If the value factory for a given key recursively calls `GetOrAdd` on the same dictionary with the same key, `Lazy<T>.Value` deadlocks because it re-enters the same `Lazy` instance's lock. Switch to `LazyThreadSafetyMode.PublicationOnly` or add re-entrancy detection to prevent deadlock when the factory triggers recursive lookups.
 
 ### N8: Fix `ProxyGenerator` not forwarding interface default method implementations
 
