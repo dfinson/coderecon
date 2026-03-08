@@ -30,7 +30,8 @@ echo "  Disk: $(df -h /repo 2>/dev/null | tail -1 | awk '{print $4}' || echo 'n/
 # ── Phase 1: Clone ──────────────────────────────────────────────
 PHASE_START=$(ts)
 echo "[1/5] Cloning..."
-git clone --quiet "${REPO_URL}" /repo
+# Clone all branches so the pinned commit is guaranteed reachable
+git clone --quiet --no-single-branch "${REPO_URL}" /repo
 cd /repo
 git checkout --quiet "${COMMIT}"
 CLONE_SEC=$(elapsed $PHASE_START)
