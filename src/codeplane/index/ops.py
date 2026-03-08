@@ -2674,6 +2674,7 @@ class IndexCoordinatorEngine:
 
             if self._structural is not None:
                 batch_size = 50
+                _extract_start = time.time()
 
                 for batch_start in range(0, total, batch_size):
                     batch_end = min(batch_start + batch_size, total)
@@ -2728,6 +2729,12 @@ class IndexCoordinatorEngine:
 
                 # Re-resolve any import paths that couldn't resolve during
                 # batched indexing (e.g. batch 1 imports targeting batch 2 files).
+                _extract_elapsed = time.time() - _extract_start
+                log.info("index.stage.extract_complete",
+                         files=count, elapsed_sec=round(_extract_elapsed, 1),
+                         workers=workers)
+
+                _resolve_start = time.time()
                 self._structural.resolve_all_imports()
 
                 # Create synthetic import edges from config files (TOML,
@@ -2755,6 +2762,9 @@ class IndexCoordinatorEngine:
 
                 on_progress(0, 1, files_by_ext, "resolving_types")
                 resolve_type_traced(self.db, on_progress=pass3_progress)
+                _resolve_elapsed = time.time() - _resolve_start
+                log.info("index.stage.resolve_complete",
+                         elapsed_sec=round(_resolve_elapsed, 1))
 
                 # Commit embeddings (both indices, shared model)
                 _staged_file = (
@@ -2768,6 +2778,7 @@ class IndexCoordinatorEngine:
                     else 0
                 )
                 staged_total = _staged_file + _staged_def
+                _embed_start = time.time()
                 if staged_total > 0:
                     on_progress(0, staged_total, files_by_ext, "computing_embeddings")
 
@@ -2778,6 +2789,10 @@ class IndexCoordinatorEngine:
                     on_progress(staged_total, staged_total, files_by_ext, "embeddings_done")
                 else:
                     self._commit_embeddings()
+                _embed_elapsed = time.time() - _embed_start
+                log.info("index.stage.embeddings_complete",
+                         staged_file=_staged_file, staged_def=_staged_def,
+                         elapsed_sec=round(_embed_elapsed, 1))
 
         return count, indexed_paths, files_by_ext
 
