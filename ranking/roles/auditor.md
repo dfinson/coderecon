@@ -62,6 +62,36 @@ Specifically:
 If `.github/copilot-instructions.md` does not exist, create it with
 just the enforcement text above and commit it.
 
+## Pre-flight: baseline coverage
+
+Run the full test suite with coverage **once** and commit the report.
+This saves every executor session from re-running the entire suite.
+
+Pick the right command for the language:
+
+| Language | Command |
+|----------|---------|
+| Python | `pytest --cov --cov-report=json -q` |
+| TypeScript | `npx vitest --coverage` or `npx jest --coverage` |
+| Go | `go test -coverprofile=coverage.out ./...` |
+| Rust | `cargo tarpaulin --out json` |
+| Java | `./gradlew test jacocoTestReport` |
+| C# | `dotnet test --collect:"XPlat Code Coverage"` |
+| Ruby | `COVERAGE=1 bundle exec rake test` |
+| PHP | `phpunit --coverage-clover=coverage.xml` |
+| Swift | `swift test --enable-code-coverage` |
+| C++ | Build with coverage flags + `ctest` |
+
+**Steps:**
+1. Run the coverage command from the repo root
+2. Verify the report was generated (check for the output file)
+3. Commit: `git add -A && git commit -m "auditor: baseline coverage report"`
+
+**If coverage fails:** Try to fix the issue (install missing deps,
+fix config). If it genuinely cannot work (no test suite, missing
+external service), record why in your final report and skip the
+commit. The executor will handle this per-task.
+
 ## Your job
 
 For EACH task (N1–N10, M1–M10, W1–W10):
@@ -115,9 +145,10 @@ Confirm the task can be solved:
 
 ## When you are done
 
-After checking all 30 tasks, say:
+After checking all 33 tasks, say:
 
 ```
 PRE-FLIGHT AUDIT COMPLETE.
 Tasks corrected: <list of task IDs that were edited, or "none">
+Baseline coverage: <committed / failed: reason>
 ```

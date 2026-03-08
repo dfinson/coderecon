@@ -62,37 +62,30 @@ clean and every solution is recoverable via `git log`.
 
 ---
 
-### STEP 1b — TEST COVERAGE
+### STEP 1b — TEST COVERAGE (use baseline)
 
-**THIS STEP IS MANDATORY. DO NOT SKIP IT. DO NOT LAZILY MARK
-`coverage_available: false` WITHOUT A REAL, SPECIFIC REASON.**
+**The auditor already ran the full test suite with coverage and
+committed the report.** Do NOT re-run the test suite yourself.
 
-Run the project's test suite with coverage enabled to capture which
-pre-existing test functions exercise the code you changed. This data
-trains a future test-selection model.
+Find the baseline coverage report in the repo root. The format
+depends on the language:
+- Python: `coverage.json` or `.coverage`
+- TypeScript: `coverage/` directory
+- Go: `coverage.out`
+- Rust: `tarpaulin-report.json`
+- Java: `build/reports/jacoco/`
+- C#: `TestResults/**/coverage.cobertura.xml`
+- Ruby: `coverage/`
+- PHP: `coverage.xml`
+- Swift: `.build/debug/codecov/`
+- C++: build directory coverage files
 
-**Run the test suite with coverage.** The exact command depends on the
-language:
+**If no baseline coverage report exists** (auditor reported failure),
+set `"coverage_available": false` and `"coverage_skip_reason":
+"Auditor could not generate baseline coverage — see auditor report"`
+for every task. Do not attempt to run coverage yourself.
 
-| Language | Command |
-|----------|---------|
-| Python | `pytest --cov --cov-report=json` |
-| TypeScript | `npx vitest --coverage` or `npx jest --coverage` |
-| Go | `go test -coverprofile=coverage.out ./...` |
-| Rust | `cargo tarpaulin --out json` |
-| Java | `./gradlew test jacocoTestReport` |
-| C# | `dotnet test --collect:"XPlat Code Coverage"` |
-| Ruby | `COVERAGE=1 bundle exec rake test` |
-| PHP | `phpunit --coverage-clover=coverage.xml` |
-| Swift | `swift test --enable-code-coverage` |
-| C++ | Build with coverage flags + `ctest` |
-
-**Important:** Run this against the **reverted** state (HEAD is the
-revert commit — the code is back to baseline but the task commit is
-in history). The coverage report shows which tests cover which lines
-in the **pre-change** codebase.
-
-After running coverage, **you must analyze the results yourself**:
+**Using the baseline report**, for each task you must:
 
 1. Identify the lines you changed (from your diff in the task commit).
 2. Read the coverage report to find which test functions cover those
@@ -102,14 +95,9 @@ After running coverage, **you must analyze the results yourself**:
 4. Record the relevant pre-existing test functions in your JSON output
    (see `test_selection` field below).
 
-**If and ONLY IF** coverage tooling genuinely cannot be configured for
-this project (e.g., no test suite exists, coverage tool requires
-external service not available), set `"coverage_available": false` AND
-you MUST provide a `"coverage_skip_reason"` explaining exactly what
-you tried and why it failed. "Couldn't figure it out" or "skipping
-for time" are NOT acceptable reasons. The reviewer will reject any
-task with `coverage_available: false` that lacks a specific, verifiable
-explanation.
+This analysis is per-task but the coverage data is shared — just
+cross-reference your diff lines against the same baseline report
+every time.
 
 ---
 
