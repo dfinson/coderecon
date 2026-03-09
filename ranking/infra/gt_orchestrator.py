@@ -551,49 +551,85 @@ async def cmd_run(state: dict, stage_filter: str | None, repo_filter: str | None
             border_style="blue",
         )
 
-    # Determine stage and targets
-    stage = stage_filter or current_global_stage(state)
-    if stage == "done":
-        console.print("[green]All stages complete![/green]")
-        return
+    # ── Main loop: run stages until all done or blocked ──
 
-    if repo_filter:
-        targets = [repo_filter] if state["repos"].get(repo_filter, {}).get(stage, {}).get("status") == "pending" else []
-    else:
-        targets = repos_for_stage(state, stage, "pending")
+    while True:
+        # Reload state each iteration (might have been updated by sessions)
+        state = load_state()
 
-    if not targets:
-        console.print(f"[yellow]No pending repos for stage {stage}[/yellow]")
-        return
+        stage = stage_filter or current_global_stage(state)
+        if stage == "done":
+            console.print("[bold green]✅ All stages complete![/bold green]")
+            return
 
-    console.print(f"Launching {len(targets)} session(s) for stage [bold]{stage}[/bold]")
+        if repo_filter:
+            targets = [repo_filter] if state["repos"].get(repo_filter, {}).get(stage, {}).get("status") == "pending" else []
+        else:
+            targets = repos_for_stage(state, stage, "pending")
 
-    # Create all tasks upfront, semaphore controls concurrency
-    async def run_with_display():
+        if not targets:
+            # Check if there are failed repos blocking progress
+            failed = repos_for_stage(state, stage, "failed")
+            if failed:
+                console.print(f"[yellow]Stage {stage}: {len(failed)} failed, 0 pending. Run 'retry' to reset.[/yellow]")
+                return
+            # Stage might be complete
+            all_done = all(
+                rd.get(stage, {}).get("status") in ("merged", "done")
+                for rd in state["repos"].values()
+            )
+            if all_done:
+                for rd in state["repos"].values():
+                    if rd.get(stage, {}).get("status") == "done":
+                        rd[stage]["status"] = "merged"
+                save_state(state)
+                console.print(f"[bold green]━━━ Stage {stage} complete! ━━━[/bold green]")
+                if stage_filter or repo_filter:
+                    return
+                continue  # next stage
+            else:
+                console.print(f"[yellow]Stage {stage}: nothing to do[/yellow]")
+                return
+
+        console.print(f"[bold]━━━ Launching {len(targets)} session(s) for stage {stage} ━━━[/bold]")
+
+        # Create all tasks, semaphore controls concurrency
         flight = [asyncio.create_task(run_one(rid, stage)) for rid in targets]
         with Live(render_display(), console=console, refresh_per_second=0.5) as live:
             while not all(t.done() for t in flight):
                 live.update(render_display())
                 await asyncio.sleep(2)
             live.update(render_display())
-        # Collect exceptions
+
+        # Report any exceptions
         for t, rid in zip(flight, targets):
-            if t.exception():
-                console.print(f"[red]{rid}: {t.exception()}[/red]")
+            exc = t.exception() if t.done() and not t.cancelled() else None
+            if exc:
+                console.print(f"  [red]✗ {rid}: {exc}[/red]")
 
-    await run_with_display()
-
-    # Post-run: advance stage if all done
-    all_done = all(
-        rd.get(stage, {}).get("status") in ("merged", "done")
-        for rd in state["repos"].values()
-    )
-    if all_done:
-        for rd in state["repos"].values():
-            if rd.get(stage, {}).get("status") == "done":
-                rd[stage]["status"] = "merged"
-        save_state(state)
-        console.print(f"[green]Stage {stage} complete![/green]")
+        # Post-batch: advance stage if all done
+        state = load_state()
+        all_done = all(
+            rd.get(stage, {}).get("status") in ("merged", "done")
+            for rd in state["repos"].values()
+        )
+        if all_done:
+            for rd in state["repos"].values():
+                if rd.get(stage, {}).get("status") == "done":
+                    rd[stage]["status"] = "merged"
+            save_state(state)
+            console.print(f"[bold green]━━━ Stage {stage} complete! ━━━[/bold green]")
+            if stage_filter or repo_filter:
+                return
+            # loop continues to next stage
+        else:
+            # Some failed — stop unless running full auto
+            failed = repos_for_stage(state, stage, "failed")
+            if failed and not stage_filter and not repo_filter:
+                console.print(f"[yellow]Stage {stage}: {len(failed)} failed. Run 'retry' to reset, then 'run' again.[/yellow]")
+                return
+            elif repo_filter or stage_filter:
+                return
 
 
 def _archive_log(repo_id: str, stage: str, attempt: int) -> None:
