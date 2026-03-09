@@ -203,14 +203,17 @@ class SessionRunner:
         session_log_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = session_log_dir / f"{repo_id}_{stage}.log"
 
-    def log(self, msg: str) -> None:
+    def log(self, msg: str, level: str = "INFO") -> None:
         ts = datetime.now().strftime("%H:%M:%S")
+        prefix = {"INFO": "│", "TOOL": "├─🔧", "WRITE": "├─📝", "ERROR": "├─❌", "DONE": "└─✅", "START": "┌─▶"}.get(level, "│")
         with open(self.log_path, "a") as f:
-            f.write(f"[{ts}] {msg}\n")
+            f.write(f"[{ts}] {prefix} {msg}\n")
 
     def elapsed(self) -> str:
-        m = int((time.time() - self.start_time) / 60)
-        return f"{m}m"
+        secs = int(time.time() - self.start_time)
+        if secs < 60:
+            return f"{secs}s"
+        return f"{secs // 60}m"
 
     def build_tools(self):
         from copilot import define_tool
@@ -221,32 +224,32 @@ class SessionRunner:
         async def write_ground_truth(params: WriteGTParams) -> str:
             errors = validate_gt_schema(params.data)
             if errors:
-                runner.log(f"VALIDATION FAILED for {params.task_id}: {errors}")
+                runner.log(f"Schema validation failed for {params.task_id}: {errors}", "ERROR")
                 return f"VALIDATION FAILED — fix these errors and call again:\n" + "\n".join(f"  - {e}" for e in errors)
             path = DATA_DIR / params.repo_id / "ground_truth" / f"{params.task_id}.json"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(params.data, indent=2) + "\n")
             runner.jsons_written += 1
-            runner.log(f"WROTE {path} ({runner.jsons_written} total)")
-            runner.status_line = f"wrote {params.task_id}.json"
+            runner.log(f"{params.task_id}.json written ({runner.jsons_written}/11)", "WRITE")
+            runner.status_line = f"wrote {params.task_id}.json ({runner.jsons_written}/11)"
             return f"Written successfully: {path} ({runner.jsons_written} JSONs total)"
 
         @define_tool(description="Write the non-OK queries JSON file to ground_truth/non_ok_queries.json. Call AFTER all W tasks are done (executor session C only). This file goes in the SAME directory as the task JSONs.")
         async def write_non_ok_queries(params: WriteNonOKParams) -> str:
             errors = validate_non_ok_schema(params.data)
             if errors:
-                runner.log(f"NON-OK VALIDATION FAILED: {errors}")
+                runner.log(f"Non-OK validation failed: {errors}", "ERROR")
                 return f"VALIDATION FAILED:\n" + "\n".join(f"  - {e}" for e in errors)
             path = DATA_DIR / params.repo_id / "ground_truth" / "non_ok_queries.json"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(params.data, indent=2) + "\n")
-            runner.log(f"WROTE {path}")
+            runner.log(f"non_ok_queries.json written ({len(params.data.get('non_ok_queries', []))} queries)", "WRITE")
             return f"Written: {path}"
 
         @define_tool(description="Signal that you have completed all assigned tasks for this session.")
         async def report_complete(params: ReportCompleteParams) -> str:
-            runner.log(f"COMPLETE: {params.summary}")
-            runner.status_line = "done"
+            runner.log(f"{params.summary}", "DONE")
+            runner.status_line = "✅ done"
             # Update state
             rd = runner.state["repos"].get(runner.repo_id, {})
             rd[runner.stage] = {"status": "done", "jsons": runner.jsons_written}
@@ -325,7 +328,7 @@ class SessionRunner:
         if not clone_dir:
             raise FileNotFoundError(f"No clone found for {self.repo_id}")
 
-        self.log(f"START {self.repo_id} {self.stage} cwd={clone_dir}")
+        self.log(f"{self.repo_id}/{self.stage} cwd={clone_dir}", "START")
         self.status_line = "initializing..."
 
         client = CopilotClient({
@@ -356,7 +359,7 @@ class SessionRunner:
                             break
                 elif etype == "session.idle":
                     if not self.done_event.is_set():
-                        self.log("SESSION IDLE (no report_complete called)")
+                        self.log("Session ended naturally", "DONE")
                         self.done_event.set()
 
             session.on(on_event)
@@ -372,7 +375,7 @@ class SessionRunner:
         finally:
             await client.stop()
 
-        self.log(f"END {self.repo_id} {self.stage} jsons={self.jsons_written} elapsed={self.elapsed()}")
+        self.log(f"Completed in {self.elapsed()} — {self.jsons_written} JSONs written", "DONE")
 
 
 # ── Progress display ──
@@ -382,48 +385,62 @@ def cmd_status(state: dict) -> None:
     from rich.console import Console
     from rich.table import Table
     from rich.panel import Panel
-    from rich.progress import BarColumn, Progress
+    from rich.columns import Columns
+    from rich.text import Text
 
     console = Console()
-
     stage = current_global_stage(state)
     total = len(state.get("repos", {}))
 
-    # Stage summary
-    stage_table = Table(show_header=False, box=None, padding=(0, 1))
+    # Stage progress
+    stage_table = Table(show_header=True, box=None, padding=(0, 2))
+    stage_table.add_column("Stage", style="bold")
+    stage_table.add_column("Progress", min_width=32)
+    stage_table.add_column("Done", justify="right")
+    stage_table.add_column("Active", justify="right", style="cyan")
+    stage_table.add_column("Failed", justify="right", style="red")
+    stage_table.add_column("Pending", justify="right", style="dim")
+    stage_table.add_column("", width=2)
+
     for s in STAGES:
         counts = {}
         for rd in state["repos"].values():
             st = rd.get(s, {}).get("status", "pending")
             counts[st] = counts.get(st, 0) + 1
-        merged = counts.get("merged", 0)
-        done = counts.get("done", 0)
+        done = counts.get("merged", 0) + counts.get("done", 0)
         active = counts.get("active", 0)
         failed = counts.get("failed", 0)
         pending = counts.get("pending", 0)
-        pct = (merged + done) / total if total else 0
-        bar = "█" * int(pct * 30) + "░" * (30 - int(pct * 30))
-        marker = " ◀" if s == stage else ""
-        detail = f"{merged+done}/{total}"
-        if active:
-            detail += f" ({active} active)"
-        if failed:
-            detail += f" ({failed} failed)"
-        stage_table.add_row(bar, detail, s, marker)
+        pct = done / total if total else 0
+        filled = int(pct * 25)
+        bar = f"[green]{'━' * filled}[/green][dim]{'─' * (25 - filled)}[/dim] {done*100//total}%"
+        marker = "[bold yellow]◀[/bold yellow]" if s == stage else ""
+        s_display = {
+            "audit": "Audit", "exec_n": "Exec N", "exec_m": "Exec M",
+            "exec_w": "Exec W", "review": "Review",
+        }.get(s, s)
+        stage_table.add_row(
+            s_display, bar, str(done),
+            str(active) if active else "·",
+            str(failed) if failed else "·",
+            str(pending) if pending else "·",
+            marker,
+        )
 
-    # Failed repos
+    console.print(Panel(stage_table, title="[bold]Ground Truth Pipeline[/bold]", subtitle=f"stage: [yellow]{stage}[/yellow]", border_style="blue"))
+
+    # Failed details
     failed_list = []
     for rid, rd in state["repos"].items():
         for s in STAGES:
             if rd.get(s, {}).get("status") == "failed":
-                err = rd[s].get("error", "")[:40]
-                failed_list.append(f"  {rid}/{s}: {err}")
-
-    console.print(Panel(stage_table, title=f"Ground Truth Pipeline — stage: {stage}"))
+                err = rd[s].get("error", "?")[:50]
+                att = rd[s].get("attempts", "?")
+                failed_list.append(f"  [red]✗[/red] {rid}/{s} (attempt {att}): {err}")
     if failed_list:
-        console.print("[red]Failed:[/red]")
+        console.print()
         for f in failed_list:
-            console.print(f"  [red]{f}[/red]")
+            console.print(f)
 
 
 # ── Run command ──
@@ -461,13 +478,13 @@ async def cmd_run(state: dict, stage_filter: str | None, repo_filter: str | None
                     rd[stage] = {"status": "done", "jsons": runner.jsons_written}
                     save_state(state)
 
-                except asyncio.TimeoutError:
-                runner.log("TIMEOUT after 2h")
+            except asyncio.TimeoutError:
+                runner.log("TIMEOUT after 2h", "ERROR")
                 rd[stage] = {"status": "failed", "error": "timeout", "attempts": attempts}
                 save_state(state)
                 _archive_log(repo_id, stage, attempts)
             except Exception as e:
-                runner.log(f"ERROR: {e}")
+                runner.log(f"{e}", "ERROR")
                 if attempts < MAX_ATTEMPTS:
                     rd[stage] = {"status": "pending", "attempts": attempts}
                     runner.log(f"Will retry (attempt {attempts}/{MAX_ATTEMPTS})")
@@ -479,25 +496,60 @@ async def cmd_run(state: dict, stage_filter: str | None, repo_filter: str | None
                 runners.pop(repo_id, None)
 
     def render_display() -> Panel:
-        table = Table(show_header=False, box=None, padding=(0, 1))
-        total = len(state.get("repos", {}))
-        for s in STAGES:
-            merged = sum(1 for rd in state["repos"].values() if rd.get(s, {}).get("status") in ("merged", "done"))
-            pct = merged / total if total else 0
-            bar = "█" * int(pct * 30) + "░" * (30 - int(pct * 30))
-            marker = " ◀" if s == current_global_stage(state) else ""
-            table.add_row(bar, f"{merged}/{total}", s, marker)
-
-        active_table = Table(show_header=False, box=None, padding=(0, 1))
-        for rid, runner in runners.items():
-            active_table.add_row("●", rid, runner.stage, runner.elapsed(), runner.status_line[:50])
-
-        pending = len(repos_for_stage(state, current_global_stage(state), "pending"))
-        failed = len(repos_for_stage(state, current_global_stage(state), "failed"))
-        footer = Text(f"Queue: {pending} pending │ {failed} failed │ {len(runners)}/{concurrency} active")
-
         from rich.console import Group
-        return Panel(Group(table, Text(""), active_table, Text(""), footer), title="Ground Truth Pipeline")
+        total = len(state.get("repos", {}))
+
+        # Stage bars
+        stage_lines = []
+        for s in STAGES:
+            done = sum(1 for rd in state["repos"].values() if rd.get(s, {}).get("status") in ("merged", "done"))
+            active = sum(1 for rd in state["repos"].values() if rd.get(s, {}).get("status") == "active")
+            pct = done / total if total else 0
+            filled = int(pct * 20)
+            bar = f"[green]{'━' * filled}[/green][dim]{'─' * (20 - filled)}[/dim]"
+            marker = " [bold yellow]◀[/bold yellow]" if s == current_global_stage(state) else ""
+            s_name = {"audit": "Audit", "exec_n": "Exec N", "exec_m": "Exec M",
+                      "exec_w": "Exec W", "review": "Review"}.get(s, s)
+            active_str = f" [cyan]+{active}[/cyan]" if active else ""
+            stage_lines.append(Text.from_markup(f"  {s_name:8} {bar} {done}/{total}{active_str}{marker}"))
+
+        # Active sessions table
+        if runners:
+            session_table = Table(show_header=True, box=None, padding=(0, 1), show_edge=False)
+            session_table.add_column("", width=1)
+            session_table.add_column("Repo", style="bold", min_width=28)
+            session_table.add_column("Time", justify="right", style="cyan", width=5)
+            session_table.add_column("JSONs", justify="right", style="green", width=5)
+            session_table.add_column("Status", max_width=45, no_wrap=True)
+
+            for rid in sorted(runners.keys()):
+                runner = runners[rid]
+                jsons = str(runner.jsons_written) if runner.jsons_written else "·"
+                status = runner.status_line[:45]
+                session_table.add_row("●", rid, runner.elapsed(), jsons, status)
+        else:
+            session_table = Text("[dim]  No active sessions[/dim]")
+
+        # Footer
+        cur_stage = current_global_stage(state)
+        pending_n = len(repos_for_stage(state, cur_stage, "pending"))
+        failed_n = len(repos_for_stage(state, cur_stage, "failed"))
+        done_n = sum(1 for rd in state["repos"].values() if rd.get(cur_stage, {}).get("status") in ("merged", "done"))
+        elapsed_total = ""
+        if runners:
+            oldest = min(r.start_time for r in runners.values())
+            elapsed_total = f" │ wall: {int((time.time() - oldest) / 60)}m"
+
+        footer = Text.from_markup(
+            f"  [dim]{done_n}[/dim] done  [cyan]{len(runners)}[/cyan]/{concurrency} active  "
+            f"[dim]{pending_n}[/dim] queued  [red]{failed_n}[/red] failed{elapsed_total}"
+        )
+
+        return Panel(
+            Group(*stage_lines, Text(""), session_table, Text(""), footer),
+            title="[bold]Ground Truth Pipeline[/bold]",
+            border_style="blue",
+        )
 
     # Determine stage and targets
     stage = stage_filter or current_global_stage(state)
