@@ -41,7 +41,8 @@ STATE_FILE = DATA_DIR / "gt_state.json"
 LOGS_DIR = DATA_DIR / "logs"
 
 STAGES = ["audit", "exec_n", "exec_m", "exec_w", "review"]
-DEFAULT_CONCURRENCY = 10
+EXEC_STAGES = {"exec_n", "exec_m", "exec_w"}
+DEFAULT_CONCURRENCY = 12
 MAX_ATTEMPTS = 3
 RATE_LIMIT_RETRIES = 4
 RATE_LIMIT_BACKOFF = [30, 60, 120, 300]  # seconds between retries
@@ -69,9 +70,10 @@ def save_state(state: dict) -> None:
 
 
 def current_global_stage(state: dict) -> str:
+    """Legacy: returns the earliest stage with any incomplete repo."""
     for stage in STAGES:
         for rd in state["repos"].values():
-            if rd.get(stage, {}).get("status") != "merged":
+            if rd.get(stage, {}).get("status") not in ("merged", "done"):
                 return stage
     return "done"
 
@@ -81,6 +83,92 @@ def repos_for_stage(state: dict, stage: str, status: str) -> list[str]:
         rid for rid, rd in state["repos"].items()
         if rd.get(stage, {}).get("status") == status
     ]
+
+
+def next_stage_for_repo(rd: dict) -> str | None:
+    """Return the next stage this repo is eligible to run, or None if all done.
+
+    Dependencies:
+      - audit must be done before any exec stage
+      - exec_n, exec_m, exec_w are independent of each other (but serialized
+        per-repo because they share a clone worktree)
+      - review requires all three exec stages done
+    """
+    def _done(stage: str) -> bool:
+        return rd.get(stage, {}).get("status") in ("merged", "done")
+
+    def _pending(stage: str) -> bool:
+        return rd.get(stage, {}).get("status") in ("pending", "") or stage not in rd
+
+    # Audit must finish first
+    if not _done("audit"):
+        return "audit" if _pending("audit") else None  # active/failed = not eligible
+
+    # Exec stages: pick first pending one (serialized per-repo via lock)
+    for s in ("exec_n", "exec_m", "exec_w"):
+        if _pending(s):
+            return s
+
+    # Review: only after all exec stages done
+    if all(_done(s) for s in ("exec_n", "exec_m", "exec_w")):
+        if _pending("review"):
+            return "review"
+
+    return None
+
+
+def all_eligible_tasks(state: dict, stage_filter: str | None = None,
+                       repo_filter: str | None = None) -> list[tuple[str, str]]:
+    """Return list of (repo_id, stage) pairs ready to run."""
+    tasks = []
+    for rid, rd in state["repos"].items():
+        if repo_filter and rid != repo_filter:
+            continue
+        ns = next_stage_for_repo(rd)
+        if ns is None:
+            continue
+        if stage_filter and ns != stage_filter:
+            continue
+        tasks.append((rid, ns))
+    return tasks
+
+
+def recover_orphaned_active(state: dict) -> int:
+    """Reset any 'active' statuses left from a previous interrupted run.
+
+    Repos with all expected JSONs on disk are marked 'done';
+    others are reset to 'pending' for retry.
+    """
+    recovered = 0
+    for rid, rd in state["repos"].items():
+        for stage in STAGES:
+            if rd.get(stage, {}).get("status") != "active":
+                continue
+            recovered += 1
+            # Check if enough JSONs were written
+            gt_dir = DATA_DIR / rid / "ground_truth"
+            prefix = stage.split("_")[1].upper() if "_" in stage else None
+            if prefix and gt_dir.exists():
+                jsons = list(gt_dir.glob(f"{prefix}*.json"))
+                if len(jsons) >= 11:
+                    rd[stage] = {"status": "done", "jsons": len(jsons),
+                                 "note": "recovered from interrupted run"}
+                    continue
+            attempts = rd[stage].get("attempts", 0)
+            _archive_log(rid, stage, attempts)
+            rd[stage] = {"status": "pending", "attempts": attempts}
+    if recovered:
+        save_state(state)
+    return recovered
+
+
+def pipeline_done(state: dict) -> bool:
+    """True when every repo has completed all stages."""
+    for rd in state["repos"].values():
+        for stage in STAGES:
+            if rd.get(stage, {}).get("status") not in ("merged", "done"):
+                return False
+    return True
 
 
 def find_clone(repo_id: str) -> Path | None:
@@ -309,6 +397,26 @@ class SessionRunner:
 
         base_prompt = f"Your tasks file is: {task_file}\nThe repo_id is: {self.repo_id}\n\n"
 
+        # Check for already-completed task JSONs on disk
+        def _existing_jsons(prefix: str) -> list[str]:
+            gt_dir = DATA_DIR / self.repo_id / "ground_truth"
+            if not gt_dir.exists():
+                return []
+            return sorted(
+                f.stem for f in gt_dir.glob(f"{prefix}*.json")
+                if f.stem != "non_ok_queries"
+            )
+
+        def _skip_instruction(prefix: str, label: str) -> str:
+            existing = _existing_jsons(prefix)
+            if not existing:
+                return ""
+            return (
+                f"\nThe following {label} task JSONs already exist and should be SKIPPED "
+                f"(do NOT redo them): {', '.join(existing)}\n"
+                f"Only solve the remaining {label} tasks that are missing.\n"
+            )
+
         if self.stage == "audit":
             base_prompt += "Begin the pre-flight audit.\n"
         elif self.stage == "exec_n":
@@ -317,12 +425,14 @@ class SessionRunner:
                 "For each task, solve it, then call write_ground_truth with the complete JSON.\n"
                 "When all N tasks are done, call report_complete.\n"
             )
+            base_prompt += _skip_instruction("N", "N")
         elif self.stage == "exec_m":
             base_prompt += (
                 "Execute tasks M1 through M11 only. Skip all N and W tasks.\n"
                 "For each task, solve it, then call write_ground_truth with the complete JSON.\n"
                 "When all M tasks are done, call report_complete.\n"
             )
+            base_prompt += _skip_instruction("M", "M")
         elif self.stage == "exec_w":
             base_prompt += (
                 "Execute tasks W1 through W11 only. Skip all N and M tasks.\n"
@@ -332,6 +442,7 @@ class SessionRunner:
                 "the SAME directory as the task JSONs. Do NOT write it anywhere else.\n"
                 "When everything is complete (all W JSONs + non_ok_queries), call report_complete.\n"
             )
+            base_prompt += _skip_instruction("W", "W")
         elif self.stage == "review":
             gt_dir = DATA_DIR / self.repo_id / "ground_truth"
             base_prompt += (
@@ -491,10 +602,23 @@ async def cmd_run(state: dict, stage_filter: str | None, repo_filter: str | None
 
     console = Console()
     sem = asyncio.Semaphore(concurrency)
-    runners: dict[str, SessionRunner] = {}
+    runners: dict[str, SessionRunner] = {}  # keyed by repo_id
+    repo_locks: dict[str, asyncio.Lock] = {}  # per-repo lock (shared clone dir)
+    start_wall = time.time()
+
+    def get_repo_lock(repo_id: str) -> asyncio.Lock:
+        if repo_id not in repo_locks:
+            repo_locks[repo_id] = asyncio.Lock()
+        return repo_locks[repo_id]
+
+    # ── Recover orphaned 'active' from previous interrupted run ──
+    n_recovered = recover_orphaned_active(state)
+    if n_recovered:
+        console.print(f"[yellow]Recovered {n_recovered} orphaned 'active' session(s) from previous run[/yellow]")
+        state = load_state()
 
     async def run_one(repo_id: str, stage: str):
-        async with sem:  # Gate EVERYTHING — session creation included
+        async with sem:  # Global concurrency gate
             runner = SessionRunner(repo_id, stage, state)
             runners[repo_id] = runner
 
@@ -530,54 +654,77 @@ async def cmd_run(state: dict, stage_filter: str | None, repo_filter: str | None
             finally:
                 runners.pop(repo_id, None)
 
+    async def run_repo_pipeline(repo_id: str):
+        """Run all remaining stages for one repo, serialized via per-repo lock."""
+        lock = get_repo_lock(repo_id)
+        async with lock:
+            while True:
+                state_snap = load_state()
+                rd = state_snap["repos"].get(repo_id, {})
+                # Update our in-memory state
+                state["repos"][repo_id] = rd
+
+                ns = next_stage_for_repo(rd)
+                if ns is None:
+                    break
+                if stage_filter and ns != stage_filter:
+                    break
+                await run_one(repo_id, ns)
+
     def render_display() -> Panel:
         from rich.console import Group
         total = len(state.get("repos", {}))
+        fresh = load_state()
 
         # Stage bars
         stage_lines = []
         for s in STAGES:
-            done = sum(1 for rd in state["repos"].values() if rd.get(s, {}).get("status") in ("merged", "done"))
-            active = sum(1 for rd in state["repos"].values() if rd.get(s, {}).get("status") == "active")
+            done = sum(1 for rd in fresh["repos"].values() if rd.get(s, {}).get("status") in ("merged", "done"))
+            active = sum(1 for rd in fresh["repos"].values() if rd.get(s, {}).get("status") == "active")
+            failed = sum(1 for rd in fresh["repos"].values() if rd.get(s, {}).get("status") == "failed")
             pct = done / total if total else 0
             filled = int(pct * 20)
             bar = f"[green]{'━' * filled}[/green][dim]{'─' * (20 - filled)}[/dim]"
-            marker = " [bold yellow]◀[/bold yellow]" if s == current_global_stage(state) else ""
             s_name = {"audit": "Audit", "exec_n": "Exec N", "exec_m": "Exec M",
                       "exec_w": "Exec W", "review": "Review"}.get(s, s)
             active_str = f" [cyan]+{active}[/cyan]" if active else ""
-            stage_lines.append(Text.from_markup(f"  {s_name:8} {bar} {done}/{total}{active_str}{marker}"))
+            failed_str = f" [red]✗{failed}[/red]" if failed else ""
+            stage_lines.append(Text.from_markup(f"  {s_name:8} {bar} {done}/{total}{active_str}{failed_str}"))
 
         # Active sessions table
         if runners:
             session_table = Table(show_header=True, box=None, padding=(0, 1), show_edge=False)
             session_table.add_column("", width=1)
             session_table.add_column("Repo", style="bold", min_width=28)
+            session_table.add_column("Stage", style="magenta", width=7)
             session_table.add_column("Time", justify="right", style="cyan", width=5)
             session_table.add_column("JSONs", justify="right", style="green", width=5)
-            session_table.add_column("Status", max_width=45, no_wrap=True)
+            session_table.add_column("Status", max_width=40, no_wrap=True)
 
             for rid in sorted(runners.keys()):
                 runner = runners[rid]
                 jsons = str(runner.jsons_written) if runner.jsons_written else "·"
-                status = runner.status_line[:45]
-                session_table.add_row("●", rid, runner.elapsed(), jsons, status)
+                status = runner.status_line[:40]
+                s_short = runner.stage.replace("exec_", "").upper() if "exec_" in runner.stage else runner.stage.title()
+                session_table.add_row("●", rid, s_short, runner.elapsed(), jsons, status)
         else:
             session_table = Text("[dim]  No active sessions[/dim]")
 
         # Footer
-        cur_stage = current_global_stage(state)
-        pending_n = len(repos_for_stage(state, cur_stage, "pending"))
-        failed_n = len(repos_for_stage(state, cur_stage, "failed"))
-        done_n = sum(1 for rd in state["repos"].values() if rd.get(cur_stage, {}).get("status") in ("merged", "done"))
-        elapsed_total = ""
-        if runners:
-            oldest = min(r.start_time for r in runners.values())
-            elapsed_total = f" │ wall: {int((time.time() - oldest) / 60)}m"
+        total_done = sum(
+            1 for rd in fresh["repos"].values()
+            if all(rd.get(s, {}).get("status") in ("merged", "done") for s in STAGES)
+        )
+        total_failed = sum(
+            1 for rd in fresh["repos"].values()
+            if any(rd.get(s, {}).get("status") == "failed" for s in STAGES)
+        )
+        wall_m = int((time.time() - start_wall) / 60)
 
         footer = Text.from_markup(
-            f"  [dim]{done_n}[/dim] done  [cyan]{len(runners)}[/cyan]/{concurrency} active  "
-            f"[dim]{pending_n}[/dim] queued  [red]{failed_n}[/red] failed{elapsed_total}"
+            f"  [dim]{total_done}[/dim]/{total} repos done  "
+            f"[cyan]{len(runners)}[/cyan]/{concurrency} active  "
+            f"[red]{total_failed}[/red] failed │ wall: {wall_m}m"
         )
 
         return Panel(
@@ -586,85 +733,54 @@ async def cmd_run(state: dict, stage_filter: str | None, repo_filter: str | None
             border_style="blue",
         )
 
-    # ── Main loop: run stages until all done or blocked ──
+    # ── Build initial task list: one pipeline coroutine per repo ──
 
-    while True:
-        # Reload state each iteration (might have been updated by sessions)
-        state = load_state()
-
-        stage = stage_filter or current_global_stage(state)
-        if stage == "done":
+    targets = all_eligible_tasks(state, stage_filter, repo_filter)
+    if not targets:
+        if pipeline_done(state):
             console.print("[bold green]✅ All stages complete![/bold green]")
-            return
-
-        if repo_filter:
-            targets = [repo_filter] if state["repos"].get(repo_filter, {}).get(stage, {}).get("status") == "pending" else []
         else:
-            targets = repos_for_stage(state, stage, "pending")
-
-        if not targets:
-            # Check if there are failed repos blocking progress
-            failed = repos_for_stage(state, stage, "failed")
-            if failed:
-                console.print(f"[yellow]Stage {stage}: {len(failed)} failed, 0 pending. Run 'retry' to reset.[/yellow]")
-                return
-            # Stage might be complete
-            all_done = all(
-                rd.get(stage, {}).get("status") in ("merged", "done")
-                for rd in state["repos"].values()
-            )
-            if all_done:
-                for rd in state["repos"].values():
-                    if rd.get(stage, {}).get("status") == "done":
-                        rd[stage]["status"] = "merged"
-                save_state(state)
-                console.print(f"[bold green]━━━ Stage {stage} complete! ━━━[/bold green]")
-                if stage_filter or repo_filter:
-                    return
-                continue  # next stage
+            # Check for failed repos
+            failed_repos = set()
+            for rid, rd in state["repos"].items():
+                for s in STAGES:
+                    if rd.get(s, {}).get("status") == "failed":
+                        failed_repos.add(rid)
+            if failed_repos:
+                console.print(f"[yellow]{len(failed_repos)} repo(s) have failed stages. Run 'retry' to reset.[/yellow]")
             else:
-                console.print(f"[yellow]Stage {stage}: nothing to do[/yellow]")
-                return
+                console.print("[yellow]Nothing to do.[/yellow]")
+        return
 
-        console.print(f"[bold]━━━ Launching {len(targets)} session(s) for stage {stage} ━━━[/bold]")
+    # Deduplicate to one pipeline task per repo (the pipeline loop handles stage sequencing)
+    target_repos = sorted(set(rid for rid, _ in targets))
+    console.print(f"[bold]━━━ Launching pipelines for {len(target_repos)} repo(s) ━━━[/bold]")
 
-        # Create all tasks, semaphore controls concurrency
-        flight = [asyncio.create_task(run_one(rid, stage)) for rid in targets]
-        with Live(render_display(), console=console, refresh_per_second=0.5) as live:
-            while not all(t.done() for t in flight):
-                live.update(render_display())
-                await asyncio.sleep(2)
+    flight = [asyncio.create_task(run_repo_pipeline(rid)) for rid in target_repos]
+    with Live(render_display(), console=console, refresh_per_second=0.5) as live:
+        while not all(t.done() for t in flight):
             live.update(render_display())
+            await asyncio.sleep(2)
+        live.update(render_display())
 
-        # Report any exceptions
-        for t, rid in zip(flight, targets):
-            exc = t.exception() if t.done() and not t.cancelled() else None
-            if exc:
-                console.print(f"  [red]✗ {rid}: {exc}[/red]")
+    # Report exceptions
+    for t, rid in zip(flight, target_repos):
+        exc = t.exception() if t.done() and not t.cancelled() else None
+        if exc:
+            console.print(f"  [red]✗ {rid}: {exc}[/red]")
 
-        # Post-batch: advance stage if all done
-        state = load_state()
-        all_done = all(
-            rd.get(stage, {}).get("status") in ("merged", "done")
-            for rd in state["repos"].values()
-        )
-        if all_done:
-            for rd in state["repos"].values():
-                if rd.get(stage, {}).get("status") == "done":
-                    rd[stage]["status"] = "merged"
-            save_state(state)
-            console.print(f"[bold green]━━━ Stage {stage} complete! ━━━[/bold green]")
-            if stage_filter or repo_filter:
-                return
-            # loop continues to next stage
-        else:
-            # Some failed — stop unless running full auto
-            failed = repos_for_stage(state, stage, "failed")
-            if failed and not stage_filter and not repo_filter:
-                console.print(f"[yellow]Stage {stage}: {len(failed)} failed. Run 'retry' to reset, then 'run' again.[/yellow]")
-                return
-            elif repo_filter or stage_filter:
-                return
+    # Final status
+    state = load_state()
+    if pipeline_done(state):
+        console.print("[bold green]✅ All stages complete![/bold green]")
+    else:
+        failed_repos = set()
+        for rid, rd in state["repos"].items():
+            for s in STAGES:
+                if rd.get(s, {}).get("status") == "failed":
+                    failed_repos.add(rid)
+        if failed_repos:
+            console.print(f"[yellow]{len(failed_repos)} repo(s) have failed stages. Run 'retry' to reset, then 'run' again.[/yellow]")
 
 
 def _archive_log(repo_id: str, stage: str, attempt: int) -> None:
@@ -680,19 +796,20 @@ def _archive_log(repo_id: str, stage: str, attempt: int) -> None:
 
 
 def cmd_retry(state: dict, target: str | None) -> None:
-    stage = current_global_stage(state)
-    if target:
-        repos = [target]
-    else:
-        repos = repos_for_stage(state, stage, "failed")
-
-    for rid in repos:
-        rd = state["repos"].get(rid, {})
-        attempts = rd.get(stage, {}).get("attempts", 0)
-        _archive_log(rid, stage, attempts)
-        rd[stage] = {"status": "pending", "attempts": attempts}
-        print(f"  RESET {rid}/{stage} → pending (attempt {attempts})")
-
+    """Reset failed stages to pending. Works per-repo across all stages."""
+    reset_count = 0
+    for rid, rd in state["repos"].items():
+        if target and rid != target:
+            continue
+        for stage in STAGES:
+            if rd.get(stage, {}).get("status") == "failed":
+                attempts = rd[stage].get("attempts", 0)
+                _archive_log(rid, stage, attempts)
+                rd[stage] = {"status": "pending", "attempts": attempts}
+                print(f"  RESET {rid}/{stage} → pending (attempt {attempts})")
+                reset_count += 1
+    if not reset_count:
+        print("  No failed stages found.")
     save_state(state)
 
 
