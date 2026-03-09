@@ -112,53 +112,73 @@ a configurable list of trusted proxy CIDRs and walk the
 `X-Forwarded-For` chain from right to left, selecting the first IP
 not in a trusted range.
 
-### N3: Fix Compress middleware not setting Vary: Accept-Encoding header
+### N3: Fix Compress middleware ignoring Accept-Encoding quality values
 
-The `Compress` middleware in `middleware/compress.go` compresses
-responses based on the `Accept-Encoding` request header but does not
-add `Vary: Accept-Encoding` to the response. Downstream caches may
-serve compressed content to clients that do not support it. Fix the
-compressor to always set the `Vary` header when compression is
-potentially applied. Add a `CHANGELOG.md` entry documenting this
-behavioral change for users relying on response header inspection.
+The `matchAcceptEncoding` function in `middleware/compress.go` uses
+`strings.Contains` to check whether a requested encoding name appears
+in the comma-separated `Accept-Encoding` header value. This does not
+respect the `q` quality parameter: a client sending
+`Accept-Encoding: gzip;q=0, identity` explicitly opts out of gzip, but
+`strings.Contains("gzip;q=0", "gzip")` returns true and the response is
+compressed anyway. Fix `matchAcceptEncoding` to split each token on `;`,
+parse the `q=` parameter if present, and treat any encoding with `q=0`
+as not acceptable. Add a `CHANGELOG.md` entry documenting this
+behavioral fix.
 
-### N4: Fix RouteContext.URLParam returning empty string for regex-constrained parameters
+### N4: Fix URLParam returning empty string in MethodNotAllowed handler
 
-When a route is defined as `r.Get("/item/{id:[0-9]+}", handler)`, and
-the request matches, `chi.URLParam(r, "id")` returns an empty string.
-The regex pattern matching in `tree.go`'s `findRoute` correctly
-validates the parameter but the matched value is stored under the full
-key `id:[0-9]+` instead of just `id` in the `RouteParams`. Fix the
-parameter key extraction in `tree.go` to strip the regex portion before
-storing the key in `Context.URLParams`.
+When a route is defined as `r.Get("/users/{id}", handler)` and a
+request arrives with an unsupported HTTP method (e.g., DELETE), the
+`MethodNotAllowedHandler` is invoked. Inside that handler,
+`chi.URLParam(r, "id")` returns an empty string even though the URL
+clearly matched the parameter pattern. The cause is in `tree.go`'s
+`FindRoute`: during tree traversal, parameter values are appended to
+`rctx.routeParams.Values`, but parameter keys from `h.paramKeys` are
+only committed to `rctx.routeParams.Keys` when a handler node is
+matched for the requested method. For method-not-allowed cases, the
+keys are never committed, leaving `URLParams.Keys` empty while
+`URLParams.Values` contains the captured values. Fix `findRoute` in
+`tree.go` to also commit param keys to `rctx.routeParams.Keys` when
+setting `rctx.methodNotAllowed = true`.
 
-### N5: Fix Throttle middleware leaking goroutines when the backlog queue is full
+### N5: Fix ThrottleWithOpts applying zero backlog timeout by default
 
-When the `Throttle` middleware in `middleware/throttle.go` has a full
-backlog queue, it returns 429 Too Many Requests. However, if the
-request's context is cancelled while waiting in the backlog queue,
-the goroutine that was waiting on the token channel is never cleaned
-up. Fix the backlog select to also listen on `<-r.Context().Done()`
-and release resources on cancellation.
+When `ThrottleWithOpts` in `middleware/throttle.go` is called with a
+`ThrottleOpts` struct that omits `BacklogTimeout` (leaving it at its
+zero value), `time.NewTimer(0)` is created for backlog-queued requests.
+A zero-duration timer fires on the next scheduler tick, so every request
+that cannot acquire an immediate processing token times out instantly
+and receives a 503 "Timed out" error. The `Throttle()` and
+`ThrottleBacklog()` convenience functions both apply
+`defaultBacklogTimeout` (60 seconds), but `ThrottleWithOpts` does not.
+Fix `ThrottleWithOpts` to substitute `defaultBacklogTimeout` when
+`opts.BacklogTimeout` is zero, matching the behaviour of the other
+constructors.
 
-### N6: Fix WrapResponseWriter not implementing http.Pusher interface
+### N6: Fix Maybe middleware reconstructing middleware chain on every request
 
-The `WrapResponseWriter` in `middleware/wrap_writer.go` wraps the
-underlying `http.ResponseWriter` and implements `http.Flusher` and
-`http.Hijacker` via type assertions, but does not check for or
-delegate `http.Pusher` (used for HTTP/2 server push). Middleware that
-wraps the writer (e.g., Compress, Logger) silently drops HTTP/2 push
-capability. Fix `WrapResponseWriter` to also implement `http.Pusher`
-when the underlying writer supports it.
+The `Maybe` middleware in `middleware/maybe.go` calls `mw(next)` inside
+the per-request handler closure each time `maybeFn(r)` returns true.
+This rebuilds the entire wrapped middleware chain on every qualifying
+request instead of once at initialization time. For middlewares with
+non-trivial setup (e.g., `Compress`, `RequestID`), this causes
+unnecessary allocations and CPU work on the hot path. Fix `Maybe` to
+eagerly evaluate `mw(next)` once when the outer middleware factory is
+called, store the resulting `http.Handler` in a closure variable, and
+invoke that pre-built handler when `maybeFn(r)` returns true.
 
-### N7: Fix URLFormat middleware not handling paths with multiple dots
+### N7: Fix URLFormat middleware not updating r.URL.Path after stripping extension
 
-The `URLFormat` middleware in `middleware/url_format.go` extracts the
-file extension from the last path segment (e.g., `/api/data.json`
-sets format to `json`). However, paths like `/api/v2.1/data.json`
-incorrectly extract `1/data.json` as the format because the logic
-splits on the first dot rather than the last. Fix the dot-finding
-logic to use `strings.LastIndex` on the final path segment only.
+The `URLFormat` middleware in `middleware/url_format.go` strips the
+format extension from the routing path by updating `rctx.RoutePath`
+(e.g., `/articles/1.json` → `rctx.RoutePath = "/articles/1"` with
+format `"json"`), but it does not update `r.URL.Path`. Handlers that
+read `r.URL.Path` directly — for logging, redirect generation, or
+path-based logic outside chi routing — see the original path including
+the extension suffix, creating an inconsistency with the routed path.
+Fix the middleware to also set `r.URL.Path` to the stripped path. If
+`r.URL.RawPath` is non-empty (percent-encoded URL), update it to the
+correspondingly stripped raw path as well.
 
 ### N8: Fix Recoverer middleware not including the request method and path in panic output
 
@@ -169,36 +189,52 @@ request triggered the panic. Fix the recovery handler to prepend
 `r.Method` and `r.URL.Path` to the logged output before the stack
 trace.
 
-### N9: Fix RequestID middleware generating non-unique IDs under high concurrency
+### N9: Fix RequestID middleware prefix containing base64 padding characters
 
-The `RequestID` middleware in `middleware/request_id.go` uses a simple
-counter with `atomic.AddUint64` combined with a prefix. Under very high
-concurrency with multiple server instances, the generated IDs are not
-globally unique. Fix the generator to incorporate a per-process random
-component (e.g., using `crypto/rand` at init time) into the ID format
-to ensure uniqueness across instances.
+The `init()` function in `middleware/request_id.go` generates a random
+prefix for request IDs by base64-encoding 12 random bytes and stripping
+`+` and `/` characters to make the result URL-safe. However, base64
+standard encoding uses `=` for padding and the code does not strip `=`.
+After the replacement, `b64` may still contain `=` characters; taking
+`b64[0:10]` can therefore embed `=` in the prefix, producing request
+IDs like `abc==defgh-000001`. These IDs are non-uniform and can cause
+unexpected behaviour when the request ID appears in log lines or is
+reflected in HTTP response headers. Fix `init()` to also strip `=`
+padding characters from the base64 string, or switch to
+`base64.RawStdEncoding.EncodeToString` which omits padding entirely.
 
-### N10: Fix Timeout middleware not cancelling the context when the handler finishes early
+### N10: Fix Timeout middleware silently dropping 504 when response is already started
 
-The `Timeout` middleware in `middleware/timeout.go` creates a context
-with `context.WithTimeout` but does not call the cancel function when
-the handler completes before the deadline. This leaks the timer
-goroutine until the timeout expires. Fix the middleware to `defer
-cancel()` immediately after creating the timeout context.
+The `Timeout` middleware in `middleware/timeout.go` writes
+`w.WriteHeader(http.StatusGatewayTimeout)` in its deferred cleanup
+function after `next.ServeHTTP(w, r)` returns. If the handler detected
+the expiring context and called `w.WriteHeader` or `w.Write` before
+returning, Go's `http.ResponseWriter` ignores the subsequent
+`WriteHeader(504)` call because headers are already committed. The
+client receives whatever partial response the handler started, with no
+504 status. Fix the middleware to wrap `w` with `WrapResponseWriter`
+from `middleware/wrap_writer.go` before passing it to the handler, then
+check `Status()` in the deferred cleanup; only write the 504 header if
+no response has been started (i.e., `Status() == 0`).
 
 ## Medium
 
-### M1: Implement route-level middleware declaration
+### M1: Implement named routes with URL generation
 
-Add `r.With(middlewares...).Get(pattern, handler)` chaining that applies
-middlewares only to the specific route, without affecting sibling routes
-or the parent router's middleware stack. Requires a middleware-carrying
-wrapper in `mux.go`, integration with `tree.go`'s `addRoute` to attach
-per-endpoint middleware, execution in the correct order during
-`routeHTTP`, and interaction with `chain.go` for composing the
-per-route chain with the global stack. Document the `With()` chaining
-API in `README.md` under the Middleware section with usage examples,
-and add a `_examples/per-route-middleware/main.go` example.
+Add support for naming individual routes and generating URLs by name.
+A route is named via `r.With(chi.RouteName("user-detail")).Get(...)` or
+an equivalent `r.Name("user-detail")` sub-router method, and URLs are
+reconstructed with `chi.RouteURL(r, "user-detail", "id", "123")`.
+Requires: a `routeName` field on handler endpoints in `tree.go`, a
+package-level name registry in `mux.go` mapping name strings to full
+route patterns, a `RouteURL` function in `chi.go` that looks up the
+pattern and substitutes supplied key-value pairs for `{param}` and
+`{param:regexp}` placeholders, a `RouteName` middleware helper in
+`chi.go` or `context.go` that stores the name on the context for
+post-match inspection, and route-name population during `setEndpoint`
+in `tree.go`. Document the API in `README.md` and add a
+`_examples/named-routes/main.go` demonstrating URL generation for
+redirect targets and HTML link `href` attributes.
 
 ### M2: Add route grouping with shared prefix and error handler
 
@@ -428,26 +464,29 @@ reporting job that uploads results. Add a `.golangci.yml` configuration
 file enabling `govet`, `errcheck`, `staticcheck`, and `gocritic`
 linters with exclusions for test files and `_examples/`. Create a
 `GOVERNANCE.md` describing the project decision-making process and
-maintainer responsibilities. Update `go.mod` to add a comment
-documenting the four-version Go support policy referenced in the
-existing module comment. Add a `Makefile` `lint` target that wraps
-`golangci-lint run ./...`.
+maintainer responsibilities. Add a `CODEOWNERS` file under `.github/`
+that assigns ownership of the `middleware/` subpackage, root package
+files, and documentation files to the core maintainers. Add a
+`Makefile` `lint` target that wraps `golangci-lint run ./...`.
 
 ### W11: Overhaul documentation, examples, and developer tooling
 
 Rewrite `README.md` to include a comprehensive middleware reference
-table listing all 28 middlewares in `middleware/` with their purpose,
-configuration options, and example usage snippets. Add a `docs/`
-directory with `architecture.md` describing the radix trie
-implementation in `tree.go`, the `Mux` dispatch pipeline in `mux.go`,
-and the `Context` URL parameter system in `context.go`. Create a
-`docs/migration-v4-to-v5.md` covering the module path change from
-`github.com/go-chi/chi` to `github.com/go-chi/chi/v5` and API
+table listing all middlewares in `middleware/` with their purpose,
+configuration options, and example usage snippets — several middlewares
+(`Maybe`, `PageRoute`, `PathRewrite`, `RequestSize`, `SuppressNotFound`,
+`Terminal`, `AllowContentEncoding`) are absent from the current table.
+Add a `docs/` directory with `architecture.md` describing the radix
+trie implementation in `tree.go`, the `Mux` dispatch pipeline in
+`mux.go`, and the `Context` URL parameter system in `context.go`.
+Create a `docs/migration-v4-to-v5.md` covering the module path change
+from `github.com/go-chi/chi` to `github.com/go-chi/chi/v5` and API
 differences. Update each example in `_examples/` with detailed
 comments explaining the demonstrated patterns. Add a `testdata/`
 README explaining the test fixtures. Update `CHANGELOG.md` to follow
 Keep a Changelog format with categorized entries (Added, Changed,
-Fixed, Security). Add `.github/FUNDING.yml` to configure GitHub
-Sponsors. Create a `.github/copilot-instructions.md` with
-project-specific guidelines for the radix tree implementation in
-`tree.go` and middleware authoring patterns.
+Fixed, Security). Update `.github/FUNDING.yml` to add additional
+funding platforms alongside the existing entries. Update
+`.github/copilot-instructions.md` with project-specific guidelines for
+the radix tree implementation in `tree.go` and middleware authoring
+patterns.

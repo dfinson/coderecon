@@ -72,85 +72,114 @@ guava/src/com/google/common/
 
 ## Narrow
 
-### N1: Fix ImmutableList.copyOf discarding null-check for single-element iterables
+### N1: Fix ImmutableList.copyOf(Iterator) missing null-check on the iterator itself
 
-When `ImmutableList.copyOf()` receives an `Iterable` with exactly one
-element, it short-circuits to `ImmutableList.of(element)` but skips the
-explicit `checkNotNull()` that the multi-element path performs. A single
-`null` element silently creates a broken immutable list instead of
-throwing `NullPointerException`. Fix the single-element fast path in
-`ImmutableList.copyOf()` to validate the element before wrapping.
+`ImmutableList.copyOf(Iterator<? extends E> elements)` does not call
+`checkNotNull(elements)` before using the iterator. Passing a `null`
+iterator throws `NullPointerException` inside the method at
+`elements.hasNext()` rather than at the call site. The sibling overload
+`copyOf(Iterable)` already calls `checkNotNull(elements)` as its first
+statement. Fix `copyOf(Iterator)` in `ImmutableList.java` to add
+`checkNotNull(elements)` at the start of the method for a clear,
+caller-pointing error.
 
-### N2: Fix Joiner.on() not rejecting null separator
+### N2: Fix Joiner.appendTo(Appendable, Iterator) missing null-check for the parts iterator
 
-`Joiner.on(String)` does not validate that the separator is non-null.
-Passing a `null` separator produces a `NullPointerException` deep in
-`StringBuilder.append()` during join, with an unhelpful stack trace.
-Fix `Joiner.on()` to call `Preconditions.checkNotNull()` on the
-separator in the factory method so the error points to the caller.
+The base `Joiner.appendTo(A appendable, Iterator<?> parts)` method does
+not call `checkNotNull(parts)` before iterating. Passing a `null`
+iterator throws `NullPointerException` at `parts.hasNext()` deep inside
+the method with a confusing stack trace. The inner class returned by
+`skipNulls()` already overrides this method and does call
+`checkNotNull(parts, "parts")`. Fix the base `Joiner.appendTo(A,
+Iterator)` method in `Joiner.java` to add `checkNotNull(parts)` as its
+first statement, consistent with the `skipNulls()` variant.
 
-### N3: Fix CacheBuilder.maximumSize not validating negative values
+### N3: Fix CacheBuilder.build(CacheLoader) not validating null loader at the call site
 
-`CacheBuilder.maximumSize(long)` does not reject negative values. A
-call like `CacheBuilder.newBuilder().maximumSize(-1)` silently creates
-a cache that immediately evicts all entries rather than throwing
-`IllegalArgumentException`. Fix `maximumSize()` to validate the
-argument with `checkArgument(size >= 0)`.
+`CacheBuilder.build(CacheLoader<? super K1, V1> loader)` does not call
+`checkNotNull(loader)` before delegating to `LocalLoadingCache`. Passing
+a `null` loader causes a `NullPointerException` to originate inside
+`LocalCache`'s constructor, exposing internal implementation details in
+the stack trace rather than pointing to the user's `build()` call. Fix
+`CacheBuilder.build(CacheLoader)` in `CacheBuilder.java` to add
+`checkNotNull(loader, "loader")` before constructing the cache, so the
+error is reported at the call site.
 
-### N4: Fix Splitter.splitToList returning mutable list
+### N4: Fix Splitter.on(String) missing null-check on the separator
 
-`Splitter.splitToList(CharSequence)` returns a mutable `ArrayList`
-despite its Javadoc promising an immutable list. Callers who rely on
-immutability may experience subtle bugs if the returned list is
-modified. Fix the method to wrap the result with
-`Collections.unmodifiableList()` or return an `ImmutableList`.
+`Splitter.on(String separator)` validates that the separator is not
+empty via `checkArgument(!separator.isEmpty())` but does not first call
+`checkNotNull(separator)`. Passing `null` throws `NullPointerException`
+at `separator.isEmpty()` inside `checkArgument`, producing a confusing
+stack trace that does not clearly identify a null argument. The
+`on(CharMatcher)` sibling already calls `checkNotNull(separatorMatcher)`
+as its first statement. Fix `Splitter.on(String)` in `Splitter.java`
+to add `checkNotNull(separator)` before the empty-string check.
 
-### N5: Fix BloomFilter.mightContain throwing ArithmeticException on zero-capacity filter
+### N5: Fix BloomFilter.writeTo not validating the OutputStream is non-null
 
-Creating a `BloomFilter` with `expectedInsertions=0` and then calling
-`mightContain()` throws an `ArithmeticException` due to division by
-zero in the hash-bucket calculation. Fix the optimal-bucket computation
-in `BloomFilter.create()` to treat zero expected insertions as 1,
-producing a minimal-capacity filter.
+`BloomFilter.writeTo(OutputStream out)` does not call
+`checkNotNull(out)` before wrapping `out` in a `DataOutputStream`. If
+`null` is passed, a `NullPointerException` is thrown on the first
+`dout.writeByte()` call inside the method rather than at the call site.
+The sibling `readFrom(InputStream, Funnel)` already calls
+`checkNotNull(in, "InputStream")` as its first statement. Fix
+`BloomFilter.writeTo()` in `BloomFilter.java` to add
+`checkNotNull(out)` before creating the `DataOutputStream`.
 
-### N6: Fix Strings.padEnd not handling negative minLength
+### N6: Fix Strings.padStart and Strings.padEnd not validating negative minLength
 
-`Strings.padEnd(String, int, char)` does not check for negative
-`minLength`. Passing a negative value silently returns the original
-string, which masks caller bugs. Fix the method to throw
-`IllegalArgumentException` when `minLength < 0`, consistent with
-`Strings.padStart()` behavior.
+Both `Strings.padStart(String, int, char)` and `Strings.padEnd(String,
+int, char)` silently return the original string when `minLength` is
+negative, masking caller bugs. Neither method throws or documents this
+edge case, while the related `Strings.repeat(String, int)` does throw
+`IllegalArgumentException` for negative `count`. Fix both `padStart()`
+and `padEnd()` in `Strings.java` to throw `IllegalArgumentException`
+when `minLength < 0`, making them consistent with `Strings.repeat()`.
 
-### N7: Fix InternetDomainName.isValid accepting trailing whitespace
+### N7: Fix InternetDomainName.isValid not handling null input gracefully
 
-`InternetDomainName.isValid(String)` returns `true` for strings with
-trailing whitespace like `"example.com "`. The subsequent
-`InternetDomainName.from()` then throws an exception, making `isValid`
-unreliable as a guard. Fix the validation in `InternetDomainName` to
-trim or reject whitespace in the `isValid()` check.
+`InternetDomainName.isValid(String name)` is documented as a safe
+guard method, but passing `null` causes it to throw
+`NullPointerException` instead of returning `false`. The method calls
+`from(name)` which calls `checkNotNull(domain)`, throwing NPE. The
+try/catch in `isValid()` only catches `IllegalArgumentException`, so
+the NPE escapes to the caller. Fix `isValid()` in
+`InternetDomainName.java` to return `false` for a `null` argument,
+making it safe to use as a guard without a prior null check.
 
-### N8: Fix RateLimiter.create(0) not throwing on zero permits-per-second
+### N8: Fix RateLimiter.create(double, long, TimeUnit) not validating null TimeUnit
 
-`RateLimiter.create(0.0)` creates a rate limiter that blocks forever
-on the first `acquire()` call instead of throwing
-`IllegalArgumentException`. Fix `RateLimiter.create()` to validate that
-the permits-per-second argument is positive.
+`RateLimiter.create(double permitsPerSecond, long warmupPeriod, TimeUnit
+unit)` does not validate that `unit` is non-null. Passing a `null`
+`TimeUnit` produces a `NullPointerException` inside
+`SmoothWarmingUp`'s constructor at `timeUnit.toMicros(warmupPeriod)`
+rather than at the caller's `create()` call site. Fix
+`RateLimiter.create(double, long, TimeUnit)` in `RateLimiter.java` to
+add `checkNotNull(unit)` before delegating, so the error is
+reported at the call site with a clear message.
 
-### N9: Fix TypeToken.getRawType losing generic info for wildcard types
+### N9: Fix TypeToken.getSupertype and getSubtype not validating null class argument
 
-When `TypeToken.of(wildcardType).getRawType()` is called with a
-wildcard type like `? extends Comparable`, the method returns
-`Object.class` instead of `Comparable.class`. Fix `getRawType()` in
-`TypeToken` to resolve the upper bound of wildcard types before
-extracting the raw class.
+`TypeToken.getSupertype(Class<? super T> superclass)` and
+`TypeToken.getSubtype(Class<?> subclass)` do not call `checkNotNull`
+on their `Class` argument before use. Passing `null` causes a
+`NullPointerException` inside `someRawTypeIsSubclassOf()` or the
+type-variable branch, with a stack trace that exposes internal
+implementation details rather than pointing to the caller. Fix both
+`getSupertype()` and `getSubtype()` in `TypeToken.java` to add
+`checkNotNull(superclass)` and `checkNotNull(subclass)` respectively
+as their first statements.
 
-### N10: Fix EventBus.post swallowing exceptions from @Subscribe methods silently
+### N10: Fix EventBus.post not validating that the event is non-null
 
-When a `@Subscribe` method throws an unchecked exception, the default
-`EventBus` logs it via `SubscriberExceptionHandler` but provides no
-access to the failed event or subscriber method identity. Fix the
-default handler in `EventBus` to include the subscriber method name
-and event class in the logged message for debuggability.
+`EventBus.post(Object event)` does not call `checkNotNull(event)`
+before dispatching. Posting a `null` event causes a
+`NullPointerException` inside `SubscriberRegistry.getSubscribers()` at
+`event.getClass()`, making the stack trace point to internal code
+rather than the caller's `post()` call. Fix `EventBus.post()` in
+`EventBus.java` to add `checkNotNull(event)` at the start of the
+method so the error is reported at the call site.
 
 ## Medium
 

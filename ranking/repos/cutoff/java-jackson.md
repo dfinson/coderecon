@@ -81,29 +81,42 @@ src/main/java/com/fasterxml/jackson/databind/
 
 ### N1: Fix ObjectMapper.readValue not propagating DeserializationFeature overrides to nested contexts
 
-When calling `ObjectMapper.readValue()` with a reader that has
-`DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES` disabled, nested
-`DeserializationContext` instances created for inner objects revert to
-the mapper-level default. Fix the context construction in
-`DeserializationContext._createInstance()` to carry forward per-read
-feature overrides.
+When calling `ObjectReader.readValue()` with per-read feature overrides
+(e.g., `reader.without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)`),
+the `DeserializationConfig` carrying those overrides must be passed to
+`DeserializationContexts.DefaultImpl.createContext()`. If the wrong
+config is supplied, nested objects deserialized during the same read
+revert to mapper-level defaults. Fix the context construction in
+`ObjectReader._deserializationContext()` and the `DeserializationContexts`
+factory to carry forward per-read feature overrides into the created
+`DeserializationContextExt` instance.
 
-### N2: Fix TypeFactory.constructType losing generic parameters for recursive types
+### N2: Fix TypeFactory caching partially-resolved types for self-referential generics
 
-`TypeFactory.constructType()` fails to resolve generic parameters when
-a type references itself (e.g., `Comparable<Foo>` where `Foo implements
-Comparable<Foo>`). The resolution enters infinite recursion and falls
-back to `Object`. Fix the type resolution loop in `TypeFactory` to
-detect self-referential bindings and short-circuit with the concrete
-type.
+`TypeFactory` uses `ResolvedRecursiveType` as a placeholder when it
+detects a type that references itself (e.g., `Comparable<Foo>` where
+`Foo implements Comparable<Foo>`). After resolution, `resolveSelfReferences()`
+patches the placeholder, but the code comment at the caching step
+acknowledges that types containing a partially-resolved
+`ResolvedRecursiveType` are skipped from the cache. This causes repeated
+expensive resolution on every access. Fix the caching logic in
+`TypeFactory._fromClass()` to correctly cache fully-resolved
+self-referential types once `resolveSelfReferences()` has completed,
+verifying that no unresolved `ResolvedRecursiveType` references remain.
 
 ### N3: Fix ObjectNode.equals not comparing field order for ordered nodes
 
-`ObjectNode.equals()` compares entries as unordered sets, but when
-constructed via `ObjectMapper` with `SORT_PROPERTIES_ALPHABETICALLY`
-enabled, users expect order-sensitive comparison. Fix `ObjectNode
-.equals()` to respect the `JsonNodeFeature.WRITE_PROPERTIES_SORTED`
-flag when comparing nodes.
+`ObjectNode.equals()` delegates entirely to the underlying `_children`
+map's `equals()`, which treats two maps with the same entries as equal
+regardless of insertion order. When nodes have been constructed or
+sorted intentionally (e.g., after `SORT_PROPERTIES_ALPHABETICALLY`
+serialization round-trips), users cannot detect order differences via
+`equals()`. Fix `ObjectNode.equals()` and the protected
+`_childrenEqual()` helper to compare entries in iteration order so
+that two `ObjectNode` instances with the same keys and values but
+different field ordering are considered unequal. Provide a separate
+`equalsIgnoreOrder(ObjectNode)` helper that preserves the old
+unordered semantics.
 
 ### N4: Fix @JsonCreator static factory method ignored when constructor also present
 
@@ -137,9 +150,9 @@ view-less serializations use separate cache entries.
 
 When serializing a `Map` with `@JsonPropertyOrder` on the containing
 bean, map entries are emitted in iteration order rather than the
-specified property order. Fix `MapSerializer.serializeFields()` to
+specified property order. Fix `MapSerializer.serializeEntries()` to
 sort entries when the enclosing bean has property-order metadata
-available through the `SerializerProvider`.
+available through the `SerializationContext`.
 
 ### N8: Fix TypeIdResolver.idFromValue receiving proxy instead of actual object
 
@@ -198,19 +211,24 @@ Add `ObjectWriter.writeValuesAsArray(OutputStream, Iterator)` that
 serializes large collections without buffering the entire collection in
 memory. Support backpressure by pausing iteration when the output buffer
 is full. Requires changes to `ObjectWriter`, `ser/SequenceWriter`,
-`SerializerProvider` for streaming context, and `cfg/SerializationConfig`
+`SerializationContext` for streaming context, and `cfg/SerializationConfig`
 for buffer-size configuration.
 
-### M4: Add support for sealed class hierarchies in deserialization
+### M4: Add multi-level sealed class hierarchy support in deserialization
 
-Implement automatic subtype detection for Java 17 sealed classes: when
-deserializing a sealed interface or abstract class, inspect its
-`getPermittedSubclasses()` to build the subtype candidate set without
-requiring `@JsonSubTypes`. Support sealed hierarchies nested multiple
-levels deep. Changes span `introspect/BasicBeanDescription` for
-sealed-class detection, `jsontype/TypeResolverBuilder` for automatic
-subtype registration, `deser/BeanDeserializerFactory` for candidate
-filtering, and `type/TypeFactory` for sealed type introspection.
+`JacksonAnnotationIntrospector.findSubtypesByPermittedSubclasses()`
+already auto-registers direct permitted subclasses of a sealed class,
+but it only inspects one level. When a permitted subclass is itself
+sealed (nested sealed hierarchy), its own permitted subclasses are
+silently ignored, leaving them unregistered as subtypes. Extend the
+implementation to recursively walk sealed hierarchies: inspect each
+permitted subclass for `isSealed()`, recurse into its permitted
+subclasses, and register all reachable concrete leaf types. Changes
+span `introspect/JacksonAnnotationIntrospector` for recursive
+detection, `jsontype/impl/` type resolver builders for multi-level
+candidate sets, `deser/BeanDeserializerFactory` for correct candidate
+filtering of intermediate sealed types, and `type/TypeFactory` for
+accurate sealed-type introspection.
 
 ### M5: Implement ObjectMapper.copyWith for selective configuration override
 
@@ -236,15 +254,20 @@ for alias metadata extraction, `cfg/SerializationConfig` for the
 feature flag, and `ser/BeanSerializerFactory` for conflict validation
 during serializer construction.
 
-### M7: Implement contextual serializer/deserializer support for container types
+### M7: Add contextual serializer support for collection and set container types
 
-Add `ContextualSerializer` and `ContextualDeserializer` support for
-`List`, `Map`, and `Set` types, so annotations on container fields
-(e.g., `@JsonFormat` on a `List<Date>` field) are propagated to
-element serializers. Changes span `deser/CollectionDeserializer`,
-`deser/MapDeserializer`, `ser/CollectionSerializer`,
-`ser/MapSerializer`, and `SerializerProvider`/`DeserializationContext`
-for contextual resolution chaining.
+`MapSerializer` and `CollectionDeserializer` already implement
+`createContextual()`, but `CollectionSerializer` (and by extension
+`IndexedListSerializer`, `EnumSetSerializer`) does not. Annotations
+on container fields (e.g., `@JsonFormat` on a `List<Date>` field) are
+therefore not propagated to element serializers during serialization.
+Add `createContextual(SerializationContext, BeanProperty)` to
+`ser/jdk/CollectionSerializer` so field-level annotations are resolved
+and forwarded to the element serializer. Similarly add
+`createContextual` to `deser/jdk/MapDeserializer` for annotation
+propagation to key and value deserializers. Changes also touch
+`ser/SerializationContext` and `deser/DeserializationContext` for
+contextual resolution chaining.
 
 ### M8: Add CSV-style flat-mapping for nested objects
 
@@ -416,28 +439,28 @@ vulnerability patterns (unsafe deserialization, type coercion
 bypasses). Add a `.github/codeql/jackson-queries.ql` custom query
 that detects unvalidated `TypeResolverBuilder` configurations. Update
 `pom.xml` to add `<security>` metadata with CVE disclosure contact
-and security policy URL. Add a `SECURITY.md` file documenting the
-vulnerability reporting process specific to deserialization-related
+and security policy URL. Update the existing `SECURITY.md` to document
+the vulnerability reporting process specific to deserialization-related
 security issues. Update `.github/dependabot.yml` to add weekly
-scanning for Maven dependency vulnerabilities and update the
+scanning for Maven dependency vulnerabilities (currently only
+`github-actions` is scanned on a monthly schedule) and update the
 `<dependencyManagement>` section in `pom.xml` to pin all test
 dependencies with version ranges that exclude known CVEs.
 
 ### W11: Overhaul build configuration, CI workflows, and project documentation
 
 Comprehensively update all non-code project files for the Jackson 3.x
-release. Restructure `pom.xml` to update the Java baseline from 17
-to document the rationale in the `<properties>` comments, add
-`maven-enforcer-plugin` rules for minimum Maven/JDK versions, and
-configure reproducible builds via `project.build.outputTimestamp`.
-Update `.github/workflows/main.yml` to add a JDK 17/21 matrix,
-add a `dep_build_v3.yml` dependent-build verification job, and add
-a `coverage-comment.yml` workflow that posts coverage deltas on PRs.
-Restructure `release-notes/` to add per-major-version migration
-guides with code examples. Update `README.md` to document the 3.x
-API changes, add a feature comparison table between 2.x and 3.x,
-and add links to the migration guide. Update `SECURITY.md` with the
-Jackson security team contact and supported-version matrix. Add a
-`.github/CONTRIBUTING.md` with guidelines on the module system
-(`module-info.java`), testing requirements, and the release
-process.
+release. Restructure `pom.xml` to document the Java baseline rationale
+in the `<properties>` comments, add `maven-enforcer-plugin` rules for
+minimum Maven/JDK versions, and configure reproducible builds via
+`project.build.outputTimestamp`. Update `.github/workflows/main.yml`
+to add `dep_build_v3.yml`-style dependent-build trigger comments and
+add release-tagging steps. Restructure `release-notes/` to add
+per-major-version migration guides (`release-notes/migration-3.x.md`)
+with code examples comparing 2.x and 3.x API usage. Update `README.md`
+to document the 3.x package rename (`tools.jackson` vs
+`com.fasterxml.jackson`), add a feature comparison table between 2.x
+and 3.x, and add links to the migration guide. Update `SECURITY.md`
+with the Jackson security team contact and supported-version matrix.
+Add a `.github/CONTRIBUTING.md` with guidelines on the module system
+(`module-info.java`), testing requirements, and the release process.

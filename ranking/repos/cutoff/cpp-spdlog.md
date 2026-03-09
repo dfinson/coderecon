@@ -124,14 +124,20 @@ Fix the constructor to reject `max_files=0` with an
 valid range for `max_files` in the rotating file sink usage example,
 and add a note to the API section clarifying the minimum value.
 
-### N2: Fix pattern_formatter leaking user-provided custom flags
+### N2: Fix pattern_formatter not refreshing compiled formatters after add_flag()
 
-`pattern_formatter` in `pattern_formatter.h` stores custom flag
-formatters provided via `add_flag()` in a map of raw pointers cloned
-during `clone()`. When a formatter is replaced by calling `add_flag()`
-with the same character a second time, the previously registered
-formatter is leaked. Fix the replacement path to delete the existing
-entry before inserting the new one.
+`pattern_formatter` in `pattern_formatter.h` maintains two parallel
+data structures: `custom_handlers_` (a map from flag char to handler
+used as the source during pattern compilation) and `formatters_` (the
+compiled vector of flag formatters used at format time). When
+`add_flag()` is called after `set_pattern()` has already compiled the
+pattern, it updates `custom_handlers_` but leaves `formatters_` stale.
+Any flag character already present in the compiled pattern continues to
+use the old handler clone stored in `formatters_` instead of the new
+one. Fix `add_flag()` in `pattern_formatter.h` to call
+`compile_pattern_(pattern_)` after updating `custom_handlers_` whenever
+a pattern has already been set, so that `formatters_` is rebuilt to
+reflect the new handler.
 
 ### N3: Fix daily_file_sink calculating next rotation time incorrectly across DST
 
@@ -167,16 +173,20 @@ the process. Fix the worker loop in `periodic_worker.h` to wrap the
 `callback_fun()` invocation in a try/catch block that suppresses the
 exception and continues the periodic loop.
 
-### N6: Fix backtracer not respecting logger level when dumping
+### N6: Fix backtracer double-pushing messages when normal logging is enabled
 
-The `backtracer` in `details/backtracer.h` stores all messages
-regardless of the logger's current level and dumps all stored
-messages during `dump_backtrace()`. Messages below the current
-log level that were stored when the level was more permissive
-should still be dumped, but the backtrace does not stamp messages
-with the level at capture time, making it impossible to replay
-them with correct filtering. Fix the backtrace to store the
-logger level at capture time alongside each message.
+The `logger` class in `logger-inl.h` pushes messages to the backtrace
+ring buffer in two separate places: once inside `sink_it_()` (via the
+`should_backtrace()` check at the bottom of that method) and once
+directly in `log_it_()` (via the unconditional `tracer_.push_back`
+call when `traceback_enabled` is true). When a message passes the
+logger-level check (`log_enabled=true`), both code paths execute,
+causing the message to consume two slots in the `circular_q` inside
+`details/backtracer.h`. This halves the effective backtrace capacity
+for normally-logged messages. Fix `logger::sink_it_()` in `logger.h`
+by removing the `should_backtrace()` / `tracer_.push_back()` call from
+it, leaving `log_it_()` as the sole place that enqueues messages into
+the backtrace.
 
 ### N7: Fix dup_filter_sink comparing only payload without level
 
@@ -194,14 +204,19 @@ to specify file permissions for newly created log files. Add an
 optional `mode_t` parameter to `open()` that calls `fchmod` after
 file creation on POSIX platforms to set the desired permissions.
 
-### N9: Fix thread_pool destructor not draining pending messages
+### N9: Fix thread_pool worker not calling on_thread_stop when on_thread_start throws
 
-The `thread_pool` destructor in `details/thread_pool.h` posts a
-`terminate` message and joins worker threads, but does not drain
-remaining messages in the MPMC queue. Messages posted between the
-last flush and the `terminate` signal are silently dropped. Fix the
-destructor to drain and process all pending log messages before
-posting the terminate signal.
+The `thread_pool` constructor in `details/thread_pool-inl.h` spawns
+worker threads using a lambda that calls `on_thread_start()`, then
+`worker_loop_()`, then `on_thread_stop()` in sequence. If
+`on_thread_start()` throws an exception, the thread function unwinds
+immediately without ever invoking `on_thread_stop()`. The
+`on_thread_stop` callback is a user-supplied cleanup hook (e.g., for
+deregistering the thread from a profiler or runtime), and it must be
+called exactly once per corresponding `on_thread_start` call. Fix the
+worker lambda in `details/thread_pool-inl.h` to call `on_thread_stop()`
+in a RAII guard or try/catch so it is invoked even when
+`on_thread_start()` throws.
 
 ### N10: Fix cfg::helpers not supporting quoted logger names with special characters
 
@@ -265,19 +280,29 @@ file.
 Implement a `log_if(condition, level, msg)` method on the `logger`
 class in `logger.h` that evaluates the format string and arguments
 only if both the condition is true and the level is active. Add
-corresponding macros in `spdlog.h` for the default logger, update
-the async path in `async_logger.h` to support conditional logging
-without allocating log_msg objects when the condition is false, and
-add pattern_formatter support for rendering the condition status.
+corresponding free-function wrappers in `spdlog.h` for the default
+logger, and add `SPDLOG_LOGGER_INFO_IF`, `SPDLOG_LOGGER_WARN_IF` and
+similar convenience macros in `common.h` (following the existing macro
+patterns). Update `async_logger.h` to override `log_if` so that the
+condition is evaluated on the calling thread before any async dispatch,
+ensuring no `log_msg` allocation occurs when the condition is false.
 
-### M6: Implement scoped context logging with key-value pairs
+### M6: Implement scoped context logging with RAII push/pop semantics
 
-Add an `spdlog::context` RAII class that attaches key-value pairs
-to all log messages within a scope via thread-local storage. The
-context data must flow through `details/log_msg.h` as an optional
-field, be rendered by `pattern_formatter.h` with a new `%&` flag,
-and be correctly propagated across the async boundary in
-`details/thread_pool.h` by copying context into `log_msg_buffer.h`.
+The existing `mdc.h` provides a flat `put`/`remove` API for
+thread-local key-value context that is rendered via the `%&` pattern
+flag in `pattern_formatter.h`. However, there is no RAII helper that
+automatically restores the previous value when a scope exits, making
+nested context scopes error-prone. Add a `spdlog::scoped_context` RAII
+class in a new `include/spdlog/scoped_context.h` that saves the current
+value of a key on construction, calls `mdc::put(key, value)`, and
+restores the original value (or removes the key if it was absent) on
+destruction. Update `log_msg_buffer.h` to snapshot the current thread's
+MDC map at construction time so that async loggers (via
+`details/thread_pool.h`) replay the originating thread's context rather
+than the worker thread's empty context. Update `pattern_formatter.h` to
+read the MDC snapshot from the `log_msg_buffer` when available instead
+of calling `mdc::get_context()` directly at format time.
 
 ### M7: Add hot-reload support for configuration files
 
@@ -294,9 +319,10 @@ Add support for an `spdlog::correlation_id` that is attached to
 a logging scope and automatically included in all log messages
 across multiple loggers. The ID must be stored in thread-local
 storage, carried through `details/log_msg.h`, serialized by
-`pattern_formatter.h` via a new `%x` flag, preserved when
-messages cross the async boundary in `details/thread_pool.h`,
-and configurable via the `cfg/` layer.
+`pattern_formatter.h` via a new `%j` flag (not yet used by any
+existing formatter), preserved when messages cross the async
+boundary in `details/thread_pool.h` by snapshotting the ID into
+`log_msg_buffer.h`, and configurable via the `cfg/` layer.
 
 ### M9: Add sink filtering by log level range
 
@@ -334,14 +360,20 @@ the `registry` in `details/registry.h` for collector registration,
 
 ### W2: Add OpenTelemetry-compatible log exporter
 
-Implement an OpenTelemetry Logs exporter that maps spdlog messages
-to the OTLP log data model. Build an `otlp_sink` that batches log
-records and exports them via gRPC or HTTP. Changes span a new
-`sinks/otlp_sink.h` for the exporter, `details/log_msg.h` for
-trace context (trace_id, span_id) fields, `pattern_formatter.h`
-for trace context rendering, `details/thread_pool.h` for batched
-async export, `logger.h` for trace context injection API, and
-`cfg/` for OTLP endpoint and resource attribute configuration.
+Implement an OpenTelemetry Logs data model adapter that maps spdlog
+messages to the OTLP log record structure and exports them over TCP
+using the existing `details/tcp_client.h` infrastructure. Build an
+`otlp_sink` that batches log records in a compact OTLP-compatible
+binary encoding (resource attributes, scope, severity, body,
+trace context) and flushes them to a configurable collector endpoint.
+Changes span a new `sinks/otlp_sink.h` for the exporter sink,
+`details/log_msg.h` for trace context fields (trace_id, span_id as
+optional string fields), `pattern_formatter.h` for trace context
+rendering via new `%q` and `%Q` flags (trace_id and span_id),
+`details/thread_pool.h` for batched async export using the existing
+MPMC queue, `logger.h` for a `set_trace_context(trace_id, span_id)`
+API that stores the IDs in thread-local storage, and `cfg/` for
+collector endpoint and batch-size configuration.
 
 ### W3: Implement compile-time log format validation and optimization
 

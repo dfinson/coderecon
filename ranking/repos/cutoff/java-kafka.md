@@ -100,14 +100,16 @@ value, headers), making construction error-prone. Add a static
 `.partition()`, `.key()`, `.timestamp()`, and `.headers()` methods,
 validating that `topic` is non-null.
 
-### N2: Fix MockProducer not tracking partitioner calls
+### N2: Fix MockProducer ignoring explicit partition and not tracking partitioner calls
 
-`MockProducer` in `clients/producer/MockProducer.java` records sent
-records but does not invoke or track the configured `Partitioner`.
-When testing partition-aware logic, the mock always uses partition 0
-or the explicitly specified partition. Add partitioner invocation in
-`send()` when no partition is explicitly set, and expose
-`partitionerCallCount()` for test assertions.
+`MockProducer` in `clients/producer/MockProducer.java` always calls
+the configured `Partitioner` in `send()` even when the `ProducerRecord`
+has an explicitly set partition, whereas the real `KafkaProducer` skips
+the partitioner when a partition is already specified. Add a check in
+the private `partition()` helper so that `record.partition() != null`
+short-circuits partitioner invocation and returns the record's partition
+directly. Additionally, expose a `partitionerCallCount()` method for
+test assertions to verify how many times the partitioner was consulted.
 
 ### N3: Add ConsumerRecord.hasKey() and hasValue() convenience methods
 
@@ -118,17 +120,18 @@ methods to check for null without retrieving the value. Add
 for non-null key and value respectively, reducing null-check
 boilerplate in consumer loops.
 
-### N4: Fix ConfigDef not validating dependent config references
+### N4: Fix ConfigDef.validate() not detecting circular dependent config chains
 
 The `ConfigDef` framework in `common/config/ConfigDef.java` allows
-declaring config dependencies via `dependents()`, but does not validate
-that referenced config keys actually exist in the same `ConfigDef`.
-A typo in a dependent reference silently produces a broken config
-definition. Add validation in `ConfigDef.validate()` that all
-`dependents` keys exist in the config definition. Also update
-`docs/configuration/` documentation pages to add a "Config
-Dependencies" subsection explaining how dependent configs are
-validated and what errors to expect on misconfiguration.
+declaring config dependencies via `dependents()`. The private
+`validate(String, Map, Map)` and `parseForValidate()` methods process
+dependents recursively, but neither maintains a visited set to detect
+cycles. When config A lists B as a dependent and B lists A as a
+dependent, calling `validate(props)` causes infinite recursion ending
+in `StackOverflowError`. Add cycle detection in `validateAll()` using
+a `Set<String>` of in-progress keys, throwing `ConfigException` with
+a descriptive message (listing the cycle path) when a cycle is
+detected.
 
 ### N5: Add Header.toString() with value decoding
 
@@ -147,14 +150,20 @@ update), the first partition assignment always starts at 0. Initialize
 new topic counters with `ThreadLocalRandom.current().nextInt()` to
 distribute initial load evenly across partitions.
 
-### N7: Add Serde.forClass() factory for common types
+### N7: Fix Serdes.serdeFrom() not handling primitive type class literals
 
-The `Serdes` utility class in `common/serialization/Serdes.java`
-requires explicit method calls (`Serdes.String()`, `Serdes.Integer()`)
-for each type. Add a `Serdes.forClass(Class<T>)` method that returns
-the appropriate `Serde<T>` for common types (`String`, `Integer`,
-`Long`, `Double`, `byte[]`, `ByteBuffer`, `UUID`) by lookup, throwing
-`IllegalArgumentException` for unsupported types.
+The `Serdes.serdeFrom(Class<T> type)` method in
+`common/serialization/Serdes.java` (line ~157) returns the built-in
+`Serde<T>` for boxed wrapper types (`Integer.class`, `Long.class`,
+`Double.class`, etc.), but throws `IllegalArgumentException` for Java
+primitive type class literals (`int.class`, `long.class`,
+`double.class`, `float.class`, `short.class`, `boolean.class`).
+Generic reflective code that obtains class literals from field types
+may produce primitive classes, causing unexpected failures. Extend
+`serdeFrom(Class<T>)` to map each primitive class to its corresponding
+boxed-type serde (`int.class` → `Integer()`, `long.class` → `Long()`,
+`double.class` → `Double()`, `float.class` → `Float()`,
+`short.class` → `Short()`, `boolean.class` → `Boolean()`).
 
 ### N8: Fix KafkaFuture.thenApply not preserving exception context
 
@@ -174,13 +183,20 @@ config values but does not cross-check against the topology (e.g.,
 `validate(Topology)` method that checks config values against topology
 requirements and returns a list of warnings.
 
-### N10: Fix JoinWindows.of() not rejecting negative durations
+### N10: Fix JoinWindows factory methods not rejecting zero-duration windows
 
-`JoinWindows.of()` in `streams/kstream/JoinWindows.java` accepts a
-`Duration` parameter but does not validate that it is non-negative. A
-negative duration produces a join window where `afterMs < beforeMs`,
-which silently produces no join results. Add an
-`IllegalArgumentException` for negative or zero durations.
+`JoinWindows.ofTimeDifferenceAndGrace()` and
+`ofTimeDifferenceWithNoGrace()` in `streams/kstream/JoinWindows.java`
+delegate duration validation to `validateMillisecondDuration()`, which
+only rejects `null` and overflow — it does not reject non-positive
+values. The constructor guard (`beforeMs + afterMs < 0`) catches
+strictly-negative timeDifference but allows `Duration.ZERO`, producing
+a zero-width window where only records with exactly identical timestamps
+join, which silently yields no results in practice. Add an explicit
+`IllegalArgumentException` for `timeDifference` of zero or negative
+milliseconds in both non-deprecated factory methods and in the
+deprecated `of(Duration)` method to make the contract consistent and
+discoverable.
 
 ## Medium
 
@@ -204,14 +220,21 @@ pattern). Requires changes to the streams processor context, the
 record forwarding pipeline in `processor/`, and configuration in
 `StreamsConfig`.
 
-### M3: Implement Admin client retry with exponential backoff
+### M3: Add per-operation retry configuration to Admin client
 
-The Admin client methods (`createTopics`, `deleteTopics`,
-`describeConfigs`) use a fixed retry with linear backoff that is
-configured globally. Add per-operation retry configuration with
-exponential backoff and jitter, configurable max attempts, and
-retryable exception classification. Touches `AdminClientConfig`,
-the `KafkaAdminClient` call construction, and the `KafkaFuture`
+The `KafkaAdminClient` in `clients/admin/KafkaAdminClient.java` uses
+global exponential backoff for all operations, configured via
+`RETRY_BACKOFF_MS_CONFIG` and `RETRY_BACKOFF_MAX_MS_CONFIG` in
+`AdminClientConfig`. Different admin operations have different
+failure characteristics — `createTopics` warrants more retries than
+`describeConfigs`, and `deleteTopics` should not be blindly retried.
+Add per-operation retry configuration with a key pattern
+`admin.retry.<operation>.max.attempts` (e.g.,
+`admin.retry.createTopics.max.attempts`) in `AdminClientConfig`, and
+update `KafkaAdminClient`'s call construction to apply per-operation
+retry counts and retryable exception classification when present,
+falling back to the global `retries` setting. Touches
+`AdminClientConfig`, the `Call` inner class, and the `KafkaFuture`
 timeout mechanism.
 
 ### M4: Add schema evolution support to JSON converter
@@ -221,8 +244,9 @@ but does not handle schema evolution (adding fields, removing fields,
 changing types). Implement forward/backward/full compatibility
 checking for JSON schemas, with configurable compatibility mode and
 clear error messages for incompatible schema changes. Touches the
-JSON converter, `connect/data/Schema.java`, and a new compatibility
-checker module.
+JSON converter (`connect/json/src/main/java/…/connect/json/JsonConverter.java`),
+`connect/api/src/main/java/org/apache/kafka/connect/data/Schema.java`,
+and a new compatibility checker module in `connect/json/`.
 
 ### M5: Implement configurable record timestamp policies for Streams
 
@@ -408,40 +432,39 @@ suppression entries in `checkstyle/suppressions.xml` matching the
 modules. Also update `checkstyle/import-control.xml` to add an
 `<allow>` rule for the generated protocol package imports.
 
-### M11: Add Gradle build cache configuration and update CI workflow parallelism
+### M11: Add Gradle local build-cache activation and CI cache steps
 
-The `build.gradle` configures `maxTestForks` based on available
-processors but does not enable Gradle's local or remote build
-caching, causing full rebuilds on every CI run. Add
-`org.gradle.caching=true` to `gradle.properties`. Configure the
-build cache in `settings.gradle` with a local cache directory and
-optional remote cache endpoint for CI. Update
-`.github/workflows/ci.yml` to add `actions/cache` for Gradle
-caches (`~/.gradle/caches`, `~/.gradle/wrapper`), reduce CI wall-
-clock time by splitting the test job into per-module parallel jobs
-(`clients`, `streams`, `connect`, `server`), and add a `rat` job
-that runs Apache Rat license header checks as a separate CI step.
-Update `gradle/dependencies.gradle` to pin the `grgit` plugin
-version used for license checking. Add a
-`.github/workflows/stale.yml` workflow update to auto-close stale
-issues after 90 days.
+`gradle.properties` does not set `org.gradle.caching=true`, so Gradle's
+local build cache (already structurally configured with `enabled = true`
+in `settings.gradle`) is never actually activated for local or CI runs,
+causing full task re-execution on every run. Add
+`org.gradle.caching=true` to `gradle.properties`. Update
+`.github/workflows/build.yml` to add `actions/cache` steps for Gradle
+home (`~/.gradle/caches`, `~/.gradle/wrapper`) using the workflow's
+`hashFiles` key so that CI hits the local cache between workflow runs.
+Split the single build job in `build.yml` into per-module matrix jobs
+(`clients`, `streams`, `connect`, `server`) to enable parallel test
+execution and reduce wall-clock time. Add a separate `rat` step that
+runs Apache Rat license header checks (`./gradlew rat`) independent of
+the main test jobs.
 
 ### W11: Overhaul Gradle build, checkstyle rules, CI workflows, and documentation
 
 Comprehensively update all non-code project files for the Kafka
-4.x release. Restructure `build.gradle` to migrate to the
-`plugins` DSL for all plugin applications, update
-`spotless` configuration to enforce consistent Java formatting
-across all 30+ modules, and add `errorprone` static analysis.
-Update `checkstyle/checkstyle.xml` to upgrade to Checkstyle 10.x
-rules, add `MissingJavadocMethod` checks for public APIs, and
+4.x release. Restructure `build.gradle` to migrate remaining
+`apply plugin:` calls to the `plugins {}` DSL for all plugin
+applications, update `spotless` configuration to enforce consistent
+Java formatting across all 30+ modules, and add `errorprone` static
+analysis. Update `checkstyle/checkstyle.xml` to upgrade to Checkstyle
+10.x rules, add `MissingJavadocMethod` checks for public APIs, and
 update `import-control*.xml` files to reflect the KRaft module
 reorganization. Update `gradle/dependencies.gradle` to use a
-Gradle version catalog (`libs.versions.toml`) instead of the
+Gradle version catalog (`gradle/libs.versions.toml`) instead of the
 current `ext` variables approach. Update `.github/workflows/ci.yml`
-to add JDK 17/21 matrix testing, add a `docker_build_and_test.yml`
-job that validates the official Docker image build, and add a
-`generate-reports.yml` workflow for automated test report
+to add JDK 17/21 matrix testing, update `.github/workflows/build.yml`
+to add a job that validates the official Docker image build using the
+existing `docker_build_and_test.yml` workflow, and extend
+`.github/workflows/generate-reports.yml` for automated test report
 publication. Update `config/server.properties` and
 `config/controller.properties` to add KRaft-mode configuration
 examples with inline documentation comments. Update

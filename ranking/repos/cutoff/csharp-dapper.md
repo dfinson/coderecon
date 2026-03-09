@@ -77,45 +77,56 @@ bypasses the `finally` block in the yield-based iterator. Fix the
 iterator implementation in `SqlMapper.cs` to ensure the reader is
 disposed even when a mapping exception occurs mid-enumeration.
 
-### N2: Fix DynamicParameters ignoring DbType for output parameters
+### N2: Fix DynamicParameters.Get<T> throwing deprecated exception and failing numeric casts
 
-When adding an output parameter via `DynamicParameters.Add()` with an
-explicit `DbType`, the type is silently ignored during command
-preparation if the parameter value is `null`. Fix the parameter setup
-loop in `DynamicParameters.cs` to apply the specified `DbType`
-regardless of whether a value is provided.
+`DynamicParameters.Get<T>()` in `DynamicParameters.cs` throws
+`ApplicationException` (deprecated since .NET 2.0) when the output
+parameter value cannot be cast, and uses a direct `(T)val` cast that
+throws `InvalidCastException` for compatible-but-different numeric
+types (e.g., retrieving a `long` output parameter as `int`). Fix
+`DynamicParameters.Get<T>()` to throw `InvalidCastException` with a
+descriptive message, and use `Convert.ChangeType` when `T` implements
+`IConvertible` so compatible numeric conversions succeed.
 
-### N3: Fix CommandDefinition.Flags not propagating to async methods
+### N3: Fix Execute deadlock when CommandFlags.Pipelined is used on sync path
 
-`CommandDefinition` accepts a `Flags` property (e.g., `Buffered`,
-`Pipelined`) but the async execution path in `SqlMapper.Async.cs`
-ignores it, always defaulting to buffered execution. Fix the async
-methods to respect `CommandDefinition.Flags` consistently with the
-synchronous paths.
+`ExecuteImpl` in `SqlMapper.cs` calls `.Result` on
+`ExecuteMultiImplAsync` when `CommandFlags.Pipelined` is set and the
+call comes from the synchronous `Execute()` extension method. In
+ASP.NET or any context with a single-threaded synchronization context,
+this `.Result` call causes a deadlock because the async continuation
+cannot resume. Fix `SqlMapper.cs` to detect this unsupported
+combination and throw `InvalidOperationException` directing callers to
+use `ExecuteAsync()` instead.
 
-### N4: Fix DefaultTypeMap not matching underscore-separated column names
+### N4: Fix DefaultTypeMap.FindConstructor using positional rather than name-based matching
 
-`DefaultTypeMap` maps columns to properties by exact name match only.
-Columns like `first_name` fail to map to a property `FirstName`. Fix
-`DefaultTypeMap.cs` to support an underscore-removal convention so
-`first_name` maps to `FirstName` without requiring a custom type map.
-Also update `Readme.md` to document the new underscore-removal
-convention under a "Column Mapping" section, and add an example
-showing both exact-match and underscore-removal behaviour.
+`DefaultTypeMap.FindConstructor` in `DefaultTypeMap.cs` matches
+constructor parameters to query columns by position (array index) rather
+than name. When query columns appear in a different order than the
+constructor parameters, the match fails or binds the wrong values. Fix
+`DefaultTypeMap.cs` so `FindConstructor` matches each constructor
+parameter to its corresponding column by name (case-insensitive),
+regardless of column order.
 
-### N5: Fix GridReader.Read<T> not advancing to next result set on empty results
+### N5: Fix GridReader.ReadAsync<T> with buffered:false executing synchronously
 
-When `GridReader.Read<T>()` encounters a result set with zero rows, it
-does not call `NextResult()` on the underlying reader, causing the next
-`Read<T>()` call to fail or return stale data. Fix the result-set
-advancement logic in `SqlMapper.GridReader.cs`.
+`GridReader.ReadAsync<T>(buffered: false)` in
+`SqlMapper.GridReader.Async.cs` returns `Task.FromResult(ReadDeferred<T>(...))`,
+wrapping a synchronous iterator in an already-completed task. This
+causes `reader.NextResult()` to be called synchronously via
+`OnAfterGrid` rather than via the truly-async `OnAfterGridAsync` path,
+blocking the calling thread on database I/O. Fix
+`SqlMapper.GridReader.Async.cs` so `ReadAsync<T>(buffered: false)`
+delegates to `ReadUnbufferedAsync<T>()`, which already uses
+`ReadAsync` and `OnAfterGridAsync`.
 
 ### N6: Fix SqlMapper.TypeHandler not clearing cache on handler registration
 
 Registering a new `TypeHandler<T>` via `SqlMapper.AddTypeHandler<T>()`
 does not invalidate the `TypeDeserializerCache`, so previously compiled
 deserializers continue using the old handler. Fix the handler
-registration in `SqlMapper.TypeHandler.cs` to purge the relevant
+registration in `SqlMapper.cs` to purge the relevant
 cache entries in `SqlMapper.TypeDeserializerCache.cs`.
 
 ### N7: Fix DbString defaulting to ANSI for Unicode connection strings
@@ -126,13 +137,17 @@ specifies an ANSI-only provider, the parameter is still sent as
 to detect the provider and set `IsAnsi` appropriately based on the
 connection's provider factory.
 
-### N8: Fix SqlMapper.Identity hash collision for different generic types
+### N8: Fix SqlMapper.Identity.Equals contract violation with gridIndex and parametersType
 
-`SqlMapper.Identity` computes its hash code without including the
-generic type argument of `Query<T>`. Two queries with the same SQL
-but different `T` can collide, causing incorrect cached deserializers.
-Fix the hash computation in `SqlMapper.Identity.cs` to incorporate
-the result type.
+`SqlMapper.Identity.GetHashCode` in `SqlMapper.Identity.cs` includes
+`gridIndex` and `parametersType` in the hash computation, but
+`SqlMapper.Identity.Equals` does not compare these fields. This
+violates the hash/equals contract: two `Identity` objects with different
+`gridIndex` or `parametersType` can have the same hash and pass
+`Equals`, causing incorrect cache hits where a deserializer compiled
+for one grid position or parameter set is returned for a different one.
+Fix `SqlMapper.Identity.Equals` to compare both `gridIndex` and
+`parametersType`.
 
 ### N9: Fix Execute returning -1 for stored procedures with no SET NOCOUNT
 
@@ -142,12 +157,15 @@ DML statements inside the procedure confuse the result aggregation.
 Fix `SqlMapper.cs` to aggregate all `RecordsAffected` values from the
 command execution for stored-procedure commands.
 
-### N10: Fix QueryFirstOrDefault<T> materializing entire result set
+### N10: Fix DbWrappedReader.Close not disposing the underlying command
 
-`QueryFirstOrDefault<T>()` internally calls `Query<T>()` and takes
-the first element, materializing all rows before discarding them. Fix
-the method in `SqlMapper.cs` to read only the first row from the
-`IDataReader` and immediately dispose the reader.
+`DbWrappedReader` in `WrappedReader.cs` is documented as allowing
+"closing a reader to also close the command", but its `Close()` method
+only calls `_reader.Close()` without disposing `_cmd`. The `Dispose(bool)`
+overload correctly disposes both, but `Close()` is the path taken when
+query code finishes reading rows. Fix `WrappedReader.cs` so `Close()`
+also disposes `_cmd`, matching the documented purpose and the behavior
+of `Dispose(bool)`.
 
 ### N11: Update Dapper.csproj target frameworks and Directory.Build.props packaging metadata
 
@@ -164,14 +182,21 @@ to `latestFeature`.
 
 ## Medium
 
-### M1: Add QueryUnbufferedAsync<T> streaming support
+### M1: Add QueryUnbufferedAsync streaming overloads for multi-mapping queries
 
-Implement `QueryUnbufferedAsync<T>()` that returns
-`IAsyncEnumerable<T>` for streaming large result sets without buffering.
-The method must support cancellation via `CancellationToken`, respect
-`CommandDefinition.Flags`, and properly dispose the reader and
-connection on enumeration completion or cancellation. Changes span
-`SqlMapper.Async.cs` and `CommandDefinition.cs`.
+The existing `QueryUnbufferedAsync<T>()` in `SqlMapper.Async.cs`
+returns `IAsyncEnumerable<T>` for single-type queries, but there are
+no unbuffered async overloads for multi-mapping. All multi-mapping
+async methods (`QueryAsync<TFirst, TSecond, TReturn>()` and siblings)
+always buffer the entire result set. Implement
+`QueryUnbufferedAsync<TFirst, TSecond, TReturn>()` and
+`QueryUnbufferedAsync<TFirst, TSecond, TThird, TReturn>()` overloads
+in `SqlMapper.Async.cs` that return `IAsyncEnumerable<TReturn>`,
+support cancellation via `CancellationToken`, respect the `splitOn`
+parameter, and properly dispose the reader on completion or
+cancellation. Share the split-column resolution logic with the
+existing `MultiMapAsync` helper in `SqlMapper.Async.cs` and the
+`GetMultiSplitPoint` helper in `SqlMapper.cs`.
 
 ### M2: Implement multi-mapping with custom split logic
 
@@ -266,8 +291,8 @@ matrix to `.github/workflows/main.yml` that runs against PostgreSQL 15
 and 16, MySQL 8.0 and 8.4, and SQL Server 2019 and 2022 using service
 containers. Update `appveyor.yml` to add a `test_script` section that
 runs `dotnet test` with `--logger trx` for structured test output.
-Also add a `.github/FUNDING.yml` sponsorship link and update the
-`nuget.config` to add the `dotnet-tools` feed for CI tool restoration.
+Update the `nuget.config` to add the `dotnet-tools` feed for CI tool
+restoration.
 
 ## Wide
 
@@ -388,11 +413,8 @@ The `docs/` directory contains a `docs.csproj`, `index.md`, and
 sponsor-related markdown, but the documentation site lacks API
 reference generation, versioned docs, and search. Add a DocFX
 configuration (`docs/docfx.json`) that generates API docs from the
-`Dapper.csproj` XML documentation comments, update `docs/index.md`
-with a getting-started guide and migration notes, and add a
-`docs/_config.yml` for GitHub Pages configuration. Update
+`Dapper.csproj` XML documentation comments, and update `docs/index.md`
+with a getting-started guide and migration notes. Update
 `Dapper.sln` to include the docs project in a `Solution Items`
-folder, add a `docs` build step to `.github/workflows/main.yml` that
-runs `docfx build` and deploys to GitHub Pages, and update
-`Directory.Build.props` to set `GenerateDocumentationFile` to `true`
-across all projects so XML docs are always produced.
+folder, and add a `docs` build step to `.github/workflows/main.yml`
+that runs `docfx build` and deploys to GitHub Pages.

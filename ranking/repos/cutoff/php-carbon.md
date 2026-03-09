@@ -192,15 +192,19 @@ decomposition (years, months, days) suitable for displaying a person's
 exact age. Add `exactAge()` returning a `CarbonInterval` with precise
 year/month/day components, handling leap years correctly.
 
-### N11: Fix `phpunit.xml.dist` missing test suite for CLI tests
+### N11: Fix stale coverage exclusion paths in `phpunit.xml.dist`
 
-The `phpunit.xml.dist` configuration file defines test suites for
-`carbon`, `immutable`, `interval`, `period`, `timezone`,
-`localization`, `laravel`, `doctrine`, and `factory`, but does not
-include a suite for the `Cli/` directory added under `src/Carbon/Cli/`.
-Tests in `tests/Cli/` are never executed by CI. Add a `cli` test suite
-entry in `phpunit.xml.dist` pointing to `tests/Cli`, and update
-`codecov.yml` to include the CLI source path in coverage tracking.
+The `phpunit.xml.dist` `<source><exclude>` block lists
+`src/Carbon/TranslatorStrongType.php` and
+`src/Carbon/TranslatorWeakType.php`, but neither file exists at those
+paths — the generated implementations live in `lazy/Carbon/`. PHPUnit
+emits a notice about non-existent exclusion targets, and the `lazy/`
+generated files are not tracked in coverage at all. Fix the exclusion
+entries to reference `lazy/Carbon/TranslatorStrongType.php` and
+`lazy/Carbon/TranslatorWeakType.php`, and add `lazy/Carbon/` to the
+`<source><include>` block. Also update `codecov.yml` (currently only
+`comment: false`) to add a `coverage` status-check block that
+requires project coverage not to drop below the current baseline.
 
 ## Medium
 
@@ -424,10 +428,10 @@ the flagged methods or adding targeted `@SuppressWarnings`
 annotations. Raise `phpstan.neon` analysis level from 3 to 6 and
 resolve all new errors, updating `ignoreErrors` patterns only for
 genuine false positives. Raise `psalm.xml` `errorLevel` from 5 to 3
-and address new findings. Update `phpunit.xml.dist` to add
-`cacheDirectory`, enable `failOnRisky`, and reorganise test suites
-into `unit` and `integration` groups. Update `contributing.md` to
-document the new static analysis requirements and the v4.0 branch
+and address new findings. Update `phpunit.xml.dist` to enable
+`failOnRisky` and reorganise test suites into `unit` and `integration`
+groups. Update `contributing.md` to document the new static analysis
+requirements and the v4.0 branch
 policy. Update `.github/workflows/tests.yml` to add a dedicated
 static-analysis job that runs PHPStan, Psalm, and PHPMD in parallel,
 and update `codecov.yml` to set a minimum coverage threshold of 80%.

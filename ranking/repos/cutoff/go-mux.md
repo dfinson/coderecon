@@ -84,13 +84,19 @@ registered by a different route in the `namedRoutes` map. Update
 `doc.go` to document the name uniqueness constraint and the new error
 return behavior.
 
-### N4: Fix CORSMethodMiddleware not including OPTIONS in the Allow header
+### N4: Fix CORSMethodMiddleware not including OPTIONS in the Access-Control-Allow-Methods header
 
 `CORSMethodMiddleware` sets the `Access-Control-Allow-Methods` header
-based on methods registered for a route, but it omits `OPTIONS` even
-when the middleware itself implicitly handles OPTIONS preflight requests.
-Fix the middleware in `middleware.go` to always include `OPTIONS` in
-the `Allow` header when CORS is active.
+based on methods registered for a route, but it only sets the header
+when `OPTIONS` is already present in the collected methods list. When a
+route handles OPTIONS explicitly (e.g., via `Methods(http.MethodOptions,
+...)`), OPTIONS is included; however, the collected methods may omit
+OPTIONS for routes that rely on the CORS middleware itself to handle
+preflight. Fix `getAllMethodsForRoute` and the middleware loop in
+`middleware.go` to always append `OPTIONS` to the methods list when
+building the `Access-Control-Allow-Methods` response header, ensuring
+preflight responses are correct even when OPTIONS is not in a route's
+explicit method matcher.
 
 ### N5: Fix path variable extraction failing when variable value contains encoded slashes
 
@@ -128,14 +134,15 @@ without the router context set on the request. Middleware and the
 `ServeHTTP` to call `requestWithRouter` before dispatching the 405
 handler so the router is available in the request context.
 
-### N9: Fix CORSMethodMiddleware producing duplicate methods in the Allow header
+### N9: Fix CORSMethodMiddleware producing duplicate methods in the Access-Control-Allow-Methods header
 
 In `middleware.go`, `getAllMethodsForRoute` collects methods from all
 routes that match the request path, but when multiple routes with
 overlapping path matchers register the same HTTP methods, the collected
-list contains duplicates (e.g., `GET,GET,POST`). The `Allow` header
-is then set with repeated values. Fix `getAllMethodsForRoute` to
-deduplicate the methods list before returning.
+list contains duplicates (e.g., `GET,GET,POST`). The
+`Access-Control-Allow-Methods` header is then set with repeated values.
+Fix `getAllMethodsForRoute` to deduplicate the methods list before
+returning.
 
 ### N10: Fix Router.ServeHTTP clean path redirect using 301 for non-GET methods
 
@@ -202,12 +209,15 @@ during URL generation.
 
 ### M6: Add graceful 404/405 handling with custom negotiation
 
-Implement `Router.NotFoundHandler` and `Router.MethodNotAllowedHandler`
-with content negotiation: inspect the `Accept` header and respond with
-JSON, XML, or plain text error bodies accordingly. Requires a
-negotiation utility, default handlers in `mux.go`, integration with
-the route matching to distinguish 404 from 405, and `Allow` header
-generation for 405 responses.
+`Router` already exposes `NotFoundHandler` and `MethodNotAllowedHandler`
+fields, but the built-in fallback handlers (`http.NotFoundHandler()` and
+the internal `methodNotAllowedHandler()`) return plain-text responses
+with no content negotiation. Add default negotiating implementations in
+`mux.go` that inspect the `Accept` header and write JSON, XML, or
+plain-text error bodies accordingly. Requires a negotiation utility,
+new default handler constructors, integration with the route-matching
+fallback paths in `ServeHTTP`, and `Allow` header generation for 405
+responses listing the permitted methods.
 
 ### M7: Implement route versioning via header or path prefix
 
@@ -391,7 +401,7 @@ release creation with changelog generation from `git log`. Create a
 `staticcheck`, `ineffassign`, and `gosec` linters with appropriate
 exclusions for test files. Add a `SECURITY.md` with a vulnerability
 disclosure process and response timeline. Update `Makefile` with
-`lint`, `bench`, and `coverage` targets. Create a
+`lint`, `bench`, and `coverage` targets. Update the existing
 `.github/copilot-instructions.md` with project-specific coding
 conventions for the router matching logic in `regexp.go` and
 `mux.go`. Update `go.mod` comments to document the minimum Go version

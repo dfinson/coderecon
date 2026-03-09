@@ -114,14 +114,20 @@ token rules (no spaces, control characters, or delimiters). Setting
 validation in the indexer setter that rejects non-token characters
 with an `ArgumentException`.
 
-### N3: Add ETag support to HttpResponse extension methods
+### N3: Add Results.NotModified() for HTTP 304 conditional responses
 
-The `Http.Results` module provides `Results.File()` and
-`Results.Stream()` but does not support ETag-based conditional
-responses. Add `Results.File()` overloads that accept an `EntityTagHeaderValue`
-and check `If-None-Match` / `If-Match` request headers, returning
-`304 Not Modified` when appropriate. Implement in
-`src/Http/Http.Results/`.
+The `Results` and `TypedResults` classes in `src/Http/Http.Results/src/`
+provide typed results for common HTTP status codes (`Results.NoContent()`,
+`Results.Ok()`, `Results.Conflict()`) but have no `Results.NotModified()`
+method for HTTP 304. Applications that implement custom conditional GET
+logic (checking `If-None-Match` or `If-Modified-Since` themselves)
+must fall back to `Results.StatusCode(304)`, which conveys no semantic
+intent and has no type-safe equivalent in `TypedResults`. Add
+`Results.NotModified()` and `TypedResults.NotModified()` backed by a
+new `NotModifiedHttpResult` class (following the same pattern as
+`NoContentHttpResult`) that sets status 304 with no response body.
+Register the result in `ResultsCache` and update `IResultExtensions`.
+Touches `src/Http/Http.Results/src/` (3–4 files).
 
 ### N4: Fix CorsPolicyBuilder not validating origin URL format
 
@@ -143,13 +149,22 @@ and query individual fields without parsing. Also update
 fields, their names, types, and usage examples for common log
 aggregation tools.
 
-### N6: Fix DeveloperExceptionPageMiddleware not escaping HTML in exception details
+### N6: Fix DeveloperExceptionPageMiddleware ProblemDetails not conforming to RFC 7807
 
-The developer exception page in `src/Middleware/Diagnostics/src/DeveloperExceptionPage/`
-renders exception messages in HTML without escaping special characters.
-If an exception message contains `<script>`, it could execute in the
-developer's browser. Apply `HtmlEncoder.Default.Encode()` to all
-user-controlled content in the exception page HTML template.
+The `DeveloperExceptionPageMiddlewareImpl.CreateProblemDetails()` in
+`src/Middleware/Diagnostics/src/DeveloperExceptionPage/DeveloperExceptionPageMiddlewareImpl.cs`
+sets `ProblemDetails.Title` to the exception type name (e.g.,
+`"NullReferenceException"`) but never sets `ProblemDetails.Type`,
+which defaults to `null` (treated as `about:blank` by RFC 7807).
+RFC 7807 requires that when `type` is `about:blank`, `title` MUST
+equal the HTTP status reason phrase (e.g., `"Internal Server Error"`
+for 500). Fix `CreateProblemDetails()` to set `Type` to `about:blank`
+and change `Title` to the HTTP status reason phrase, then add an
+`ExceptionTypeUriProvider` delegate property to
+`DeveloperExceptionPageOptions` that allows callers to supply a
+documentation URI for known exception types, overriding `about:blank`.
+Touches `src/Middleware/Diagnostics/src/DeveloperExceptionPage/`
+(2–3 files).
 
 ### N7: Add QueryCollection.TryGetValues() for multi-value query parameters
 
@@ -190,37 +205,51 @@ encoding is configured.
 ### N11: Fix global.json SDK version constraint blocking local builds
 
 The `global.json` at the repo root pins the SDK to a specific preview
-version (`11.0.100-preview.1.26104.118`) using an exact version match.
-Contributors without that exact preview installed cannot build locally.
-Update `global.json` to use a `rollForward` policy of `latestFeature`
-so compatible SDK versions are accepted, add a `allowPrerelease` flag,
-and update the error message to point to the `restore.sh` /
-`restore.cmd` bootstrapping scripts. Also update
-`.markdownlint.json` to add a rule for validating SDK version
-references in documentation files, and ensure `NuGet.config` includes
-the dotnet-public feed as a fallback source for preview packages.
+version (`11.0.100-preview.1.26104.118`) using an exact version match
+with no `rollForward` policy. Contributors with a compatible but not
+identical SDK installed cannot build locally without running
+`restore.sh` / `restore.cmd` first. Update `global.json` to add a
+`rollForward` policy of `latestFeature` under the `sdk` object so
+that compatible minor SDK versions are accepted, and add
+`allowPrerelease: true` to permit preview SDKs. Also update
+`.markdownlint.json` to add a rule enforcing that any documentation
+file referencing a specific SDK version includes a note directing
+users to run `restore.sh` / `restore.cmd` to bootstrap the required
+SDK. Touches `global.json` and `.markdownlint.json`.
 
 ## Medium
 
-### M1: Implement request rate limiting middleware
+### M1: Add rate limit response headers to the existing rate limiting middleware
 
-Add a `RateLimitingMiddleware` that enforces per-client rate limits
-using configurable policies (fixed window, sliding window, token
-bucket). Support policy selection by route, client IP, or
-authenticated user. Include rate limit headers (`X-RateLimit-Limit`,
-`X-RateLimit-Remaining`, `Retry-After`) in responses. Touches
-`src/Middleware/` (new project), routing integration for per-endpoint
-policies, and DI registration extensions.
+The rate-limiting middleware in `src/Middleware/RateLimiting/src/`
+rejects requests with `429 Too Many Requests` but does not add
+standard rate limit response headers (`X-RateLimit-Limit`,
+`X-RateLimit-Remaining`, `Retry-After`) to either successful responses
+(informing clients of current usage) or rejected responses (informing
+clients when to retry). Add an `IRateLimitHeadersPolicy` interface
+and default implementations that extract metadata from `RateLimitLease`
+(via `TryGetMetadata<RetryAfterMetadata>()`) to populate these
+headers. Add a `EmitRateLimitHeaders` property to `RateLimiterOptions`
+(default `false`) and update the existing `RateLimiterApplicationBuilderExtensions`
+to invoke the header policy. Extend `RateLimiterOptionsExtensions`
+so `AddFixedWindowLimiter` and `AddSlidingWindowLimiter` can optionally
+include limit metadata in the lease. Touches `src/Middleware/RateLimiting/src/`
+(5–6 files).
 
-### M2: Add request/response caching with validation support
+### M2: Add distributed cache backing store to ResponseCaching middleware
 
-Implement a response caching middleware that supports `Cache-Control`
-directives, `ETag` and `Last-Modified` validation, `Vary` header
-awareness, and configurable cache stores (in-memory, distributed).
-Include cache invalidation by key pattern and integration with
-endpoint metadata for per-route cache policies. Touches
-`src/Middleware/` (new or extension), `src/Http/Headers/`, and
-`src/Caching/`.
+The `ResponseCachingMiddleware` in `src/Middleware/ResponseCaching/src/`
+caches responses using `IResponseCache`, but the only built-in
+implementation is `MemoryResponseCache`. There is no
+`IDistributedCache`-backed store, so cached responses cannot be
+shared across server instances in a load-balanced deployment. Add a
+`DistributedResponseCache` class implementing `IResponseCache` that
+serializes and stores `CachedResponse` and `CachedVaryByRules` entries
+using `IDistributedCache`, with configurable key prefix and absolute
+expiry. Add `UseDistributedResponseCaching()` and
+`AddDistributedResponseCaching()` DI extension methods. Touches
+`src/Middleware/ResponseCaching/src/` (4–5 files) and
+`src/Caching/` for any shared distributed-cache helpers.
 
 ### M3: Implement health check aggregation with dependency tree
 
@@ -232,18 +261,24 @@ execution with timeouts per check, machine-readable output
 visualization. Touches `src/Middleware/HealthChecks/`,
 `src/Http/Http.Results/`, and DI extensions.
 
-### M4: Add OpenAPI document customization hooks
+### M4: Add global/cross-document transformer registration to OpenAPI
 
-The OpenAPI document generator in `src/OpenApi/` produces API
-descriptions from endpoints. Add extensibility points: document-level
-transformers (add security schemes, server URLs), operation-level
-transformers (custom parameters, response examples), and schema-level
-transformers (property descriptions, validation rules). Requires
-changes to the document builder, schema generator, and DI registration.
-Also update `Directory.Build.props` to add the new OpenAPI extension
-assembly to the shared framework packaging list, and update
-`eng/Versions.props` to pin the version of the JSON Schema validation
-library used for schema-level transformers.
+The OpenAPI transformer system in `src/OpenApi/src/Transformers/` and
+`src/OpenApi/src/Services/OpenApiOptions.cs` requires transformers to
+be registered per named document via
+`services.AddOpenApi("v1", opts => opts.AddDocumentTransformer<T>())`.
+There is no way to register a transformer that automatically applies
+to ALL named OpenAPI documents without enumerating each name. Add
+`AddOpenApiDocumentTransformer<T>()`, `AddOpenApiOperationTransformer<T>()`,
+and `AddOpenApiSchemaTransformer<T>()` extension methods on
+`IServiceCollection` in `src/OpenApi/src/Extensions/OpenApiServiceCollectionExtensions.cs`
+that store global transformer registrations in a shared
+`OpenApiGlobalTransformersOptions`. Update `OpenApiDocumentService`
+to merge global transformers with per-document transformers during
+document generation. Touches `src/OpenApi/src/Extensions/`,
+`src/OpenApi/src/Services/OpenApiOptions.cs`,
+`src/OpenApi/src/Services/OpenApiDocumentService.cs`, and a new
+`OpenApiGlobalTransformersOptions` class.
 
 ### M5: Implement request body validation middleware
 
@@ -265,33 +300,60 @@ with the existing hub protocol negotiation. Touches
 `src/SignalR/common/`, `src/SignalR/clients/csharp/`, and the
 server-side transport.
 
-### M7: Implement minimal API endpoint filters with dependency injection
+### M7: Add ordered endpoint filter execution via IOrderedEndpointFilter
 
-Add `app.MapGet("/path", handler).AddEndpointFilter<MyFilter>()` that
-supports DI-resolved filters with `before` and `after` hooks. Filters
-should support short-circuiting (returning a result without calling the
-handler), async execution, and ordering. Requires changes to
-`src/Http/Http.Extensions/`, the route endpoint data source, and the
-request delegate pipeline.
+The endpoint filter pipeline in
+`src/Http/Routing/src/Builder/EndpointFilterExtensions.cs` executes
+filters in registration order with no mechanism to control relative
+ordering between filters added at different call sites (e.g., handler
+level vs. group level). Add an `IOrderedEndpointFilter` interface
+in `src/Http/Http.Abstractions/src/` extending `IEndpointFilter` with
+an `int Order { get; }` property. Update
+`RequestDelegateFilterPipelineBuilder` in `src/Http/Routing/src/` to
+sort filters implementing `IOrderedEndpointFilter` by `Order` before
+building the pipeline (filters without an order are treated as
+`Order = 0`). Add `AddEndpointFilter<TFilter>(int order)` convenience
+overloads to `EndpointFilterExtensions` that wrap an existing filter
+with the specified order. Touches `src/Http/Http.Abstractions/src/`
+(new interface), `src/Http/Routing/src/` (pipeline builder and
+extensions), and `src/Http/Http.Extensions/` (delegate factory
+integration).
 
-### M8: Add request decompression middleware
+### M8: Add layered Content-Encoding decompression to RequestDecompression middleware
 
-Implement middleware that automatically decompresses request bodies
-with `Content-Encoding: gzip`, `deflate`, or `br`. Support
-configurable size limits to prevent decompression bombs, content type
-filtering, and integration with the model binding pipeline in MVC.
-Touches `src/Middleware/` (new project), `src/Http/Http/`, and
-`src/Mvc/Mvc.Core/src/ModelBinding/`.
+The `DefaultRequestDecompressionProvider` in
+`src/Middleware/RequestDecompression/src/DefaultRequestDecompressionProvider.cs`
+returns `null` and logs a warning when `Content-Encoding` contains
+multiple tokens (e.g., `Content-Encoding: gzip, br`), silently skipping
+decompression. Per RFC 7231, multiple `Content-Encoding` values
+represent sequential compression applied in order; decompression should
+be applied in reverse. Add support for layered decompression in
+`DefaultRequestDecompressionProvider` by iterating the encoding tokens
+in reverse and chaining their decompression streams. Add an
+`AllowMultipleEncodings` property (default `false`) to
+`RequestDecompressionOptions` as an opt-in guard against unexpected
+multi-encoding payloads. Update `RequestDecompressionMiddleware` to
+correctly dispose all chained streams in the `finally` block. Touches
+`src/Middleware/RequestDecompression/src/` (3–4 files).
 
-### M9: Implement structured exception handling with ProblemDetails
+### M9: Add per-exception-type ProblemDetails customization to ExceptionHandlerOptions
 
-Add a global exception handling middleware that catches unhandled
-exceptions and converts them to RFC 7807 `ProblemDetails` responses.
-Support exception-to-status-code mapping, development vs production
-detail levels, custom problem type URIs, and integration with the
-existing `IExceptionHandler` interface. Touches
-`src/Middleware/Diagnostics/`, `src/Http/Http.Abstractions/`, and
-`src/Mvc/Mvc.Core/`.
+The `ExceptionHandlerOptions` in
+`src/Middleware/Diagnostics/src/ExceptionHandler/ExceptionHandlerOptions.cs`
+supports mapping exceptions to HTTP status codes via
+`StatusCodeSelector`, but provides no mechanism to map exception types
+to structured `ProblemDetails` instances with custom `Type` URIs,
+`Title`, or `Detail` fields. Add an `ExceptionToProblemDetailsMapper`
+delegate property of type
+`Func<HttpContext, Exception, ProblemDetails?>?` to
+`ExceptionHandlerOptions`. Update `ExceptionHandlerMiddlewareImpl` to
+invoke the mapper before falling back to `IProblemDetailsService`,
+merging the returned `ProblemDetails` into the response. Add
+`MapExceptionToProblemDetails<TException>()` and
+`MapExceptionToProblemDetails()` convenience extension methods to
+`ExceptionHandlerServiceCollectionExtensions` for registering
+per-type mappings without replacing the entire delegate. Touches
+`src/Middleware/Diagnostics/src/ExceptionHandler/` (4 files).
 
 ### M10: Add HTTP/3 QUIC connection metrics
 
@@ -364,16 +426,28 @@ Jaeger container, update `eng/Dependencies.props` with the
 OpenTelemetry SDK package references, and add a `docs/Tracing.md`
 guide on configuring distributed tracing for ASP.NET Core applications.
 
-### W5: Implement server-sent events with backpressure
+### W5: Add keep-alive, retry, and connection lifecycle management to ServerSentEvents
 
-Add `Results.ServerSentEvents(stream)` that produces SSE responses
-with proper formatting, automatic keep-alive, client disconnection
-detection, and backpressure support (pause producing when the client
-falls behind). Include a typed `SseClient<T>` for server-side push
-with serialization, retry configuration, and event filtering.
-Changes span `src/Http/Http.Results/`, `src/Http/Http/`,
-`src/Hosting/Server.Abstractions/`, `src/SignalR/` (for comparison),
-and new SSE project files.
+The `ServerSentEventsResult<T>` in `src/Http/Http.Results/src/ServerSentEventsResult.cs`
+provides basic SSE responses but lacks production-ready lifecycle
+features: automatic keep-alive heartbeats (periodic `:` comment lines
+to prevent proxy/firewall disconnection), configurable reconnection
+retry interval (the SSE `retry:` field), last-event-ID echo-back for
+resumption on reconnect, and a server-side push abstraction for
+out-of-band event emission. Add a `ServerSentEventsOptions` class with
+`KeepAliveInterval`, `ReconnectInterval`, and `DefaultEventType`
+properties; update `ServerSentEventsResult<T>` to honour these options
+and inject keep-alive comments; add a `ChannelBackedSseResult<T>` that
+wraps a `Channel<SseItem<T>>` for push semantics; add an
+`ISseConnectionManager` DI service backed by a `ConcurrentDictionary`
+for managing active connections by group name; and integrate keep-alive
+timer logic with `IHostedService` for background heartbeat emission.
+Changes span `src/Http/Http.Results/` (new result types and options),
+`src/Http/Http.Extensions/` (DI registration extensions),
+`src/Http/Http/src/` (response flush feature interface),
+`src/Hosting/` (IHostedService integration),
+`src/Http/Routing/src/` (endpoint metadata), and
+`src/DefaultBuilder/` (DI wiring).
 
 ### W6: Add GraphQL endpoint support alongside REST
 
@@ -417,17 +491,30 @@ health dashboard. Changes span `src/Hosting/`, `src/Http/Http/`,
 `src/Middleware/`, a new `src/Plugins/` project, DI integration,
 and the `WebApplicationBuilder`.
 
-### W10: Add WebAssembly server-side rendering integration
+### W10: Integrate Blazor SSR component rendering with output caching infrastructure
 
-Extend Blazor's server-side rendering to support streaming SSR with
-progressive hydration: render initial HTML on the server, stream
-component updates as they complete, and hydrate interactive
-components on the client. Include component-level render mode
-selection (static, server, WebAssembly), prerendering cache, and
-fallback for non-JavaScript clients. Changes span `src/Components/`,
-`src/Hosting/`, `src/Http/Http.Results/`, `src/Mvc/Mvc.Core/`
-(tag helpers), `src/SignalR/` (for server interactivity), and
-JavaScript interop.
+Blazor's server-side rendering in `src/Components/Endpoints/src/`
+re-renders static Blazor components on every request even when their
+output depends only on stable route parameters or public data with no
+per-user personalization. The existing output caching infrastructure
+in `src/Middleware/OutputCaching/src/` is not wired to Blazor component
+rendering. Integrate the two: add a `[BlazorOutputCache]` attribute in
+`src/Components/Web/src/` for marking static components as cacheable;
+implement a `BlazorComponentOutputCachePolicy` in
+`src/Middleware/OutputCaching/src/` that generates cache keys from
+component type, route data, and query parameters and delegates storage
+to the registered `IOutputCacheStore`; add bypass logic in
+`EndpointHtmlRenderer` (`src/Components/Endpoints/src/Rendering/`)
+to skip re-rendering and serve cached HTML when a warm cache entry
+exists; add a `BlazorOutputCacheTagHelper` in
+`src/Mvc/Mvc.TagHelpers/src/` for applying the policy from Razor
+views; and add DI registration in `src/DefaultBuilder/src/`. Changes
+span `src/Components/Endpoints/src/` (renderer integration),
+`src/Components/Web/src/` (attribute),
+`src/Middleware/OutputCaching/src/` (new policy),
+`src/Mvc/Mvc.TagHelpers/src/` (tag helper),
+`src/DefaultBuilder/src/` (DI wiring), and
+`src/Hosting/` (configuration options).
 
 ### W11: Consolidate build infrastructure and documentation across all projects
 

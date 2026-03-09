@@ -142,38 +142,46 @@ in `AbstractSoftAssertions`. Fix the recursive comparison flow in
 `AbstractAssert` to route failures through `SoftAssertions`'s
 `AssertionErrorCollector` instead of throwing directly via `Failures`.
 
-### N2: Fix AbstractIterableAssert.extracting losing custom comparator after extraction
+### N2: Fix AbstractIterableAssert.usingComparatorForType not applying when element comparator is already set
 
 In `assertj-core/src/main/java/org/assertj/core/api/AbstractIterableAssert.java`,
-calling `usingComparatorForType(cmp, MyType.class)` followed by
-`extracting(MyType::getField)` creates a new `ListAssert` that does not
-propagate the registered type comparators from `TypeComparators`. The
-extracted assertion uses default `equals` comparison. Fix `extracting` to
-propagate the parent assertion's `TypeComparators` map to the new
-`ListAssert` returned.
+the `usingComparatorForType(Comparator, Class)` method only installs a
+wrapping `ExtendedByTypesComparator` when `iterables.getComparator() == null`.
+If the user previously called `usingElementComparator(existingCmp)` (making
+`iterables.getComparator()` non-null), a subsequent
+`usingComparatorForType(newCmp, MyType.class)` call updates `comparatorsByType`
+but does NOT update the `iterables` strategy, so `newCmp` is silently
+ignored during element comparison. Fix `usingComparatorForType` to also
+update the element comparison strategy when an `ExtendedByTypesComparator`
+is already in use, by rebuilding it with the updated `comparatorsByType` map.
 
-### N3: Fix DescriptionFormatter not escaping percent signs in user-provided descriptions
+### N3: Fix TextDescription.value throwing on percent signs when extra args are provided
 
-In `assertj-core/src/main/java/org/assertj/core/error/DescriptionFormatter.java`,
-the `format` method uses `String.format` internally. When users provide
-assertion descriptions containing literal `%` characters via `describedAs("100% done")`,
-the formatter throws `java.util.UnknownFormatConversionException`. Fix
-`format` to escape `%` characters in the description text before passing
-to `String.format`. Also update `CONTRIBUTING.md` to add a
-"Error Message Formatting" section documenting the string formatting
-conventions and the requirement to escape user-provided text before
-passing to `String.format`.
+In `assertj-core/src/main/java/org/assertj/core/description/TextDescription.java`,
+the `value()` method calls `org.assertj.core.util.Strings.formatIfArgs(value, args)`.
+When `args` is non-null and non-empty, `formatIfArgs` calls
+`value.formatted(args)` directly. If the user's description string contains
+a literal `%` character not intended as a format specifier (for example
+`describedAs("100% done", extraContext)`), the `%` is interpreted as the
+start of a format conversion, throwing `java.util.UnknownFormatConversionException`.
+Fix `Strings.formatIfArgs` in `assertj-core/src/main/java/org/assertj/core/util/Strings.java`
+so that when args are present it escapes `%` signs not followed by valid
+format-conversion characters before calling `.formatted(args)`, consistent
+with the no-args branch that already calls `escapePercentExceptWhenFollowedBy_n`.
 
-### N4: Fix AbstractDateAssert.isCloseTo not respecting custom date comparator
+### N4: Add TimeUnit-based isCloseTo overloads to AbstractDateAssert
 
 In `assertj-core/src/main/java/org/assertj/core/api/AbstractDateAssert.java`,
-the `isCloseTo(Date, long, TimeUnit)` method delegates to
-`Dates.assertIsCloseTo` in `internal/Dates.java`, which computes the
-difference using `Date.getTime()` arithmetic directly. When a custom
-comparator is registered via `usingComparator`, it is ignored for the
-closeness check. Fix `assertIsCloseTo` in `Dates.java` to use the
-registered comparator's comparison semantics when determining temporal
-proximity.
+`isCloseTo` only accepts a delta in raw milliseconds via
+`isCloseTo(Date other, long deltaInMilliseconds)`. There is no overload
+accepting a `java.util.concurrent.TimeUnit`, forcing callers to convert
+manually (e.g., `TimeUnit.SECONDS.toMillis(5)`). Add
+`isCloseTo(Date other, long delta, TimeUnit unit)` and
+`isCloseTo(String dateAsString, long delta, TimeUnit unit)` to
+`AbstractDateAssert` that compute `unit.toMillis(delta)` and delegate to
+`Dates.assertIsCloseTo` in `internal/Dates.java`. Validate that `delta`
+is non-negative in the new overloads, throwing `IllegalArgumentException`
+with a descriptive message when it is not.
 
 ### N5: Fix VerboseCondition not including the mapped value in the failure description
 
@@ -185,14 +193,20 @@ actual value's representation. Fix `VerboseCondition.matches` to include
 the `StandardRepresentation` of the tested value in the failure
 description.
 
-### N6: Fix Offset.strictOffset not failing when values are exactly equal
+### N6: Fix Offset.strictOffset Javadoc examples using wrong factory method and Numbers.assertIsCloseTo wrong file reference
 
 In `assertj-core/src/main/java/org/assertj/core/data/Offset.java`, the
-`strictOffset` factory method creates an offset that should fail when the
-difference is exactly zero (strict inequality). However, the comparison
-in `internal/Comparables.java` method `assertIsCloseTo` uses `<=` for
-strict offsets instead of `<`. Fix the comparison operator used when
-the offset is strict to properly reject zero-difference values.
+`strictOffset` method's Javadoc code examples mistakenly call `offset()`
+(non-strict factory) in all three sample assertions instead of
+`strictOffset()`, making the documented failure cases incorrect. For
+example, `assertThat(8.1).isCloseTo(8.0, offset(0.1))` would pass
+(non-strict `<=`), not fail as the example claims. Additionally,
+`internal/Comparables.java` is sometimes incorrectly referenced for
+`assertIsCloseTo` — the actual implementation lives in
+`internal/Numbers.java`. Fix the Javadoc examples in `Offset.java` to use
+`strictOffset()` and add a clarifying comment in
+`Numbers.assertIsCloseTo` explaining why the early-return `areEqual` guard
+correctly passes for strict offsets when `diff == 0` (since `0 < any positive strictOffset`).
 
 ### N7: Fix MappedCondition.toString not including the mapping function description
 
@@ -214,25 +228,32 @@ implementation differences across JDK versions. Fix `deepEquals` to
 check for `Optional` and compare by `Optional.equals` semantics before
 falling through to field-level comparison.
 
-### N9: Fix AbstractStringAssert.containsPattern not supporting Pattern flags
+### N9: Fix AbstractCharSequenceAssert.doesNotMatch missing Pattern overload
 
-In `assertj-core/src/main/java/org/assertj/core/api/AbstractStringAssert.java`,
-`containsPattern(String regex)` compiles the pattern without flags. When
-users need case-insensitive matching, they must use inline flags
-`(?i)` in the pattern string. The overloaded `containsPattern(Pattern)`
-variant is missing. Fix by adding a `containsPattern(java.util.regex.Pattern)`
-overload that accepts a pre-compiled pattern with flags, delegating to
-`Strings.assertContainsPattern` in `internal/Strings.java`.
+In `assertj-core/src/main/java/org/assertj/core/api/AbstractCharSequenceAssert.java`,
+`doesNotMatch(CharSequence regex)` compiles a pattern from the string at
+call time without flags. When users need flag-sensitive negative matching
+(e.g., case-insensitive), they must embed inline flags (`(?i)`) in the
+regex string. A `doesNotMatch(java.util.regex.Pattern pattern)` overload
+accepting a pre-compiled `Pattern` is absent (unlike `containsPattern`,
+which already has both `CharSequence` and `Pattern` overloads). Add
+`doesNotMatch(Pattern pattern)` to `AbstractCharSequenceAssert` that
+delegates to `Strings.assertDoesNotMatch(AssertionInfo, CharSequence, Pattern)`
+in `internal/Strings.java`, adding that internal method alongside the
+existing `assertDoesNotMatch(AssertionInfo, CharSequence, Pattern)` logic.
 
-### N10: Fix AbstractMapAssert.containsExactlyInAnyOrderEntriesOf not detecting duplicate keys
+### N10: Fix AbstractMapAssert.containsExactlyInAnyOrderEntriesOf not reporting value mismatches for same keys
 
 In `assertj-core/src/main/java/org/assertj/core/api/AbstractMapAssert.java`,
-`containsExactlyInAnyOrderEntriesOf(Map)` delegates to `Maps.assertContainsExactlyInAnyOrder`
-in `internal/Maps.java`. If the expected map and actual map both contain
-the same key with different values, and the actual map has additional
-entries, the error message reports "missing entries" but not the value
-mismatch. Fix `assertContainsExactlyInAnyOrder` to separately report
-entries with matching keys but differing values.
+`containsExactlyInAnyOrderEntriesOf(Map)` delegates to
+`containsOnly(toEntries(map))` which calls `Maps.assertContainsOnly` in
+`internal/Maps.java`. When the actual and expected maps share a key but
+differ on its value (e.g., actual has `{a=1}` and expected has `{a=2}`),
+`assertContainsOnly` reports the expected entry `<a=2>` as "not found" and
+actual entry `<a=1>` as "not expected" rather than a targeted value
+mismatch. Fix `Maps.assertContainsOnly` to detect entries whose keys match
+but whose values differ and report them as value mismatches separately from
+genuinely missing or unexpected entries.
 
 ## Medium
 

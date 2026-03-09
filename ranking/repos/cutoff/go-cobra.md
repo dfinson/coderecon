@@ -381,15 +381,21 @@ propagation, a new telemetry module, the hook system, error handling,
 CLI generator templates for instrumented scaffolding, and optional
 dependency management.
 
-### N11: Fix .github/labeler.yml not labeling PRs that modify the doc/ subpackage
+### N11: Fix .github/labeler.yml not labeling PRs that modify the site/ content
 
-The `.github/labeler.yml` defines label rules for file path patterns
-but has no entry for `doc/*.go` — changes to documentation generators
-(`man_docs.go`, `md_docs.go`, `rest_docs.go`, `yaml_docs.go`) are not
-automatically labeled in PRs. Add a `documentation` label rule matching
-`doc/**` and `site/**`, and add a `completion` label rule matching
-`*_completions.go` and `shell_completions.go`. Update the `MAINTAINERS`
-file to use a consistent format with GitHub usernames.
+The `.github/labeler.yml` defines label rules for file path patterns:
+`area/docs-generation` matches `doc/**`, `area/shell-completion` matches
+`./*completions*`, `area/cobra-command` matches command files, and
+`area/flags` matches `args*.go`. However, there is no label covering
+`site/**` (the Hugo-based documentation site content under
+`site/content/`), so PRs that add or modify user-guide pages or
+example content receive no label. Update `.github/labeler.yml` to
+extend the `area/docs-generation` rule to also match `site/**`, and
+add a new `area/flag-groups` label rule matching `flag_groups.go` and
+`active_help.go` (currently unlabeled). Update the `MAINTAINERS` file
+to add an `emeritus` section (rename the existing `inactive:` key to
+`emeritus:`) for consistency with common open-source maintainer file
+conventions.
 
 ### M11: Restructure project documentation and contributor resources
 
@@ -404,23 +410,30 @@ versions are tested in `.github/workflows/test.yml` and which shell
 completions are supported. Create a `doc/README.md` documenting the doc
 generation API and output formats. Update `Makefile` to add a `docs`
 target that runs all four doc generators and outputs to
-`site/content/`. Add `SECURITY.md` with a vulnerability disclosure
-process and response timeline.
+`site/content/`. Update `SECURITY.md` to add a cobra-specific
+vulnerability scope section that describes which components (completion
+scripts, doc generators, CLI generator) are in scope, and add an
+expected response SLA table.
 
 ### W11: Overhaul CI pipeline and developer tooling configuration
 
-Expand `.github/workflows/test.yml` to add a dedicated lint job using
-`.golangci.yml` configuration, a documentation generation test that
-runs all four doc generators (`man_docs.go`, `md_docs.go`,
-`rest_docs.go`, `yaml_docs.go`) and verifies output, and a completion
-script generation test that produces all four shell scripts and
-validates their syntax. Add `.github/dependabot.yml` with Go module
-dependency update entries on a weekly schedule. Update `Makefile` to
-add `lint`, `generate`, and `verify-generated` targets. Create a
-`site/content/changelog.md` generated from categorized release notes.
-Update `.github/copilot-instructions.md` with project-specific coding
-guidelines for the completion engine and doc generators. Update
-`go.mod` to add comment annotations explaining the minimum Go version
-requirement and the `go.yaml.in/yaml/v3` dependency usage. Add
-`.github/workflows/labeler.yml` verification that the labeler config
-matches the current file structure.
+Expand `.github/workflows/test.yml` to add a documentation generation
+test job that runs all four doc generators (`man_docs.go`, `md_docs.go`,
+`rest_docs.go`, `yaml_docs.go`) against a sample command tree and
+verifies non-empty output, and a completion script generation test job
+that invokes `__complete` for each of the four shells (bash, zsh, fish,
+PowerShell) and validates their syntax using shell-specific validators.
+Update `Makefile` to add `generate` and `verify-generated` targets: the
+`generate` target runs all four doc generators and outputs to a
+temporary directory, while `verify-generated` diffs the output against
+the committed `site/content/` to catch uncommitted doc changes. Create
+`site/content/changelog.md` with a structured changelog template grouped
+by version (Features, Bug Fixes, Breaking Changes). Update
+`.github/copilot-instructions.md` with project-specific coding
+guidelines covering the completion engine's `ValidArgsFunction`/
+`RegisterFlagCompletionFunc` patterns, the doc generators' shared
+`printOptionsHelper` pattern, and the `MarkFlagsRequiredTogether`/
+`MarkFlagsMutuallyExclusive` annotation conventions in `flag_groups.go`.
+Update `go.mod` to add a `// require` comment block explaining the
+minimum Go version rationale and the role of `go.yaml.in/yaml/v3` in
+the doc generators.

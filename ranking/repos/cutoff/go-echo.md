@@ -96,14 +96,16 @@ way to specify defaults for multiple parameters at once. Add a
 `QueryParamDefaults(defaults map[string]string)` method to `Context`
 that returns a `url.Values` map filled with defaults for missing keys.
 
-### N2: Fix DefaultRouter not returning 405 Method Not Allowed
+### N2: Add AllowedMethods query to DefaultRouter
 
-The `DefaultRouter.Find()` method in `router.go` returns a "not found"
-result when a path matches but the HTTP method does not. It does not
-distinguish between "path not found" (404) and "method not allowed"
-(405). Fix `Find()` to check if the path exists with other methods
-and return the `Allow` header listing valid methods, enabling the
-framework to respond with `405 Method Not Allowed` instead of `404`.
+The `DefaultRouter` in `router.go` handles 405 responses internally
+during request routing, but provides no way to query which HTTP methods
+are registered for a given path without initiating a full request
+through the router. Add an `AllowedMethods(path string) []string`
+method to `DefaultRouter` that traverses the radix tree for the given
+path and returns the set of registered HTTP methods, or an empty slice
+if the path is not found. This enables middleware and application code
+to inspect available methods programmatically.
 
 ### N3: Add binding error detail to BindingError message
 
@@ -114,15 +116,18 @@ parameter, the error says "invalid value" without stating the expected
 type. Add an `ExpectedType` field to `BindingError` and populate it in
 all `ValueBinder` type conversion methods (e.g., `Int64()`, `Float64()`).
 
-### N4: Fix CORS middleware not handling multiple Access-Control-Request-Headers
+### N4: Fix CORS middleware not validating Access-Control-Request-Headers against AllowHeaders
 
-The CORS middleware in `middleware/cors.go` reads
-`Access-Control-Request-Headers` from preflight requests but does not
-split or validate individual header names when `AllowHeaders` is
-configured with specific values. A preflight with multiple headers in
-a single comma-separated value may be incorrectly rejected. Fix the
-header comparison in `CORSConfig.ToMiddleware()` to properly split and
-trim the request header values before matching.
+The CORS middleware in `middleware/cors.go` accepts preflight requests
+and responds with configured `AllowHeaders` regardless of whether the
+headers listed in `Access-Control-Request-Headers` are a subset of the
+configured `AllowHeaders`. When specific `AllowHeaders` are configured,
+the middleware should split and trim the comma-separated
+`Access-Control-Request-Headers` value, check each header against the
+allowed list (case-insensitively), and omit the
+`Access-Control-Allow-Headers` response header (causing the browser to
+fail the CORS check) when the requested headers are not a subset. Fix
+`CORSConfig.ToMiddleware()` to perform this server-side validation.
 
 ### N5: Add CIDR notation support to rate limiter identifier extraction
 
@@ -172,14 +177,15 @@ to inspect which trust options are active. Add a `String()` method to
 `ipChecker` that lists the active trust options and configured IP
 ranges in a human-readable format.
 
-### N10: Fix Group.Static not applying group-level middleware
+### N10: Add Middlewares() introspection method to Group
 
-The `Group.Static()` method in `group.go` registers a static file
-route using `e.Static()` on the parent Echo instance rather than going
-through the group's middleware chain. Middleware registered via
-`g.Use()` is bypassed for static routes. Fix `Group.Static()` to
-wrap the static handler with the group's middleware stack, consistent
-with how `Group.GET()` works.
+The `Group` struct in `group.go` supports registering middleware via
+`g.Use()` but provides no way to inspect which middleware is currently
+registered on a group. The `Echo` struct exposes `Middlewares()` and
+`PreMiddlewares()` methods for middleware introspection, but `Group`
+has no equivalent. Add a `Middlewares() []MiddlewareFunc` method to
+`Group` that returns a copy of the group's registered middleware slice,
+consistent with how `Echo.Middlewares()` works in `echo.go`.
 
 ## Medium
 
@@ -258,40 +264,54 @@ middleware. Changes span `echo.go` for route option handling,
 enforcement during body reading, and `group.go` for group-level
 default limits.
 
-### M8: Add request/response logging middleware with structured output
+### M8: Extend RequestLogger middleware with header capture and status-based log levels
 
 The `RequestLogger` middleware in `middleware/request_logger.go`
-provides basic logging but does not output structured JSON logs with
-configurable fields. Add structured logging support with field
-selection (method, path, status, latency, body size, headers, user
-agent, request ID), log level based on status code, and pluggable
-output format (JSON, logfmt, text). Changes span
-`middleware/request_logger.go` for structured output, `context.go`
-for timing data, `response.go` for response size tracking, and
-`middleware/request_id.go` for ID integration.
+supports field selection for common fields (method, path, status,
+latency, size, user agent, request ID) but does not support capturing
+specific request or response headers as log fields, nor does it
+distinguish log severity based on HTTP status code ranges (e.g., 4xx
+as `WARN`, 5xx as `ERROR`). Add a `LogHeaders []string` field to
+`RequestLoggerConfig` that captures the named request headers into
+`RequestLoggerValues`, and a `StatusLevel func(status int) slog.Level`
+field that maps status codes to log levels in `LogValuesFunc`-based
+output. Update `RequestLogger()` to use status-based severity in its
+default slog output. Changes span `middleware/request_logger.go` for
+the new config fields and default handler, `context.go` for header
+access helpers, `response.go` for response header capture after
+write, and `middleware/request_id.go` for request ID header
+propagation.
 
-### M9: Implement virtual host routing with per-host middleware
+### M9: Add wildcard host pattern support to virtual host routing
 
-The `vhost.go` module provides basic virtual host routing but does
-not support per-host middleware stacks or per-host error handlers.
-Add `VHost` configuration that maps hostnames to sub-Echo instances,
-each with independent middleware, routes, and error handlers. Support
-wildcard host patterns (e.g., `*.example.com`). Changes span
-`vhost.go` for host-to-instance mapping, `echo.go` for sub-instance
-creation, `server.go` for request dispatch, and `group.go` for
-host-scoped groups.
+The `NewVirtualHostHandler` function in `vhost.go` matches incoming
+requests to registered `*Echo` instances by exact `Host` header
+comparison using a `map[string]*Echo`. It does not support wildcard
+host patterns (e.g., `*.example.com`), so each subdomain must be
+registered individually. Add a `NewVirtualHostHandlerWithWildcards`
+function that accepts a `[]VHostEntry` slice where each entry pairs
+a host pattern (supporting `*` as a wildcard prefix) with an `*Echo`
+instance. Pattern matching should try exact matches first, then
+wildcard matches in registration order. Changes span `vhost.go` for
+the new pattern-matching handler and `VHostEntry` type, `echo.go` for
+a convenience constructor, `server.go` for host extraction from
+forwarded headers, and `group.go` for wildcard-scoped sub-groups.
 
-### M10: Add automatic HTTPS redirect with HSTS support
+### M10: Add HSTS injection and path exclusions to HTTPS redirect middleware
 
 The `Redirect` middleware in `middleware/redirect.go` handles basic
-HTTP-to-HTTPS redirection but does not support HSTS headers or
-configurable redirect status codes. Add HSTS header injection with
-`max-age`, `includeSubDomains`, and `preload` support. Add
-configuration for redirect status code (301 vs 308) and path
-exclusions. Changes span `middleware/redirect.go` for HSTS and
-configuration, `middleware/secure.go` for HSTS header coordination,
-`echo.go` for global HSTS configuration, and `server.go` for
-TLS-aware redirect decisions.
+HTTP-to-HTTPS redirection but does not inject `Strict-Transport-Security`
+(HSTS) headers on redirected or HTTPS responses, nor does it support
+path exclusions to skip redirection for specific routes (e.g.,
+health-check endpoints). While `middleware/secure.go` provides HSTS
+via `SecureConfig`, there is no way to combine HSTS injection with the
+redirect middleware without adding both separately. Add `HSTSMaxAge`,
+`HSTSIncludeSubdomains`, `HSTSPreload`, and `ExcludedPaths []string`
+fields to `RedirectConfig` in `middleware/redirect.go`, injecting the
+HSTS header on HTTPS requests and skipping redirect for excluded paths.
+Update `middleware/secure.go` to document the coordination between the
+two middlewares to avoid duplicate HSTS headers, and update `echo.go`
+with a convenience constructor that wires both together.
 
 ## Wide
 
@@ -441,28 +461,26 @@ with `ToMiddleware()` method, test file requirements, and the `README.md`
 update checklist. Add a `docs/` directory with `architecture.md`
 describing the `Echo` → `Router` → `Context` request lifecycle and the
 middleware chain execution model. Update `README.md` to add a middleware
-reference table listing all 23 middleware files in `middleware/` with
+reference table listing all 24 middleware files in `middleware/` with
 one-line descriptions. Update `API_CHANGES_V5.md` to document all v4 to
 v5 breaking changes that are currently missing. Update
 `.github/ISSUE_TEMPLATE.md` to add sections for middleware-specific bug
 reports with required configuration details.
 
-### W11: Overhaul CI/CD pipeline and developer tooling
+### W11: Overhaul developer tooling and documentation infrastructure
 
-Expand `.github/workflows/echo.yml` to add separate jobs for linting
-(the current workflow has no lint job), benchmark comparison against
-the base branch using `go test -bench`, and documentation generation
-verification. Add a `docs/` directory with `migration-v4-to-v5.md`
+Add a `.golangci.yml` configuration at the repo root enabling `govet`,
+`errcheck`, `staticcheck`, and `gocritic` linters, and update
+`.github/workflows/checks.yml` to use it instead of invoking linters
+manually. Add a `docs/` directory with `migration-v4-to-v5.md`
 covering all API changes from `API_CHANGES_V5.md` with before/after
 code examples, `middleware-guide.md` explaining the `Config` struct
 patterns used across all middlewares with the `ToMiddleware()` method
 convention, and `testing.md` documenting the `echotest/` testing
-utilities. Create a `.golangci.yml` configuration enabling `govet`,
-`errcheck`, `staticcheck`, and `gocritic` linters. Update `Makefile`
-to add `lint`, `bench`, and `docs` targets. Update `.github/stale.yml`
-to better categorize stale issue handling with separate rules for bugs,
-features, and questions. Update `CLAUDE.md` with expanded project-
-specific coding conventions and architectural decision records. Add
-per-package coverage targets to `codecov.yml` as described in N11.
-Update `go.mod` and `go.sum` to document the module's dependency
-policy in comments.
+utilities. Update `Makefile` to add a `docs` target that validates the
+`docs/` directory structure. Update `.github/stale.yml` to better
+categorize stale issue handling with separate rules for bugs, features,
+and questions. Update `CLAUDE.md` with expanded project-specific
+coding conventions and architectural decision records. Add per-package
+coverage targets to `codecov.yml` as described in N11. Update
+`go.mod` to ensure the module's minimum Go version comment is current.

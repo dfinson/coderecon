@@ -107,24 +107,28 @@ the truncation logic can produce an off-by-one scale count because the
 minus sign is included in the digit count. Fix the precision/scale
 calculation to strip the sign before measuring digits.
 
-### N3: Add WithErrorCode() fluent extension for setting machine-readable error codes
+### N3: Add WithErrorCode() dynamic overloads for instance-based error codes
 
-The `ValidationFailure` class in `Results/ValidationFailure.cs` has an
-`ErrorCode` property that defaults to the validator class name. There is
-no fluent extension to set a custom short code (e.g., `"ERR_TOO_SHORT"`)
-in the rule chain. Add a `WithErrorCode(string code)` extension method
-in `DefaultValidatorOptions.cs` that sets the `ErrorCode` on the current
-`RuleComponent`, mirroring how `WithMessage()` sets the error message.
+The `DefaultValidatorOptions.cs` provides `WithErrorCode(string code)` to
+set a static error code on a rule, but unlike `WithMessage()` there are no
+overloads that accept a delegate to derive the code at validation time.
+Add `WithErrorCode<T, TProperty>(Func<T, string> codeProvider)` and
+`WithErrorCode<T, TProperty>(Func<T, TProperty, string> codeProvider)`
+extension methods in `DefaultValidatorOptions.cs` that store the delegate
+in `RuleComponent` and invoke it when building the `ValidationFailure`,
+mirroring how `WithMessage(Func<T, string>)` works for error messages.
 
-### N4: Add StringEnum validator for case-insensitive string-to-enum matching
+### N4: Add generic IsEnumName<TEnum>() convenience overload for string-to-enum validation
 
-The `EnumValidator` in `Validators/EnumValidator.cs` validates that a
-numeric value is defined in an enum, but there is no built-in validator
-for string properties that should match enum member names. Add a
-`StringEnumValidator<TEnum>` in `Validators/StringEnumValidator.cs` that
-validates a string property against `Enum.GetNames<TEnum>()` with
-configurable case sensitivity, and wire it with an `IsStringEnum<TEnum>()`
-extension in `DefaultValidatorExtensions.cs`.
+The `IsEnumName` extension in `DefaultValidatorExtensions.cs` validates a
+string property against enum member names but requires the caller to pass
+an explicit `Type` argument (e.g., `IsEnumName(typeof(MyEnum))`). There
+is no generic overload that infers the enum type from a type parameter,
+forcing unnecessary boilerplate. Add a generic
+`IsEnumName<T, TEnum>(this IRuleBuilder<T, string> ruleBuilder, bool caseSensitive = true)`
+overload in `DefaultValidatorExtensions.cs` that delegates to the existing
+`StringEnumValidator<T>` implementation using `typeof(TEnum)`, providing a
+cleaner call site: `RuleFor(x => x.Status).IsEnumName<MyModel, StatusEnum>()`.
 
 ### N5: Fix MessageFormatter not escaping braces in custom property values
 
@@ -170,26 +174,31 @@ the `Severity` level (Error, Warning, Info) of each `ValidationFailure`.
 Fix `ToString()` to prefix each message with its severity when the
 severity is not the default `Error`, e.g., `"[Warning] Name is too short"`.
 
-### N10: Add WithSeverity overload accepting a Func<T, Severity> for conditional severity
+### N10: Add WithSeverity() overloads for IRuleBuilderOptionsConditions
 
-The `DefaultValidatorOptions.cs` file provides `WithSeverity(Severity)`
-for setting a fixed severity on a rule component, but there is no
-overload that accepts a `Func<T, Severity>` to compute the severity
-based on the object being validated. Add a `WithSeverity(Func<T, Severity>)`
-overload that defers severity evaluation to validation time, storing the
-delegate in `RuleComponent` alongside the existing fixed-severity path.
+The `WithSeverity` extension methods in `DefaultValidatorOptions.cs`
+target `IRuleBuilderOptions<T, TProperty>` only. Rules that use
+`Must()` or `Custom()` return `IRuleBuilderOptionsConditions<T, TProperty>`,
+leaving those rules unable to call `WithSeverity()` without an explicit
+cast. Add mirroring `WithSeverity(Severity)`, `WithSeverity(Func<T, Severity>)`,
+`WithSeverity(Func<T, TProperty, Severity>)`, and
+`WithSeverity(Func<T, TProperty, ValidationContext<T>, Severity>)` overloads
+on `IRuleBuilderOptionsConditions<T, TProperty>` in `DefaultValidatorOptions.cs`,
+storing the severity provider in `RuleComponent` via the existing
+`SeverityProvider` path.
 
 ### N11: Update FluentValidation.csproj packaging and ReadTheDocs configuration
 
 The `FluentValidation.csproj` has `EnablePackageValidation` set twice
-(duplicate property). Remove the duplicate, add a `PackageIcon`
-property referencing `fv-small.png`, and set `MinVerTagPrefix` to `v`
-for automatic version calculation from git tags. Also update
-`.readthedocs.yaml` to use Python 3.12 and Ubuntu 24.04, update
-`docs/requirements_rtd.txt` to pin `sphinx>=7.0` and
-`sphinx-rtd-theme>=2.0`, and update `docs/conf.py` to set the
-`project` variable and `html_logo` path. Ensure `nuget.config`
-includes the `dotnet-public` feed as a package source.
+(duplicate property at lines 12 and 16). Remove the duplicate. Also
+update `.readthedocs.yaml` to use Python 3.12 and Ubuntu 24.04 (currently
+`ubuntu-22.04` and `python: "3.11"`), update `docs/requirements_rtd.txt`
+to pin `sphinx>=7.0` and `sphinx-rtd-theme>=2.0` (currently
+`sphinx==1.8.5` and `sphinx-rtd-theme==0.4.3`), update `docs/conf.py`
+to set the `html_logo` path to `_static/logo.png`, and update
+`nuget.config` to add the `dotnet-public` feed
+(`https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-public/nuget/v3/index.json`)
+as a package source alongside the existing `nuget.org` entry.
 
 ## Medium
 
@@ -204,14 +213,19 @@ filters to the `"Create"` ruleset. Requires changes to `ChildValidatorAdaptor`,
 `ValidationStrategy`, and the `ValidationContext` threading in
 `Internal/RuleBase.cs`.
 
-### M2: Add async predicate support to When()/Unless() conditions
+### M2: Add When()/Unless()/WhenAsync()/UnlessAsync() conditions for RuleForEach collection rules
 
-The `ConditionBuilder` in `Internal/ConditionBuilder.cs` accepts
-synchronous `Func<T, bool>` predicates for `When()` and `Unless()`.
-Add `WhenAsync(Func<T, CancellationToken, Task<bool>>)` and
-`UnlessAsync()` overloads that support asynchronous condition evaluation.
-Requires changes to `ConditionBuilder`, the async validation path in
-`RuleBase.cs`, and registration of async conditions in `RuleComponent`.
+Rules built with `RuleForEach()` return `IRuleBuilderInitialCollection<T, TCollectionElement>`,
+which has no condition methods — `When()`, `Unless()`, `WhenAsync()`, and
+`UnlessAsync()` are defined only for `IRuleBuilderOptions<T, TProperty>` and
+`IRuleBuilderOptionsConditions<T, TProperty>` in `DefaultValidatorOptions.cs`.
+As a result, applying a rule-level condition to an entire `RuleForEach` block
+is impossible without wrapping the whole rule in a child validator. Add
+`When`, `Unless`, `WhenAsync`, and `UnlessAsync` extension overloads for
+`IRuleBuilderInitialCollection<T, TCollectionElement>` in
+`DefaultValidatorOptions.cs`, wiring them through `CollectionPropertyRule.ApplyCondition`
+and `CollectionPropertyRule.ApplyAsyncCondition` in `Internal/CollectionPropertyRule.cs`,
+and registering async conditions through `RuleBase`'s existing condition infrastructure.
 
 ### M3: Implement a FluentValidation source generator for compile-time rule registration
 
@@ -298,11 +312,11 @@ not build or validate the documentation site. Add a `docs` job to
 `.github/workflows/ci.yml` that runs `make html` using the
 `docs/Makefile`, validates all internal links, and checks for Sphinx
 warnings treated as errors. Update `docs/Makefile` to add a
-`linkcheck` target that runs `sphinx-build -b linkcheck`. Also add a
-`.github/workflows/lock.yml` schedule entry for Dependabot-style
-dependency lock file updates, and update `build.ps1` to include a
-`-Docs` switch that builds the Sphinx site locally for contributor
-preview.
+`linkcheck` target that runs `sphinx-build -b linkcheck`. Update
+`build.ps1` to include a `-Docs` switch that builds the Sphinx site
+locally for contributor preview. Also update `ci.yml` to use
+`actions/checkout@v4` and `actions/setup-dotnet@v4` (currently both
+are pinned to `@v2`).
 
 ## Wide
 
