@@ -8,7 +8,7 @@
 | **Scale** | Small (focused library) |
 | **Category** | Serialization/deserialization framework |
 | **Set** | ranker-gate |
-| **Commit** | `3fd6b4840a8c7dcc34284f8d478c744c4f78ebfb` |
+| **Commit** | `fa7da4a93567ed347ad0735c28e439fca688ef26` |
 
 ## Why this repo
 

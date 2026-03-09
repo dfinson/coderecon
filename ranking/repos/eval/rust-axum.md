@@ -8,7 +8,7 @@
 | **Scale** | Medium-large |
 | **Category** | Web framework for Tokio |
 | **Set** | eval |
-| **Commit** | `39eda3c6be7ad34687dc50d9f11a3cb4c3f9521e` |
+| **Commit** | `866e6d2cb402a7c9c4aa300bea24b4bea7eec852` |
 
 ## Why this repo
 

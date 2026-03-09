@@ -8,7 +8,7 @@
 | **Scale** | Large (multi-team project) |
 | **Category** | Computer vision library |
 | **Set** | ranker-gate |
-| **Commit** | `fe160f3eed3ec0344baff4bfb6a0771d01b5882d` |
+| **Commit** | `d719c6d84a6139e07e81abd3814a3c23756f63eb` |
 
 ## Why this repo
 

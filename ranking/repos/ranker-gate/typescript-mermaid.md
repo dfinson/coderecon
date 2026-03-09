@@ -8,7 +8,7 @@
 | **Scale** | Medium (multi-module project) |
 | **Category** | Diagram generation engine |
 | **Set** | ranker-gate |
-| **Commit** | `6e40ff272949ef2eec09c6efd42b6284b3d51148` |
+| **Commit** | `adcf722dba57a8c9ff4ff1164d6c3d8812cc8810` |
 
 ## Why this repo
 

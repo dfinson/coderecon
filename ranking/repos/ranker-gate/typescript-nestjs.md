@@ -8,7 +8,7 @@
 | **Scale** | Large (multi-team project) |
 | **Category** | Enterprise server-side framework |
 | **Set** | ranker-gate |
-| **Commit** | `3de9ef6c92531869a0537e25ce79d83d32d9337f` |
+| **Commit** | `64a911b8482d1959607f9f8c06f86ea61445411e` |
 
 ## Why this repo
 

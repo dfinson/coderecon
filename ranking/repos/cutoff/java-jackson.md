@@ -8,7 +8,7 @@
 | **Scale** | Large |
 | **Category** | JSON data-binding |
 | **Set** | Cutoff |
-| **Commit** | `3116d07e791128ca034bd06c909706399be1be14` |
+| **Commit** | `d6c58d9fd459afaca037767e8705b2373848e5b1` |
 
 ## Why this repo
 

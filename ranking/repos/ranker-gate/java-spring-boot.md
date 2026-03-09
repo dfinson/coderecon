@@ -8,7 +8,7 @@
 | **Scale** | Large (multi-team project) |
 | **Category** | Application framework |
 | **Set** | ranker-gate |
-| **Commit** | `fd18d6ba968dbce31a793edaf62a39ae0b5ba718` |
+| **Commit** | `5dd220a06fcd89f28a3eb92c7c47616fcb0765fa` |
 
 ## Why this repo
 

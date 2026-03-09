@@ -8,7 +8,7 @@
 | **Scale** | Large (multi-team project) |
 | **Category** | Object-relational mapper (ORM) |
 | **Set** | ranker-gate |
-| **Commit** | `8e7f5641775281a0607a6d76077e743965c86761` |
+| **Commit** | `45eaef017ea29a75046bfe15b76b4f2d155335c3` |
 
 ## Why this repo
 

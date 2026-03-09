@@ -8,7 +8,7 @@
 | **Scale** | Small (focused library) |
 | **Category** | Schema validation library |
 | **Set** | ranker-gate |
-| **Commit** | `58498da33b1cd110e15fed3a83733f24d41a6bb9` |
+| **Commit** | `c7805073fef5b6b8857307c3d4b3597a70613bc2` |
 
 ## Why this repo
 

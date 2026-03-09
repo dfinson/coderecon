@@ -8,7 +8,7 @@
 | **Scale** | Medium |
 | **Category** | Filesystem abstraction |
 | **Set** | Cutoff |
-| **Commit** | `0faf66a23e934a90bee5d24e7791264fafe5afaa` |
+| **Commit** | `254b1595b16b22dbddaaef9ed6ca9fdac4956725` |
 
 ## Why this repo
 

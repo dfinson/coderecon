@@ -8,7 +8,7 @@
 | **Scale** | Small |
 | **Category** | HTTP router |
 | **Set** | Cutoff |
-| **Commit** | `d01bcc7473e6d2352174958219e4721435102e52` |
+| **Commit** | `db9d1d0073d27a0a2d9a8c1bc52aa0af4374d265` |
 
 ## Why this repo
 

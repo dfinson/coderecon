@@ -8,7 +8,7 @@
 | **Scale** | Medium |
 | **Category** | Terminal formatting library |
 | **Set** | Cutoff |
-| **Commit** | `e6719c48f3b812ab369b10217b79fef56dcfcc03` |
+| **Commit** | `fc41075a3206d2a5fd846c6f41c4d2becab814fa` |
 
 ## Why this repo
 

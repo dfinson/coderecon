@@ -8,7 +8,7 @@
 | **Scale** | Small |
 | **Category** | HTTP client abstraction |
 | **Set** | Cutoff |
-| **Commit** | `2de6beec29f571051b6e010a8ad745fb667445ca` |
+| **Commit** | `c6988a840738760fae1a40d653fa2ccd0da425b9` |
 
 ## Why this repo
 

@@ -8,7 +8,7 @@
 | **Scale** | Large |
 | **Category** | JS/TS bundler |
 | **Set** | eval |
-| **Commit** | `f566f21d943aa2a741e7e57b3f76425634b4a576` |
+| **Commit** | `9129e00e6c36a3e374820cb5e3fc2cd319c8ab85` |
 
 ## Why this repo
 

@@ -8,7 +8,7 @@
 | **Scale** | Small (focused library) |
 | **Category** | JSON serialization library |
 | **Set** | ranker-gate |
-| **Commit** | `990f1377e2e21d15e280e83190132e2f6baffae2` |
+| **Commit** | `dbf0f0416596add88c9d38b3e80b4e44059863ca` |
 
 ## Why this repo
 

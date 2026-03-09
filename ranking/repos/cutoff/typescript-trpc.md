@@ -8,7 +8,7 @@
 | **Scale** | Large |
 | **Category** | End-to-end typesafe API framework |
 | **Set** | Cutoff |
-| **Commit** | `1e7e6986101ca60f9d48dff4480fd32e6bf5b065` |
+| **Commit** | `2bf122da0b2875dc46a037095f69382524205407` |
 
 ## Why this repo
 

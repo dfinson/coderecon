@@ -8,7 +8,7 @@
 | **Scale** | Large (multi-team project) |
 | **Category** | Self-hosted Git service |
 | **Set** | ranker-gate |
-| **Commit** | `5d87bb3d4566e71b791a8114bfc9e25c037ab5fe` |
+| **Commit** | `eb020a9d27841cd2cd79d1d28a1ef2fcdc7a5a6b` |
 
 ## Why this repo
 

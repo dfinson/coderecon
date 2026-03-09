@@ -8,7 +8,7 @@
 | **Scale** | Medium (single-header with modular detail/) |
 | **Category** | JSON library |
 | **Set** | Cutoff |
-| **Commit** | `0d92c01619b04aab4d1f52bdc5ec6a25e62195fd` |
+| **Commit** | `f534f4f75e12893716ea688679aeb768bff426c4` |
 
 ## Why this repo
 

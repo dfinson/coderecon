@@ -8,7 +8,7 @@
 | **Scale** | Large |
 | **Category** | Reactive extensions for Swift |
 | **Set** | eval |
-| **Commit** | `c5a74e0378ab8fe8a8f16844fd438347d87e5641` |
+| **Commit** | `132aea4f236ccadc51590b38af0357a331d51fa2` |
 
 ## Why this repo
 
@@ -53,55 +53,55 @@ Platform/                # AtomicInt, RecursiveLock, data structures (Bag, Queue
 
 ## Narrow
 
-### N1: Fix `throttle` operator dropping the last element when using `.latest` mode
+### N1: Document `throttle` timer-reset semantics and add `Tips.md` section
 
-The `ThrottleSink` in `Observables/Throttle.swift` schedules a timer on `next` events but when the source completes while a throttle window is active, the pending latest value is never forwarded. The `on(.completed)` path disposes the scheduled item without flushing it. Document the corrected throttle behavior in `Documentation/Tips.md`.
+The `ThrottleSink` in `Observables/Throttle.swift` resets its trailing-edge timer every time a new element arrives within the active throttle window (each new `next` event replaces the in-flight `cancellable: SerialDisposable` with a fresh timer). This behavior — where a rapid burst repeatedly pushes back the trailing emission — is undocumented in the operator's doc comment. Update the `throttle` function's documentation in `Observables/Throttle.swift` to explain the timer-reset semantics, and add a 'Throttling and Debouncing' section to `Documentation/Tips.md` with examples contrasting `throttle(latest: false)` (leading-edge only), `throttle(latest: true)` (leading + trailing with window reset), and `debounce` (trailing-edge with emission only after silence).
 
-### N2: Fix `ReplaySubject` not trimming buffer after `bufferSize` exceeded under concurrent access
+### N2: Add `bufferSize` and `currentElementCount` properties to `ReplaySubject`
 
-In `Subjects/ReplaySubject.swift`, the replay buffer (`ReplayBufferBase`) trims elements in `_synchronized_on`, but concurrent subscriptions can read the un-trimmed buffer between the append and trim, causing subscribers to receive more elements than `bufferSize` specifies.
+The `ReplaySubject` in `Subjects/ReplaySubject.swift` does not expose the configured buffer size or current element count publicly. The `bufferSize` is stored privately in `ReplayMany` and inaccessible from the `ReplaySubject` base class reference returned by `create(bufferSize:)`. Add a `bufferSize: Int?` computed property to `ReplaySubject<Element>` (returning `nil` for the unbounded `ReplayAll` created by `createUnbounded()`) and a `currentElementCount: Int` property returning the number of elements currently held in the replay buffer, both accessed under the existing `RecursiveLock`.
 
-### N3: Fix `DisposeBag` not thread-safe when calling `insert` during `deinit`
+### N3: Add `count` and `isEmpty` inspection properties to `DisposeBag`
 
-`Disposables/DisposeBag.swift` uses a lock in `insert(_:)` but the `deinit` path calls `dispose()` without holding the lock, creating a race if another thread is inserting a disposable concurrently with bag deallocation.
+The `DisposeBag` in `Disposables/DisposeBag.swift` exposes no public API to inspect how many disposables are currently tracked. This makes it impossible to verify in unit tests that subscriptions were correctly added and not yet disposed. Add a thread-safe `count: Int` computed property and an `isEmpty: Bool` computed property to `DisposeBag`, both protected by the existing `SpinLock` that guards `disposables` and `isDisposed`.
 
-### N4: Add `distinctUntilChanged` overload accepting `KeyPath` for `Infallible`
+### N4: Add `buffer(timeSpan:count:scheduler:)` operator to `Infallible`
 
-The `Infallible` trait in `Traits/Infallible/Infallible+Operators.swift` forwards most operators from `Observable` but lacks a `distinctUntilChanged` variant that accepts a `KeyPath<Element, V>` for property-based comparison, unlike the base `ObservableType` extension.
+The `Infallible` trait in `Traits/Infallible/Infallible+Operators.swift` is missing a `buffer(timeSpan:count:scheduler:)` operator that collects elements into arrays and emits them on time boundaries or when the count threshold is reached. Unlike `Observable.buffer`, an `Infallible` version should return `Infallible<[Element]>` since collecting elements into an array cannot introduce errors. Implement the operator by bridging to `Observable.buffer` and wrapping the result in `Infallible`, following the pattern already used by `debounce` and `throttle` in the same file.
 
-### N5: Fix `HistoricalScheduler` not advancing clock on `sleep` call
+### N5: Add `advance(by:)` relative time-advancement method to `HistoricalScheduler`
 
-In `Schedulers/HistoricalScheduler.swift`, the `sleep(_:)` method should advance the virtual clock by the specified duration, but it currently calls the superclass `VirtualTimeScheduler.sleep` which is a no-op, preventing time-based operators from progressing in test scenarios.
+The `HistoricalScheduler` in `Schedulers/HistoricalScheduler.swift` inherits `advanceTo(_ virtualTime: VirtualTime)` from `VirtualTimeScheduler` but provides no convenience method to advance the clock by a relative `TimeInterval` offset. Users who want to move time forward by, say, 5 seconds must manually compute `clock + 5` themselves. Add an `func advance(by interval: TimeInterval)` method to `HistoricalScheduler` that computes the new target time from the current `clock` and delegates to the inherited `advanceTo(_:)`, including guard logic matching `sleep(_:)` to prevent advancing into the past.
 
-### N6: Fix `window` operator not completing inner observable on source error
+### N6: Add boundary-observable `window(boundary:)` variant to `Observables/Window.swift`
 
-In `Observables/Window.swift`, when the source observable errors, the `WindowTimeCountSink` disposes the timer and forwards the error to the outer observable, but the current inner `Subject` never receives a `.completed` or `.error` event, leaving subscribers hanging.
+The `window` operator in `Observables/Window.swift` only provides the combined time-and-count boundary variant (`window(timeSpan:count:scheduler:)`). Add a `window(boundary:)` overload on `ObservableType` that accepts a secondary boundary observable and opens a new inner window on each boundary emission, completing the previous window. Implement a `WindowBoundarySink` following the structural pattern of the existing `WindowTimeCountSink` in the same file.
 
-### N7: Add `timeout` operator variant for `Maybe` trait
+### N7: Add `Maybe.from(_ optional:)` factory for Swift `Optional` wrapping
 
-The `PrimitiveSequence` extensions in `Traits/PrimitiveSequence/PrimitiveSequence.swift` expose `timeout` for `Single` and `Completable` but the `Maybe` type is missing a `timeout` overload, requiring users to convert to `Observable` and back.
+The `Maybe` trait in `Traits/PrimitiveSequence/Maybe.swift` lacks a static `from(_ optional: Element?)` factory method that converts a Swift `Optional` to a `Maybe`: `.success(value)` for `.some(value)` and `.empty()` for `.none`. This forces users to write boilerplate `guard let` + `Maybe.just` / `Maybe.empty()` at every call site. Add `static func from(_ optional: Element?) -> Maybe<Element>` as an extension on `PrimitiveSequence` constrained to `Trait == MaybeTrait`, in `Traits/PrimitiveSequence/Maybe.swift`.
 
-### N8: Fix `sample` operator emitting duplicate values when trigger fires rapidly
+### N8: Add `sampleFirst` operator to `Observables/Sample.swift`
 
-In `Observables/Sample.swift`, the `SampleSequenceSink` stores the latest value and a `hasValue` flag, but when the sampler fires multiple times before a new source value arrives, the same value is emitted repeatedly because `hasValue` is not cleared after emission when `onlyNew` is not available.
+The `sample(_:)` operator in `Observables/Sample.swift` always emits the *latest* element produced since the last sampler tick. There is no variant for emitting the *first* element observed in each sampling window. Add a `sampleFirst(_ sampler:)` operator on `ObservableType` that emits the first new element since the most recent tick and discards subsequent elements until the next tick. Implement it via a new `SampleFirstSequenceSink` in `Observables/Sample.swift` with a `hasEmitted: Bool` flag that is set on the first `next` event and cleared when the sampler fires.
 
-### N9: Fix `CurrentThreadScheduler` recursive scheduling causing stack overflow
+### N9: Unify thread-local storage mechanism in `CurrentThreadScheduler`
 
-In `Schedulers/CurrentThreadScheduler.swift`, recursive `schedule` calls within a scheduled action queue work items into the current thread's queue, but deeply nested recursive scheduling causes unbounded stack growth because the trampoline re-enters before the queue drains.
+The `CurrentThreadScheduler` in `Schedulers/CurrentThreadScheduler.swift` uses two different thread-local storage mechanisms within the same class: raw `pthread_key_t`/`pthread_getspecific` for `isScheduleRequired`, but Foundation's `Thread.getThreadLocalStorageValueForKey` (via `Platform.Darwin.swift` / `Platform.Linux.swift`) for the scheduler `queue`. This creates an unnecessary cross-layer dependency and potential inconsistency on non-Foundation platforms. Add a second `pthread_key_t` for the scheduler queue alongside the existing `isScheduleRequiredKey` and rewrite the `queue` getter/setter to use `pthread_getspecific`/`pthread_setspecific` directly, removing the `getThreadLocalStorageValueForKey` call from `CurrentThreadScheduler`.
 
 ### N10: Add `materialize` operator for `Completable` trait
 
-The `Completable` extensions in `Traits/PrimitiveSequence/Completable.swift` lack a `materialize()` operator that would convert `.completed` and `.error` events into `Observable<CompletableEvent>`, unlike `Single` and `Maybe` which have their own materialized event types.
+The `Completable` extensions in `Traits/PrimitiveSequence/Completable.swift` lack a `materialize()` operator that converts `.completed` and `.error` events into `Observable<CompletableEvent>`. Since `Completable` has `Element == Never`, calling `asObservable().materialize()` yields `Observable<Event<Never>>`, which is not the same as `Observable<CompletableEvent>`. Add a specific `func materialize() -> Observable<CompletableEvent>` extension on `PrimitiveSequence` where `Trait == CompletableTrait` that maps `.completed` to `CompletableEvent.completed` and `.error(_:)` to `CompletableEvent.error(_:)`.
 
-### N11: Fix `Documentation/GettingStarted.md` code samples using deprecated `bind(to:)` syntax
+### N11: Fix `Documentation/GettingStarted.md` code samples using deprecated Swift 2 syntax
 
-The `Documentation/GettingStarted.md` file contains code examples that use the deprecated `bind(to:)` API patterns and reference outdated import statements. Update all code samples in `Documentation/GettingStarted.md` to use current syntax, fix broken markdown links in `Documentation/Examples.md` and `Documentation/Traits.md`, and add version-specific callouts for API differences between RxSwift 5 and 6 in `Documentation/SwiftConcurrency.md`.
+The `Documentation/GettingStarted.md` file contains code examples that use obsolete Swift 2/Objective-C bridging APIs: `containsString(_:)` (replaced by `contains(_:)` in Swift 3), bare `just(...)` global functions (now `Observable.just(...)`), and `catchError { }` (renamed to `catch { }` in RxSwift 6). Update all code samples in `Documentation/GettingStarted.md` to use current RxSwift 6 and Swift 5.9+ syntax, fix broken cross-reference anchor links in `Documentation/Examples.md` and `Documentation/Traits.md` that point to renamed sections, and add a version-specific callout in `Documentation/SwiftConcurrency.md` noting that `async`/`await` bridging requires iOS 13+ / macOS 10.15+.
 
 ## Medium
 
-### M1: Implement `share(replay:scope:)` for `Infallible`
+### M1: Add `merge`, `reduce`, and `toArray` operators to `Infallible`
 
-The `Infallible` trait needs a `share(replay:scope:)` operator equivalent to `Observable.share(replay:scope:)` in `Observables/ShareReplayScope.swift`. This requires adapting `ShareReplay1WhileConnected` and `ShareReplayLifetimeScope` to work with the `InfallibleType` protocol while preserving the no-error guarantee.
+The `Infallible` trait in `Traits/Infallible/` is missing three commonly-used aggregation and combining operators: `Infallible.merge(_:)` (both array and variadic overloads), `merge()` on `InfallibleType where Element: InfallibleType`, `reduce(_:accumulator:)`, and `toArray()` returning `Infallible<[Element]>`. These force `Infallible` users to call `asObservable()` and manually wrap results. Implement the operators in a new `Infallible+Operators+Gathering.swift` file following the delegation-and-wrap pattern used throughout `Infallible+Operators.swift`, adapting from `Observable.merge`, `Observable.reduce`, and `Observable.toArray` respectively.
 
 ### M2: Add retry with exponential backoff operator
 
@@ -111,9 +111,9 @@ Implement a `retry(maxAttempts:delay:multiplier:scheduler:)` operator that retri
 
 Extend `RxTest/Schedulers/TestScheduler.swift` to track all subscriptions created by `createColdObservable` and provide an assertion method `assertAllDisposed(by:)` that verifies all subscriptions are disposed by a specific virtual time. This requires extending `TestableObservable` and `Subscription` tracking.
 
-### M4: Add `combineLatest` collection operator for `Infallible`
+### M4: Add collection-based and multi-source `withLatestFrom` overloads to `Infallible`
 
-The `Infallible` trait lacks the collection-based `combineLatest` available in `Observables/CombineLatest+Collection.swift`. Implement `Infallible.combineLatest(_ collection:resultSelector:)` that combines an arbitrary collection of `Infallible` sequences while maintaining the infallible guarantee.
+The `Infallible` trait in `Traits/Infallible/Infallible+Operators.swift` only provides single-source `withLatestFrom` overloads. It lacks 2-, 3-, and 4-source arity overloads (with and without `resultSelector`) and a collection-based `withLatestFrom<Collection: Swift.Collection>(_:resultSelector:)` variant. Implement the arity overloads as static functions in a new `Infallible+WithLatestFrom+arity.swift` file and the collection overload in `Infallible+WithLatestFrom+Collection.swift`, following the patterns established by `Infallible+CombineLatest+arity.swift` and `Infallible+CombineLatest+Collection.swift`.
 
 ### M5: Implement `prefetch` operator for observable sequences
 
@@ -131,9 +131,9 @@ Extend `RxBlocking/BlockingObservable+Operators.swift` to add `toArray(timeout:p
 
 Extend `RxRelay/BehaviorRelay.swift` with `snapshot()` returning the current value and subscription count, and `changes()` returning an `Observable` that emits `(oldValue, newValue)` tuples. Requires adding value comparison infrastructure and thread-safe old value tracking within the relay.
 
-### M9: Implement scheduler-aware `delay` for `Completable` trait
+### M9: Add cross-trait `flatMap` variants to `Maybe`
 
-The `Completable` trait lacks a `delay` operator. Implement `delay(_:scheduler:)` in `Traits/PrimitiveSequence/Completable.swift` that delays the `.completed` event by the specified duration using the provided scheduler, correctly handling disposal during the delay window and error passthrough.
+The `Maybe` trait in `Traits/PrimitiveSequence/Maybe.swift` only exposes `flatMap(_:) -> Maybe<Result>`, but `Single` already provides `flatMapMaybe`, `flatMapCompletable`, and `flatMap`. `Maybe` is missing `flatMapSingle<Result>(_ selector:) -> Single<Result>` (for selectors that guarantee a value) and `flatMapCompletable(_ selector:) -> Completable` (for side-effecting selectors). Add both methods to `Traits/PrimitiveSequence/Maybe.swift` mirroring the `Single` implementations, add `flatMapMaybe<Result>(_ selector:) -> Maybe<Result>` to `Completable` (complementing its existing `andThen` variants) in `Traits/PrimitiveSequence/Completable.swift`, and add corresponding test cases to `Sources/AllTestz/MaybeTest.swift`.
 
 ### M10: Add `groupBy` operator support for `Driver` trait
 
@@ -141,13 +141,13 @@ The `Driver` trait in `RxCocoa/Traits/` supports most operators but lacks `group
 
 ### M11: Improve SwiftLint and formatting configuration
 
-Update `.swiftlint.yml` with module-specific rules for RxSwift/, RxCocoa/, RxBlocking/, RxRelay/, and RxTest/ directories. Configure `.swiftformat` with per-directory formatting rules matching the existing code style. Update `.jazzy.yml` with complete module documentation generation settings and custom theme. Add a `Makefile` target for documentation generation and linting. Configure `mise.toml` with development tool versions. Create a `CONTRIBUTING.md` with code style guidelines referencing the linting configuration. Changes span `.swiftlint.yml`, `.swiftformat`, `.jazzy.yml`, `Makefile`, `mise.toml`, `CONTRIBUTING.md`, and `README.md`.
+Update `.swiftlint.yml` with module-specific rules for RxSwift/, RxCocoa/, RxBlocking/, RxRelay/, and RxTest/ directories. Configure `.swiftformat` with per-directory formatting rules matching the existing code style. Update `.jazzy.yml` with complete module documentation generation settings and custom theme. Add a `Makefile` target for documentation generation and linting. Configure `mise.toml` with development tool versions. Update `CONTRIBUTING.md` with code style guidelines referencing the linting configuration. Changes span `.swiftlint.yml`, `.swiftformat`, `.jazzy.yml`, `Makefile`, `mise.toml`, `CONTRIBUTING.md`, and `README.md`.
 
 ## Wide
 
 ### W1: Implement structured concurrency bridge for async/await
 
-Add comprehensive `async`/`await` bridging beyond the existing `Observable+Concurrency.swift`. Implement `AsyncObservableSequence` conforming to `AsyncSequence`, `Observable.init(asyncSequence:)` for the reverse direction, `Subject.send(from:)` for async stream feeding, and `Task`-aware disposal that cancels the RxSwift subscription when the Task is cancelled. Changes span RxSwift/Concurrency/, Observable, Subjects, and DisposeBag.
+Add comprehensive `async`/`await` bridging beyond the existing `Observable+Concurrency.swift`. Implement a typed `AsyncObservableSequence<Element>` struct conforming to `AsyncSequence` to replace the anonymous `AsyncThrowingStream` returned by the `values` property, providing a stable named public type. Add `Subject.send(from asyncSequence: some AsyncSequence)` on `SubjectType` that feeds an `AsyncSequence` into a subject via a managed `Task`, automatically cancelling or completing the task when the subject disposes. Add `DisposeBag.add(task:)` that stores a Swift `Task` and cancels it on bag deinit, completing lifecycle integration. Changes span `RxSwift/Concurrency/`, `RxSwift/Subjects/`, and `RxSwift/Disposables/`.
 
 ### W2: Implement reactive caching layer with expiration
 

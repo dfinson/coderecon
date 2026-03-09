@@ -8,7 +8,7 @@
 | **Scale** | Small (focused micro-ORM) |
 | **Category** | Data access / ORM |
 | **Set** | Cutoff |
-| **Commit** | `9769c710c1b7a73b5233548b6f5e0106f167b2af` |
+| **Commit** | `288730e69b05c32cac898d9b55ebea219ea8a2d1` |
 
 ## Why this repo
 

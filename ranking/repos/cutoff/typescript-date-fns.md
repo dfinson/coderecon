@@ -8,7 +8,7 @@
 | **Scale** | Large |
 | **Category** | Date utility library |
 | **Set** | Cutoff |
-| **Commit** | `ec4d9f88d32059967196605435e929de880c4e3c` |
+| **Commit** | `dd66398305c2b015fba3c1b3d31ccff42ee8d4cf` |
 
 ## Why this repo
 

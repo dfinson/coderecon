@@ -8,7 +8,7 @@
 | **Scale** | Large (multi-team project) |
 | **Category** | Async runtime |
 | **Set** | ranker-gate |
-| **Commit** | `6a44775e078ad518923dd10f922a7f210364dd64` |
+| **Commit** | `e67cd87f71304e6b4cc94ce0c1656797466e56f3` |
 
 ## Why this repo
 

@@ -8,7 +8,7 @@
 | **Scale** | Medium (header-only with modular sinks and details) |
 | **Category** | Logging library |
 | **Set** | Cutoff |
-| **Commit** | `355676231ecc8054df12bee275b2193eeeef5ccb` |
+| **Commit** | `0f7562a0f9273cfc71fddc6ae52ebff7a490fa04` |
 
 ## Why this repo
 

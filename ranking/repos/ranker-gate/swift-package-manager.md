@@ -8,7 +8,7 @@
 | **Scale** | Large (multi-team project) |
 | **Category** | Build system and package manager |
 | **Set** | ranker-gate |
-| **Commit** | `b908844f8e335dbc36735eea71eb0fc30baffb66` |
+| **Commit** | `ced4e7c6c537a61f8a4a012c72c912edabfcb98e` |
 
 ## Why this repo
 

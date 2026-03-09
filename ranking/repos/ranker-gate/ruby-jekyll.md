@@ -8,7 +8,7 @@
 | **Scale** | Medium (multi-module project) |
 | **Category** | Static site generator |
 | **Set** | ranker-gate |
-| **Commit** | `491d4737611298a54d82c91118a40563a00d485f` |
+| **Commit** | `d0cf1791f6a349519998750f4511822e43e516e4` |
 
 ## Why this repo
 

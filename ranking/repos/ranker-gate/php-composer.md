@@ -8,7 +8,7 @@
 | **Scale** | Medium (multi-module project) |
 | **Category** | Dependency manager |
 | **Set** | ranker-gate |
-| **Commit** | `213661a06ab4b080c03334c354b08430af0bb108` |
+| **Commit** | `f8a87966f77267f041949ca9785df6992ec4a128` |
 
 ## Why this repo
 

@@ -8,7 +8,7 @@
 | **Scale** | Medium (multi-module project) |
 | **Category** | JSON framework |
 | **Set** | ranker-gate |
-| **Commit** | `e1cf98c5792302e814b7c5a083c36cd8f139d5fe` |
+| **Commit** | `e5f67150a0a2cd6fafcee483add00c1bb0fae306` |
 
 ## Why this repo
 

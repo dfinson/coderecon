@@ -8,7 +8,7 @@
 | **Scale** | Small (focused library) |
 | **Category** | HTTP client library |
 | **Set** | ranker-gate |
-| **Commit** | `1ef0adc83863b51dae427f1f64b1b5002f0bf911` |
+| **Commit** | `fb92d95f80a9da51bf8f2a5b26d8e8ea3b6d99ed` |
 
 ## Why this repo
 

@@ -8,7 +8,7 @@
 | **Scale** | Medium (~50 source files, ~15K LOC) |
 | **Category** | Image downloading and caching |
 | **Set** | Cutoff |
-| **Commit** | `f24c47b5d78353836faae8f2813bc67f291868da` |
+| **Commit** | `3fe88ce2de62528b9ed5d88df9d9af0494826fdd` |
 
 ## Why this repo
 

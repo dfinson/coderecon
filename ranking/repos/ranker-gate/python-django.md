@@ -8,7 +8,7 @@
 | **Scale** | Large (multi-team project) |
 | **Category** | Full-stack web framework |
 | **Set** | ranker-gate |
-| **Commit** | `09b7e84b79073e915ee74a2941ba82dad1e8918a` |
+| **Commit** | `787166fe27b0e7c7f97505da5766cfa72e76ae25` |
 
 ## Why this repo
 

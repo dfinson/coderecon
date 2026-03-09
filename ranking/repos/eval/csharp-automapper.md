@@ -8,7 +8,7 @@
 | **Scale** | Medium |
 | **Category** | Object-to-object mapper |
 | **Set** | eval |
-| **Commit** | `fc8cb3f3d6aafe35b77697fcd67639f7ae42fb70` |
+| **Commit** | `c343d02c8a7d96752c0ce108a2a834be8da86baa` |
 
 ## Why this repo
 

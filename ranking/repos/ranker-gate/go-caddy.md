@@ -8,7 +8,7 @@
 | **Scale** | Medium (multi-module project) |
 | **Category** | Web server with plugin architecture |
 | **Set** | ranker-gate |
-| **Commit** | `a118b959e27f6c09ab077e90bd60accea529eb28` |
+| **Commit** | `ffb6ab0644f24c5ee6542aca6bd59b7a1b0a8f91` |
 
 ## Why this repo
 

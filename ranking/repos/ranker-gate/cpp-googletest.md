@@ -8,7 +8,7 @@
 | **Scale** | Medium (multi-module project) |
 | **Category** | Testing framework |
 | **Set** | ranker-gate |
-| **Commit** | `0299475a381902f1c81dc8da388edc4b3dea65b6` |
+| **Commit** | `a35bc7693c117a048152beeb34f6aac354b9423f` |
 
 ## Why this repo
 

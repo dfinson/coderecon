@@ -8,7 +8,7 @@
 | **Scale** | Large |
 | **Category** | Fluent assertions for Java |
 | **Set** | Cutoff |
-| **Commit** | `9a79aeb6f27683917012432650d6af4fc0572189` |
+| **Commit** | `5cc365bb41b583db9e91bf010616a711a5e21495` |
 
 ## Why this repo
 

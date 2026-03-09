@@ -8,7 +8,7 @@
 | **Scale** | Small (focused library) |
 | **Category** | Text formatting library |
 | **Set** | ranker-gate |
-| **Commit** | `696dd855fc82b582ad6da2e732a3c57aa3e56dff` |
+| **Commit** | `c29b64dde78ffd6658124af0f1bcc071da29b3e4` |
 
 ## Why this repo
 

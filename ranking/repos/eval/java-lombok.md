@@ -8,7 +8,7 @@
 | **Scale** | Large |
 | **Category** | Boilerplate reduction (annotation processor / compiler plugin) |
 | **Set** | eval |
-| **Commit** | `c2babe33dd54e326ef3d4ef1a0fd74eb4c9ffbd9` |
+| **Commit** | `1edca70420ff29d68e3a7da0c3def499609dac84` |
 
 ## Why this repo
 

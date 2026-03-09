@@ -8,7 +8,7 @@
 | **Scale** | Medium (multi-module project) |
 | **Category** | Recursive search tool |
 | **Set** | ranker-gate |
-| **Commit** | `0884e89f38b7b756b58aed8318c2aa05de0a750c` |
+| **Commit** | `4519153e5e461527f4bca45b042fff45c4ec6fb9` |
 
 ## Why this repo
 

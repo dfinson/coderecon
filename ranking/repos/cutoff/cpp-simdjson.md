@@ -8,7 +8,7 @@
 | **Scale** | Medium |
 | **Category** | JSON parser |
 | **Set** | Cutoff |
-| **Commit** | `262ddad0370cdfa656b61c388c52bad02697f8a1` |
+| **Commit** | `2922822622d8fe2d8b2673b29d0818543e07e328` |
 
 ## Why this repo
 

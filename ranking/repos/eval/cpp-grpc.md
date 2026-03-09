@@ -8,7 +8,7 @@
 | **Scale** | Very large |
 | **Category** | gRPC C++ implementation |
 | **Set** | eval |
-| **Commit** | `4a1e0fb594588a81e11187d0c34507a22a141e42` |
+| **Commit** | `a18875d1df6a3fdac2cd7339a4fdb6aff29db89e` |
 
 ## Why this repo
 

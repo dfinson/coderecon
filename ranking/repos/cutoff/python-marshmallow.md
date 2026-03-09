@@ -8,7 +8,7 @@
 | **Scale** | Small–Medium |
 | **Category** | Object serialization |
 | **Set** | Cutoff |
-| **Commit** | `4c1dc98631114e94d9a753ffdc82d4961b5dff0a` |
+| **Commit** | `7324d8f3567c0a29a93b0a8f98bdf90307aefb19` |
 
 ## Why this repo
 

@@ -8,7 +8,7 @@
 | **Scale** | Small (focused DSL library) |
 | **Category** | UI layout / Auto Layout DSL |
 | **Set** | Cutoff |
-| **Commit** | `72d8c252b6715debfff3527e27fa18ecf483026f` |
+| **Commit** | `19f59a63f0faac287f4e59986959859d81ec851c` |
 
 ## Why this repo
 

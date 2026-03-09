@@ -8,7 +8,7 @@
 | **Scale** | Small |
 | **Category** | CLI parser |
 | **Set** | Cutoff |
-| **Commit** | `b5fc53c89afc1f2c4fce49c5061d44dddcd41fc4` |
+| **Commit** | `a30d32bb2f6c96a34484d4c206e55df0434022b9` |
 
 ## Why this repo
 

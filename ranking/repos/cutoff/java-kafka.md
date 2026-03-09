@@ -8,7 +8,7 @@
 | **Scale** | Large |
 | **Category** | Distributed streaming |
 | **Set** | Cutoff |
-| **Commit** | `55d1e3823b76590649cbe584cb906e330ca59fcc` |
+| **Commit** | `7bd979bb4ff842b90ecde4ae8eb6580544f303a9` |
 
 ## Why this repo
 

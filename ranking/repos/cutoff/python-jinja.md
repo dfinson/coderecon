@@ -8,7 +8,7 @@
 | **Scale** | Medium |
 | **Category** | Template engine |
 | **Set** | Cutoff |
-| **Commit** | `5c574d2d6d11708c6a6d4d23f5b786819895c8e0` |
+| **Commit** | `5ef70112a1ff19c05324ff889dd30405b1002044` |
 
 ## Why this repo
 
