@@ -123,15 +123,18 @@ crossbeam/
 
 ## Narrow
 
-### N1: Fix ArrayQueue::push not waking parked consumers after a successful push
+### N1: Add Extend and FromIterator implementations for ArrayQueue
 
-In `crossbeam-queue/src/array_queue.rs`, after a successful `push`
-the implementation does not signal any mechanism to wake consumers
-that may be spin-waiting via `Backoff`. When the queue transitions
-from empty to non-empty, consumers using `Backoff::snooze()` in a
-polling loop can experience unnecessary latency. Fix `push` to
-include a fence or wake mechanism after successfully enqueuing to
-the previously-empty queue.
+In `crossbeam-queue/src/array_queue.rs`, `ArrayQueue` does not implement
+`std::iter::Extend<T>` or `std::iter::FromIterator<T>`, even though these
+are standard Rust collection traits. Users who want to bulk-push elements
+from an iterator must write their own loop, and cannot use
+`Iterator::collect::<ArrayQueue<_>>()`. Implement `Extend<T>` for
+`ArrayQueue<T>` by pushing each item and stopping (returning early) when
+the queue is full, and implement `FromIterator<T>` by creating a queue with
+capacity equal to the iterator's `size_hint().0` (or a reasonable default)
+and extending it. Update `crossbeam-queue/src/lib.rs` to note the new
+trait implementations in module-level documentation.
 
 ### N2: Add missing capacity() method to SegQueue
 
@@ -217,21 +220,20 @@ insert, a concurrent `remove` can delete the found entry, causing
 that will be reclaimed. Fix the insert path to re-validate the node's
 removal status under the epoch guard before returning.
 
-### N8: Refactor WaitGroup::wait to eliminate unsafe block
+### N8: Add WaitGroup::wait_timeout method
 
-In `crossbeam-utils/src/sync/wait_group.rs`, `WaitGroup::wait()`
-takes `self` by value and uses an `unsafe` block with
-`ManuallyDrop` and `core::ptr::read` to extract `inner` while
-preventing `Drop` from running a second reference-count decrement.
-This unsafe code can be replaced with a safe idiom: clone the
-`Arc<Inner>` before consuming `self`, then call `mem::forget(self)`
-to prevent the `Drop` impl from running, then proceed with the
-decremented count using the cloned `Arc`. Refactor
-`WaitGroup::wait()` to eliminate the `unsafe` block using
-`Arc::clone` and `core::mem::forget`, preserving identical
-observable semantics while removing the manual-drop bypass.
-Add a comment explaining why `mem::forget` is used instead of
-calling `drop`.
+In `crossbeam-utils/src/sync/wait_group.rs`, `WaitGroup` provides `wait()`
+which blocks until all other references are dropped, but there is no
+`wait_timeout(Duration) -> bool` variant. Callers that need a bounded wait
+(e.g., for watchdog threads or graceful-shutdown logic) must implement their
+own timeout loop using `WaitGroup` together with an external channel or
+atomic flag. Add `pub fn wait_timeout(self, timeout: Duration) -> bool` that
+returns `true` if all references were dropped before the timeout, or `false`
+if the timeout elapsed with outstanding references remaining. The
+implementation should mirror the existing `wait()` logic, using
+`Condvar::wait_timeout_while` (or equivalent) on `Inner::cvar` with the
+given deadline. Update the module documentation in `wait_group.rs` and add
+a doc-test demonstrating the timeout path.
 
 ### N9: Fix AtomicCell<f64>::compare_exchange using bitwise comparison for NaN
 
@@ -246,12 +248,19 @@ explicitly and add a `compare_exchange_bitwise` variant.
 ### N10: Fix tick channel not accounting for system clock adjustments
 
 The `tick` channel flavor in `crossbeam-channel/src/flavors/tick.rs`
-uses `Instant::now()` for computing the next delivery time. If the
-system monotonic clock is adjusted (e.g., NTP step on some platforms),
-the tick interval can drift or deliver a burst of messages. Fix the
-tick delivery logic to use duration-based arithmetic (elapsed since
-creation) rather than absolute `Instant` comparison, preventing
-burst delivery after clock adjustments.
+schedules the next delivery time as `now + duration` in `try_recv`, where
+`now` is sampled at the start of the CAS loop. Under sustained consumer
+load, each successful delivery anchors the next tick to the actual delivery
+instant rather than the intended delivery time, causing the tick cadence to
+drift forward over time. In contrast, `recv` already uses
+`delivery_time.0.max(now) + duration` which preserves cadence when the
+consumer is on-time but still drifts when late. Fix both `try_recv` and
+`recv` to advance the schedule from the nominal delivery time
+(`delivery_time.0 + duration`) rather than from `now`, so that the tick
+interval is preserved regardless of consumer processing delay. Add a comment
+in `tick.rs` explaining the trade-off (this design allows at most one queued
+tick; if the consumer falls more than one `duration` behind, ticks are
+dropped rather than accumulated).
 
 ## Medium
 
@@ -320,16 +329,16 @@ structure in the feature overview table.
 In `crossbeam-utils/src/sync/parker.rs`, `Parker::park_timeout` and
 `Parker::park_deadline` return `UnparkReason` with two variants:
 `Unparked` (woken by an `unpark` call) and `Timeout` (timed out).
-However, the underlying `condvar.wait_timeout` can return spuriously
-without an `unpark` call or actual timeout expiry. The current code
-maps all non-notification wakeups to `UnparkReason::Timeout`,
-indistinguishably conflating true timeouts with spurious wakeups.
-Callers that act on `Timeout` results cannot distinguish a real
-timeout from a spurious wakeup. Add a `Spurious` variant to
-`UnparkReason`, update the `Inner::park()` state machine in `parker.rs`
-to detect and return `UnparkReason::Spurious` when the condvar
-returns without notification and before the deadline has passed,
-update all `match` sites on `UnparkReason` within `parker.rs` and
+The current `Inner::park()` implementation correctly loops back to sleep
+on spurious `condvar.wait_timeout` returns, but it cannot communicate to
+callers that a spurious wakeup occurred before the deadline — the caller
+only ever sees `Unparked` or `Timeout`. Callers that instrument or log
+wakeup causes (e.g., scheduler profiling, adaptive spin strategies) have no
+way to distinguish true timeouts from spurious wakeups. Add a `Spurious`
+variant to `UnparkReason`, update `Inner::park()` in `parker.rs` to detect
+and return `UnparkReason::Spurious` when the condvar returns without
+notification and before the deadline has passed (instead of looping back to
+sleep), update all `match` sites on `UnparkReason` within `parker.rs` and
 the surrounding `sync/` module, update `crossbeam-utils/src/sync/mod.rs`
 and `crossbeam-utils/src/lib.rs` to re-export the updated enum, and
 add tests and documentation for the new variant.
@@ -491,10 +500,13 @@ minimum supported Rust version (MSRV) bumps per sub-crate release.
 When `crossbeam-epoch` or `crossbeam-channel` bump their `rust-version`
 in their per-crate `Cargo.toml`, the root `CHANGELOG.md` does not
 mention it, surprising downstream users who pin MSRV. Add an "MSRV
-Changes" subsection to each release in `CHANGELOG.md` that lists
-per-crate MSRV changes. Also update the root `README.md` to link to
-the "Compatibility" section and add an MSRV badge that reflects the
-workspace-level `rust-version` from `Cargo.toml`.
+Changes" subsection to each release section in the root `CHANGELOG.md`
+that lists per-crate MSRV changes, noting when each sub-crate's
+`rust-version` was last updated. Also add a similar MSRV tracking
+subsection to each sub-crate's own `CHANGELOG.md`
+(`crossbeam-channel/CHANGELOG.md`, `crossbeam-epoch/CHANGELOG.md`,
+`crossbeam-queue/CHANGELOG.md`, `crossbeam-utils/CHANGELOG.md`)
+for the most recent release entry.
 
 ### M11: Add no_std CI testing matrix for crates that support it
 

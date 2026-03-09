@@ -52,9 +52,9 @@ celery/
 
 When a task configured with `autoretry_for` retries due to an expected exception, the `retry_backoff` countdown is not applied. The retry fires immediately instead of using exponential backoff.
 
-### N2: Fix `chord` callback not called when group has zero tasks
+### N2: Fix `chord` callback not triggered when all header tasks are revoked
 
-When a `chord` is created with an empty group, the callback is never invoked. The chord logic waits for group completion signals that never arrive.
+When all tasks in a chord's header group are revoked after the chord is created, the chord counter never reaches zero and the callback is never invoked. The task revocation path in `celery/worker/request.py` decrements active task counters but does not trigger chord completion when the last chord header task is revoked, leaving the chord permanently incomplete.
 
 ### N3: Add `task_received_timeout` configuration option
 
@@ -68,13 +68,13 @@ When the result backend goes down, `AsyncResult.get(timeout=10)` hangs indefinit
 
 When both settings are enabled, task acknowledgment happens before the task completes, defeating the purpose of late acks. The prefetch logic sends the ack early to fetch the next task.
 
-### N6: Add `on_retry` signal for task retry events
+### N6: Add `task_max_retries_exceeded` signal for exhausted retry events
 
-Tasks emit `task_prerun` and `task_postrun` signals but there's no signal for retry events. Add an `on_retry` signal that fires when a task is about to be retried, providing the exception, retry count, and countdown.
+When a task fails after exhausting all retries, a generic `task_failure` signal is emitted with no way to distinguish max-retry failures from one-off failures. Add a `task_max_retries_exceeded` signal to `celery/signals.py` that fires when a task raises an exception and `task.request.retries >= task.max_retries`. Emit it from `celery/app/trace.py` at the point where the retry count is exhausted, providing the task, task_id, args, kwargs, and exception info.
 
-### N7: Fix `group.apply_async()` not propagating `queue` argument to all tasks
+### N7: Fix `group.apply_async()` not propagating routing options into nested canvas primitives
 
-When calling `group(tasks).apply_async(queue='high')`, only the first task in the group is routed to the specified queue. Subsequent tasks use the default queue.
+When tasks inside a `group` are themselves `chain` or `group` objects, calling `group([chain(...), group(...)]).apply_async(queue='high')` applies routing to the outer signatures but not recursively to the inner tasks. The `_apply_tasks()` method in `celery/canvas.py` passes `**options` to `sig.apply_async()` which handles simple `Signature` objects, but nested canvas primitives do not propagate the routing options to their own inner tasks.
 
 ### N8: Fix `beat` scheduler drift accumulating over long run times
 
@@ -118,9 +118,9 @@ Each `AsyncResult.get()` call creates a new connection to the result backend. Im
 
 Implement explicit task dependency declarations beyond canvas primitives. `@app.task(depends_on=['task_a', 'task_b'])` ensures the task only executes after its dependencies complete. Detect and reject circular dependencies.
 
-### M7: Implement gradual worker shutdown with task draining
+### M7: Fix worker soft shutdown to drain executing tasks instead of sleeping
 
-When a worker receives SIGTERM, it should stop accepting new tasks, wait for currently executing tasks to complete with configurable timeout, and gracefully disconnect from the broker.
+The `wait_for_soft_shutdown()` method in `celery/worker/worker.py` sleeps for `worker_soft_shutdown_timeout` seconds unconditionally rather than waiting for running tasks to complete. When a worker receives SIGTERM it should stop accepting new messages from the broker, poll `state.active_requests` until executing tasks finish or the timeout expires, then gracefully close the broker connection. The change spans the shutdown handlers in `celery/apps/worker.py`, the consumer loop in `celery/worker/consumer/consumer.py`, request state tracking in `celery/worker/state.py`, and the `wait_for_soft_shutdown()` implementation.
 
 ### M8: Add per-task resource limits
 

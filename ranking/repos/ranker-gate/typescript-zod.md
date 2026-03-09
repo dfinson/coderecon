@@ -89,21 +89,29 @@ the "Error handling" section in `packages/docs/content/error-customization.mdx`
 to document the new discriminator path behavior with a before/after
 example showing the improved error path output for discriminated unions.
 
-### N4: Fix `.catch()` fallback not invoked during async parsing
+### N4: Fix `ZodCatch.create()` not accepting error-context callback
 
-When using `.catch(fallback)` on a schema that contains async
-refinements, the catch handler is not triggered on validation failure.
-The async parse path in `ZodCatch` does not check for the catch wrapper
-after awaiting inner validation. Fix the async branch to apply the
-fallback value when the inner schema rejects.
+The chainable `.catch(fn)` method on any schema accepts a callback
+with signature `(ctx: { error: ZodError; input: Input }) => Output`,
+giving callers access to the validation error and original input when
+computing the fallback. However, the static `ZodCatch.create()` factory
+only accepts `catch: Output | (() => Output)` — a zero-argument function
+— so callers using the factory directly cannot access the error context.
+Fix `ZodCatch.create()` to accept the same full callback signature as
+`.catch()`, updating the `RawCreateParams` intersection type and the
+`catchValue` wrapper inside the factory.
 
-### N5: Fix `.describe()` metadata dropped by `.optional()` wrapper
+### N5: Fix `.describe()` metadata dropped by `.array()` wrapper
 
-Calling `.describe("label")` on a schema and then wrapping it with
-`.optional()` discards the description. The `ZodOptional` constructor
-creates a fresh internal definition without copying the description
-property from the inner schema. The description should propagate
-through optional, nullable, and default wrappers.
+Calling `.describe("label")` on a schema and then calling `.array()`
+discards the description. The `ZodArray.create(this)` call inside the
+`.array()` method does not pass `this._def` as a second argument, so
+`processCreateParams` never sees the description. By contrast,
+`.optional()`, `.nullable()`, and `.default()` all pass `this._def` and
+correctly preserve the description. Fix `.array()` — and similarly
+`.set()`, `.map()`, and `.record()` wrapper methods on `ZodType` — to
+forward `this._def` so that descriptions propagate through these
+wrappers consistently.
 
 ### N6: Fix `ZodObject.merge()` silently discarding `description` and `errorMap`
 
@@ -115,22 +123,31 @@ constructs a new `ZodObject` with only `unknownKeys`, `catchall`,
 either definition. Fix `merge()` to propagate the incoming schema's
 metadata fields.
 
-### N7: Fix `z.preprocess()` not forwarding preprocessed value to refinements
+### N7: Fix `z.preprocess()` transform exceptions bypassing Zod error formatting
 
-When `.superRefine()` is chained after `z.preprocess()`, the refinement
-callback receives the original raw input instead of the preprocessed
-value. The preprocess step stores the transformed value but the
-refinement context still references the raw input. Fix the parse
-pipeline to thread the preprocessed value through subsequent
-refinement steps.
+When the transform function passed to `z.preprocess()` throws a
+JavaScript error (rather than using `ctx.addIssue()`), the exception
+propagates raw out of `_parse()` and is never converted to a
+`ZodError`. Callers who expect `safeParse` to always return a result
+object instead receive an uncaught exception. Fix the preprocess branch
+in `ZodEffects._parse()` in `types.ts` to wrap `effect.transform()` in
+a try/catch and, on caught errors, add a `custom` issue via
+`addIssueToContext` so the exception surfaces as a structured validation
+failure. Apply the same fix to both the synchronous and async
+preprocess code paths.
 
-### N8: Fix sparse array holes silently passing `ZodArray` validation
+### N8: Fix sparse array holes treated identically to explicit `undefined` values
 
-When validating a sparse JavaScript array like `[1, , 3]`, `ZodArray`
-iterates holes as `undefined` without raising an issue. If the element
-schema does not accept `undefined`, validation should fail for each
-sparse index with a clear path indicating the missing position rather
-than silently coercing the hole.
+`ZodArray._parse()` spreads the input via `[...ctx.data]` before
+iterating, which converts sparse holes to `undefined`. This loses the
+distinction between an intentional `undefined` element and a missing
+sparse-array index. A schema like `z.array(z.number().optional())`
+silently accepts `[1,,3]` treating the hole as valid optional input,
+with no indication that a hole existed. Add an explicit pre-iteration
+check using `!Object.hasOwn(ctx.data, i)` for each index so that holes
+are detected before element validation runs and emit a dedicated
+`invalid_type` issue with `received: "hole"` that identifies the
+missing sparse index by its path position.
 
 ### N9: Fix `ZodLiteral` equality check failing for `NaN` literal values
 
@@ -374,7 +391,7 @@ introduces new utility functions in the helpers module.
 
 ## Non-code focused
 
-### N11: Fix `vitest.config.ts` not enabling coverage reporting and align `biome.jsonc` formatter settings with project conventions
+### N11: Fix `vitest.config.ts` not enabling coverage reporting and extend `biome.jsonc` file inclusion to cover JSON files
 
 The root `vitest.config.ts` configures test execution but does not enable
 coverage collection — there is no `coverage` property in the `test` block.
@@ -383,27 +400,30 @@ it difficult to assess untested code paths. Add a `coverage` configuration
 to `vitest.config.ts` that uses the `v8` provider with `text` and `lcov`
 reporters, excludes `packages/docs/` and `packages/bench/`, and sets a
 minimum threshold of 80% for branches. Additionally, the `biome.jsonc`
-file sets `lineWidth: 120` in the formatter block but the `trailingCommas`
-setting under `javascript.formatter` uses `"es5"` which conflicts with
-the `noTrailingCommas` rule active in the linter section for JSON files.
-Harmonize the Biome configuration so that the JavaScript and JSON trailing
-comma settings are consistent and document the chosen convention in a
-comment at the top of `biome.jsonc`.
+file configures a `json.formatter` block (setting `trailingCommas: "none"`)
+but the `files.include` array only specifies TypeScript patterns
+(`**/*.ts`, `**/*.mts`, `**/*.cts`), so JSON and JSONC files are never
+processed by biome and the JSON formatter settings are dead configuration.
+Extend `files.include` to add `"**/*.json"` and `"**/*.jsonc"` entries so
+that biome actually formats JSON files in the project according to the
+configured settings.
 
-### M11: Add TypeScript version matrix validation and circular dependency check to the CI workflow
+### M11: Add TypeScript minimum version declaration and circular dependency check to the CI workflow
 
 The `.github/workflows/test.yml` CI workflow tests against TypeScript
-`"5.5"` and `"latest"` in its matrix but does not test against the
-minimum TypeScript version declared in `packages/zod/package.json`'s
-`peerDependencies` (currently `>=5.5`). If the minimum peer dependency
-changes, the CI matrix falls out of sync. Add a job step that reads the
-minimum TypeScript version from `package.json` and injects it into the
-matrix dynamically. Also, the `check-circular` job in the same workflow
-installs dependencies with `pnpm install` but does not run `pnpm build`
-before checking circular dependencies, so the check runs against stale
-build artifacts. Add a `pnpm build` step before `pnpm check:circular`.
-Finally, update the workflow `name` fields to include the pnpm version
-for traceability.
+`"5.5"` and `"latest"` in its matrix, but `packages/zod/package.json`
+has no `peerDependencies` entry declaring the minimum supported TypeScript
+version. Add a `peerDependencies` field to `packages/zod/package.json`
+declaring `"typescript": ">=5.5"` so the minimum version is explicit
+and machine-readable. Then add a job step in the CI matrix that reads
+this minimum version from `packages/zod/package.json` using `jq` and
+asserts that the matrix always includes it, failing the build if the
+declared minimum drifts from the tested versions. Also, the `check-circular`
+job in the same workflow installs dependencies with `pnpm install` but
+does not run `pnpm build` before checking circular dependencies, so the
+check runs against stale build artifacts. Add a `pnpm build` step before
+`pnpm check:circular`. Finally, update the workflow `name` fields to
+include the pnpm version for traceability.
 
 ### W11: Overhaul project documentation to accurately reflect the v3/v4 dual-version architecture
 
@@ -419,5 +439,5 @@ and add a "Docs development" section explaining the `packages/docs/`
 Next.js site. Review and update the `packages/docs/content/api.mdx` and
 `packages/docs/content/error-customization.mdx` doc pages to ensure all
 code examples reference the correct import paths for both v3 and v4 and
-that the `z.coerce` section in `api.mdx` documents the coercion failure
-error codes introduced by recent changes.
+that the `z.coerce` section in `api.mdx` accurately documents the current
+coercion behavior including what error codes are emitted when coercion fails.

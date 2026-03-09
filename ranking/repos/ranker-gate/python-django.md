@@ -69,16 +69,20 @@ clause is silently dropped on SQLite backends. The `SQLCompiler` in
 ORDER BY from compound subqueries. Fix the compiler's compound query
 assembly to preserve the outer ORDER BY clause on unioned querysets.
 
-### N2: Fix `UniqueConstraint.validate()` not respecting `exclude` for expression-based constraints
+### N2: Fix `_get_unique_checks()` crashing with `AttributeError` when `exclude` is a list and model has `CompositePrimaryKey`
 
-The `UniqueConstraint.validate()` method in `django/db/models/constraints.py`
-accepts an `exclude` parameter to skip certain fields during validation,
-but when the constraint uses expressions (e.g., `Lower('name')`) instead
-of plain `fields`, the `exclude` check only compares against raw field
-names and never matches the expression's source field. Fix `validate()`
-to resolve expression references against `exclude` so that
-`instance.full_clean(exclude=['name'])` correctly skips a
-`UniqueConstraint(Lower('name'), name='...')` constraint.
+`Model._get_unique_checks()` in `django/db/models/base.py` starts with:
+`if exclude is None: exclude = set()` — but when called directly (e.g.,
+`model.validate_unique(exclude=['field_a'])`) with a list, `exclude` is not
+converted to a set. Later at line ~1521 the code calls
+`exclude.isdisjoint(names)` while iterating fields for a model with
+a `CompositePrimaryKey`, raising `AttributeError: 'list' object has no
+attribute 'isdisjoint'`. `full_clean()` always converts `exclude` to a set
+before calling `validate_unique()`, but callers that invoke
+`validate_unique()` or `_get_unique_checks()` directly (including inline
+formsets via `django/forms/models.py`) may pass a list. Fix
+`_get_unique_checks()` to normalize `exclude` to a set unconditionally at
+the top of the method, matching `full_clean()`'s existing pattern.
 
 ### N3: Fix admin search with `__` lookups on JSONField
 
@@ -88,25 +92,36 @@ The admin search constructs the query incorrectly, treating `data__name`
 as a related field traversal rather than a JSON path lookup. Fix the
 admin search query construction to handle JSON path lookups.
 
-### N4: Fix `F()` expression not working with `JSONField` key transforms
+### N4: Fix `F()` expression not working with `JSONField` key transforms in `update()`
 
-Using `F('json_field__key') + 1` in an `update()` call raises
-`FieldError` because the ORM doesn't recognize JSON key transforms
-as valid expressions for arithmetic. Fix the expression compiler to
-support arithmetic on JSON key transforms for PostgreSQL and SQLite.
+Using `Model.objects.update(data__key=F('data__key') + 1)` raises
+`FieldDoesNotExist: has no field named 'data__key'` because the ORM
+resolves the left-hand side of an `update()` call through `_meta.get_field`,
+which does not recognise JSON key-path syntax. Separately, using the
+key-transform on the right side only — `update(data=F('data__key') + 1)` —
+compiles without error but overwrites the entire JSON column with a scalar
+integer, silently discarding the rest of the document. Fix the `update()`
+query-building path to detect `JSONField` key-path notation on both sides of
+an update assignment, and generate the appropriate JSON replacement SQL
+(e.g., `json_set`/`jsonb_set`) so that `update(data__key=F('data__key') + 1)`
+performs an in-place atomic increment of the named key for PostgreSQL and
+SQLite.
 
-### N5: Fix `GeneratedField` not included in `dumpdata` serialization
+### N5: Fix `GeneratedField` serialized by `dumpdata` causing `loaddata` failures
 
-The `GeneratedField` class in `django/db/models/fields/generated.py`
-sets `serialize=False` by default, so `dumpdata` and
-`django/core/serializers/base.py` skip it entirely. When fixtures are
-loaded back via `loaddata`, the generated column value is lost and the
-database must recompute it — but some backends don't recompute on
-INSERT. Add a `serialize` option to `GeneratedField.__init__()` that
-defaults to `True` for `STORED` generated columns, and update
-`Serializer.serialize()` in the base serializer to include them. Update
-the `GeneratedField` reference documentation in `docs/ref/models/fields.txt`
-to document the new `serialize` parameter and its default behavior.
+`GeneratedField` in `django/db/models/fields/generated.py` does not
+override `serialize`, so it inherits `serialize=True` from `Field`. This
+means `dumpdata` includes generated column values in fixtures. When such
+a fixture is loaded via `loaddata`, backends that treat `STORED` generated
+columns as read-only (PostgreSQL `GENERATED ALWAYS AS … STORED`, SQLite
+virtual columns) reject the `INSERT` with a value for the computed column,
+causing `loaddata` to fail. Fix `GeneratedField.__init__()` to set
+`serialize=False` as the default — since the database always recomputes
+the value on `INSERT`, there is no need to round-trip it through fixtures.
+Update the `GeneratedField` reference documentation in
+`docs/ref/models/fields.txt` to document the new default behaviour and
+note that callers may pass `serialize=True` explicitly if they need the
+value present in exported data.
 
 ### N6: Fix `prefetch_related` generating duplicate queries with `to_attr`
 
@@ -127,13 +142,16 @@ before resolving the referenced file.
 ### N8: Fix `CompositePrimaryKey` fields not supported in admin `search_fields`
 
 The `CompositePrimaryKey` field in `django/db/models/fields/composite.py`
-cannot be used in `ModelAdmin.search_fields`. When the admin's
+cannot be used safely in `ModelAdmin.search_fields`. When the admin's
 `get_search_results()` method in `django/contrib/admin/options.py`
 iterates `search_fields` and encounters `'pk'`, it resolves to the
-`CompositePrimaryKey` field, which has no `get_lookup('icontains')`
-support and raises `FieldError`. Fix `construct_search()` inside
+`CompositePrimaryKey` field, which returns the composite key descriptor.
+The `construct_search()` helper then produces `'pk__icontains'`, and
+the ORM generates invalid SQL — `"field_a", "field_b" LIKE %term%
+ESCAPE '\'` — rather than separate per-component lookups, causing a
+database error when the search is executed. Fix `construct_search()` inside
 `get_search_results()` to detect `CompositePrimaryKey` and expand
-it into separate searches on each component field.
+it into separate `icontains` searches on each component field.
 
 ### N9: Fix `assertNumQueries` count wrong with `atomic()` savepoints
 
@@ -202,11 +220,10 @@ connections, health check pass/fail counts). Wire it into the
 `BaseDatabaseWrapper` class with a `get_connection_stats()` method
 that each backend overrides. For PostgreSQL, read from
 `ConnectionPool.get_stats()`. For SQLite, report single-connection state.
-Also add a `django/core/checks/database.py` system check that warns
-when `CONN_HEALTH_CHECKS` is disabled but `CONN_MAX_AGE` is set. Update
-`docs/Makefile` to include the new management command in the doc build
-targets, and add a documentation entry in `docs/ref/django-admin.txt` for
-the `dbconnstats` command.
+Also add a system check to the existing `django/core/checks/database.py`
+that warns when `CONN_HEALTH_CHECKS` is disabled but `CONN_MAX_AGE` is set.
+Add a documentation entry in `docs/ref/django-admin.txt` for the
+`dbconnstats` command.
 
 ### M6: Add full-text search for SQLite backend
 

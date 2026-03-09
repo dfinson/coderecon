@@ -89,33 +89,33 @@ Build errors and warnings are formatted for human consumption. Add a JSON output
 
 When a CSS file uses `@import 'package/style.css'`, the resolver in `internal/resolver/resolver.go` checks `main` and `module` fields but doesn't consult the `browser` field for CSS entry remapping, unlike JS resolution.
 
-### N5: Fix `keepNames` not preserving names for arrow functions assigned to `const`
+### N5: Fix `keepNames` not preserving names for function expressions in `for` loop initializers
 
-When `keepNames` is enabled, arrow functions assigned to `const` like `const foo = () => {}` don't get `Object.defineProperty` name preservation. The name preservation logic in `internal/js_parser/js_parser.go` only handles `function` declarations and expressions.
+When `keepNames` is enabled, function expressions assigned in `for` statement initializer declarations like `for (var fn = function() {}; ...; ...)` are not wrapped with the `__name` helper, even though the equivalent statement-level declaration `var fn = function() {}` correctly receives name preservation. The name-propagation logic in `internal/js_parser/js_parser.go` handles `SLocal` variable declarations at statement level but does not propagate `nameToKeep` for the initializer clause of `for` statements.
 
 ### N6: Add `--analyze=detailed` flag for per-module size breakdown
 
 The `--analyze` flag shows file sizes but doesn't show how much of each file's size comes from code vs. comments vs. strings. Add per-module detailed breakdown to `internal/linker/linker.go` by tracking AST node categories during printing.
 
-### N7: Fix `define` replacements not applied inside template literal expressions
+### N7: Fix `/* @__PURE__ */` annotations discarded before tagged template literal expressions
 
-When `define: { 'process.env.NODE_ENV': '"production"' }` is configured, occurrences inside template literal expressions like `` `${process.env.NODE_ENV}` `` are not replaced. The define substitution in `internal/js_parser/js_parser.go` skips member expressions within template expression spans.
+When `/* @__PURE__ */ tag\`template\`` appears in source, the annotation comment is consumed by the lexer but does not mark the tagged template call as side-effect-free for tree-shaking purposes. The pure-annotation handling in `internal/js_parser/js_parser.go` applies the annotation to `ECall` and `ENew` expressions but not to `ETemplate` expressions that have a tag, so unused pure-annotated tagged template calls are never eliminated by the tree shaker.
 
 ### N8: Fix CSS `composes` from external files not resolving relative paths correctly
 
 When CSS modules use `composes: name from './other.module.css'`, the `composes` resolution in `internal/css_parser/css_decls_composes.go` resolves relative to the output directory instead of the source file's directory.
 
-### N9: Add `--drop-labels=DEV` to strip labeled blocks from output
+### N9: Fix `--drop-labels` not warning when a specified label name is never found
 
-The `--drop` flag supports `console` and `debugger`. Extend it to support named labels via `--drop-labels=DEV` that removes `DEV: { ... }` labeled blocks from output. Changes touch `internal/config/config.go` for the option and `internal/js_parser/js_parser.go` for block removal.
+When `--drop-labels=DEV` is specified but no `DEV: { ... }` labeled statement appears in the processed files, esbuild silently succeeds with no indication that the label name was unused—making it impossible to catch typos such as `--drop-labels=DEv`. Add a diagnostic in `internal/js_parser/js_parser.go` that tracks which label names from `DropLabels` (`internal/config/config.go`) were actually matched, and emits a warning via the logger when a specified label name was never encountered in a file.
 
 ### N10: Fix chunk splitting not respecting `sideEffects: false` in `package.json`
 
 When code splitting creates chunks, modules marked with `sideEffects: false` in their `package.json` are still included in chunks even when their exports aren't used by that chunk. The chunk assignment in `internal/graph/graph.go` doesn't consult side-effects metadata during splitting.
 
-### N11: Update `CHANGELOG.md` and `docs/architecture.md` to document the `--drop-labels` feature
+### N11: Update `CHANGELOG.md` and `docs/architecture.md` to document the `--drop-labels` unused-label warning
 
-Add a changelog entry to `CHANGELOG.md` describing the `--drop-labels` flag with usage examples. Update `docs/architecture.md` with the label-stripping pipeline stage in the parser-to-printer flow. Update `README.md` CLI reference section with the new flag syntax and semantics.
+Add a `CHANGELOG.md` entry describing the new warning emitted when a label name specified via `--drop-labels` is never encountered in the processed files, including a usage example showing how the warning helps catch typos. Update `docs/architecture.md` to document the label-stripping mechanism in the parse pipeline section, explaining how `DropLabels` is matched against labeled statements and when the diagnostic fires.
 
 ## Medium
 

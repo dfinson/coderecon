@@ -79,37 +79,37 @@ sinatra/
 
 ## Narrow
 
-### N1: Fix `IndifferentHash#merge` not returning an `IndifferentHash`
+### N1: Fix `IndifferentHash#filter` not returning an `IndifferentHash`
 
-In `lib/sinatra/indifferent_hash.rb`, `merge` delegates to `Hash#merge` which returns a plain `Hash`. Downstream code that calls `params.merge(extra).key?(:foo)` with symbol keys silently fails because the returned hash is no longer indifferent.
+In `lib/sinatra/indifferent_hash.rb`, the class overrides `select` to return a `Sinatra::IndifferentHash`, but does not override `filter` (the Ruby 2.6+ alias for `select`). Because `filter` is a C-level method that bypasses the Ruby-level `select` override, calling `params.filter { |k, v| v }` returns a plain `Hash`. Downstream code that calls `params.filter { ... }.key?(:foo)` with symbol keys silently fails because the returned hash is no longer indifferent. The fix is to define `filter` as an explicit alias for the overridden `select` method in `IndifferentHash`.
 
-### N2: Fix `Request#preferred_type` returning `nil` when all `Accept` entries have `q=0`
+### N2: Fix `Request#preferred_type` not respecting `q=0` rejection in `Accept` headers
 
-In `base.rb`, `preferred_type` calls `accept.detect` which returns `nil` when no `AcceptEntry` matches. The method should return the first type passed by the caller as a fallback when the client explicitly rejects everything, rather than `nil` which causes a `NoMethodError` on `to_s`.
+In `base.rb`, `preferred_type` loops over `accept` entries and delegates matching to `MimeTypeEntry#accepts?`, which never checks the `q` value. As a result, `Accept: text/html;q=0` (an explicit client rejection) still causes `preferred_type("text/html")` to return `"text/html"` instead of treating it as unacceptable. The fix should filter or skip `AcceptEntry` instances with `q == 0.0` inside `preferred_type` before attempting type matching, so clients can explicitly reject content types.
 
-### N3: Fix `Response#finish` not setting `content-length` for streaming bodies
+### N3: Fix `Response#finish` raising `NoMethodError` when body contains non-String elements
 
-In `base.rb`, `Response#finish` calculates `content-length` by calling `body.map(&:bytesize)`. If body is a streaming `IO` or `Enumerator`, `map` consumes the stream and the response body is empty. The length calculation should be skipped for non-rewindable bodies.
+In `base.rb`, `Response#finish` calculates `content-length` with `body.map(&:bytesize).reduce(0, :+)`. If any element in the body array does not respond to `bytesize` (e.g., an Integer, Symbol, or other non-String object set via `body [some_object]`), a `NoMethodError` is raised instead of a meaningful error. The calculation should guard against non-String elements by using `body.reduce(0) { |sum, s| sum + s.to_s.bytesize }` or a similar safe accumulation, and the `calculate_content_length?` helper in `base.rb` should remain the single gate for this logic.
 
 ### N4: Fix `Rack::Protection::AuthenticityToken` not rotating tokens on session regeneration
 
-In `rack-protection/lib/rack/protection/authenticity_token.rb`, the CSRF token is derived from `session[:csrf]`. When the session ID is regenerated (e.g., after login), the old session hash persists and the CSRF token remains valid for the old session, allowing session fixation attacks to reuse the token. Document the token rotation behavior and mitigation in `SECURITY.md`.
+In `rack-protection/lib/rack/protection/authenticity_token.rb`, the CSRF token is derived from `session[:csrf]` (stored under `options[:key]`). When the session ID is regenerated (e.g., after login), the old session hash is copied to the new session, so the CSRF token remains valid across the regeneration boundary. Applications have no public API to invalidate the old token. The fix is to add a `self.rotate_token!(session, options = {})` class method that deletes the master CSRF key from the session hash (forcing a new token to be generated on the next request), and to call this helper from an `after_call` hook or expose it for app-level use. Changes are confined to `authenticity_token.rb`.
 
 ### N5: Fix `Rack::Protection::HostAuthorization` not normalising port numbers in permitted hosts
 
-In `rack-protection/lib/rack/protection/host_authorization.rb`, `permitted_hosts` are compared with exact string match against `request.host_with_port`. When the default port (80/443) is omitted from the Host header but included in the permitted list (or vice versa), the check incorrectly rejects legitimate requests.
+In `rack-protection/lib/rack/protection/host_authorization.rb`, `HostAuthorization#initialize` stores permitted host strings verbatim (e.g., `"example.com:80"`) in `@permitted_hosts`, while `accepts?` compares using `extract_host` which strips any port via `PORT_REGEXP`. This means `permitted_hosts: ["example.com:80"]` never matches a request with `Host: example.com` (default port omitted), because `"example.com"` is not included in `@permitted_hosts`. The fix should strip port numbers from string entries during `initialize` so the stored values always match the port-stripped comparison values.
 
 ### N6: Fix `Rack::Protection::PathTraversal` not decoding percent-encoded sequences before checking
 
 In `rack-protection/lib/rack/protection/path_traversal.rb`, the middleware checks for `..` in the request path. Attackers can bypass this by double-encoding (`%252e%252e`). The middleware should decode the path fully before checking for traversal sequences.
 
-### N7: Fix `Base.route` not unescaping pattern captures for UTF-8 path segments
+### N7: Fix `Base.process_route` silently dropping route captures named `:ignore`
 
-In `base.rb`, `route!` uses Mustermann to match the pattern but the captured params are URL-encoded byte strings. When the route pattern is `/users/:name` and the path is `/users/caf%C3%A9`, `params[:name]` is `"caf%C3%A9"` instead of `"café"`. The captures should be decoded with `URI.decode_www_form_component`.
+In `base.rb`, `process_route` calls `params.delete('ignore')` unconditionally before merging Mustermann params into `@params`. This means any route that uses `:ignore` as a named parameter (e.g., `get '/users/:ignore' do ... end`) will have that parameter silently deleted: `params[:ignore]` will always be `nil`. The fix should remove the hardcoded delete and instead handle the internal `ignore` sentinel differently (e.g., store it under a namespace-prefixed key, or use Mustermann's `ignore` option rather than post-processing).
 
-### N8: Fix `ShowExceptions` HTML template not escaping exception messages
+### N8: Fix `ShowExceptions` HTML template not escaping `env['SCRIPT_NAME']`
 
-In `lib/sinatra/show_exceptions.rb`, the error page interpolates `exception.message` directly into HTML. If the message contains user input (e.g., from a `raise "Invalid param: #{params[:q]}"`), it creates an XSS vector in development mode. The message should be HTML-escaped.
+In `lib/sinatra/show_exceptions.rb`, the `TEMPLATE` ERB template uses `<%=h ... %>` (which calls `Rack::Utils.escape_html`) for nearly every interpolated value — including `exception.message`, frame filenames, and request data. However, the `src` attribute of the error image tag interpolates `env['SCRIPT_NAME']` without the `h` escaping helper: `<img src="<%= env['SCRIPT_NAME'] %>/__sinatra__/500.png" ...>`. A malicious or misconfigured proxy can inject arbitrary values into `SCRIPT_NAME`, making this an XSS vector in development mode. The fix is to apply `<%=h env['SCRIPT_NAME'] %>` consistently with the rest of the template.
 
 ### N9: Fix `Sinatra::Cookies` helper not setting `SameSite` attribute
 
@@ -125,9 +125,9 @@ The `CHANGELOG.md` lists security fixes as regular bug fixes without linking to 
 
 ## Medium
 
-### M1: Add conditional route matching with request-header predicates
+### M1: Add generic request-header condition helper for route matching
 
-Implement `get '/api/data', provides: 'json', user_agent: /Mobile/i do ... end` where route matching considers arbitrary request-header conditions. Requires changes to `Base.route` (to store header conditions), `Base.route!` (to check conditions during matching), and `Base.compile!` (to compile condition procs).
+Sinatra's `compile!` method already processes route options via `options.each_pair { |option, args| send(option, *args) }`, and built-in helpers (`user_agent`, `provides`, `host_name`) work as route conditions today. However, there is no generic `request_header` helper for matching arbitrary HTTP headers not covered by the built-in conditions. Add a `request_header(name, pattern)` condition method to the DSL (e.g., `get '/api', request_header(:x_api_version, /v2/) do ... end`) that registers a condition proc checking `request.env["HTTP_#{name.upcase}"]` against the given pattern. Changes span `Base` (new `request_header` condition method), `compile!` (no changes needed — it already invokes option methods), and documentation in `README.md`.
 
 ### M2: Implement rate limiting middleware for rack-protection
 
@@ -147,7 +147,7 @@ Implement `post '/items', schema: ItemSchema do ... end` that validates the pars
 
 ### M6: Implement session encryption for rack-protection
 
-Add `Rack::Protection::EncryptedSession` middleware that encrypts session data at rest using AES-256-GCM. Changes span a new `encrypted_session.rb` in `rack-protection/lib/rack/protection/`, key derivation from the app secret in `base.rb`, and integration with session middleware. Update `README.md` with session encryption configuration instructions and add a security hardening section to `.github/copilot-instructions.md`.
+Add `Rack::Protection::EncryptedSession` middleware that encrypts session data at rest using AES-256-GCM. Changes span a new `encrypted_session.rb` in `rack-protection/lib/rack/protection/`, key derivation from the app secret in `base.rb`, and integration with session middleware. Update `README.md` with session encryption configuration instructions and add a security hardening section to `SECURITY.md`.
 
 ### M7: Add template caching with dependency invalidation for the reloader
 
@@ -165,9 +165,9 @@ Extend `sinatra-contrib/lib/sinatra/namespace.rb` to allow `namespace '/admin' d
 
 Extend `rack-protection/lib/rack/protection/content_security_policy.rb` to auto-generate a per-request nonce, inject it into the CSP `script-src` directive, and expose it via `env['rack.csp_nonce']` for use in templates. Changes span `content_security_policy.rb` (nonce generation and header rewriting), `Helpers` in `base.rb` (nonce accessor), and `show_exceptions.rb` (use nonce for inline scripts).
 
-### M11: Modernize CI test matrix and release workflow
+### M11: Modernize CI test matrix and monorepo tooling
 
-Extend `.github/workflows/test.yml` with a Ruby version matrix (3.1, 3.2, 3.3) and platform matrix (ubuntu, macos). Add an automated release workflow in `.github/workflows/release.yml` that reads the `VERSION` file, builds all three gems (`sinatra`, `sinatra-contrib`, `rack-protection`), and publishes to RubyGems. Update `Gemfile` with development dependency groups, configure `.rubocop.yml` with monorepo-specific settings per gem directory, and add a `.github/CODEOWNERS` file mapping gem directories to maintainers. Changes span `.github/workflows/test.yml`, `.github/workflows/release.yml`, `.github/CODEOWNERS`, `Gemfile`, `.rubocop.yml`, `VERSION`, and `sinatra.gemspec`.
+Extend `.github/workflows/test.yml` to add a macOS platform to the test matrix (currently only `ubuntu-latest` is used). Update `.rubocop.yml` to replace the blanket `Exclude` of `rack-protection/**/*` and `sinatra-contrib/**/*` with per-gem `inherit_from` entries using gem-specific `.rubocop.yml` files in each gem directory. Move the existing `CODEOWNERS` file from `.github/workflows/CODEOWNERS` (an unrecognised path) to `.github/CODEOWNERS` so GitHub correctly enforces code ownership. Changes span `.github/workflows/test.yml`, `.rubocop.yml`, `.github/CODEOWNERS`, `rack-protection/.rubocop.yml`, and `sinatra-contrib/.rubocop.yml`.
 
 ## Wide
 

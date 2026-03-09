@@ -77,11 +77,18 @@ code block.
 
 ### N3: Fix error span pointing to wrong field with `#[serde(rename_all)]`
 
-When deserialization fails on a renamed field (via `rename_all = "camelCase"`),
-the error message shows the original Rust field name instead of the
-renamed (JSON) key name. Users see "unknown field `userData`" when the
-error should say "missing field `userData`". Fix the error reporting to
-use the serialized name.
+When deserialization fails on a struct field that has been renamed via
+`#[serde(rename_all = "camelCase")]`, the "missing field" error message
+shows the original Rust field name instead of the renamed (JSON) key
+name. For example, a struct field `user_data` renamed to `userData`
+produces "missing field `user_data`" when the error should say
+"missing field `userData`". The issue occurs in variant-level
+`rename_all` applied to enum struct variants, where the generated
+`__Field` visitor and `expr_is_missing` code path in
+`serde_derive/src/de.rs` does not consistently use
+`field.attrs.name().deserialize_name()`. Fix the error reporting in
+the enum variant deserialization path to always use the deserialized
+(renamed) name.
 
 ### N4: Fix `#[serde(default)]` not called when field is `null` in JSON
 
@@ -259,12 +266,20 @@ visitor.
 ### W1: Add first-class support for `serde` with `no_std` + `no_alloc`
 
 Currently `serde` without `std` still requires `alloc` for `String`,
-`Vec`, and `BTreeMap`. Implement a `no_alloc` feature that replaces
-heap-allocated types with bounded stack alternatives. Provide
-`Serialize` impls for `heapless::String`, `heapless::Vec`, etc. Adjust
-the data model, derive macros, and built-in impls to work without an
-allocator. This affects the core trait definitions, derive codegen,
-and the built-in impl set.
+`Vec`, and `BTreeMap`. Implement a `no_alloc` feature flag in
+`serde_core/Cargo.toml` and `serde/Cargo.toml` that gates out all
+heap-dependent impls. Add a `no_alloc` feature to `serde_core/src/lib.rs`
+(alongside the existing `alloc` and `std` gates) and strip the
+corresponding `Serialize`/`Deserialize` impls in
+`serde_core/src/ser/impls.rs` and `serde_core/src/de/impls.rs` so
+they compile without an allocator. Update the derive macro in
+`serde_derive/src/de.rs` and `serde_derive/src/ser.rs` to avoid
+generating code that requires `alloc` when the feature is absent.
+Add a `test_suite/no_std` build target that compiles with
+`--no-default-features` and the new `no_alloc` flag to prevent
+regressions. This affects `serde_core/src/lib.rs`, both `impls.rs`
+files, the derive codegen, and the build matrix in
+`.github/workflows/ci.yml`.
 
 ### W2: Implement schema generation from serde-annotated types
 
@@ -277,12 +292,20 @@ JSON Schema. The derive macro should generate a `Schema` impl alongside
 
 ### W3: Implement async serialization and deserialization
 
-Add `AsyncSerializer` and `AsyncDeserializer` traits for
-streaming serialization/deserialization over async I/O. Support
-serializing large collections without buffering the entire output,
-and deserializing from async byte streams (e.g., `tokio::io::AsyncRead`).
-Add derive macro support for async traits. This crosses the core
-traits, derive macros, and data model.
+Add `AsyncSerializer` and `AsyncDeserializer` traits in
+`serde_core/src/ser/mod.rs` and `serde_core/src/de/mod.rs` for
+streaming serialization and deserialization where each step can
+yield to a scheduler (modelled as `Poll`-returning methods or
+`async fn` with a generic waker, without requiring any specific
+async runtime). Support serializing large collections without
+buffering the entire output by adding `serialize_seq_element_async`
+and `serialize_map_entry_async` methods to the async trait. Add
+`#[serde(async)]` attribute support in `serde_derive/src/ser.rs`
+and `serde_derive/src/de.rs` that emits an `AsyncSerialize` /
+`AsyncDeserialize` impl alongside the standard one. The async traits
+should be gated behind an `async` feature flag and carry no external
+runtime dependency — the executor is provided by the caller through
+a `Waker` parameter, keeping this entirely within the serde workspace.
 
 ### W4: Add serde data model introspection API
 
@@ -305,12 +328,22 @@ version resolution protocol.
 
 ### W6: Add first-class support for self-describing formats
 
-Implement a `SelfDescribing` serializer trait that embeds type information
-alongside values. On deserialization, `serde_any::from_reader()` can
-detect the format (JSON, TOML, YAML, MessagePack) from the content
-and deserialize automatically. Includes format detection heuristics,
-a registry for format handlers, and an envelope format for explicit
-format tagging.
+Implement a `SelfDescribing` marker trait in `serde_core/src/ser/mod.rs`
+that serializers can opt into, signalling that their output embeds
+enough type information to reconstruct values without a schema. Add a
+`FormatHint` enum in `serde_core/src/format.rs` (which already exists)
+with variants covering the common serde data model representations
+(JSON-like, binary, self-describing binary, etc.) and a
+`Serializer::format_hint() -> FormatHint` method with a default
+returning `FormatHint::Unknown`. Add a derive-macro attribute
+`#[serde(format_hint = "json")]` in `serde_derive/src/internals/attr.rs`
+that allows `Serialize` implementations to emit format-specific fast
+paths when the hint matches. Add a `ContentType` registry in
+`serde_core/src/lib.rs` that lets callers query which hint is active
+at runtime so that `Serialize` impls can branch without overhead in
+the common (unknown hint) case. Document the feature in `crates-io.md`
+with an example of a type that serializes differently based on the
+format hint.
 
 ### W7: Implement streaming collection serialization with backpressure
 
@@ -349,15 +382,24 @@ analysis metadata, lines 1046–1058), `serde_derive/src/bound.rs`
 `serde_derive/src/internals/check.rs` (borrow validation), and
 `serde_core/src/de/mod.rs` (lifetime bound documentation).
 
-### W10: Add serde ecosystem interop layer
+### W10: Add serde data model transcoding layer
 
-Implement a compatibility layer between serde and other serialization
-ecosystems: protobuf (`prost`), Cap'n Proto, FlatBuffers, and
-`rkyv` (zero-copy). For each format, provide bidirectional conversion
-between the format's native types and serde's data model. Support
-deriving both serde and the native traits from a single struct
-definition. This crosses derive macros, data model mapping, and adds
-per-format bridge modules.
+Implement a `Transcoder` type in `serde_core/src/` (new file
+`serde_core/src/transcode.rs`) that implements both `Serialize` and
+acts as a proxy `Deserializer`, forwarding events from any
+`Deserializer` to any `Serializer` without materialising an
+intermediate value. This enables zero-copy format-to-format conversion
+(e.g., JSON → MessagePack) using only the serde data model. Add a
+`transcode` free function that takes a `Deserializer + Serializer` pair
+and drives the conversion. Extend `serde_core/src/de/mod.rs` to add a
+`TranscodeVisitor` that maps `Visitor` calls to the corresponding
+`Serializer` calls. Add `#[serde(transcode)]` support in
+`serde_derive/src/ser.rs` so derived `Serialize` impls can opt into a
+transcoding fast path when a `Deserializer` is available. Register
+`transcode` in `serde_core/src/lib.rs` and document the API in
+`crates-io.md`. This touches `serde_core/src/de/mod.rs`,
+`serde_core/src/ser/mod.rs`, `serde_core/src/lib.rs`, the new
+`transcode.rs`, and `serde_derive/src/ser.rs`.
 ## Non-code focused
 
 ### N11: Update `crates-io.md` to document supported data formats and feature flags
@@ -385,17 +427,22 @@ instructions, and add a dedicated `msrv` job to
 `.github/workflows/ci.yml` that uses `cargo +<msrv> check` to prevent
 accidental MSRV regressions.
 
-### W11: Add `serde_test` crate with documentation, CI coverage, and workspace integration
+### W11: Integrate `serde_test` crate into the workspace
 
-The `test_suite/` directory contains integration tests but there is no
-public testing utility crate for downstream users to verify their
-`Serialize`/`Deserialize` impls. Create a new `serde_test` crate in
-the workspace that provides `assert_tokens`, `assert_ser_tokens`, and
-`assert_de_tokens` helpers. Register the crate in the workspace
-`Cargo.toml` `members` list and add a `[patch.crates-io]` entry.
-Add a `serde_test` section to `CONTRIBUTING.md` with instructions for
-running serde_test's own test suite. Update `crates-io.md` to link to
-the new crate. Add a `serde_test` build step to
+The `test_suite` currently depends on an externally-published
+`serde_test = "1.0.176"` crate for the `assert_tokens`,
+`assert_ser_tokens`, `assert_de_tokens`, and `Token` testing helpers.
+Bring `serde_test` into this workspace by creating a new
+`serde_test/` crate directory with its own `Cargo.toml` and `src/lib.rs`
+implementing the `Token` enum and the `assert_tokens`,
+`assert_ser_tokens`, `assert_de_tokens`, and `assert_de_tokens_error`
+helpers that match the published crate's API. Register `serde_test`
+in the workspace `Cargo.toml` `members` list and add a
+`[patch.crates-io]` entry so `test_suite` uses the local version
+automatically. Add a `serde_test` section to `CONTRIBUTING.md`
+with instructions for running serde_test's own test suite alongside
+the existing test commands. Update `crates-io.md` to link to
+the new in-tree crate. Add a `serde_test` build step to
 `.github/workflows/ci.yml` in both the `stable` and `nightly` jobs.
 Update `README.md` to list `serde_test` in the project structure
 overview.

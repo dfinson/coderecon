@@ -81,13 +81,19 @@ add a note about the reverse-mapping pitfall for numeric enums and how
 contributors should test pipe behavior with both string and numeric enum
 types.
 
-### N3: Fix `@UseInterceptors()` ordering with global interceptors
+### N3: Fix duplicate interceptor execution when same class is global and method-level
 
-When both global interceptors and method-level `@UseInterceptors()` are
-registered, the execution order is inconsistent — global interceptors
-sometimes run after method-level ones depending on module initialization
-order. Fix the interceptor chain to guarantee that global interceptors
-always wrap method-level interceptors (global runs first/outermost).
+When an interceptor class is registered both globally (via
+`app.useGlobalInterceptors()` or `APP_INTERCEPTOR`) and at the
+controller or method level via `@UseInterceptors()`, the interceptor
+executes twice per request. The `ContextCreator.createContext()` in
+`packages/core/helpers/context-creator.ts` concatenates the global
+metadata list with the class-level and method-level metadata lists
+without checking for duplicates, producing `[global, class, method]`
+where the same interceptor instance appears in both the global and
+method sections. Fix `ContextCreator.createContext()` to deduplicate
+interceptor instances across the three metadata lists so each
+interceptor runs at most once per request.
 
 ### N4: Fix `@Injectable()` scope not inherited by child classes
 
@@ -127,12 +133,12 @@ only applies the default when the value is `null`, `undefined`, or
 `NaN`. When a query parameter is present but empty (e.g., `?name=`),
 the pipe passes through the empty string `""` instead of the default
 value. Add an `includeEmptyStrings` option that treats empty strings as
-missing values and applies the default. Also update the `Readme.md` to
-add `DefaultValuePipe` to the "Built-in pipes" feature list in the
-Description section (currently only `ValidationPipe` and `ParseIntPipe`
-are mentioned), and add a JSDoc example block to the
-`default-value.pipe.ts` source file showing the new
-`includeEmptyStrings` option.
+missing values and applies the default. Add a JSDoc example block to
+the `default-value.pipe.ts` source file showing the new
+`includeEmptyStrings` option. Also update `CONTRIBUTING.md` (under
+"Coding Rules") to add a note about the empty-string edge case for
+query parameters and how contributors should test pipe behavior with
+both `null`/`undefined` and empty-string inputs.
 
 ### N9: Fix `ExceptionFilter` not catching errors from async guards
 
@@ -255,20 +261,26 @@ async operations using `AsyncLocalStorage`. The context should be
 available in all services, repositories, and event handlers spawned
 during request processing, without explicit parameter passing.
 
-### M9: Add `TestingModuleBuilder.overrideInterceptor()` for test isolation
+### M9: Add pre-compilation global enhancer configuration to `TestingModuleBuilder`
 
 The `TestingModuleBuilder` in
-`packages/testing/testing-module.builder.ts` supports
-`overrideProvider()` and `overrideModule()` for test isolation, but
-there is no dedicated API for overriding interceptors. Developers must
-use `overrideProvider()` with the interceptor class token, which doesn't
-work for globally registered interceptors set via
-`app.useGlobalInterceptors()`. Add
-`overrideInterceptor(type).useClass(mock)` and
-`overrideGuard(type).useClass(mock)` methods to `TestingModuleBuilder`.
-Update `TestingModule` (`packages/testing/testing-module.ts`) and
-`TestingInjector` (`packages/testing/testing-injector.ts`) to intercept
-global enhancer registration.
+`packages/testing/testing-module.builder.ts` provides
+`overrideInterceptor()`, `overrideGuard()`, `overridePipe()`, and
+`overrideFilter()` for replacing DI-registered enhancers in the
+container, but has no way to pre-configure global enhancers that act
+as if they were registered via `app.useGlobalInterceptors()`,
+`app.useGlobalGuards()`, `app.useGlobalPipes()`, or
+`app.useGlobalFilters()`. Developers who need globally applied mock
+enhancers during testing must create a full `NestApplication` after
+`compile()`, which is heavyweight for unit tests. Add
+`withGlobalInterceptors(...interceptors)`, `withGlobalGuards(...guards)`,
+`withGlobalPipes(...pipes)`, and `withGlobalFilters(...filters)` builder
+methods to `TestingModuleBuilder` that populate the `ApplicationConfig`
+(`packages/core/application-config.ts`) before `compile()` is called.
+Update `TestingModule` (`packages/testing/testing-module.ts`) to expose
+the configured `ApplicationConfig` and update `TestingInjector`
+(`packages/testing/testing-injector.ts`) to resolve the pre-configured
+global enhancers during test context creation.
 
 ### M10: Add `DiscoveryService` method-level metadata scanning
 
@@ -409,9 +421,7 @@ Node.js 18 reached end-of-life in April 2025 but is still listed as
 Node.js 18 support, promote 20.x to legacy, 22.x to maintenance, and
 add Node.js 24.x as current. Also add a comment block at the top of the
 config documenting the Node.js release schedule mapping and update the
-`check-legacy-node-version` pipeline parameter description. Finally,
-update `package.json` to set the `engines.node` field to `>=20` to
-match the new minimum.
+`check-legacy-node-version` pipeline parameter description.
 
 ### M11: Consolidate linting configuration and align `eslint.config.mjs` with `tsconfig.json` project references
 
@@ -425,25 +435,29 @@ Create a `tsconfig.eslint.json` that extends `tsconfig.json` but
 includes both source and spec files, then reference it from
 `eslint.config.mjs`. Also consolidate the three parallel `lint:packages`,
 `lint:integration`, and `lint:spec` npm scripts in `package.json` into
-a single `lint` script using ESLint's `overrides` pattern instead of
-three separate concurrently invocations, and update `CONTRIBUTING.md`
+a single `lint` script that passes all glob patterns to a single ESLint
+invocation (using ESLint flat config's array of config objects to handle
+per-glob rule differences) instead of three separate concurrently
+invocations, and update `CONTRIBUTING.md`
 (section "Development Setup") to document the new unified lint command.
 
 ### W11: Modernize project documentation and release tooling configuration
 
-The `Readme.md` (note: lowercase "eadme") references CircleCI build
-badges pointing to the `master` branch, but the default branch is now
-`master` and the CircleCI badge token placeholder (`?token=abc123def456`)
-is not a real token — the badge never renders. Fix the badge URLs,
-remove the placeholder token, and update all badge links to use the
-current default branch. The `CONTRIBUTING.md` file references `npm` for
-all setup commands but the project uses `lerna` for monorepo management
+`Readme.md` contains a stale markdown reference definition
+`[circleci-image]` pointing to
+`https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456`
+— the `?token=abc123def456` placeholder is not a real token and the
+reference is never used in the document body (the active badge is
+hardcoded inline HTML without a token). Remove the unused
+`[circleci-image]` and `[circleci-url]` reference definitions from
+`Readme.md`. The `CONTRIBUTING.md` file references `npm` for all
+setup commands but the project uses `lerna` for monorepo management
 — add a "Monorepo structure" section explaining the `lerna.json`
 configuration, how `packages/` are linked, and how to add a new package.
-Update `lerna.json` to use the `"useWorkspaces": true` configuration
-for npm workspace integration instead of relying on the legacy
-`"packages"` field. Review and update the `gulpfile.js` to add JSDoc
-comments explaining each gulp task, and add a `DEVELOPMENT.md` at the
-repository root documenting the build pipeline (TypeScript compilation,
-gulp tasks, lerna publish flow) with a step-by-step guide for running
-tests locally.
+Update `lerna.json` to add the `"useWorkspaces": true` field and add a
+corresponding `"workspaces": ["packages/*"]` field to `package.json` to
+enable npm workspace integration alongside lerna. Review and update the
+`gulpfile.js` to add JSDoc comments explaining each gulp task, and add a
+`DEVELOPMENT.md` at the repository root documenting the build pipeline
+(TypeScript compilation, gulp tasks, lerna publish flow) with a
+step-by-step guide for running tests locally.

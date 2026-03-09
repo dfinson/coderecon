@@ -71,23 +71,31 @@ to pass a rich error with the original request details.
 
 ### N2: Add `cURLDescription` for upload requests with multipart body
 
-The `cURLDescription()` method generates a curl command for debugging
-but omits the body for multipart upload requests. It shows
-`--data '<multipart body omitted>'`. Generate a proper curl command
-with `--form` flags for each multipart part, including file references
-and content types.
+The `cURLDescription()` method in `Source/Core/Request.swift` generates
+a curl command for debugging. For multipart upload requests where the
+encoded data fits below `encodingMemoryThreshold`, the raw multipart
+binary is included as `-d "..."`, producing an invalid curl invocation.
+For large multipart uploads (file-backed), `httpBody` is nil and the
+body is silently omitted entirely. Override `cURLDescription()` in
+`UploadRequest` to detect when the upload originated from a
+`MultipartFormData` (accessible via the `upload` property cast to
+`MultipartUpload`) and emit `--form` flags for each body part,
+including file references and content types.
 
 ### N3: Fix `AuthenticationInterceptor` not cancelling queued requests on credential invalidation
 
 When `AuthenticationInterceptor` detects an expired credential and
-begins a refresh cycle, requests that arrive during the refresh are
-queued in `mutableState.additionalRequests`. If the credential refresh
-fails permanently (e.g., refresh token revoked), the queued requests
-are completed with the refresh error but their underlying
-`URLSessionTask`s are never cancelled. This leaves zombie tasks
-consuming connections. Cancel the underlying tasks for all queued
-requests when credential refresh fails in
-`Source/Features/AuthenticationInterceptor.swift`.
+begins a refresh cycle, pending adapt operations are queued in
+`mutableState.adaptOperations` and pending retry completions in
+`mutableState.requestsToRetry`. If the credential refresh fails
+permanently (e.g., refresh token revoked), `handleRefreshFailure`
+calls `requestsToRetry.forEach { $0(.doNotRetryWithError(error)) }` and
+`adaptOperations.forEach { $0.completion(.failure(error)) }` to drain
+the queues, but the underlying `URLSessionTask`s associated with those
+requests are never explicitly cancelled. This leaves zombie tasks
+consuming connections until the session or task timeout fires. Cancel
+the underlying tasks for all queued requests when credential refresh
+fails in `Source/Features/AuthenticationInterceptor.swift`.
 
 ### N4: Fix `RequestTaskMap` not cleaning up cancelled tasks
 
@@ -110,18 +118,22 @@ the second value. The array index tracking resets when recursing into
 nested containers. Fix the encoder to correctly track array indices
 across nested levels so all values are emitted.
 
-### N6: Fix `ParameterEncoder` not encoding `Date` values consistently
+### N6: Fix `JSONParameterEncoder` always encoding parameters into the request body
 
-When using `JSONParameterEncoder` vs `URLEncodedFormParameterEncoder`
-to encode a struct containing `Date` fields, the two encoders produce
-inconsistent date representations. `JSONParameterEncoder` uses the
-underlying `JSONEncoder.dateEncodingStrategy` (defaulting to
-`deferredToDate`), while `URLEncodedFormEncoder` in
-`Source/Features/URLEncodedFormEncoder.swift` always uses
-`timeIntervalSinceReferenceDate`. Add a `DateEncoding` configuration
-to `URLEncodedFormEncoder` that supports `.iso8601`,
-`.secondsSince1970`, and `.formatted(DateFormatter)` to match
-`JSONEncoder`'s strategies.
+`JSONParameterEncoder` in `Source/Core/ParameterEncoder.swift` always
+places encoded parameters into `request.httpBody` regardless of HTTP
+method. Unlike `URLEncodedFormParameterEncoder`, which has a
+`methodDependent` `Destination` that places GET/HEAD/DELETE parameters
+in the URL query string and other methods in the body, there is no
+equivalent on `JSONParameterEncoder`. When callers use
+`JSONParameterEncoder` with GET requests and a server expects
+JSON-encoded parameters in the URL query string (a pattern used by
+some GraphQL and search APIs), they must manually construct the URL.
+Add a `Destination` enum to `JSONParameterEncoder` with cases
+`.httpBody` (default, preserves current behaviour) and `.queryString`
+(percent-encodes the JSON string and appends it as the `query`
+component of the URL), matching the structure of
+`URLEncodedFormParameterEncoder.Destination`.
 
 ### N7: Fix `ServerTrustManager` not supporting wildcard subdomains
 
@@ -142,29 +154,36 @@ and `205`. Add `201` to the default `emptyResponseCodes` when the
 generic type is `Empty` or `Void`, so empty creation responses succeed
 without requiring callers to override the defaults.
 
-### N9: Fix `MultipartFormData` not setting `filename` for `Data` appends
+### N9: Fix `MultipartFormData` silently dropping extensionless files
 
-When appending raw `Data` to `MultipartFormData` via
-`append(_ data:, withName:, mimeType:)` in
-`Source/Features/MultipartFormData.swift`, the `Content-Disposition`
-header omits the `filename` parameter. Some server frameworks
-(e.g., Rails, Django) reject file uploads that lack a `filename`
-in the multipart part headers, returning 422 errors. Add an optional
-`fileName` parameter to the `Data` append overload (defaulting to
-`nil` for backward compatibility) and include it in the
-`Content-Disposition` when provided.
+The convenience overload `append(_ fileURL: URL, withName name: String)`
+in `Source/Features/MultipartFormData.swift` calls
+`setBodyPartError(withReason: .bodyPartFilenameInvalid(in: fileURL))`
+when `fileURL.pathExtension` is empty. This silently drops files whose
+names have no extension (common in Unix/Linux environments, e.g.,
+named pipes, Dockerfile, Makefile). The private `mimeType(forPathExtension:)`
+helper already returns `"application/octet-stream"` when no UTType is
+found for a given extension. Relax the guard so that an empty
+`pathExtension` still appends the body part using
+`"application/octet-stream"` as the MIME type rather than recording
+a `bodyPartFilenameInvalid` error.
 
-### N10: Fix `DownloadRequest` resume data not included in `AFError`
+### N10: Fix `DownloadRequest.resumeData` not returning resume data from network failures on Apple platforms
 
-When a `DownloadRequest` fails after partial transfer, the resume
-data from `URLSessionDownloadTask` is stored in
-`DownloadRequest.mutableState.resumeData` in
-`Source/Core/DownloadRequest.swift`, but the `AFError` delivered to
-response handlers does not include it. Callers must separately
-access `request.resumeData` which may be nil by the time the error
-handler runs if the request is deallocated. Attach the resume data
-to the `AFError.downloadedFileMoveFailed` error case so that error
-handlers have the data needed to retry the download.
+In `Source/Core/DownloadRequest.swift`, the `resumeData` computed
+property has a platform split: on Linux (`canImport(FoundationNetworking)`),
+it returns `mutableDownloadState.read(\.resumeData) ?? error?.downloadResumeData`,
+so that resume data embedded in a `URLError`'s userInfo
+(`NSURLSessionDownloadTaskResumeData`) is surfaced when the download
+fails mid-transfer. On Apple platforms (the `#else` branch), it only
+returns `mutableDownloadState.read(\.resumeData)`, which is populated
+solely by an explicit `cancel(producingResumeData:)` call. When a
+download fails due to a network error (not an explicit cancellation),
+the resume data present in `(error as? URLError)?.userInfo[NSURLSessionDownloadTaskResumeData]`
+is silently discarded. Fix the Apple-platform `#else` branch to match
+the Linux path: return `mutableDownloadState.read(\.resumeData) ?? error?.downloadResumeData`
+so callers can always resume interrupted downloads from the
+`DownloadResponse.resumeData` field.
 
 ## Medium
 

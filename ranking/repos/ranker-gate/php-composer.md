@@ -131,23 +131,29 @@ warning before running `composer update`, which overwrites the vendor
 directory. Include untracked files in the status output using
 `git status --porcelain`.
 
-### N8: Fix `ArchiveCommand` including `.git` directory in created archives
+### N8: Fix `GitExcludeFilter` ignoring subdirectory `.gitattributes` export-ignore rules
 
-When `composer archive` creates a zip or tar archive from a local
-path, the `ArchivableFilesFinder` includes the `.git` directory in
-the archive, inflating the file size and potentially leaking
-repository history. The finder should exclude `.git`, `.svn`, and
-`.hg` version control directories by default when building the
-file list for archiving.
+When `composer archive` creates a zip or tar archive, `ArchivableFilesFinder`
+applies `GitExcludeFilter` to honour `export-ignore` directives from
+`.gitattributes`. However, `GitExcludeFilter` only reads the `.gitattributes`
+file at the root of the source directory (`$sourcePath.'/.gitattributes'`); it
+never descends into subdirectories. When a package defines `export-ignore`
+patterns in `.gitattributes` files inside subdirectories — which is valid git
+behaviour — those rules are silently ignored and the matched files are included
+in the archive. Fix `GitExcludeFilter` to also process `.gitattributes` files
+found in subdirectories of the source path, accumulating their `export-ignore`
+rules alongside those from the root file.
 
-### N9: Fix `SearchCommand` not respecting configured repository priority
+### N9: Fix `SearchCommand` returning duplicate results from multiple repositories
 
-`composer search` queries all configured repositories but displays
-results in arbitrary order regardless of repository priority. When
-a private Packagist repository is configured alongside the public
-one, private packages appear interleaved with public results. Sort
-search results by repository priority (order of declaration in
-`composer.json`), then alphabetically within each repository.
+`composer search` queries all configured repositories via
+`CompositeRepository::search()`, which uses `array_merge` to concatenate
+results without deduplication. When the same package is mirrored in both a
+private Packagist repository and the public one, it appears multiple times in
+the output — once per repository that returned it. Fix `SearchCommand` to
+deduplicate search results by package name, keeping the entry from the
+highest-priority repository (first-declared in `composer.json`) when
+duplicates exist.
 
 ### N10: Fix `ValidateCommand` not checking for conflicting `autoload` and `autoload-dev` paths
 
@@ -160,17 +166,20 @@ sections define the same namespace prefix with different paths.
 
 ## Medium
 
-### M1: Implement download integrity verification with content-hash validation
+### M1: Implement explicit download-verification controls with improved error reporting
 
-After downloading a package archive, verify the file's SHA-256
-checksum against the `dist.shasum` value from the repository metadata
-before extraction. On mismatch, delete the corrupted file, emit a
-warning with both expected and actual hashes, and re-download once
-before failing. Add a `--verify-downloads` CLI flag and a
-`config.verify-downloads` option (default: true). Support disabling
-verification for local/path repositories. Modify `FileDownloader`,
-`ZipDownloader`, and `TarDownloader` to call the verification step
-after the download completes but before extraction begins.
+`FileDownloader` already verifies SHA-1 checksums from the `dist.shasum`
+field when the repository provides them, but there is no way for users to
+control or observe this behaviour. Add a `--verify-downloads` CLI flag to
+the `install` and `update` commands and a `config.verify-downloads`
+configuration option (default: `true`) to explicitly enable or disable
+checksum verification. When verification fails, emit a clear error message
+showing the expected and actual SHA-1 hash before deleting the corrupted
+file, then retry the download once before permanently failing. Support
+disabling verification for local/path repositories where no checksum is
+available. Modify `FileDownloader`, `ZipDownloader`, and `TarDownloader`
+to call the verification step after download but before extraction, and
+to respect the new configuration flag.
 
 ### M2: Add package size reporting to `ShowCommand` and post-install summary
 
@@ -193,20 +202,19 @@ automatically. `composer install` in the root resolves dependencies
 for all workspace members together, deduplicating shared dependencies.
 Add `--workspace-filter=pkg/*` to operate on a subset.
 
-### M4: Add `composer outdated --major-only` and semver-level categorization
+### M4: Add `--format=markdown` and semver-level column to `outdated` command
 
-The `outdated` command shows all outdated packages but does not
-categorize them by the semver level of the available update. Add
-`--major-only`, `--minor-only`, and `--patch-only` filter flags
-that limit output to packages with updates at the respective
-semver level. Display a color-coded semver column (red for major,
-yellow for minor, green for patch) in the default table output.
-Add `--format=markdown` for pasting into pull request descriptions.
-Determine semver level by comparing the locked version against the
-latest available version using `VersionParser`. Update
-`CHANGELOG.md` with the new filtering flags and add documentation
-for `--major-only`, `--minor-only`, `--patch-only`, and
-`--format=markdown` to `doc/03-cli.md`.
+The `outdated` command already supports `--major-only`, `--minor-only`, and
+`--patch-only` filter flags and displays color-coded update indicators in
+the default text output, but it has no `--format=markdown` option for
+generating output suitable for pasting into pull request descriptions.
+Add `--format=markdown` to `OutdatedCommand` and the underlying
+`ShowCommand` display logic, producing a GitHub-Flavored Markdown table
+with columns for package name, current version, latest version, and semver
+level (major/minor/patch). The semver level column should use text labels
+since Markdown cannot render colors. Update `CHANGELOG.md` with the new
+format option and add documentation for `--format=markdown` to
+`doc/03-cli.md`.
 
 ### M5: Add configurable retry and mirror fallback to Downloader
 
@@ -266,17 +274,20 @@ verifies that all expected symlinks exist and point to valid
 targets. Integrate with `InstallationManager` to read the binary
 registry and `Filesystem` to validate symlink targets.
 
-### M10: Implement `composer depends --tree` with version constraint display
+### M10: Add require-dev path differentiation to `depends --tree` output
 
-The `depends` command shows which packages require a given package
-but only displays one level of dependents. Add a `--tree` flag
-that recursively walks the dependency graph upward from the target
-package to the root requirements, displaying a nested tree of each
-path. At each node, show the version constraint that creates the
-dependency (`vendor/a ^2.0 → vendor/b ~1.5 → target >=1.0`).
-Highlight paths that pass through `require-dev` differently from
-production paths. Integrate with `BaseDependencyCommand` and the
-`Locker`'s installed repository for graph traversal.
+The `depends --tree` command recursively walks the dependency graph upward
+from a target package to the root, displaying a nested tree of each path
+with version constraints at each node. However, all paths are displayed
+identically regardless of whether they pass through a `require-dev` entry:
+there is no visual distinction between production and dev-only dependency
+paths. Add a `[dev]` prefix marker (and apply a distinct color in terminal
+output) to every tree node that is reachable only via a `require-dev`
+dependency link. Add a `--no-dev` flag to `DependsCommand` that excludes
+all require-dev dependency paths from the tree output entirely. Update
+`BaseDependencyCommand` to propagate the require-dev state when
+traversing dependency links during graph construction and integrate with
+the `Locker`'s installed repository for graph traversal.
 
 ## Wide
 
@@ -402,41 +413,50 @@ to a configurable endpoint.
 
 ### N11: Fix inconsistent formatting in `CHANGELOG.md`
 
-Recent entries in `CHANGELOG.md` use `### [version] YYYY-MM-DD`
-headers, but older entries below the fold use `#### version` without
-brackets and with inconsistent date formats (mixed ISO 8601 and
-spelled-out month names). Standardize all version headers to use
-`### [version] YYYY-MM-DD` format with consistent heading levels.
-Ensure every entry has a bulleted list with uniform indentation
-(two-space indent for continuation lines). Add missing links to
-GitHub issue and PR references throughout the file.
+The `CHANGELOG.md` has two formatting inconsistencies. First, the oldest
+entry (version `1.0.0-alpha1` near the bottom of the file) uses the header
+`### 1.0.0-alpha1 - 2012-03-01` — missing the brackets around the version
+number that every other entry uses (`### [version]`). Second, older 1.x
+entries use `### [version] - YYYY-MM-DD` (hyphen separator after the
+closing bracket), while all 2.x entries use `### [version] YYYY-MM-DD`
+(no hyphen). Standardise all version headers to the modern `### [version]
+YYYY-MM-DD` format: add brackets to the `1.0.0-alpha1` entry and remove
+the hyphen separators from all 1.x entries. Add the missing
+`[1.0.0-alpha1]` link-reference definition at the bottom of the file to
+match every other version.
 
-### M11: Update user documentation and refresh CI configuration
+### M11: Expand contributor tooling and add plugin development documentation
 
-Add documentation for the `verify-downloads` and `max-depth`
-configuration options to `doc/06-config.md` with usage examples
-and default values. Update `doc/04-schema.md` to document the
-`extra.license-policy` field schema for the license compliance
-feature. Add a new `doc/dev/plugin-development.md` guide covering
-the plugin capability model, lifecycle hooks (`activate`,
-`deactivate`, `uninstall`), and testing strategies for plugin
-authors. Update `phpunit.xml.dist` to add a dedicated `integration`
-test group and configure the `<coverage>` element with branch
-coverage reporting enabled.
+The `phpunit.xml.dist` configures coverage via the PHPUnit 9 `<coverage>`
+element but does not enable branch coverage reporting, and has no dedicated
+test group for integration tests (only `slow` and `legacy` groups are
+defined). The `composer.json` `scripts` section has `test`, `phpstan`, and
+`compile` entries but no `lint` or `cs-fix` shortcuts for contributors. Add
+an `integration` test group to `phpunit.xml.dist` and configure the
+`<coverage>` element with branch coverage enabled and a Clover XML report
+output. Add `lint` (for JSON/schema validation via `composer validate`)
+and `cs-fix` (invoking `php-cs-fixer fix`) script entries to `composer.json`
+and their descriptions to `scripts-descriptions`. Add a new
+`doc/dev/plugin-development.md` guide covering the existing `PluginInterface`
+lifecycle hooks (`activate`, `deactivate`, `uninstall`), capability
+declaration patterns, event subscription via `EventSubscriberInterface`,
+and strategies for testing plugins.
 
 ### W11: Modernize project tooling and contributor documentation
 
-Migrate `.php-cs-fixer.php` rules to enforce PHP 8.x coding
-standards including `readonly` property formatting,
-`enum` case declarations, and named argument alignment. Update
-`phpunit.xml.dist` from the PHPUnit 9 `<filter>` element to the
-PHPUnit 10+ `<source>` element format. Add a comprehensive
-`CONTRIBUTING.md` covering the development workflow, running the
-test suite, SAT solver debugging tips, and repository driver
-testing procedures. Refresh `README.md` with updated CI badges,
-installation instructions for PHP 8.x, and a quick-start guide.
-Update `doc/00-intro.md` and `doc/01-basic-usage.md` to reflect
-Composer 2.x defaults and behavior changes. Add enforcement
-procedures to `CODE_OF_CONDUCT.md`. Update `composer.json` with a
-`scripts` section defining `test`, `lint`, `cs-fix`, and `phpstan`
-commands for contributor convenience.
+Migrate `.php-cs-fixer.php` rules to enforce PHP 8.x coding standards
+(strict types declarations, match expression formatting, named argument
+alignment, and nullsafe operator usage). Update `phpunit.xml.dist` from
+the PHPUnit 9 schema (`xsi:noNamespaceSchemaLocation` targeting version
+9.3 with a `<coverage><include>` element) to the PHPUnit 10+ schema
+(update the `xsi:noNamespaceSchemaLocation` URL and replace
+`<coverage><include>` with the `<source>` element format). Expand the
+existing `.github/CONTRIBUTING.md` with detailed sections covering the
+SAT solver debugging workflow, repository driver testing procedures, and
+development environment setup for new contributors. Refresh `README.md`
+with updated installation instructions for PHP 8.x and current CI badges.
+Update `doc/00-intro.md` and `doc/01-basic-usage.md` to reflect Composer
+2.x defaults and behavior changes. Add enforcement procedures to
+`CODE_OF_CONDUCT.md`. Add `lint` and `cs-fix` entries to the `scripts`
+section of `composer.json` for contributor convenience (the section
+already contains `test`, `phpstan`, and `compile`).

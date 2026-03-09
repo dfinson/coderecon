@@ -111,8 +111,10 @@ When reading a 16-bit RGBA PNG file with `cv::imread` using
 decoder in `modules/imgcodecs/src/grfmt_png.cpp` only preserves alpha
 for 8-bit images. Fix the PNG reader to retain the alpha channel for
 16-bit images and return a 4-channel `CV_16UC4` Mat. Also update the
-`doc/` API reference for `cv::imread` to document 16-bit alpha channel
-support and add a note to `doc/tutorials/` about reading RGBA images.
+Doxygen comment for `cv::imread` in
+`modules/imgcodecs/include/opencv2/imgcodecs.hpp` to document 16-bit
+alpha channel support and add a note to `doc/tutorials/app/` about
+reading 16-bit RGBA images.
 
 ### N5: Fix `cv::warpAffine` producing black border artifacts at image edges
 
@@ -315,13 +317,14 @@ and add benchmarking tools.
 
 ### W7: Add 3D point cloud processing module
 
-Implement `cv::ppf3d` replacement with modern algorithms: point cloud
-I/O (PLY, PCD, OBJ), point cloud filtering (voxel grid, SOR, radius
-outlier), registration (ICP, RANSAC, feature-based), surface
-reconstruction (Poisson, ball pivoting), and visualization. Support
-organized and unorganized point clouds. Changes span core data
-structures, add I/O handlers, algorithm implementations, and
-visualization.
+Implement a new `cv::pointcloud` module with modern 3D point cloud
+algorithms: point cloud I/O (PLY, PCD, OBJ), point cloud filtering
+(voxel grid, SOR, radius outlier removal), registration (ICP,
+RANSAC-based, feature-based), surface reconstruction (Poisson, ball
+pivoting), and visualization. Support organized and unorganized point
+clouds. Changes span core data structures, add I/O handlers under a
+new `modules/pointcloud/` directory, algorithm implementations, and
+visualization support.
 
 ### W8: Implement federated learning support for vision models
 
@@ -393,10 +396,11 @@ reusable workflows from `opencv/ci-gha-workflow` but lack a
 Extend `.github/workflows/PR-4.x.yaml` with additional jobs for
 Clang static analysis and a WASM build. Update `platforms/js/`
 build scripts to support Emscripten 3.x and add a wasm32 CI job.
-Update `platforms/android/aar-template/build.gradle` (the Gradle
-build file at `platforms/android/aar-template/`) to target SDK 34.
-Overhaul `doc/Doxyfile.in` to enable `EXTRACT_ALL`, add
-`DOT_GRAPH_MAX_NODES` limit, and configure `HTML_EXTRA_STYLESHEET`
-to use `doc/stylesheet.css`. Update `cmake/OpenCVPackaging.cmake`
+Update `platforms/android/ndk-25.config.py` to raise the default
+`ANDROID_TARGET_SDK_VERSION` and `ANDROID_COMPILE_SDK_VERSION` from
+32 to 34. Update `doc/Doxyfile.in` to enable `GENERATE_TREEVIEW`,
+add `CALL_GRAPH` and `CALLER_GRAPH` support, and set
+`WARN_AS_ERROR = YES` to surface undocumented symbols in CI.
+Update `cmake/OpenCVPackaging.cmake`
 and `cmake/OpenCVInstallLayout.cmake` to support CPack-based binary
 packaging with `.deb`, `.rpm`, and `.msi` generators.

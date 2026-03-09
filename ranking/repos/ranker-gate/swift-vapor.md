@@ -77,13 +77,16 @@ instead of returning nil. The `URLEncodedFormDecoder` does not handle
 optional enum types correctly when the key is missing. Fix the decoder
 to treat missing optional enum keys as nil.
 
-### N2: Add `req.logger` contextual metadata propagation
+### N2: Fix `RouteLoggingMiddleware` not logging response status or duration
 
-The `req.logger` includes the request ID but does not automatically
-propagate custom metadata added during the request lifecycle. When a
-middleware adds metadata via `req.logger[metadataKey: "userId"] = "123"`,
-subsequent middleware and route handlers see a fresh logger without the
-metadata. Fix logger metadata to propagate through the middleware chain.
+`RouteLoggingMiddleware` in `Sources/Vapor/Middleware/RouteLoggingMiddleware.swift`
+logs the HTTP method and request path when a request arrives, but does not log
+the response status code or elapsed request duration. When debugging production
+issues it is impossible to tell from the log whether a request succeeded or how
+long it took without correlating with separate error logs. Update
+`RouteLoggingMiddleware.respond(to:chainingTo:)` to await the response from the
+next responder and emit a second log line (at the same configurable level) that
+includes the response HTTP status code and the elapsed time in milliseconds.
 
 ### N3: Fix WebSocket `ping` not sent when connection is idle
 
@@ -93,16 +96,17 @@ and load balancers are silently closed after the proxy's idle timeout.
 Implement automatic ping/pong with a configurable interval (default 30s)
 and a dead connection timeout.
 
-### N4: Fix `FileMiddleware` not setting `Cache-Control` for versioned assets
+### N4: Fix `FileMiddleware` not supporting per-extension cache policies
 
-`FileMiddleware` in `Sources/Vapor/Middleware/FileMiddleware.swift`
-serves static files but does not set `Cache-Control` headers. Assets
-with version hashes in their filenames (e.g., `app.a1b2c3.js`) should
-receive long-lived cache headers (`max-age=31536000, immutable`),
-while unversioned assets should receive short-lived headers. Add a
-configurable `CachePolicy` option to `FileMiddleware` that supports
-pattern-based cache control rules (e.g., by file extension or path
-prefix) with sensible defaults.
+`FileMiddleware` in `Sources/Vapor/Middleware/FileMiddleware.swift` accepts
+a `cachePolicy: CachePolicy` parameter but applies the same single policy
+to every served file regardless of its extension or path. There is no way to
+give versioned assets (e.g. `app.a1b2c3.js`, `styles.abcd1234.css`) the
+long-lived `max-age=31536000, immutable` cache header while giving unversioned
+assets (e.g. `index.html`) a short-lived policy. Extend `FileMiddleware` to
+accept multiple `CachePolicyRule` entries, each pairing a matcher (file
+extension or path prefix) with a `CachePolicy`, plus a fallback default.
+Apply the first matching rule's policy when serving each file.
 
 ### N5: Fix `ErrorMiddleware` not including request ID in error responses
 
@@ -140,13 +144,17 @@ parameters that were on the original request. Developers expect
 the original `req.url.query` to the redirect location. Add the
 `preservingQuery` parameter (default `false`) to the redirect helper.
 
-### N9: Fix `Application.shutdown()` not draining in-flight requests
+### N9: Fix `CORSMiddleware` missing `Vary: Origin` for `.any` origin setting
 
-When `app.shutdown()` is called, the HTTP server immediately closes
-the listening socket and drops in-flight requests. Clients receive
-connection-reset errors. Implement graceful shutdown: stop accepting
-new connections, wait for in-flight requests to complete (with a
-configurable timeout, default 30s), then close the server.
+`CORSMiddleware` in `Sources/Vapor/Middleware/CORSMiddleware.swift` only
+adds `Vary: Origin` to responses when `allowedOrigin` is `.originBased`.
+When `allowedOrigin` is set to `.any([...])`, the middleware reflects the
+specific requesting origin in `Access-Control-Allow-Origin` (making the
+response vary per origin) but omits the `Vary: Origin` header. Without it,
+a shared cache may serve a response authorised for one origin to a different
+origin, causing CORS failures or security vulnerabilities. Add `Vary: Origin`
+to the response whenever the `Access-Control-Allow-Origin` value is derived
+from the request origin (both `.originBased` and `.any([...])` cases).
 
 ### N10: Fix `PlaintextEncoder` not handling non-UTF-8 string encodings
 
@@ -180,16 +188,20 @@ threshold), and all queries. Include query duration, bound parameters
 (with sensitive value masking), and row count. Add an in-memory query
 log for testing assertions.
 
-### M3: Implement response body streaming for large file downloads
+### M3: Complete HTTP range request support in `FileIO.streamFile`
 
-The current `FileIO.streamFile` in `Sources/Vapor/Utilities/FileIO.swift`
-reads files through NIO file handles but does not support HTTP range
-requests or conditional fetching. Implement `Range` header parsing
-and `206 Partial Content` responses with proper `Content-Range`
-headers. Support multi-range requests returning
-`multipart/byteranges` content. Add `Accept-Ranges: bytes` to file
-response headers. Handle `If-Range` conditional requests. Add
-configurable read-ahead buffer size for streaming performance.
+`FileIO.streamFile` in `Sources/Vapor/Utilities/FileIO.swift` already
+handles single-range `Range` headers and returns `206 Partial Content`
+responses with `Content-Range`. However, three related features are missing:
+(1) `Accept-Ranges: bytes` is never added to file responses, so clients
+cannot discover that range requests are supported; (2) `If-Range` conditional
+range requests are not handled — when a client sends `If-Range` with an ETag
+or date and the file has changed, the server should fall back to a full `200`
+response instead of a partial one; (3) multi-range requests
+(`Range: bytes=0-499, 600-999`) return a full file instead of a
+`multipart/byteranges` response. Add `Accept-Ranges: bytes` to all file
+responses, implement `If-Range` validation against the response ETag, and
+return `multipart/byteranges` content for multi-range requests.
 
 ### M4: Add structured concurrency-aware request context
 
@@ -416,8 +428,9 @@ guide only mentions Xcode). Update `.github/CODEOWNERS` to assign
 module-specific reviewers for `Sources/Vapor/WebSocket/`,
 `Sources/Vapor/Auth/`, and `Sources/Vapor/HTTP/Server/` so PRs
 touching those subsystems are automatically routed to domain
-experts. Add a Swift-DocC catalog stub under `Sources/Vapor/` for
-future API documentation generation.
+experts. Expand the existing DocC catalog at `Sources/Vapor/Docs.docc/`
+with a top-level article covering the request pipeline and extension
+points, replacing the current stub `index.md`.
 
 ### W11: Overhaul repository documentation and CI configuration
 
@@ -429,7 +442,8 @@ WebSocket setup with runnable code snippets. Create a
 across Vapor 4.x releases — currently no changelog exists and
 release notes are only on GitHub Releases. Update `.spi.yml` to
 declare supported platforms (`macOS`, `iOS`, `tvOS`, `watchOS`,
-`Linux`) and add the documentation URL. Update
+`Linux`) — currently `.spi.yml` has only author metadata and an
+external documentation link, with no platform declarations. Update
 `.github/workflows/test.yml` to add a documentation generation job
 using Swift-DocC that builds API docs and catches broken doc
 comments in CI. Create a `SECURITY.md` at the repo root

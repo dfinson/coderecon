@@ -66,17 +66,17 @@ pydantic/
 
 When calling `model.model_copy(update={'field': value})`, the updated values bypass field validators. The `model_copy` method in `main.py` uses `__dict__` manipulation directly without re-validating the updated fields through the core schema.
 
-### N2: Fix `TypeAdapter.validate_json()` not respecting `strict` mode for nested models
+### N2: Fix `TypeAdapter.validate_json()` not applying per-call `strict` override for `TypedDict` types with `__pydantic_config__`
 
-When `TypeAdapter` is configured with `strict=True`, top-level type coercion is rejected but nested model fields still allow coercion. The `_init_core_attrs` method in `type_adapter.py` does not propagate the strict flag into nested core schemas.
+When a `TypeAdapter` wraps a `TypedDict` subclass that has `__pydantic_config__ = ConfigDict(strict=False)`, calling `validate_json(..., strict=True)` does not raise a `ValidationError` for inputs that should be rejected in strict mode. The per-call `strict` parameter is not correctly overriding the type-level config stored in the validator built by `_init_core_attrs` in `type_adapter.py`. There is a known failing test (`test_validate_json_strict`) that documents this behavior.
 
-### N3: Fix `AliasChoices` not working with `model_fields_set` tracking
+### N3: Fix pydantic dataclass fields with `init=False` being silently skipped in assignment validation
 
-When a field uses `AliasChoices` and data is provided via one of the alias paths, the field name doesn't appear in `model_fields_set`. The alias resolution in `_fields.py` doesn't update the fields-set tracking for choice-based aliases.
+When a pydantic dataclass uses `validate_assignment=True` in its config and has a field declared with `init=False`, setting that field after construction is silently accepted without validation. The `_internal/_fields.py` code skips `init=False` dataclass fields entirely when building the field map (with a TODO comment acknowledging the issue), so they are absent from the assignment-validation schema. The fix should include those fields in the schema used for assignment validation while still excluding them from `__init__`.
 
-### N4: Add `deprecated` parameter to `Field()` for marking deprecated fields
+### N4: Add `include_if` parameter to `Field()` for conditional field inclusion during serialization
 
-Fields lack a mechanism to emit deprecation warnings when accessed. Add a `deprecated` parameter to `Field()` in `fields.py` that emits a `DeprecationWarning` when the field is set during validation, and includes the deprecation notice in JSON Schema output.
+Fields can be conditionally excluded from serialization via the existing `exclude_if` parameter in `fields.py`, but there is no complementary `include_if` parameter. Add an `include_if` parameter to `Field()` (and the corresponding `FieldInfo` class) that accepts a callable: when the callable returns `False`, the field is omitted from `model_dump()` and `model_dump_json()` output. The `_internal/_generate_schema.py` schema generator should apply the callable as a serialization filter, symmetric with how `exclude_if` is handled.
 
 ### N5: Fix JSON Schema `$ref` generation for recursive models with `by_alias=True`
 
@@ -86,25 +86,25 @@ When generating JSON Schema with `mode='serialization'` and `by_alias=True` for 
 
 When a wrap-mode field validator's handler is called, it receives the raw core validator function instead of a properly typed handler. The decorator processing in `_decorators.py` wraps the handler but doesn't match the `ValidatorFunctionWrapHandler` signature.
 
-### N7: Fix `RootModel.model_validate()` losing type discrimination for union root types
+### N7: Fix `RootModel.__setattr__` raising `ValueError` instead of `AttributeError` for unknown attributes
 
-When a `RootModel[Union[A, B]]` validates data, the discriminator field is checked but the error message doesn't indicate which union member failed. The root model validation in `root_model.py` delegates to `__pydantic_validator__` without enriching the `ValidationError` context.
+When setting an attribute on a `RootModel` instance that is neither the `root` field nor a declared private attribute, pydantic raises a `ValueError` (e.g., `ValueError('other_attr')`) rather than an `AttributeError`. The Python convention — and what `hasattr()` checks — expects `AttributeError` for missing or read-only attributes. The `__setattr__` implementation in `root_model.py` should raise `AttributeError` for these cases to align with standard Python behavior and make `hasattr()` reliable on `RootModel` instances. There is a TODO comment in `tests/test_root_model.py` tracking this issue.
 
 ### N8: Add `transform` parameter to `PlainSerializer` for pre-serialization data transformation
 
 `PlainSerializer` in `functional_serializers.py` replaces the entire serialization but lacks a way to transform data before the default serializer runs. Add a `transform` parameter that applies a function before default serialization.
 
-### N9: Fix `model_json_schema()` not including `examples` from field metadata in output
+### N9: Fix `GenerateJsonSchema.__get_pydantic_json_schema__` being called extra times for models with custom JSON schema hooks
 
-When `Field(examples=[...])` is set, the examples are stored in field metadata but the JSON Schema generator in `json_schema.py` doesn't include them in the generated schema output for individual properties.
+When a `BaseModel` subclass defines `__get_pydantic_json_schema__` and that model appears both as a top-level type and as a type referenced through `Annotated` metadata containing custom schema annotations, the `GenerateJsonSchema` machinery in `json_schema.py` calls the hook an extra time during schema resolution. On the second encounter, the model's schema is retrieved from `__pydantic_core_schema__`, but the metadata JSON schema functions list is appended again, leading to duplicate handlers and potentially wrong schema output. There is a known xfail test (`test_get_pydantic_core_schema_calls`) documenting this behavior.
 
-### N10: Fix `validate_call` not preserving `functools.wraps` metadata on decorated functions
+### N10: Fix `@validate_call` not supporting validation context for annotation-level validators
 
-When `@validate_call` decorates a function, the resulting wrapper in `validate_call_decorator.py` doesn't preserve `__module__`, `__qualname__`, and `__annotations__` from the original function, breaking introspection tools.
+When a function decorated with `@validate_call` uses annotation-level validators such as `AfterValidator`, `BeforeValidator`, or `WrapValidator`, those validators receive a `ValidationInfo` object whose `context` is always `None` because there is no mechanism to pass a context when calling the decorated function. The `ValidateCallWrapper.__call__` in `_validate_call.py` invokes the pydantic-core validator without a context argument, and `update_wrapper_attributes` in `validate_call_decorator.py` does not expose a `context` pathway. Add a `.call_with_context(ctx, *args, **kwargs)` helper method to the wrapper so callers can inject validation context.
 
-### N11: Update `docs/concepts/fields.md` to document the `deprecated` parameter for `Field()`
+### N11: Update `docs/concepts/fields.md` to document the `include_if` parameter for `Field()`
 
-The `deprecated` parameter added to `Field()` is not reflected in the documentation. Add a section to `docs/concepts/fields.md` covering usage examples, deprecation warning behavior, and JSON Schema output. Update `mkdocs.yml` navigation if needed and cross-reference from `docs/migration.md` for users migrating from manual deprecation patterns.
+The `include_if` parameter added to `Field()` is not reflected in the documentation. Add a section to `docs/concepts/fields.md` covering usage examples, behavior when the callable returns `False`, interaction with `exclude_if`, and the relationship to `model_dump(exclude=...)`. Cross-reference from `docs/concepts/serialization.md` for users who discover conditional serialization from that page. Update `mkdocs.yml` navigation if a new section anchor is needed.
 
 ## Medium
 
@@ -120,9 +120,9 @@ When a child model redefines a parent field with incompatible validators or type
 
 Add a `model_validate_partial()` class method that accepts incomplete data and returns a model with only the provided fields set, leaving others at their defaults. Changes span `main.py`, `_model_construction.py`, and `type_adapter.py` to generate a partial core schema variant.
 
-### M4: Add JSON Schema generation for discriminated unions using `oneOf` with `discriminator`
+### M4: Fix `Optional[DiscriminatedUnion]` JSON Schema not hoisting `discriminator` to the outer `anyOf` level
 
-The JSON Schema output for discriminated unions uses `anyOf` without the OpenAPI `discriminator` mapping object. Implement proper `discriminator` object generation in `json_schema.py` with property name and mapping, coordinating with `_discriminated_union.py` for tag extraction.
+When a discriminated union is wrapped in `Optional` (i.e., `Optional[Annotated[Union[A, B], Field(discriminator='type')]]`), the generated JSON Schema places the `discriminator` object and `oneOf` inside the first element of the outer `anyOf` rather than at the schema root. This nesting breaks OpenAPI tooling that expects the `discriminator` at the outermost level of a schema. The `GenerateJsonSchema` class in `json_schema.py` should detect when an `anyOf` contains exactly one discriminated-union branch and one null branch, and hoist the `discriminator` mapping to the outer level. Changes span `json_schema.py`, `_internal/_discriminated_union.py`, `_internal/_generate_schema.py`, `fields.py`, and `type_adapter.py`.
 
 ### M5: Implement custom error message templates for validation errors
 
@@ -132,9 +132,9 @@ Add configurable error message templates per field or per model via `Field(error
 
 Creating `TypeAdapter` instances is expensive due to schema generation. Implement a cache keyed by type annotation that reuses core schemas and validators. Add cache invalidation when `ConfigDict` differs. Changes span `type_adapter.py` and `_internal/_generate_schema.py`.
 
-### M7: Implement field-level serialization context propagation
+### M7: Add `serializer_fallback` option to `model_config` for handling unregistered types during serialization
 
-Add the ability to pass per-field context during serialization via `model.model_dump(context={'field_name': value})` that's accessible in `@field_serializer` functions. Changes span `main.py`, `functional_serializers.py`, and `_internal/_generate_schema.py`.
+When a model contains fields of types that have no registered serializer, pydantic falls back to a default behavior that may produce incorrect output. Add a `serializer_fallback` key to `ConfigDict` in `config.py` that accepts a callable `(value: Any) -> Any`. When a field's type has no registered serializer and the default serialization would fail, the callable is invoked instead. The `_internal/_generate_schema.py` schema generator should inject this fallback into the serialization schema; `main.py` and `type_adapter.py` must pass it through to `model_dump()` and `dump_python()`. Changes span `config.py`, `main.py`, `functional_serializers.py`, `_internal/_generate_schema.py`, `type_adapter.py`, and `_internal/_model_construction.py`.
 
 ### M8: Add validation performance profiling to the plugin system
 
@@ -180,7 +180,7 @@ Implement automatic GraphQL type generation from pydantic models: types, inputs,
 
 ### W7: Implement model migration framework for schema evolution
 
-Add a migration system for evolving model schemas across versions: field renames, type changes, computed defaults, and data transformations. Include forward/backward migration with validation. Changes span `main.py`, `config.py`, `fields.py`, `_model_construction.py`, `_internal/_fields.py`, `_migration.py`, and add migration infrastructure.
+Add a migration system for evolving model schemas across versions: field renames, type changes, computed defaults, and data transformations. Include forward/backward migration with validation. Changes span `main.py`, `config.py`, `fields.py`, `_model_construction.py`, `_internal/_fields.py`, and add a new `_internal/_schema_migration.py` module to house the migration infrastructure.
 
 ### W8: Add comprehensive model testing utilities
 

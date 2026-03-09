@@ -77,15 +77,17 @@ length is exactly 1, skipping multi-element classes. A pattern like
 Fix the check to detect banned bytes in any character class range,
 regardless of total class size.
 
-### N3: Fix `.rgignore` not loaded from `$HOME` on Windows
+### N3: Add global user-level `.rgignore` file support
 
-On Windows, ripgrep looks for the global ignore file at
-`$HOME/.rgignore` but `$HOME` is not standard on Windows. The lookup
-should also check `%USERPROFILE%\.rgignore` and
-`%APPDATA%\ripgrep\ignore`. Fix the global ignore file discovery in
-the `ignore` crate to use platform-appropriate paths. Also update
-`FAQ.md` to expand the "Does ripgrep support configuration files?"
-entry with platform-specific ignore file paths for Windows.
+Ripgrep currently processes `.rgignore` files found in traversed
+directories but does not load a global user-level ignore file.
+Add global ignore file discovery to the `ignore` crate so ripgrep
+reads a per-user ignore file at a platform-appropriate path:
+`$HOME/.rgignore` on Unix/macOS, and `%USERPROFILE%\.rgignore` or
+`%APPDATA%\ripgrep\ignore` on Windows (using `#[cfg(windows)]` for
+the platform conditional). Also update `FAQ.md` to expand the "Does
+ripgrep support configuration files?" entry with the global ignore
+file paths for each platform.
 
 ### N4: Fix `--hidden` flag not searching inside `.git/hooks/`
 
@@ -119,14 +121,18 @@ When using the PCRE2 regex engine (`-P`) with complex patterns
 compiled code overflows its default stack. Add configurable JIT stack
 size via `--pcre2-jit-stack` and increase the default size.
 
-### N8: Fix hyperlink URLs not percent-encoding special characters in paths
+### N8: Fix hyperlink URLs not percent-encoding non-ASCII bytes in paths
 
-The hyperlink writer in `crates/printer/src/hyperlink/mod.rs`
-interpolates file paths directly into OSC-8 hyperlink URLs. Paths
-containing spaces, `#`, `?`, or `%` produce invalid URLs that
-terminal emulators cannot open. Fix the hyperlink path interpolation
-to percent-encode reserved characters per RFC 3986, preserving `/`
-as the path separator.
+The `encode()` function in `crates/printer/src/hyperlink/mod.rs`
+correctly percent-encodes ASCII special characters but passes bytes
+with value ≥ 128 through unencoded (the `128.. => result.push(byte)`
+arm). RFC 3986 requires all non-ASCII bytes to be percent-encoded in
+URIs. Paths containing non-ASCII characters (accented letters, CJK
+characters, emoji, or other multibyte UTF-8 sequences in filenames)
+produce technically invalid `file://` hyperlink URLs that some
+terminal emulators fail to open. Fix the `encode()` function to
+percent-encode each byte with value ≥ 128 as a `%XX` sequence,
+preserving `/` and `:` as unencoded path separators.
 
 ### N9: Fix binary file detection false positive on UTF-16 files
 
@@ -167,14 +173,20 @@ traversal in `crates/ignore/src/walk.rs`, and adding a
 add a "Shebang-based file type detection" subsection under the existing
 "Manual filtering: file types" section explaining the new behavior.
 
-### M3: Implement parallel directory traversal with work stealing
+### M3: Improve parallel directory traversal with lock-free work queues
 
-The current directory traversal uses a thread pool but the walk is
-single-threaded with a channel to workers. Implement a work-stealing
-directory walker where each thread independently walks its portion
-of the directory tree and steals work from other threads' queues when
-idle. This should improve performance on network filesystems and
-repositories with many directories at the same depth.
+The parallel directory walker in `crates/ignore/src/walk.rs` already
+implements work-stealing using per-thread `VecDeque` stacks protected
+by `Mutex`. Replace these Mutex-protected queues with lock-free
+work-stealing deques using the `crossbeam-deque` crate, which
+provides a proper Chase-Lev deque and eliminates lock contention when
+multiple threads simultaneously steal work from each other's queues.
+Additionally replace the current sleep-based polling for new work
+with a `Condvar`-based wake mechanism so idle threads sleep rather
+than spin. Update the thread-pool setup in `WalkParallel`, replace
+the internal stack implementation, and add benchmarks via `hyperfine`
+comparing the lock-free implementation against the baseline on a
+large repository.
 
 ### M4: Implement per-file search timeout
 
@@ -207,21 +219,36 @@ given timestamp. Use filesystem mtime for filtering. Support
 only files modified since the previous invocation. Store timestamps in
 a `.rgcache` file.
 
-### M7: Add structured output with match context metadata
+### M7: Add CSV and SARIF output formats
 
-Implement `--output-format <fmt>` supporting formats: json-lines (one
-JSON object per match with full metadata), csv (columns: file, line,
-column, match, context), and sarif (Static Analysis Results Interchange
-Format for IDE integration). Each format includes file path, line
-number, column range, match text, and surrounding context.
+Ripgrep already supports `--json` for JSON-lines machine-readable
+output. Extend the structured output support by adding an
+`--output-format <fmt>` flag with two new formats: `csv`
+(comma-separated columns: file, line, column, match text, context
+lines) and `sarif` (Static Analysis Results Interchange Format
+v2.1.0 for IDE and CI tool integration). Each format includes file
+path, line number, column range, match text, and surrounding context.
+Add new printer implementations in `crates/printer/src/` for each
+format (e.g., `crates/printer/src/csv.rs`,
+`crates/printer/src/sarif.rs`), expose them through the printer
+crate's public API, register the `--output-format` CLI flag in
+`crates/core/flags/defs.rs`, wire it through
+`crates/core/flags/hiargs.rs` and `crates/core/search.rs`, and add
+integration tests.
 
-### M8: Implement search-and-replace with preview mode
+### M8: Add diff-style replacement preview with `--replace-diff`
 
-Extend `--replace` with a `--preview` mode that shows the would-be
-replacement diff without modifying files. Add `--replace-write` that
-performs the replacement on disk. Support interactive mode where each
-match is shown and the user confirms (y/n/a/q). Handle file encoding
-preservation and line ending consistency.
+The existing `--replace` flag substitutes match text in printed
+output. Add a `--replace-diff` flag that renders replacements as a
+unified diff: each matching file shows a `--- original` / `+++ replaced`
+header, with `-` lines showing the original content and `+` lines
+showing the replacement. Non-matching lines are omitted (like `grep
+context` output). This lets users verify replacement patterns before
+committing to an external `sed` pipeline. Implement the diff-output
+sink path in `crates/printer/src/standard.rs`, add the flag to
+`crates/core/flags/defs.rs`, propagate the option through
+`crates/core/flags/hiargs.rs` and `crates/core/search.rs`, and add
+integration tests in `tests/`.
 
 ### M9: Add multi-pattern search with labeled results
 
@@ -273,14 +300,23 @@ literals only). Requires integrating a multi-language tokenizer
 (tree-sitter based) in the searcher crate. Changes span the regex
 crate integration, searcher, printer, and CLI.
 
-### W4: Add distributed search across multiple machines
+### W4: Implement watch mode for continuous search (`rg --watch`)
 
-Implement `rg --distributed <host-list>` that distributes the search
-across multiple machines via SSH. Each machine searches its local
-filesystem and streams results back. Merge and deduplicate results.
-Support progress aggregation, error handling per host, and automatic
-load balancing based on file count. Changes span the CLI, add a
-network transport layer, result merging, and progress tracking.
+Add `rg --watch` that monitors the search paths for filesystem
+changes and re-runs the search automatically when files are created,
+modified, or deleted. Use the `notify` crate for cross-platform
+filesystem event monitoring (inotify on Linux, FSEvents on macOS,
+ReadDirectoryChangesW on Windows). On each change event, re-run the
+search for affected files only and refresh the output in-place using
+ANSI cursor control, adding new matches and removing stale ones.
+Implement the watcher coordinator in a new `crates/core/watch.rs`,
+integrate file-change notifications with the directory walker in
+`crates/ignore/src/walk.rs`, add watch-mode output handling in
+`crates/printer/src/standard.rs`, register `--watch` and
+`--watch-debounce <ms>` flags in `crates/core/flags/defs.rs`,
+propagate through `crates/core/flags/hiargs.rs` and
+`crates/core/search.rs`, update `crates/core/main.rs` with the
+watch event loop, and add integration tests.
 
 ### W5: Implement code search index server
 
@@ -352,17 +388,20 @@ checklist item after the "Run `cargo package`" step to run
 `cargo test --features pcre2` and verify PCRE2 builds on all release
 targets.
 
-### M11: Add `rustfmt.toml` enforcement to CI and document code style in `GUIDE.md`
+### M11: Add developer code style documentation to `GUIDE.md` and `CONTRIBUTING.md`
 
-The `rustfmt.toml` file sets `max_width = 79`,
-`use_small_heuristics = "max"`, and `edition = "2024"`, but the CI
-workflow (`.github/workflows/ci.yml`) does not run `cargo fmt --check`
-to enforce these settings. Add a `rustfmt` job to
-`.github/workflows/ci.yml` that runs `cargo fmt --all -- --check` and
-fails on formatting violations. Also add a "Code style" section to
-`GUIDE.md` (after the existing "Common options" section) documenting
-the project's formatting conventions and how contributors should run
-`cargo fmt` before submitting PRs.
+The project enforces formatting via `rustfmt.toml` and CI, but there
+is no contributor documentation explaining the code style conventions.
+Add a "Code style" section to `GUIDE.md` after the existing "Common
+options" section, documenting the `rustfmt.toml` settings
+(`max_width = 79`, `use_small_heuristics = "max"`), how to run
+`cargo fmt --all` before submitting PRs, and how to run
+`cargo clippy --all --all-features` to check for lint warnings.
+Create a `CONTRIBUTING.md` at the repository root that consolidates
+contributor guidance: building from source, running the test suite
+with `cargo test --workspace`, the code style expectations (linking
+to the GUIDE.md section), and the PR review process. Update `README.md`
+to add a "Contributing" pointer to `CONTRIBUTING.md`.
 
 ### W11: Add cross-platform release artifact verification with CI and documentation
 

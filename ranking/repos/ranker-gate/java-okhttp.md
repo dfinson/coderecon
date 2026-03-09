@@ -72,13 +72,19 @@ okhttp/src/commonJvmAndroid/kotlin/okhttp3/
 
 ## Narrow
 
-### N1: Fix connection pool eviction race under high concurrency
+### N1: Add per-host connection count API to `ConnectionPool`
 
-Under high concurrency, idle connections are sometimes evicted from the
-pool while another thread is in the process of acquiring them. This
-causes a `ConnectionShutdownException` on the acquiring thread. Fix the
-eviction logic to check for in-flight acquisitions before closing
-idle connections.
+`ConnectionPool` exposes `idleConnectionCount()` and `connectionCount()`
+for aggregate pool statistics, but provides no way to query the number
+of connections to a specific host. Applications that implement
+per-host throttling or observability have no programmatic way to inspect
+per-host connection usage. Add a `connectionCount(url: HttpUrl): Int`
+method to `RealConnectionPool` that iterates `connections` and counts
+entries whose `route().address.url.host` matches the given host, and
+expose it through the public `ConnectionPool` API with the same
+signature. Also add a corresponding `idleConnectionCount(url: HttpUrl)`
+overload that counts only idle (no active calls) connections to the
+host.
 
 ### N2: Add `DNS-over-HTTPS` cache TTL support
 
@@ -130,13 +136,18 @@ causes the same broken route to be retried on subsequent requests. Fix
 the route failure tracking so that failed proxy routes are properly
 excluded during proxy fallback selection.
 
-### N7: Handle `HTTP 421 Misdirected Request` in HTTP/2 coalesced connections
+### N7: Implement `Cache-Control: stale-if-error` in `CacheStrategy` and `CacheInterceptor`
 
-When an HTTP/2 connection is coalesced across multiple hostnames and
-the server responds with a 421 status, OkHttp does not retry the
-request on a fresh, non-coalesced connection. Add handling for the
-421 response code that opens a dedicated connection to the target
-host and replays the request.
+The `Cache-Control: stale-if-error` directive (RFC 5861) is not
+implemented. When a network request fails with a server error (5xx) or
+a connection error, and the cached response is within the
+`stale-if-error` window, OkHttp should serve the stale cached response
+instead of surfacing the error to the caller. Add a
+`staleIfErrorSeconds: Int` property to `CacheControl` (defaulting to
+`-1` for absent), update the `Cache-Control` parser in
+`-CacheControlCommon.kt` to populate it, and update `CacheInterceptor`
+to check the directive when the network response is a 5xx or an
+`IOException` and the directive window covers the response age.
 
 ### N8: Fix stale `Exchange` reference after `CallServerInterceptor` timeout
 
@@ -147,13 +158,19 @@ misleading `IllegalStateException` instead of a timeout exception.
 Fix the exchange lifecycle so the connection is properly detached
 on timeout.
 
-### N9: Correct `Cache-Control: only-if-cached` returning `null` instead of 504
+### N9: Honor `Cache-Control: immutable` in `CacheStrategy`
 
-The HTTP specification says a request with `Cache-Control: only-if-cached`
-must return a 504 Gateway Timeout when no cached response is available.
-OkHttp currently returns a null response, which causes a
-`NullPointerException` downstream. Fix the cache interceptor to
-return a synthetic 504 response in this case.
+`CacheControl` parses and exposes the `immutable` boolean property
+(RFC 8246) but `CacheStrategy` never reads it. When a cached response
+carries `Cache-Control: immutable`, it should be treated as perpetually
+fresh for the duration of its `max-age`; no conditional request
+(`If-None-Match` / `If-Modified-Since`) should be generated even after
+the freshness lifetime expires. Currently such responses are still
+revalidated with conditional requests on every request after max-age.
+Fix `CacheStrategy.Companion.compute()` to check
+`cacheResponse.cacheControl.immutable` and, when true and the response
+is still within its freshness window, return the cached response
+directly without building a conditional network request.
 
 ### N10: Fix `WebSocket` ping/pong frame ordering under back-pressure
 
@@ -201,15 +218,23 @@ certificates at runtime. Integrate with the `HandshakeCertificates`
 builder and ensure that the connection pool evicts connections whose
 client certificate no longer matches the selector's current choice.
 
-### M5: Implement conditional request support in the cache interceptor
+### M5: Implement `Cache-Control: stale-while-revalidate` with background refresh
 
-Add automatic conditional request handling to the cache layer. When a
-cached response has an `ETag` or `Last-Modified` header, subsequent
-requests should automatically include `If-None-Match` or
-`If-Modified-Since`. On a 304 response, merge the cached body with the
-new headers and update the cache entry. Track cache revalidation
-statistics through the `EventListener`. Handle the edge case of the
-server returning a full 200 response to a conditional request.
+The `Cache-Control: stale-while-revalidate` directive (RFC 5861) is
+not implemented. When a cached response is stale but falls within the
+`stale-while-revalidate` window, OkHttp should return the stale
+response immediately and concurrently dispatch a background request
+to refresh the cache entry for future calls. Add a
+`staleWhileRevalidateSeconds: Int` property to `CacheControl` and its
+parser in `-CacheControlCommon.kt`. Update `CacheStrategy` to detect
+the stale-while-revalidate window and mark the strategy accordingly.
+Update `CacheInterceptor` to return the stale cached response to the
+caller while enqueuing an asynchronous revalidation via the
+`OkHttpClient`'s `Dispatcher`. Add a
+`cacheStaleWhileRevalidate(call: Call, cachedResponse: Response)` event
+to `EventListener` that fires when a stale response is served with a
+background refresh in flight. Ensure the background refresh updates the
+cache entry and does not surface errors to the original caller.
 
 ### M6: Add per-host connection pool configuration
 
@@ -263,15 +288,28 @@ to another.
 
 ## Wide
 
-### W1: Add comprehensive request/response logging interceptor
+### W1: Enhance `HttpLoggingInterceptor` with structured output and async logging
 
-Implement a new `HttpLoggingInterceptor` with structured logging
-output. Support logging levels: basic (method, URL, status, duration),
-headers (basic + request/response headers with sensitive header
-masking), body (headers + request/response body with size limits and
-content type filtering). Add format options: text, JSON, and custom
-formatters. Log multipart request bodies with per-part metadata.
-Support async logging to avoid blocking the request thread.
+The existing `HttpLoggingInterceptor` in `okhttp-logging-interceptor/`
+logs plain-text request/response information with four levels
+(`NONE`, `BASIC`, `HEADERS`, `BODY`) but lacks several capabilities
+needed for production observability. Extend it as follows. Add a
+`Logger` interface variant that accepts structured key-value maps so
+JSON log sinks can be plugged in without string parsing, and provide
+a `JsonLogger` implementation that emits one JSON object per
+request/response event. Add a `redactHeader(name: String)` API that
+replaces the value of sensitive headers (e.g., `Authorization`,
+`Cookie`) with `██` in log output; the existing code logs all header
+values verbatim. Add a `maxBodySize(bytes: Long)` limit that truncates
+logged body content and appends `"... (truncated)"` rather than
+buffering unlimited response bodies. Add a `contentTypeFilter` that
+skips body logging for non-text content types such as `image/*` and
+`application/octet-stream`. Support async logging via an
+`AsyncLogger` wrapper that offloads log writes to a dedicated thread
+so the HTTP call thread is not blocked by slow log sinks. Update
+`LoggingEventListener` in the same module to surface the new
+structured fields. Update the module's `README.md` to document each
+new option with examples.
 
 ### W2: Implement connection health monitoring dashboard
 
@@ -376,13 +414,39 @@ transformed bodies can optionally be stored post-transformation.
 Expose per-stage metrics (bytes processed, time spent) through the
 `EventListener`.
 
-### N11: Fix `mkdocs.yml` missing navigation entries for docs pages
+### N11: Fix broken `changelogs/changelog.md` reference and missing `releasing.md` in `mkdocs.yml`
 
-The `mkdocs.yml` configuration defines the Material theme, extra CSS, and markdown extensions, but does not include a `nav:` section mapping all pages in the `docs/` directory. As a result, pages like `docs/recipes.md`, `docs/releasing.md`, `docs/works_with_okhttp.md`, and the `docs/security/` and `docs/contribute/` directories are not reachable from the documentation site's navigation sidebar. Add a complete `nav:` section to `mkdocs.yml` that lists all existing documentation pages organized into logical groups (Getting Started, Recipes, Security, Contributing, Changelogs, Releasing). Verify that the `site_name`, `repo_url`, and `edit_uri` fields are consistent with the current GitHub repository URL.
+The `mkdocs.yml` navigation includes `'Change Log': changelogs/changelog.md`
+but `docs/changelogs/changelog.md` does not exist — the 5.x change log
+lives at the repo root as `CHANGELOG.md`. The nav entry will produce a
+broken link on the documentation site. Additionally, `docs/releasing.md`
+exists but is absent from the `nav:` section entirely, making it
+unreachable from the site sidebar. Fix both issues: create
+`docs/changelogs/changelog.md` that mirrors the 5.x content from the
+root `CHANGELOG.md` (or uses MkDocs `!include` / symlink as appropriate),
+and add `'Releasing': releasing.md` as an entry under the Contributing
+group in `mkdocs.yml`.
 
-### M11: Expand `CONTRIBUTING.md` with multi-module build instructions and Gradle property guide
+### M11: Expand contributor build documentation and add a dedicated build guide page
 
-The current `CONTRIBUTING.md` covers CLA requirements, basic `./gradlew clean check`, and Android test setup, but does not explain how to build and test individual modules in the multi-module project. Add a "Module Build Guide" section documenting how to run checks for specific modules (e.g., `./gradlew :okhttp:check`, `./gradlew :mockwebserver-junit5:check`, `./gradlew :okhttp-tls:check`). Add a "Gradle Properties Reference" section explaining each flag in `gradle.properties` (`androidBuild`, `graalBuild`, `loomBuild`, `containerTests`, `okhttpModuleTests`, `okhttpDokka`) with descriptions of what they enable and when contributors should set them. Also document how to enable the Gradle configuration cache and troubleshoot common serialization issues with `org.gradle.configuration-cache.problems=fail`.
+The current `CONTRIBUTING.md` covers CLA requirements, basic
+`./gradlew clean check`, and Android test setup, but does not explain
+how to build and test individual modules in the multi-module project.
+`docs/contribute/contributing.md` (the rendered docs version) has the
+same gaps. Add a "Module Build Guide" section to both files documenting
+how to run checks for specific modules (e.g., `./gradlew :okhttp:check`,
+`./gradlew :mockwebserver-junit5:check`, `./gradlew :okhttp-tls:check`).
+Add a "Gradle Properties Reference" section explaining each flag in
+`gradle.properties` (`androidBuild`, `graalBuild`, `loomBuild`,
+`containerTests`, `okhttpModuleTests`, `okhttpDokka`) with descriptions
+of what they enable and when contributors should set them. Also document
+how to enable the Gradle configuration cache and troubleshoot common
+serialization issues with `org.gradle.configuration-cache.problems=fail`.
+Create a new `docs/contribute/build-guide.md` page with the full
+Module Build Guide and Gradle Properties Reference content (linking to
+it from both `CONTRIBUTING.md` and `docs/contribute/contributing.md`),
+and add the new page to `mkdocs.yml` under the Contributing navigation
+group.
 
 ### W11: Create a unified release engineering guide and update `mkdocs.yml` navigation
 
