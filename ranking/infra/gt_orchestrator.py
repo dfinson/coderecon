@@ -41,7 +41,7 @@ STATE_FILE = DATA_DIR / "gt_state.json"
 LOGS_DIR = DATA_DIR / "logs"
 
 STAGES = ["audit", "exec_n", "exec_m", "exec_w", "review"]
-DEFAULT_CONCURRENCY = 5
+DEFAULT_CONCURRENCY = 10
 MAX_ATTEMPTS = 3
 
 MODELS = {
@@ -442,35 +442,41 @@ async def cmd_run(state: dict, stage_filter: str | None, repo_filter: str | None
     runners: dict[str, SessionRunner] = {}
 
     async def run_one(repo_id: str, stage: str):
-        runner = SessionRunner(repo_id, stage, state)
-        runners[repo_id] = runner
+        async with sem:  # Gate EVERYTHING — session creation included
+            runner = SessionRunner(repo_id, stage, state)
+            runners[repo_id] = runner
 
-        # Mark active
-        rd = state["repos"].get(repo_id, {})
-        attempts = rd.get(stage, {}).get("attempts", 0) + 1
-        rd[stage] = {"status": "active", "attempts": attempts}
-        save_state(state)
+            # Mark active
+            rd = state["repos"].get(repo_id, {})
+            attempts = rd.get(stage, {}).get("attempts", 0) + 1
+            rd[stage] = {"status": "active", "attempts": attempts}
+            save_state(state)
 
-        try:
-            async with sem:
+            try:
                 await runner.run()
-        except asyncio.TimeoutError:
-            runner.log("TIMEOUT after 2h")
-            rd[stage] = {"status": "failed", "error": "timeout", "attempts": attempts}
-            save_state(state)
-            # Archive log
-            _archive_log(repo_id, stage, attempts)
-        except Exception as e:
-            runner.log(f"ERROR: {e}")
-            if attempts < MAX_ATTEMPTS:
-                rd[stage] = {"status": "pending", "attempts": attempts}
-                runner.log(f"Will retry (attempt {attempts}/{MAX_ATTEMPTS})")
-            else:
-                rd[stage] = {"status": "failed", "error": str(e)[:200], "attempts": attempts}
-            save_state(state)
-            _archive_log(repo_id, stage, attempts)
-        finally:
-            runners.pop(repo_id, None)
+
+                # If session ended naturally (session.idle) without report_complete,
+                # mark as done anyway — auditor sessions don't use report_complete
+                if rd.get(stage, {}).get("status") == "active":
+                    rd[stage] = {"status": "done", "jsons": runner.jsons_written}
+                    save_state(state)
+
+                except asyncio.TimeoutError:
+                runner.log("TIMEOUT after 2h")
+                rd[stage] = {"status": "failed", "error": "timeout", "attempts": attempts}
+                save_state(state)
+                _archive_log(repo_id, stage, attempts)
+            except Exception as e:
+                runner.log(f"ERROR: {e}")
+                if attempts < MAX_ATTEMPTS:
+                    rd[stage] = {"status": "pending", "attempts": attempts}
+                    runner.log(f"Will retry (attempt {attempts}/{MAX_ATTEMPTS})")
+                else:
+                    rd[stage] = {"status": "failed", "error": str(e)[:200], "attempts": attempts}
+                save_state(state)
+                _archive_log(repo_id, stage, attempts)
+            finally:
+                runners.pop(repo_id, None)
 
     def render_display() -> Panel:
         table = Table(show_header=False, box=None, padding=(0, 1))
