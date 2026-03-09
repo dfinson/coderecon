@@ -1263,8 +1263,8 @@
       "fork": "dfinson/django",
       "fork_ready": true,
       "audit": {
-        "status": "active",
-        "attempts": 2
+        "status": "done",
+        "jsons": 0
       },
       "exec_n": {
         "status": "pending"

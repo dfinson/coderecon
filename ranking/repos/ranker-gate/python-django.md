@@ -72,15 +72,15 @@ assembly to preserve the outer ORDER BY clause on unioned querysets.
 ### N2: Fix `_get_unique_checks()` crashing with `AttributeError` when `exclude` is a list and model has `CompositePrimaryKey`
 
 `Model._get_unique_checks()` in `django/db/models/base.py` starts with:
-`if exclude is None: exclude = set()` — but when called directly (e.g.,
-`model.validate_unique(exclude=['field_a'])`) with a list, `exclude` is not
-converted to a set. Later at line ~1521 the code calls
-`exclude.isdisjoint(names)` while iterating fields for a model with
+`if exclude is None: exclude = set()` — but when called with a non-None
+list (e.g., `model.validate_unique(exclude=['field_a'])`), `exclude` is
+not converted to a set. Later at line ~1521 the code calls
+`exclude.isdisjoint(names)` while iterating local fields for a model with
 a `CompositePrimaryKey`, raising `AttributeError: 'list' object has no
-attribute 'isdisjoint'`. `full_clean()` always converts `exclude` to a set
-before calling `validate_unique()`, but callers that invoke
-`validate_unique()` or `_get_unique_checks()` directly (including inline
-formsets via `django/forms/models.py`) may pass a list. Fix
+attribute 'isdisjoint'`. `full_clean()` already converts `exclude` to a
+set before delegating to `validate_unique()`, but user code calling
+`validate_unique()` or `_get_unique_checks()` directly with a list is a
+supported usage (the parameter signature accepts any iterable). Fix
 `_get_unique_checks()` to normalize `exclude` to a set unconditionally at
 the top of the method, matching `full_clean()`'s existing pattern.
 
