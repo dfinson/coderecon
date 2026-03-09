@@ -59,11 +59,11 @@ packages/
 
 ### N1: Fix `test.each` not preserving test context when used with fixtures
 
-When `test.each(cases)` is combined with fixture injection via `test.extend`, the fixtures are not injected into the parameterized test function. The `collect.ts` in `packages/runner/src/` doesn't propagate fixture definitions through `each` wrappers.
+When `test.each(cases)` is combined with fixture injection via `test.extend`, the fixtures are not injected into the parameterized test function. The `suite.ts` in `packages/runner/src/` wraps each `each` handler as `() => handler(...items)`, discarding the fixture context parameter, while `test.for` correctly passes it via `(ctx) => handler(item, ctx)`. The fix propagates fixture definitions through `each` wrappers in `packages/runner/src/suite.ts`.
 
 ### N2: Fix snapshot update mode not clearing obsolete snapshots from inline snapshot files
 
-When running with `--update`, removed inline snapshots in test files leave stale `toMatchInlineSnapshot()` calls with old values. The `InlineSnapshotManager` in `packages/snapshot/src/port/inlineSnapshot.ts` detects unused file-based snapshots but skips inline ones.
+When running with `--update`, removed inline snapshots in test files leave stale `toMatchInlineSnapshot()` calls with old values. The `SnapshotState` class in `packages/snapshot/src/port/state.ts` tracks unused keys for file-based snapshots via `_uncheckedKeys` and clears them on update, but maintains no equivalent tracking for inline snapshots stored in `_inlineSnapshots`. The fix adds unchecked-inline-snapshot tracking to `SnapshotState` so stale inline snapshot calls are removed during `--update` runs.
 
 ### N3: Add `--fail-on-flaky` CLI flag to mark flaky tests as failures
 
@@ -77,21 +77,21 @@ When fake timers are active, `setTimeout` calls inside resolved promise `.then()
 
 When a TypeScript file exports only type definitions, V8 coverage reports it as 0% covered even though there's no executable code. The coverage provider in `packages/coverage-v8/src/provider.ts` should exclude type-only files from the coverage report.
 
-### N6: Add `expect.soft()` assertion that collects failures without stopping the test
+### N6: Fix `expect.soft()` throwing when called inside `beforeEach`/`afterEach` hooks
 
-Currently `expect()` throws on first failure. Add `expect.soft()` that records failures and reports all of them at test end. Changes touch `packages/expect/src/jest-expect.ts` for the soft wrapper and `packages/runner/src/run.ts` for failure collection.
+When `expect.soft(val).toBe(x)` is placed inside a `beforeEach` or `afterEach` hook, it throws `'expect.soft() can only be used inside a test'` because the `vitest-test` flag is not set in the assertion context during hook execution. The failures should instead be collected and associated with the corresponding test. Changes touch `packages/expect/src/utils.ts` to resolve the active test from runner state when the assertion flag is absent, and `packages/runner/src/run.ts` to expose the hook's parent test reference to the assertion layer.
 
-### N7: Fix `toMatchObject` not handling `Date` instances correctly in deep comparisons
+### N7: Fix `toMatchObject` not handling `Error` instances correctly in deep comparisons
 
-When `expect(obj).toMatchObject({ date: new Date('2024-01-01') })` compares objects with `Date` fields, it uses reference equality instead of value equality. The comparison logic in `packages/expect/src/jest-utils.ts` doesn't special-case `Date` objects.
+When `expect(obj).toMatchObject({ err: new TypeError('message') })` compares objects containing `Error` fields, the comparison uses strict reference equality instead of property-based matching. The `isObjectWithKeys` function in `packages/expect/src/jest-utils.ts` explicitly excludes `Error` instances via `!isError(a)`, causing `subsetEquality` to return `undefined` for Error values and fall back to `equals()`, which requires the same Error instance. The fix adds `Error` handling to `subsetEquality` in `packages/expect/src/jest-utils.ts` to compare by `message`, `name`, and `cause` properties.
 
 ### N8: Fix test file watcher not detecting changes in symlinked dependencies
 
 When test files import from symlinked local packages, changes to those packages don't trigger re-runs. The watcher in `packages/vitest/src/node/watcher.ts` resolves symlinks but doesn't add the resolved paths to the watch list.
 
-### N9: Add `onTestFinished` hook for cleanup that runs after each test regardless of result
+### N9: Add `onTestRetry` hook that runs before each retry attempt
 
-Tests need a way to register cleanup callbacks that run after the test completes (pass or fail), similar to Go's `t.Cleanup()`. Add `onTestFinished(callback)` to the test context in `packages/runner/src/context.ts` with execution in `packages/runner/src/run.ts`.
+Tests that use retry need a way to reset state or log diagnostics specifically between retry attempts, distinct from `onTestFailed` (which runs on any failure, including the final one) and `onTestFinished` (which runs after the test is fully done). Add `onTestRetry(callback)` to the test context in `packages/runner/src/context.ts` that fires before each retry attempt, with execution added to the retry loop in `packages/runner/src/run.ts`.
 
 ### N10: Fix `vi.mock()` hoisting not working with dynamic import expressions
 
@@ -103,13 +103,13 @@ The `--fail-on-flaky` CLI flag is undocumented. Add usage examples and behavior 
 
 ## Medium
 
-### M1: Implement test tagging and tag-based filtering
+### M1: Implement `watchExclude` patterns to prevent heavy tests from re-running in watch mode
 
-Add `test.tag('slow', 'integration')` and `--tags slow --exclude-tags integration` CLI filtering. Changes span `packages/runner/src/collect.ts` for tag collection, `packages/vitest/src/node/tags.ts` for filtering, `packages/vitest/src/node/cli/` for CLI options, and reporter output. Update `docs/guide/test-tags.md` and `docs/config/tags.md` with tag filtering documentation, configuration reference, and usage examples.
+In watch mode, every file change that touches the dependency graph of a test file triggers a re-run. Add a `watchExclude` glob-pattern list that prevents matched test files from being scheduled for re-run even when their imported modules change, enabling developers to exclude slow integration tests from automatic re-runs. Changes span `packages/vitest/src/node/watcher.ts` for exclusion logic during change detection, `packages/vitest/src/node/config/resolveConfig.ts` for pattern normalization, `packages/vitest/src/node/types/config.ts` for the new option type, `packages/vitest/src/node/cli/cli-config.ts` for the `--watch-exclude` CLI flag, `packages/vitest/src/node/specifications.ts` for spec filtering, and `packages/vitest/src/node/core.ts` for integration with the watch loop. Update `docs/config/watchexclude.md` and `docs/guide/filtering.md` with documentation and usage examples.
 
-### M2: Add parallel suite execution within a single test file
+### M2: Add per-suite concurrency limit for `describe.concurrent()`
 
-Currently suites within a file run sequentially. Implement `describe.concurrent()` that runs child suites in parallel with configurable concurrency limits. Changes span `packages/runner/src/run.ts` for parallel suite orchestration, `packages/runner/src/collect.ts` for concurrent marking, and `packages/runner/src/fixture.ts` for fixture isolation.
+Currently `describe.concurrent()` shares the global `maxConcurrency` limit across all concurrent suites and tests. Implement an optional `concurrency` parameter on `describe.concurrent({ concurrency: N }, () => {...})` that scopes parallelism to just the tests within that specific suite, independent of the global limit. Changes span `packages/runner/src/types/tasks.ts` for the suite-level concurrency option, `packages/runner/src/suite.ts` for parsing the option and wiring up the scoped limiter, `packages/runner/src/run.ts` for creating and applying a suite-scoped `ConcurrencyLimiter` when the option is set, `packages/runner/src/utils/limit-concurrency.ts` for any required extensions, `packages/runner/src/fixture.ts` for fixture isolation within bounded concurrency, and `packages/vitest/src/node/config/resolveConfig.ts` for validation.
 
 ### M3: Implement snapshot testing with custom serializers per test file
 
@@ -131,17 +131,17 @@ Implement `vi.mock('./module', { strict: true })` that throws when the test code
 
 Add `--coverage-baseline coverage-baseline.json` that compares current coverage against a saved baseline and reports regressions. Changes span `packages/coverage-v8/src/provider.ts` and `packages/coverage-istanbul/src/` for baseline loading and comparison, and `packages/vitest/src/node/coverage.ts` for orchestration.
 
-### M8: Add structured test metadata and custom properties
+### M8: Implement maximum total run-duration enforcement with `maxRunDuration`
 
-Implement `test.meta({ ticket: 'JIRA-123', owner: 'team-a' })` that attaches metadata to test results, available in reporters and the UI. Changes span `packages/runner/src/types.ts` for metadata types, `packages/runner/src/collect.ts`, `packages/vitest/src/node/reporters/` for output, and `packages/ui/` for display.
+Add a `maxRunDuration` configuration option (in milliseconds) that causes the entire Vitest run to fail with a timeout error if the total wall-clock duration exceeds the limit. Unlike per-test `timeout`, this is a global ceiling for the complete test run, useful for CI pipelines with strict time budgets. Changes span `packages/runner/src/types/tasks.ts` for propagating deadline information, `packages/vitest/src/node/core.ts` for starting a run-level timer and aborting when exceeded, `packages/vitest/src/node/config/resolveConfig.ts` for config defaults, `packages/vitest/src/node/types/config.ts` for the option type, `packages/vitest/src/node/cli/cli-config.ts` for the `--max-run-duration` CLI flag, `packages/vitest/src/node/reporters/summary.ts` for displaying elapsed time against the budget, and `packages/vitest/src/node/reporters/json.ts` for including run duration in JSON output.
 
-### M9: Implement global test setup/teardown with resource sharing
+### M9: Implement per-test environment variable overrides via test options
 
-Add `globalSetup` files that can export resources accessible to all test files via `inject()`. Changes span `packages/vitest/src/node/globalSetup.ts` for resource lifecycle, `packages/vitest/src/integrations/inject.ts` for type-safe access, and `packages/vitest/src/node/pools/` for resource propagation across workers.
+Add an `env` option to individual tests and suites so that `process.env` variables are automatically set before the test runs and restored afterwards, without needing explicit `vi.stubEnv()` calls. Changes span `packages/runner/src/types/tasks.ts` for the `env` field on test options, `packages/runner/src/suite.ts` for parsing the option, `packages/runner/src/run.ts` for applying and restoring env overrides around each test, `packages/vitest/src/node/config/resolveConfig.ts` for global env defaults, `packages/vitest/src/node/types/config.ts` for the config type, and `packages/vitest/src/node/pools/` for propagating env maps across worker boundaries.
 
-### M10: Add test file impact analysis using module graph
+### M10: Add console output capture fixture for asserting on logged output
 
-Implement `--changed` mode that uses the Vite module graph to determine which test files are affected by source changes, running only impacted tests. Changes span `packages/vitest/src/node/git.ts` for change detection, `packages/vitest/src/node/vite.ts` for module graph traversal, and `packages/vitest/src/node/specifications.ts` for test selection.
+Implement a built-in `captureConsole` fixture that intercepts `console.log`, `console.warn`, and `console.error` output during a test and exposes the captured lines for assertion, without relying on `vi.spyOn`. Changes span `packages/runner/src/fixture.ts` for the capture fixture lifecycle, `packages/runner/src/context.ts` for context integration, `packages/runner/src/types/tasks.ts` for captured output types, `packages/runner/src/run.ts` for console interception and restoration around each test, `packages/vitest/src/integrations/vi.ts` for the public `vi.captureConsole()` API surface, and `packages/vitest/src/node/reporters/` for surfacing captured output in test failure reports.
 
 ### M11: Add contributor documentation and CI validation for test tagging
 
@@ -153,9 +153,9 @@ Update `CONTRIBUTING.md` with tag system development guidelines and architecture
 
 Add a coordinator/worker architecture that splits test files across machines, collects results, and produces merged reports. Changes span `packages/vitest/src/node/core.ts` for coordination, `packages/vitest/src/node/pools/` for remote pool, `packages/runner/src/` for result serialization, `packages/vitest/src/node/reporters/` for merged output, `packages/vitest/src/api/` for network protocol, and add a distributed execution module.
 
-### W2: Add visual regression testing support
+### W2: Add performance regression testing support
 
-Implement screenshot comparison for browser tests: capture, diff against baselines, threshold configuration, and visual diff output. Changes span `packages/browser/src/` for screenshot capture, `packages/snapshot/src/` for image comparison, `packages/vitest/src/node/reporters/` for visual diff reports, `packages/expect/src/` for `toMatchScreenshot()` matcher, `packages/ui/` for visual diff display, and add image processing utilities.
+Implement performance metric capture and regression detection for browser tests: record Core Web Vitals (LCP, CLS, INP, TTFB) and custom timings, diff against stored baselines, apply configurable regression thresholds, and output visual trend reports. Changes span `packages/browser/src/` for performance metric capture commands, `packages/snapshot/src/` for numeric baseline storage and comparison, `packages/vitest/src/node/reporters/` for performance regression reports, `packages/expect/src/` for `toMatchPerformanceSnapshot()` matcher, `packages/ui/` for performance trend dashboard, `packages/vitest/src/node/config/` for threshold configuration per metric, `packages/vitest/src/node/coverage.ts` for performance data collection orchestration, and add metric serialization and diff utilities.
 
 ### W3: Implement test analytics and trend tracking
 

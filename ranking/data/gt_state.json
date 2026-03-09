@@ -6,7 +6,8 @@
       "fork_ready": true,
       "audit": {
         "status": "merged",
-        "pr": 2
+        "pr": 2,
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -26,7 +27,8 @@
       "fork_ready": true,
       "audit": {
         "status": "merged",
-        "pr": 2
+        "pr": 2,
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -46,7 +48,8 @@
       "fork_ready": true,
       "audit": {
         "status": "merged",
-        "pr": 2
+        "pr": 2,
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -66,7 +69,8 @@
       "fork_ready": true,
       "audit": {
         "status": "merged",
-        "pr": 2
+        "pr": 2,
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -180,7 +184,8 @@
       "fork": "dfinson/Polly",
       "fork_ready": true,
       "audit": {
-        "status": "merged"
+        "status": "merged",
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -922,7 +927,8 @@
       "fork_ready": true,
       "audit": {
         "status": "merged",
-        "pr": 2
+        "pr": 2,
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -942,7 +948,8 @@
       "fork_ready": true,
       "audit": {
         "status": "merged",
-        "pr": 2
+        "pr": 2,
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -981,7 +988,8 @@
       "fork_ready": true,
       "audit": {
         "status": "merged",
-        "pr": 2
+        "pr": 2,
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -1001,7 +1009,8 @@
       "fork_ready": true,
       "audit": {
         "status": "merged",
-        "pr": 2
+        "pr": 2,
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -1021,7 +1030,8 @@
       "fork_ready": true,
       "audit": {
         "status": "merged",
-        "pr": 2
+        "pr": 2,
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -1040,7 +1050,8 @@
       "fork": "dfinson/bubbletea",
       "fork_ready": true,
       "audit": {
-        "status": "merged"
+        "status": "merged",
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -1517,7 +1528,8 @@
       "fork_ready": true,
       "audit": {
         "status": "merged",
-        "pr": 2
+        "pr": 2,
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -1536,7 +1548,8 @@
       "fork": "dfinson/AutoMapper",
       "fork_ready": true,
       "audit": {
-        "status": "merged"
+        "status": "merged",
+        "local_synced": true
       },
       "exec_n": {
         "status": "merged"
@@ -1556,7 +1569,8 @@
       "fork_ready": true,
       "audit": {
         "status": "merged",
-        "pr": 2
+        "pr": 2,
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -1575,7 +1589,8 @@
       "fork": "dfinson/fiber",
       "fork_ready": true,
       "audit": {
-        "status": "merged"
+        "status": "merged",
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -1594,7 +1609,8 @@
       "fork": "dfinson/gin",
       "fork_ready": true,
       "audit": {
-        "status": "merged"
+        "status": "merged",
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -1613,7 +1629,8 @@
       "fork": "dfinson/lombok",
       "fork_ready": true,
       "audit": {
-        "status": "merged"
+        "status": "merged",
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -1632,7 +1649,8 @@
       "fork": "dfinson/mockito",
       "fork_ready": true,
       "audit": {
-        "status": "merged"
+        "status": "merged",
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -1651,7 +1669,8 @@
       "fork": "dfinson/console",
       "fork_ready": true,
       "audit": {
-        "status": "merged"
+        "status": "merged",
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -1671,7 +1690,8 @@
       "fork_ready": true,
       "audit": {
         "status": "merged",
-        "pr": 4
+        "pr": 4,
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -1728,7 +1748,8 @@
       "fork": "dfinson/grape",
       "fork_ready": true,
       "audit": {
-        "status": "merged"
+        "status": "merged",
+        "local_synced": true
       },
       "exec_n": {
         "status": "merged",
@@ -1769,7 +1790,8 @@
       "fork_ready": true,
       "audit": {
         "status": "merged",
-        "pr": 2
+        "pr": 2,
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -1788,7 +1810,8 @@
       "fork": "dfinson/diesel",
       "fork_ready": true,
       "audit": {
-        "status": "merged"
+        "status": "merged",
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -1807,7 +1830,8 @@
       "fork": "dfinson/swift-composable-architecture",
       "fork_ready": true,
       "audit": {
-        "status": "merged"
+        "status": "merged",
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -1826,7 +1850,8 @@
       "fork": "dfinson/RxSwift",
       "fork_ready": true,
       "audit": {
-        "status": "merged"
+        "status": "merged",
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"
@@ -1865,7 +1890,8 @@
       "fork_ready": true,
       "audit": {
         "status": "merged",
-        "pr": 2
+        "pr": 2,
+        "local_synced": true
       },
       "exec_n": {
         "status": "pending"

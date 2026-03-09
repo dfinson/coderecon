@@ -77,39 +77,39 @@ In `src/cpp/server/server_builder.cc`, when `AddListeningPort` fails to bind (e.
 
 ### N3: Add `grpc.max_connection_idle_ms` channel argument validation
 
-The channel argument `grpc.max_connection_idle_ms` in `src/core/lib/channel/` accepts any integer value including negative numbers, which silently causes the connection to never idle. Add validation in channel argument processing to reject negative values and emit a log warning for zero values. Update `doc/keepalive.md` with validated parameter ranges and default values.
+The channel argument `grpc.max_connection_idle_ms` is parsed via `GetDurationFromIntMillis(GRPC_ARG_MAX_CONNECTION_IDLE_MS)` in `src/core/ext/filters/channel_idle/legacy_channel_idle_filter.cc`. Negative integer values are accepted silently, which produces a negative `Duration` that will never satisfy idle-time comparisons against `Duration::Infinity()`, causing the connection to never idle. Add validation in `legacy_channel_idle_filter.cc` to clamp negative values to zero and emit a log warning. Update `doc/keepalive.md` with validated parameter ranges and default values.
 
-### N4: Fix `ring_hash` policy not rebalancing when endpoint weights change
+### N4: Fix `ring_hash` policy ring-slot instability when endpoint address order changes
 
-In `load_balancing/ring_hash/ring_hash.cc`, the ring is constructed from endpoint addresses with a fixed number of virtual nodes. When endpoint weights are updated via service config, the ring is not rebuilt because the address list hasn't changed, causing traffic distribution to remain based on stale weights.
+In `load_balancing/ring_hash/ring_hash.cc`, the `Ring` constructor derives the hash key for each endpoint from `endpoint.addresses().front()` (the first element of the address vector) when `GRPC_ARG_RING_HASH_ENDPOINT_HASH_KEY` is not set. The `endpoint_map_` in `UpdateLocked` is keyed by `EndpointAddressSet`, which stores addresses as a sorted set for order-independent comparison. When a resolver returns the same endpoint addresses in a different vector order between resolutions (e.g., DNS may reorder A/AAAA records), the `EndpointAddressSet` key still matches—so the existing `RingHashEndpoint` is reused—but the hash key passed to ring construction changes because `.front()` now returns a different address. This causes the endpoint to land on different ring slots after each re-resolution that reorders addresses, making consistent-hash routing unstable. Fix by computing the hash key from the lexicographically smallest address in the set rather than `.front()` of the vector.
 
 ### N5: Fix `CompletionQueue::AsyncNext` not respecting `gpr_timespec` deadline on Windows
 
-In `src/core/lib/surface/completion_queue.cc`, the `AsyncNext` deadline conversion on Windows uses `gpr_time_to_millis` which truncates sub-millisecond precision. For very short deadlines (microsecond-level), this truncates to zero, causing `AsyncNext` to return immediately instead of waiting.
+In `src/core/lib/surface/completion_queue.cc`, the `cq_next` function converts the `gpr_timespec` deadline to an internal `grpc_core::Timestamp` via `Timestamp::FromTimespecRoundUp`, which rounds sub-millisecond deadlines up to the nearest millisecond. On Windows, the underlying event loop (`grpc_pollset_work`) uses `WaitForSingleObjectEx` with millisecond granularity. For deadlines between 0 and 1 ms, the rounded-up value causes `AsyncNext` to block for up to 1 ms even when the caller intended an immediate poll, and for already-elapsed deadlines close to zero the rounding may produce a nonzero wait. Fix the Windows event loop path to treat any deadline that rounds to 0 ms (i.e., already-elapsed or sub-millisecond) as an immediate zero-wait rather than applying the rounded-up value.
 
-### N6: Add `ClientContext::GetServerInitialMetadata` method for callback API
+### N6: Fix `ClientCallbackUnary` not invoking `OnReadInitialMetadataDone` before `OnDone` in the simple callback form
 
-The callback-based client API in `include/grpcpp/support/client_callback.h` does not provide access to server initial metadata before the response is received. Add `GetServerInitialMetadata()` to `ClientContext` that returns metadata received in the HTTP/2 HEADERS frame, available after `OnReadInitialMetadataDone`.
+In `include/grpcpp/support/client_callback.h`, the simple non-reactor callback form (`CallbackUnaryCall` / `CallbackUnaryCallImpl`) bundles all ops—send message, receive initial metadata, receive message, receive status—into a single batch with one completion tag. The `on_completion` function receives only a `grpc::Status` and is invoked when all ops complete. There is no separate notification when initial metadata arrives, so callers cannot inspect `context->GetServerInitialMetadata()` before the full RPC finishes. By contrast, `ClientCallbackUnaryImpl` (the reactor form) correctly invokes `reactor_->OnReadInitialMetadataDone` via a dedicated `start_tag_` callback. Fix `CallbackUnaryCallImpl` to split the initial-metadata receive into a separate first batch and invoke a user-supplied `on_initial_metadata` callback (defaulting to a no-op) before the response batch, consistent with the reactor implementation.
 
-### N7: Fix DNS resolver not honoring `grpc.dns_min_time_between_resolutions_ms` for SRV records
+### N7: Fix DNS resolver delaying address results while waiting for SRV query to complete
 
-In `resolver/dns/c_ares/dns_resolver_ares.cc`, the minimum resolution interval is enforced for A/AAAA queries but SRV record re-resolution bypasses the timer check because SRV and address resolutions are tracked with separate timestamps.
+In `resolver/dns/c_ares/dns_resolver_ares.cc`, the `OnResolvedLocked` method waits for all sub-queries (hostname/A/AAAA, SRV, TXT) to complete before reporting any result. When `GRPC_ARG_DNS_ENABLE_SRV_QUERIES` is set and the SRV query fails (e.g., NXDOMAIN or SERVFAIL) while the hostname query has already returned addresses, the resolver withholds the available addresses until the SRV failure propagates, causing unnecessary delay in address delivery. There is already a `TODO` comment in the code acknowledging this limitation. Fix `OnResolvedLocked` to report successfully-resolved hostname addresses immediately when the hostname query succeeds, without waiting for outstanding SRV or TXT queries that have no bearing on the address list.
 
-### N8: Fix `fake_resolver` not notifying watchers on empty address list update
+### N8: Fix `fake_resolver` crashing when re-resolution is triggered without a response generator
 
-In `resolver/fake/fake_resolver.cc`, when the fake resolver is updated with an empty address list (simulating all backends going down), the `ResolverResultHandler` is not invoked because the empty result is treated as "no change" rather than a meaningful update.
+In `resolver/fake/fake_resolver.cc`, `FakeResolver::RequestReresolutionLocked` unconditionally asserts `GRPC_CHECK(response_generator_ != nullptr)`. A `FakeResolver` can legitimately be constructed without a `FakeResolverResponseGenerator` when a test only needs a static address list and does not intend to re-resolve. If the gRPC channel framework internally triggers re-resolution (e.g., after a subchannel connectivity failure), the hard assertion fires and terminates the test process. Replace the `GRPC_CHECK` with a null guard so that re-resolution requests are silently ignored when no generator is configured, matching the graceful behavior of other resolver implementations.
 
 ### N9: Add compression algorithm name to channelz socket trace events
 
 In `src/core/channelz/`, socket trace events record message send/receive but do not include which compression algorithm (gzip, deflate, none) was used for each message. Add the algorithm name to the trace event data in the channelz socket node.
 
-### N10: Fix `pick_first` policy not shuffling addresses when `grpc.service_config_disable_resolution` is set
+### N10: Fix `pick_first` happy-eyeballs interleaving preferring whichever address family appears first in resolver output
 
-In `load_balancing/pick_first/pick_first.cc`, the random address shuffling for happy eyeballs is skipped when the service config is provided directly via channel arguments instead of through name resolution, because the shuffling is gated on a resolution-originated flag.
+In `load_balancing/pick_first/pick_first.cc`, the happy-eyeballs address interleaving logic builds `address_family_order` by recording the first occurrence of each address family encountered while iterating the flattened endpoint list. The scheme that appears first in the resolver output becomes the first scheme tried during connection, regardless of address family type. When the resolver returns IPv4 addresses before IPv6 (common for DNS A-then-AAAA ordering), IPv4 is tried first, contrary to RFC-8305's recommendation to prefer IPv6. Fix the `UpdateLocked` interleaving logic to reorder `address_family_order` so that the IPv6 family (scheme `"ipv6"` or equivalent) is placed first if present, consistent with RFC-8305 section 4 which mandates preferring IPv6 for Happy Eyeballs.
 
-### N11: Fix `doc/PROTOCOL-HTTP2.md` not documenting RST_STREAM error code mapping
+### N11: Add RST_STREAM error code mapping to `doc/PROTOCOL-WEB.md`
 
-The `doc/PROTOCOL-HTTP2.md` specification document describes HTTP/2 frame mapping for gRPC but does not document how HTTP/2 RST_STREAM error codes map to gRPC status codes. Add a mapping table for all RST_STREAM error codes to `doc/PROTOCOL-HTTP2.md`, cross-reference `doc/statuscodes.md` and `doc/http-grpc-status-mapping.md`, and update `doc/PROTOCOL-WEB.md` with the equivalent mapping for gRPC-Web.
+The `doc/PROTOCOL-WEB.md` specification document describes the gRPC-Web protocol but does not document how HTTP/2 RST_STREAM error codes map to gRPC-Web status codes when a stream is abruptly terminated. While `doc/PROTOCOL-HTTP2.md` already contains a RST_STREAM-to-gRPC-status mapping table (e.g., REFUSED_STREAM→UNAVAILABLE, CANCEL→CANCELLED), gRPC-Web has additional constraints because it is typically proxied over HTTP/1.1 connections where RST_STREAM semantics are translated by the proxy. Add a section to `doc/PROTOCOL-WEB.md` documenting RST_STREAM error code handling for gRPC-Web, cross-referencing `doc/PROTOCOL-HTTP2.md` for the base mapping and `doc/statuscodes.md` for gRPC status code definitions, and clarifying how a gRPC-Web proxy should translate RST_STREAM errors for gRPC-Web clients that use HTTP/1.1 connections.
 
 ## Medium
 
@@ -155,7 +155,7 @@ Implement a `RateLimitingFilter` that limits the number of concurrent RPCs per s
 
 ### M11: Improve CMake build configuration and dependency management
 
-Overhaul `CMakeLists.txt` with modern CMake 3.20+ practices: add `FetchContent` integration for third-party dependencies as an alternative to `third_party/` submodules; update `cmake/` support modules with better find-package support for system-installed dependencies; add `requirements.txt` pinning with hash verification for Python build dependencies; configure `build_handwritten.yaml` and `build_autogenerated.yaml` with clearer documentation; and update `BUILDING.md` with step-by-step instructions for all supported platforms. Changes span `CMakeLists.txt`, `cmake/`, `requirements.txt`, `build_handwritten.yaml`, `BUILDING.md`, and `MODULE.bazel`.
+Overhaul `CMakeLists.txt` with modern CMake practices (current minimum is 3.16; update to at least 3.20 to unlock `FetchContent_MakeAvailable` improvements): add `FetchContent` integration for third-party dependencies as an alternative to `third_party/` submodules; update `cmake/` support modules with better find-package support for system-installed dependencies; update `requirements.txt` (which exists but lacks hash pinning) with hash verification for Python build dependencies; configure `build_handwritten.yaml` and `build_autogenerated.yaml` with clearer documentation; and update `BUILDING.md` with step-by-step instructions for all supported platforms. Changes span `CMakeLists.txt`, `cmake/`, `requirements.txt`, `build_handwritten.yaml`, `BUILDING.md`, and `MODULE.bazel`.
 
 ## Wide
 

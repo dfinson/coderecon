@@ -92,18 +92,22 @@ include/nlohmann/
 
 ## Narrow
 
-### N1: Fix lexer not validating UTF-8 continuation bytes in non-escaped strings
+### N1: Fix lexer not including offending byte value in ill-formed UTF-8 error messages
 
-The lexer in `detail/input/lexer.hpp` validates `\uNNNN` escape
-sequences and rejects unpaired surrogates, but when processing raw
-(non-escaped) multi-byte UTF-8 characters in strings, it accepts
-each byte individually without verifying that continuation bytes
-(`0x80`–`0xBF`) follow the correct leading-byte pattern. Invalid
-UTF-8 sequences such as orphaned continuation bytes or overlong
-encodings are silently accepted as part of the string content. Fix
-the string-scanning path in `lexer.hpp` to validate complete UTF-8
-byte sequences and reject strings containing malformed UTF-8 with
-`parse_error.101`.
+The `scan_string()` function in `detail/input/lexer.hpp` validates
+raw (non-escaped) multi-byte UTF-8 sequences and rejects ill-formed
+byte sequences via `next_byte_in_range()` and the `default` case of
+the inner switch. However, when an ill-formed byte is detected, the
+error message is always the generic
+`"invalid string: ill-formed UTF-8 byte"` without identifying the
+specific offending byte value. This contrasts with the detailed
+control-character error messages elsewhere in `scan_string()` (e.g.,
+`"invalid string: control character U+0000 (NUL) must be escaped"`).
+Fix `next_byte_in_range()` and the `default` ill-formed-byte case in
+`scan_string()` to include the hex value of the offending byte in the
+error message — e.g., `"invalid string: ill-formed UTF-8 byte 0xC0"`
+— so that users can identify malformed bytes without additional
+tooling.
 
 ### N2: Fix binary_reader not validating BSON document size against consumed bytes
 
@@ -157,13 +161,20 @@ Invalid tag values outside the typed-array range are silently treated
 as untagged data. Fix the reader to reject unexpected tag values with
 `parse_error.112`.
 
-### N7: Fix iter_impl::operator[] returning dangling reference for object values
+### N7: Fix iter_impl::operator* using JSON_ASSERT for bounds checking in release builds
 
-`iter_impl::operator[]` in `detail/iterators/iter_impl.hpp` returns a
-reference to the mapped value when iterating over objects, but for
-primitive types it constructs a temporary and returns a reference to
-it. Fix the primitive path to either disallow indexing or return by
-value.
+`iter_impl::operator*` in `detail/iterators/iter_impl.hpp` guards
+dereference of object and array iterators with `JSON_ASSERT`, which
+maps to `assert()` and is compiled out in release builds (when
+`NDEBUG` is defined). In release mode, calling `operator*` on an
+end-positioned object or array iterator therefore silently causes
+undefined behavior instead of throwing a catchable
+`invalid_iterator` exception. Fix the object and array branches of
+`operator*` to replace the release-mode no-op `JSON_ASSERT` checks
+with runtime `if` guards that throw
+`invalid_iterator::create(214, "cannot get value", m_object)` when
+the underlying iterator is at end, matching the exception already
+thrown in the null and primitive branches of the same function.
 
 ### N8: Fix value_t ordering array not guarded by static_assert against enum changes
 
@@ -178,32 +189,39 @@ unordered rather than producing a compilation error. Fix
 `value_t.hpp` to add a `static_assert` verifying the array size
 matches the enum range.
 
-### N9: Fix parser not reporting expected token type in structural error messages
+### N9: Fix parser losing context when wrapping lexer parse_error tokens
 
-The recursive-descent parser in `detail/input/parser.hpp` emits
-`parse_error` exceptions when unexpected tokens are encountered
-during structural parsing (e.g., missing `:` after an object key,
-missing `,` between array elements). The error messages report
-only what was found (“unexpected token”) without indicating what
-was expected, making it difficult to diagnose malformed JSON. Fix
-`parser.hpp` to include the expected token type in structural parse
-error messages — e.g., `"expected ':' after object key, got ']'"`
-instead of the generic unexpected-token message.
+The iterative SAX parser in `detail/input/parser.hpp` passes
+`token_type::uninitialized` as the expected token in the
+`parse_error` token case of `sax_parse_internal` (the case at the
+`token_type::parse_error` label). The comment notes this is
+intentional to suppress the "expected" clause, but as a result,
+parse errors originating in the lexer (e.g.,
+`"invalid string: ill-formed UTF-8 byte"`) are emitted without the
+parser context that describes what was being parsed — `"object key"`,
+`"value"`, etc. Fix `sax_parse_internal` so that `parse_error`
+tokens in value position carry the same context string used in
+surrounding structural error paths (e.g., `"value"` inside the
+parse_value context), producing messages like
+`"syntax error while parsing value - invalid string: ..."` rather
+than `"syntax error - invalid string: ..."`.
 
-### N10: Fix to_json not providing an overload for std::filesystem::path
+### N10: Add to_json and from_json overloads for std::variant
 
-The `to_json` overloads in `detail/conversions/to_json.hpp` cover
-standard library types including strings, containers, and optional,
-but do not include `std::filesystem::path` despite the library
-already providing filesystem-related utilities in
-`detail/meta/std_fs.hpp`. Users must manually convert paths to
-strings before serialization, which is error-prone on Windows where
-`path::string()` and `path::u8string()` differ. Add a `to_json`
-overload for `std::filesystem::path` that serializes via
-`path::string()` (or `u8string()` for UTF-8 correctness), guarded
-by the same feature-detection macro used in `std_fs.hpp`. Also update
-`ChangeLog.md` to document the new overload and update `FILES.md`
-to list `detail/meta/std_fs.hpp` in the filesystem support section.
+The conversion functions in `detail/conversions/to_json.hpp` and
+`detail/conversions/from_json.hpp` cover standard library types
+including `std::optional`, `std::pair`, `std::tuple`, and
+`std::filesystem::path`, but do not include `std::variant`. Users
+who hold typed alternatives via `std::variant` must manually match
+the active alternative before serialization. Add `to_json` and
+`from_json` overloads for `std::variant<Types...>` that serialize the
+active alternative as a JSON array `[index, value]` (where `index`
+is the zero-based `std::variant::index()`) and deserialize by reading
+the index and constructing the corresponding alternative via
+`std::get<N>`. Guard the overloads with `__cpp_lib_variant` or an
+equivalent feature-detection check. Add a supporting `is_variant`
+type trait in `detail/meta/type_traits.hpp` to gate the SFINAE
+constraints.
 
 ## Medium
 
@@ -271,16 +289,24 @@ Changes span `basic_json`, `detail/iterators/iter_impl.hpp` for
 random-access operations, and `detail/meta/type_traits.hpp` for
 comparator concept checking.
 
-### M7: Add BJData optimized container round-trip support
+### M7: Add bjdata_use_optimized convenience option and round-trip marker validation
 
-The BJData binary format supports optimized containers with `$` (type)
-and `#` (count) markers for homogeneous arrays. Currently
-`binary_reader.hpp` parses them but `binary_writer.hpp` always writes
-the generic format. Implement optimized writing: detect homogeneous
-arrays, emit type/count markers, and add a `use_bjdata_optimized`
-option. Changes span `detail/output/binary_writer.hpp`,
-`detail/input/binary_reader.hpp` for round-trip verification, and
-`basic_json` for the output option.
+The BJData writer (`detail/output/binary_writer.hpp`) already detects
+homogeneous arrays and emits `$` (type) and `#` (count) markers when
+`use_type=true`, but the public `to_bjdata()` API in `basic_json`
+exposes only the raw `use_size` / `use_type` pair with both defaulting
+to `false`. There is no single `bjdata_use_optimized` boolean to
+enable both simultaneously, making optimized output harder to
+discover. Furthermore, the writer's internal excluded-marker list
+(`bjdx` in `write_ubjson_internal` in `binary_writer.hpp`) is defined
+inline but never cross-validated against the reader's
+`bjd_optimized_type_markers` list in `binary_reader.hpp`, leaving a
+latent round-trip gap if the two diverge. Add a `bjdata_use_optimized`
+convenience parameter to the three `to_bjdata()` overloads in
+`basic_json` that enables `use_size=true, use_type=true`, wire it
+through `binary_writer.hpp`, and add a `static_assert` in
+`binary_writer.hpp` that validates the two excluded-marker lists
+remain consistent with `binary_reader.hpp`.
 
 ### M8: Implement JSON Path (RFC 9535) query support
 
@@ -471,16 +497,23 @@ targets and how to add corpus files. Also update
 
 ### W11: Overhaul CI and build configuration across all platforms
 
-The CI configuration spans `.cirrus.yml` (FreeBSD),
+The CI configuration spans `.cirrus.yml` (ARM Linux container),
 `.github/workflows/ubuntu.yml`, `.github/workflows/macos.yml`,
 `.github/workflows/windows.yml`, and several analysis workflows
-(CodeQL, Semgrep, Flawfinder, Scorecards). Synchronize the compiler
-matrix: add GCC 14 and Clang 18 to the Ubuntu workflow, add an
-Apple Silicon runner to the macOS workflow, and add ARM64 Windows to
-the Windows workflow. Update `CMakeLists.txt` to add a
-`JSON_SystemInclude` option for header-only embedding scenarios.
-Update `.cirrus.yml` to pin the FreeBSD image version and add a
-Meson build task alongside the existing CMake one. Update
-`ChangeLog.md` with a "Build & CI" section, update `.reuse/dep5`
-with copyright info for any new files, and update
-`.github/dependabot.yml` to monitor GitHub Actions version updates.
+(CodeQL, Semgrep, Flawfinder, Scorecards). Several gaps remain:
+`.cirrus.yml` uses `image: gcc:latest` without pinning the Docker
+image to a specific version tag or digest, making ARM-container
+builds non-reproducible; `.cirrus.yml` exercises only CMake and
+lacks a Meson build step; the Windows workflow covers only `Win32`
+and `x64` architectures with no ARM64 Windows target; and none of
+the workflows test the C++23 standard mode end-to-end. Synchronize
+coverage: pin the `.cirrus.yml` Docker image to a specific versioned
+tag, add a Meson build task alongside the existing CMake task in
+`.cirrus.yml`, add ARM64 Windows to the Windows workflow matrix,
+and add C++23 standard jobs to the Ubuntu workflow. Update
+`CMakeLists.txt` to add a `JSON_DisableEnumSerialization` validation
+test target that confirms the `JSON_DISABLE_ENUM_SERIALIZATION` macro
+path compiles correctly. Update `ChangeLog.md` with a "Build & CI"
+section, update `.reuse/dep5` with copyright info for any new files,
+and update `.github/CONTRIBUTING.md` to document the ARM and Meson
+CI paths.

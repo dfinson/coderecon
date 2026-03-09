@@ -91,45 +91,45 @@ console/
 
 ## Narrow
 
-### N1: Fix `OutputFormatterStyleStack` not restoring style after nested empty tags
+### N1: Fix `OutputFormatterStyleStack` not merging inherited styles from parent stack entries
 
-In `Formatter/OutputFormatterStyleStack.php`, when processing `<info>outer<error></error>continued</info>`, the empty `<error></error>` pair pops the error style and leaves the stack pointing to the base style instead of restoring `info`. The `pop()` method should verify it is popping the matching style rather than always popping the top of the stack.
+In `Formatter/OutputFormatterStyleStack.php`, the `getCurrent()` method returns only the top-most active style, discarding visual properties from all parent styles lower in the stack. When `<fg=red><bold>text</bold></fg=red>` is processed, text inside `<bold>` displays only as bold with no foreground color, because `getCurrent()` returns only the bold style instead of a combination of all stacked styles. The method should compute a merged effective style that accumulates properties (foreground, background, options) from all stacked entries in order, so inner styles inherit and augment the outer ones.
 
-### N2: Fix `ProgressBar` not recalculating terminal width on window resize
+### N2: Fix `Terminal` static dimension cache not invalidated on window resize
 
-In `Helper/ProgressBar.php`, the terminal width is captured once during `start()` via `Terminal::getWidth()`. If the terminal is resized mid-progress, the bar format overflows or underflows. The width should be re-queried on each `advance()` call or on a configurable interval. Document the resize behavior in `README.md`.
+In `Terminal.php`, the static properties `self::$width` and `self::$height` are populated once by `initDimensions()` and never refreshed. The instance method `getWidth()` falls back to `self::$width ?: 80` after the first call, so `ProgressBar::display()` always uses the cached value even after a terminal resize. Add a `static resetDimensions(): void` method to `Terminal` that sets both static properties to `null` so the next `getWidth()` / `getHeight()` call re-queries the terminal, and call it from `ProgressBar::display()` on a configurable resize-check interval stored in `ProgressBar`. Document the resize behavior in `README.md`.
 
-### N3: Fix `ArgvInput` not handling `--option=` (empty value) for required-value options
+### N3: Fix `ArgvInput` ignoring configured default for `VALUE_OPTIONAL` options provided without a value
 
-In `Input/ArgvInput.php`, parsing `--name=` with an `InputOption` of mode `VALUE_REQUIRED` throws `RuntimeException` ("option requires a value") instead of accepting the empty string as a valid value. The parser should distinguish between `--name` (missing value) and `--name=` (explicit empty value).
+In `Input/ArgvInput.php`, when an `InputOption` with mode `VALUE_OPTIONAL` and a non-null default is passed on the command line as `--name` (without a trailing `=value`), `addLongOption()` stores `null` in `$this->options`. Because `Input::getOption()` returns the stored `null` when the key exists—bypassing the definition default—the option's configured default value is never used. The `addLongOption()` method should assign the option's defined default value when `$value` is `null` and the option is `VALUE_OPTIONAL`, so that `--name` without an explicit value behaves identically to omitting the option entirely.
 
-### N4: Fix `ConsoleSectionOutput` overwrite corruption when content contains ANSI escape sequences
+### N4: Fix `ConsoleSectionOutput` line-count miscalculation for content containing tab characters
 
-In `Output/ConsoleSectionOutput.php`, `overwrite()` calculates the number of lines to erase based on `substr_count($content, "\n")`. When the content includes ANSI color codes that span multiple lines, the visible line count differs from the newline count, causing partial overwrites that leave ghost text from previous renders.
+In `Output/ConsoleSectionOutput.php`, the `addContent()` method delegates to `getDisplayLength()`, which calls `str_replace("\t", '        ', $text)` to expand tab characters as a fixed 8-space sequence regardless of the tab's column position. Real terminal tab stops advance to the next column that is a multiple of 8 from the tab's actual position, so a tab at column 3 advances only 5 spaces, not 8. This makes the computed line count exceed the actual rendered line count when section content contains tab characters, causing `popStreamContentUntilCurrentSection()` to erase too many lines and leave ghost text from previous renders above the section.
 
-### N5: Fix `QuestionHelper` not respecting `max_attempts` for `ChoiceQuestion` with multiselect
+### N5: Fix `ChoiceQuestion` multiselect validator accepting duplicate comma-separated values
 
-In `Helper/QuestionHelper.php`, when a `ChoiceQuestion` has `multiselect: true` and `maxAttempts: 3`, each invalid comma-separated entry counts as one attempt per item selected rather than one attempt per prompt. A single multiselect prompt with three items exhausts all attempts immediately.
+In `Question/ChoiceQuestion.php`, the default validator returned by `getDefaultValidator()` does not detect duplicate entries in a multiselect comma-separated response. When a user enters `foo,foo` for a `ChoiceQuestion` with `multiselect: true`, the validator silently returns `['foo', 'foo']` as a valid result instead of throwing `InvalidArgumentException`. The validator should track processed choices in a set and throw when any value appears more than once, matching the contract that each selected choice represents a distinct selection.
 
-### N6: Fix `TreeHelper` not handling circular references in node structures
+### N6: Improve `TreeHelper` cycle detection to render a placeholder instead of throwing
 
-In `Helper/TreeHelper.php`, if a `TreeNode` has a child that references an ancestor node, `renderNode()` recurses infinitely until stack overflow. The helper should detect cycles and render a `[circular reference]` placeholder or throw an explicit error.
+In `Helper/TreeHelper.php`, when the renderer encounters a node that has already been visited during the current traversal, it throws `\LogicException("Cycle detected at node: …")`. Applications that use `TreeHelper` for data structures that may legitimately contain back-references (e.g., dependency graphs loaded from external sources) must wrap every `render()` call in a try-catch, making normal control flow awkward. Replace the throw with a configurable placeholder text (default `[circular reference]`) written via `$this->output->writeln()` for the repeated node, and continue rendering the rest of the tree. Expose a `setCircularReferencePlaceholder(string $text): static` method and update `README.md` with a cycle-handling example.
 
-### N7: Fix `CompletionInput` binding failure for options with `VALUE_NONE` mode
+### N7: Fix `CompletionInput::bind()` accessing out-of-bounds token index when cursor is at position 0
 
-In `Completion/CompletionInput.php`, `bind()` attempts to set the value of a `VALUE_NONE` option (boolean flag) when the cursor is positioned right after the flag name. This triggers `InvalidArgumentException` from `InputDefinition` because no-value options cannot accept a value. The binding should skip value assignment for `VALUE_NONE` options.
+In `Completion/CompletionInput.php`, the `bind()` method unconditionally reads `$this->tokens[$this->currentIndex - 1]` as the "previous token" when deciding whether completion type is `TYPE_OPTION_VALUE`. When `$currentIndex` is `0`, this evaluates to `$this->tokens[-1]`, which is `null` for a standard 0-indexed PHP array. The subsequent `'-' === $previousToken[0]` string offset access on `null` triggers a deprecation warning in PHP 8.0 and a `TypeError` in PHP 8.1+. The method should guard the previous-token lookup with `$this->currentIndex > 0` before accessing the array index.
 
-### N8: Fix `Color` class not clamping 24-bit color values
+### N8: Fix `AnsiColorMode` hex color parser silently accepting non-hexadecimal characters
 
-In `Color.php`, the `convertHexColor()` method passes raw RGB values to ANSI escape sequences. Values above 255 produce malformed escape codes that corrupt terminal output. The method should clamp each channel to the 0–255 range.
+In `Output/AnsiColorMode.php`, `convertFromHexToAnsiColorCode()` strips the `#` prefix and validates only the string length (3 or 6 characters), but does not verify that the remaining characters are valid hexadecimal digits. PHP's `hexdec()` silently returns `0` for strings containing non-hex characters such as `#zzzzzz`, so `Color('#zzzzzz')` silently produces black `(0, 0, 0)` instead of throwing `InvalidArgumentException`. The method should validate that the stripped string matches `/^[0-9a-fA-F]+$/` and throw `InvalidArgumentException` for strings that contain non-hexadecimal characters.
 
-### N9: Fix `OutputWrapper` splitting words mid-multibyte character
+### N9: Fix `OutputWrapper` wrapping at code-point count rather than display column width
 
-In `Helper/OutputWrapper.php`, the `wrap()` method uses `wordwrap()` which operates on byte length rather than character length. For multibyte UTF-8 strings (e.g., CJK characters), the wrapping can split in the middle of a character, producing invalid UTF-8 output.
+In `Helper/OutputWrapper.php`, the `wrap()` method uses `preg_replace()` with the `/u` (Unicode) flag, which counts wrap width in Unicode code points rather than visual terminal columns. East-Asian full-width characters (CJK ideographs, fullwidth forms) each occupy two display columns but count as a single code point. A line wrapped at 80 code points that contains double-width characters may visually span up to 160 terminal columns, causing overflow. The `wrap()` method should measure display width using `mb_strwidth()` (or a helper function that accounts for zero-width and double-width characters) instead of raw code-point count when determining line break positions.
 
-### N10: Fix `Cursor` not flushing output after movement methods
+### N10: Fix `Cursor::getCurrentPosition()` writing terminal query to the input stream instead of output
 
-In `Cursor.php`, methods like `moveUp()`, `moveToColumn()`, and `clearLine()` write ANSI escape sequences to the output but do not call `flush()`. When the output stream is buffered, cursor movements are delayed until the next explicit write, causing visual glitches in interactive commands.
+In `Cursor.php`, the `getCurrentPosition()` method writes the ANSI Device Status Report query (`\033[6n`) to `$this->input` (the input stream, defaulting to `STDIN`) via `@fwrite($this->input, "\033[6n")` rather than to `$this->output`. On systems where standard input is piped or redirected (e.g., `echo '' | php app.php`), the query is never delivered to the terminal, and the subsequent `fread($this->input, 1024)` blocks indefinitely waiting for a CPR response that will never arrive. The query should be sent through `$this->output->write("\033[6n")` so it travels via the same path as all other cursor escape sequences, with the CPR response still read back from `$this->input`.
 
 ### N11: Fix `CHANGELOG.md` unreleased section not following Keep a Changelog format
 
@@ -149,13 +149,13 @@ Add `#[AsCommand(group: 'database')]` support so `list` command displays command
 
 Implement `ProgressBar::createMulti($output, $count)` that renders multiple progress bars simultaneously using `ConsoleSectionOutput`. Changes span `Helper/ProgressBar.php` (multi-bar coordinator, section-based rendering), `Output/ConsoleSectionOutput.php` (multi-section updates), `Style/SymfonyStyle.php` (multi-progress factory), and `Helper/ProgressIndicator.php` (multi-indicator support).
 
-### M4: Implement argument resolver for Symfony UID types
+### M4: Extend `UidValueResolver` to support array-mode UID arguments and options
 
-Add value resolvers for `Uuid`, `Ulid`, and custom UID types used with `InvokableCommand`. Changes span a new `ArgumentResolver/ValueResolver/UidValueResolver.php`, `Attribute/Argument.php` (UID validation hints), `InvokableCommand.php` (UID type detection), and `ArgumentResolver/ArgumentResolver.php` (resolver registration order).
+The existing `ArgumentResolver/ValueResolver/UidValueResolver.php` resolves a single `AbstractUid` instance from a command argument or option but does not handle the case where the argument or option is declared with `IS_ARRAY` mode. When an `#[Argument]` or `#[Option]` has a UID type name and array mode, multiple string values may be provided that each need to be converted to a UID. Changes span `UidValueResolver.php` (add array branches to `resolveArgument()` and `resolveOption()` that iterate values and return an array of UIDs), `Attribute/Argument.php` (expose array-mode flag for UID detection), `Attribute/Option.php` (corresponding option handling), `ArgumentResolver/ArgumentResolver.php` (ensure UID resolver runs before the generic array resolver to avoid type conflicts), and `Command/InvokableCommand.php` (propagate `IS_ARRAY` flag when building the UID input definition entry).
 
-### M5: Add command execution timeout with configurable alarm signal
+### M5: Add per-command timeout via `#[AsCommand(timeout:)]` integrated with the existing alarm infrastructure
 
-Implement `#[AsCommand(timeout: 30)]` that registers a `SIGALRM` handler to abort long-running commands. Changes span `Attribute/AsCommand.php` (timeout property), `Application.php` (alarm registration in `doRunCommand`), `SignalRegistry/SignalRegistry.php` (alarm signal handling), `Event/ConsoleAlarmEvent.php` (event dispatch), and `Command/Command.php` (timeout accessor).
+`Application` already implements `setAlarmInterval()`, `scheduleAlarm()`, and `SIGALRM` dispatch via `ConsoleAlarmEvent`, but there is no way to declare a per-command timeout declaratively. Add a `timeout` constructor parameter to `Attribute/AsCommand.php` and a `getTimeout(): ?int` accessor to `Command/Command.php`. In `Application::doRunCommand()`, read the command's timeout and call `$this->setAlarmInterval($timeout)` before execution and `$this->setAlarmInterval(null)` in the finally block. Extend `EventListener/ErrorListener.php` to cancel any pending alarm when a console error event is dispatched. Changes span `Attribute/AsCommand.php`, `Command/Command.php`, `Application.php` (`doRunCommand`), and `EventListener/ErrorListener.php`.
 
 ### M6: Implement output format auto-detection for CI environments
 

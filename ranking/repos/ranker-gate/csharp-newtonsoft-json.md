@@ -66,13 +66,19 @@ Src/Newtonsoft.Json/
 
 ## Narrow
 
-### N1: Fix `JsonConvert.PopulateObject` not respecting `NullValueHandling.Ignore`
+### N1: Fix `JsonConvert.PopulateObject` throwing for `Required.Always` properties absent from the JSON when target already has values set
 
-When using `PopulateObject` with `NullValueHandling.Ignore` in the
-serializer settings, null values in the JSON still overwrite non-null
-existing properties on the target object. The population path does not
-check `NullValueHandling` before setting property values. Fix the
-populate logic to respect the null handling setting.
+When calling `JsonConvert.PopulateObject` with a partial JSON update
+(not all properties present), `EndProcessProperty` in
+`JsonSerializerInternalReader` throws a `JsonSerializationException`
+for any property marked `Required.Always` or `Required.AllowNull` that
+is absent from the JSON — even when that property already has a valid
+non-null value on the existing target object. The check in
+`EndProcessProperty` compares only `PropertyPresence.None` without
+reading the current value from the target. Fix `EndProcessProperty` to
+skip the required-missing exception when the target object's property
+already holds a non-null value (i.e., `property.Readable` is true and
+`property.ValueProvider.GetValue(newObject)` returns non-null).
 
 ### N2: Add `Required.AllowDefault` for value types
 
@@ -82,30 +88,49 @@ must be present in the JSON even when the value is the type's default
 (0, false). Add `Required.AllowDefault` that only checks for presence
 in the JSON without validating against type defaults.
 
-### N3: Fix `JObject.Parse` stack overflow on deeply nested JSON
+### N3: Add `MaxDepth` property to `JsonLoadSettings`
 
-Parsing a JSON document with ~1000 levels of nesting causes a
-`StackOverflowException` because the recursive descent parser uses
-the call stack for nesting depth tracking. Add a configurable maximum
-depth (default 64) and throw a `JsonReaderException` when exceeded.
+`JsonLoadSettings` (used by `JToken.Parse` and `JToken.Load`) exposes
+`CommentHandling`, `LineInfoHandling`, and `DuplicatePropertyNameHandling`
+but provides no way to configure the maximum nesting depth. To restrict
+depth when loading via the LINQ-to-JSON API, callers must create a
+`JsonTextReader` manually and set `MaxDepth` on it. Add a nullable
+`MaxDepth` property to `JsonLoadSettings` and propagate it to the
+`JsonTextReader` created inside `JToken.Load(JsonReader, JsonLoadSettings)`
+so callers can control the depth limit through the settings object. When
+`MaxDepth` is null, the reader's own default should be preserved.
 
-### N4: Fix `JsonTextReader` ignoring trailing commas in strict mode
+### N4: Add `AllowTrailingCommas` option to `JsonLoadSettings` to optionally reject trailing commas
 
-When `JsonTextReader` is configured with strict parsing, it silently
-accepts trailing commas in arrays and objects (e.g., `[1, 2, 3,]`).
-The reader's `ParseValue` and `ParseObject` methods do not check for
-a trailing comma before the closing bracket or brace. Fix the reader
-to throw a `JsonReaderException` when a trailing comma is encountered
-in strict mode.
+`JsonTextReader` currently accepts trailing commas in arrays and objects
+(e.g., `[1, 2, 3,]`) — `ParseObject` and `ParseValue` treat a comma
+immediately before a closing `}` or `]` as valid JSON. This permissive
+behavior is intentional for lenient parsing, but there is no way to
+opt into stricter RFC 8259 compliance via the `JToken.Parse` /
+`JToken.Load` API. Add a `bool AllowTrailingCommas` property to
+`JsonLoadSettings` that controls this behavior: `true` (the default)
+preserves the existing permissive behavior for backward compatibility,
+while `false` makes the reader strict. Add a matching
+`AllowTrailingCommas` property to `JsonTextReader` and propagate the
+setting from `JsonLoadSettings` to the reader inside `JToken.Load`.
+When `AllowTrailingCommas` is `false`, the reader's `ParseObject` and
+`ParseValue` methods should throw a `JsonReaderException` upon
+encountering a trailing comma before the closing `}` or `]`.
 
-### N5: Fix `DefaultContractResolver` cache not distinguishing generic type arguments
+### N5: Fix `DefaultContractResolver` not sharing a static contract cache across instances
 
-When resolving contracts for `List<int>` and `List<string>`,
-`DefaultContractResolver` caches the contract by the open generic
-type definition, causing both to share the same `JsonArrayContract`
-with identical item converter settings. The cache key in
-`ResolveContract` needs to use the closed generic type rather than
-the generic type definition.
+`CamelCasePropertyNamesContractResolver` uses a static
+`Dictionary<StructMultiKey<Type, Type>, JsonContract>` keyed by
+`(objectType, resolverType)` (guarded by `TypeContractCacheLock`) so
+that multiple instances share their resolved contracts. By contrast,
+`DefaultContractResolver` stores contracts only in a per-instance
+`ThreadSafeStore<Type, JsonContract>`, so every new instance recreates
+contracts from scratch. Add a static contract cache to
+`DefaultContractResolver.ResolveContract` using the same
+`StructMultiKey<Type, Type>` pattern already present in
+`CamelCasePropertyNamesContractResolver`, and update `ResolveContract`
+to check and populate the static cache before falling back to the
+instance store.
 
 ### N6: Fix `JValue.Equals` not comparing `DateTimeOffset` and `DateTime` correctly
 
@@ -115,37 +140,59 @@ same instant. The `Compare` method in `JValue` does not attempt to
 normalize the two date types before comparison. Fix `JValue.Compare`
 to convert to a common representation when both values are date-like.
 
-### N7: Fix `JsonSerializerInternalWriter` not escaping single quotes in property names
+### N7: Fix `JsonTextWriter.QuoteChar` setter not guarding against mid-stream changes
 
-When `JsonTextWriter.QuoteChar` is set to single quote (`'`), the
-serialization writer does not escape single quotes embedded inside
-property names, producing invalid JSON like `{'it's': 'val'}`.
-`WritePropertyName` in `JsonTextWriter` needs to escape the active
-quote character within the name string.
+Changing `JsonTextWriter.QuoteChar` after writing has begun (i.e., after
+at least one token has been written) produces inconsistent output: the
+writer silently switches the quote character mid-stream, yielding output
+such as `{"first":"value",'second':'value'}` which is syntactically
+invalid JSON. The `set_QuoteChar` property validates only that the
+character is `"` or `'` but does not check whether the writer is past
+`WriteState.Start`. Fix `JsonTextWriter.set_QuoteChar` to throw an
+`InvalidOperationException` when `WriteState != WriteState.Start`,
+with a message indicating that the quote character cannot be changed
+after writing has started.
 
-### N8: Fix `BsonReader` returning wrong type for empty binary data
+### N8: Fix `BsonReader.ReadBinary` not validating outer byte count for `BsonBinaryType.BinaryOld`
 
-When reading a BSON binary field with zero length, `BsonReader`
-returns `null` instead of an empty `byte[]`. The `ReadBinary` method
-short-circuits on zero length before allocating the array. Fix it to
-return `new byte[0]` for zero-length binary data.
+For `BsonBinaryType.BinaryOld` fields, the BSON spec stores an outer
+4-byte length followed by a second inner 4-byte length; the outer
+length therefore must be at least 4. `BsonReader.ReadBinary` reads
+the outer `dataLength` via `ReadInt32` and, for `BinaryOld`, always
+reads a second `ReadInt32` for the inner length. When a malformed
+BSON document encodes a `BinaryOld` field with `dataLength < 4`,
+the second `ReadInt32` over-reads into the following BSON data,
+silently corrupting the read position. Add a guard in
+`BsonReader.ReadBinary` that throws a `JsonReaderException` when a
+`BinaryOld` field's outer byte count is less than 4.
 
-### N9: Fix `JsonSerializerInternalReader` skipping `OnDeserialized` callback for populated objects
+### N9: Fix `JsonConvert.PopulateObject` not applying `$id` reference tracking only when reference preservation is enabled
 
-When `JsonSerializer.Populate` is used to fill an existing object,
-the `OnDeserialized` callback (via `[OnDeserialized]` attribute or
-`ISerializationCallback`) is not invoked after population completes.
-`PopulateObject` in `JsonSerializerInternalReader` finishes after
-setting properties but never raises the deserialized event. Add the
-callback invocation at the end of the populate path.
+In `JsonSerializerInternalReader.Populate`, the `$id` metadata
+property is read and consumed (lines that check
+`JsonTypeReflector.IdPropertyName`) regardless of whether
+`PreserveReferencesHandling` is enabled on the serializer. When
+reference preservation is `None`, the id is extracted and silently
+discarded, which advances the reader past the first real property of
+the object, causing that property to be skipped. Fix `Populate` to
+only parse and consume the `$id` token when
+`Serializer.PreserveReferencesHandling != PreserveReferencesHandling.None`
+so that objects whose first property name happens to be `$id` are
+deserialized correctly when reference tracking is off.
 
-### N10: Fix `JArray.Remove` not updating parent references
+### N10: Add `StringComparison` property to `JsonSelectSettings` for case-insensitive property matching in `SelectTokens`
 
-Removing a `JToken` from a `JArray` using `Remove(JToken)` clears
-the item from the internal list but does not reset the removed
-token's `Parent` property to `null`. This causes the removed token
-to still report the old array as its parent, leading to incorrect
-behavior when the token is added to a different container.
+`JToken.SelectTokens` (and `SelectToken`) always performs case-sensitive
+property name matching because `FieldFilter.ExecuteFilter` and
+`FieldMultipleFilter.ExecuteFilter` use the `JObject` indexer (`o[Name]`)
+and `JObject.GetValue(name)` without a `StringComparison` argument.
+`JsonSelectSettings` has no property to control case sensitivity.
+Add a `StringComparison` property to `JsonSelectSettings` (defaulting
+to `StringComparison.Ordinal` for backward compatibility). Pass the
+settings object into `FieldFilter.ExecuteFilter` and
+`FieldMultipleFilter.ExecuteFilter` and replace the `o[Name]` call with
+`o.GetValue(Name, settings.StringComparison)` so callers can opt in to
+case-insensitive path evaluation.
 
 ## Medium
 
@@ -199,14 +246,21 @@ compute the minimal merge patch between two documents. Unlike the
 existing `Merge` method, this must follow RFC 7396 semantics exactly,
 including null-means-delete behavior.
 
-### M6: Add `JsonPath` filter expression support in `SelectTokens`
+### M6: Add JSONPath script-function support in `SelectTokens` filter expressions
 
-`JToken.SelectTokens` supports basic JSON Path navigation but does
-not support filter expressions like `$.store.book[?(@.price < 10)]`.
-Implement a filter expression parser in the `Linq/JsonPath/` layer
-that handles comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`),
-boolean logic (`&&`, `||`), and property existence (`@.isbn`). Wire
-the filter into `QueryExpression` evaluation.
+`JToken.SelectTokens` supports filter expressions with comparison and
+existence operators (e.g., `$.store.book[?(@.price < 10)]`, `[?(@.isbn)]`).
+However, it does not support script functions such as `length()`, `size()`,
+`keys()`, or `type()` that appear in popular JSONPath proposals (Goessner
+extension, JSONPath spec drafts). Implement a `ScriptFunction` abstraction
+in the `Linq/JsonPath/` layer with built-in functions: `length()` (string
+and array length), `size()` (alias for `length`), `type()` (returns the
+`JTokenType` name), and `keys()` (returns property names of a JObject).
+Extend `JPath.ParseExpression` and `BooleanQueryExpression.IsMatch` to
+recognize and evaluate function calls within filter expression paths
+(e.g., `[?( length(@.title) > 5 )]`, `[?(@.type() == 'array')]`). Wire
+the function registry into `JsonSelectSettings` so callers can add custom
+script functions.
 
 ### M7: Add `IAsyncEnumerable<T>` serialization and deserialization support
 

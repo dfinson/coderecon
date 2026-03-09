@@ -63,25 +63,25 @@ src/
 
 ## Narrow
 
-### N1: Fix `TestCollectionRunner` not respecting `MaxParallelThreads` when set to 1
+### N1: Fix `XunitTestAssemblyRunnerBase` not short-circuiting to serial execution when `MaxParallelThreads` is set to 1
 
-When `MaxParallelThreads` is configured to 1 in the JSON config, `XunitTestCollectionRunner` still executes test classes concurrently within the collection. The `TestCollectionRunnerContext` passes the parallel limit to the scheduler but the base `TestCollectionRunner.Run` method doesn't enforce the constraint when dispatching class runners.
+When `MaxParallelThreads` is configured to 1 in the JSON config, `XunitTestAssemblyRunnerBase.RunTestCollections()` still dispatches all test collections as concurrently-started tasks rather than taking the fully serial path (which is only used when `DisableParallelization` is `true`). `XunitTestAssemblyRunnerBaseContext.SetupParallelism()` creates a `SemaphoreSlim(initialCount: 1)` to throttle execution, but all collection tasks are still launched simultaneously before competing for the semaphore. This wastes thread-pool resources and causes all collection fixtures to be initialized in parallel even though the user intends single-threaded execution. Fix `RunTestCollections` in `XunitTestAssemblyRunnerBase` to take the serial base path when `MaxParallelThreads == 1`, matching the behavior of `DisableParallelization = true`.
 
-### N2: Fix `QueryFilterParser` not handling escaped quotes in trait value filters
+### N2: Fix `CommandLineParserBase` incorrectly rejecting trait values that contain `=`
 
-In `src/xunit.v3.runner.common/Filtering/QueryFilterParser.cs`, filter expressions like `Trait("Category", "it's tricky")` fail to parse when the trait value contains single quotes. The parser splits on quote boundaries without handling escape sequences.
+In `src/xunit.v3.runner.common/Parsers/CommandLineParserBase.cs`, the `OnTrait` and `OnTraitMinus` methods parse the `-trait` and `-trait-` command-line arguments by calling `option.Value.Split('=')` without a count limit. If the trait value contains an `=` character (e.g., `-trait "Status=result=pass"`), the split produces more than two pieces and the methods throw `"incorrect argument format for -trait"` instead of treating everything after the first `=` as the value. Fix both methods to use `Split('=', 2)` so that values containing `=` are handled correctly.
 
 ### N3: Add `TestMethodDisplay.ClassAndMethodWithParameters` option
 
 The `TestMethodDisplay` enum in `xunit.v3.common/Options/` supports `ClassAndMethod` and `Method`. Add a `ClassAndMethodWithParameters` option that includes the serialized parameter values in the display name for `[Theory]` tests, making parameterized test names more distinctive in output.
 
-### N4: Fix `UniqueIDGenerator` producing collisions for overloaded methods with different generic parameters
+### N4: Fix `UniqueIDGenerator.ForTestMethod` not including method parameter types, causing ID collisions for overloaded methods
 
-In `xunit.v3.common/Utility/UniqueIDGenerator.cs`, when two test methods have the same name but different generic type parameters (e.g., `TestMethod<int>` and `TestMethod<string>`), the generated unique IDs can collide because generic parameters are not included in the hash input.
+In `xunit.v3.common/Utility/UniqueIDGenerator.cs`, `ForTestMethod` accepts only the parent class unique ID and the method name; it does not incorporate parameter type information. When two test methods share the same name but differ only in parameter types (overloads discoverable via reflection, such as when a custom discoverer enumerates all overloads of a base class method), they receive identical `ForTestMethod` IDs. Because `ForTestCase` uses the `ForTestMethod` ID as its parent, any downstream test cases for these overloads with identical arguments would also collide. Fix `ForTestMethod` to accept an optional `IReadOnlyList<string>? parameterTypes` parameter and include it in the hash computation.
 
-### N5: Fix `ExecutionSink` not reporting `LongRunningTestSeconds` warning for async tests that await
+### N5: Fix `ExecutionSink` delaying long-running test warnings by up to one extra interval for tests that start mid-period
 
-In `src/xunit.v3.runner.common/Sinks/ExecutionSink.cs`, the long-running test detection timer starts when the test begins but is not properly tracked for async test methods. Tests that `await` long-running operations don't trigger the warning because the timer check races with async continuations.
+In `src/xunit.v3.runner.common/Sinks/ExecutionSink.cs`, `ThreadWorker` rate-limits `SendLongRunningMessage()` to at most once per `LongRunningTestTime` by checking `now - lastTestActivity >= options.LongRunningTestTime`. A test that starts just after a timer fire will not satisfy the per-test `(now - startTime) >= LongRunningTestTime` condition at the NEXT fire (still short by the start offset), so it is not reported until the fire AFTER that — meaning the warning is delayed by up to `2 × LongRunningTestTime` from when the test actually started. Fix `ThreadWorker` so that the next check is scheduled at `min(testStartTime + LongRunningTestTime)` across all currently-running tests, ensuring each test case is detected within one timer-tick of its individual threshold.
 
 ### N6: Add `[RetryFact]` attribute for automatically retrying flaky tests
 
@@ -91,13 +91,13 @@ Add a `RetryFactAttribute` that retries a failing test up to a configurable numb
 
 In `src/xunit.v3.runner.common/Configuration/ConfigReader_Json.cs`, unknown keys in the JSON configuration file are silently ignored. A typo like `"maxParallelThread"` (missing 's') produces no warning, leading to confusing behavior where the setting appears ineffective. Update `README.md` with a comprehensive list of valid configuration keys and their expected types.
 
-### N8: Add support for `[MemberData]` sourcing from static properties on base classes
+### N8: Fix `MemberDataAttributeBase` throwing `NullReferenceException` instead of a diagnostic error when `MemberType` points to an inaccessible type
 
-The `MemberDataAttributeBase` in `xunit.v3.core/Attributes/` resolves member data from the declaring class. When a `[Theory]` test in a derived class uses `[MemberData(nameof(TestData))]` referencing a static property on a base class, discovery fails with a member-not-found error because the lookup only checks the immediate declaring type.
+In `xunit.v3.core/Attributes/MemberDataAttributeBase.cs`, when the `MemberType` parameter specifies a type that is not accessible from the test assembly (e.g., an `internal` type in a different assembly), `GetPropertyAccessor`, `GetFieldAccessor`, and `GetMethodAccessor` silently return `null` because reflection returns `null` for the inaccessible member. This causes `GetData()` to fall through all three accessors and throw a `DataAttributeException` whose message references the test class rather than the inaccessible `MemberType`, making the root cause hard to diagnose. Fix `GetData` to detect when `MemberType` is non-null but no accessor is found, and throw a `DataAttributeException` that names the specified `MemberType` and `MemberName` explicitly.
 
-### N9: Fix `DisposalTracker` not awaiting `IAsyncDisposable` objects in disposal order
+### N9: Fix `DisposalTracker.Clear()` silently dropping tracked objects without disposing them and throwing on post-disposal calls
 
-In `xunit.v3.common/Utility/DisposalTracker.cs`, objects implementing `IAsyncDisposable` are disposed in FIFO order, but the disposals should be LIFO (reverse registration order) to match the expected disposal pattern. Additionally, async disposals are fire-and-forget instead of being awaited sequentially.
+In `xunit.v3.common/Utility/DisposalTracker.cs`, `Clear()` removes all tracked objects from the internal `Stack<object>` without calling `Dispose()` or `DisposeAsync()` on any of them, silently leaking resources. Additionally, calling `Clear()` after `DisposeAsync()` has already run throws `ObjectDisposedException` even though clearing an already-disposed tracker is a harmless no-op. Fix `DisposalTracker` by adding a `DisposeAllAsync()` method that disposes all tracked objects in LIFO order (identical to `DisposeAsync()`) and then clears the stack, and update `Clear()` to be a no-op (rather than throwing) when called after the tracker has been disposed.
 
 ### N10: Add test attachment size limit to `ExecutionSinkOptions`
 
@@ -133,9 +133,9 @@ Add `Assert.MatchesSnapshot<T>(T actual, string snapshotName)` that compares obj
 
 Implement timing breakdown for each test execution phase: fixture construction, `BeforeAfterTest.Before`, test method execution, `BeforeAfterTest.After`, and fixture disposal. Add a `TestExecutionProfile` to the `TestPassed`/`TestFailed` messages. Update `XunitTestRunner` and `XunitTestCaseRunner` to capture phase timings, and update reporters to display profiling data.
 
-### M7: Implement dynamic test generation via `IAsyncEnumerable` data sources
+### M7: Implement dedicated `[AsyncMemberData]` attribute and discoverer for async data generation
 
-Extend the `[Theory]` infrastructure to support `IAsyncEnumerable<object[]>` as a data source. Add `[AsyncMemberData]` attribute, implement `AsyncTheoryDiscoverer` in the Framework directory, and update `XunitDelayEnumeratedTheoryTestCase` to handle async enumeration during execution. Support cancellation and timeout for async data generation.
+`MemberDataAttributeBase` in `xunit.v3.core/Attributes/` already handles `IAsyncEnumerable<object?>` return values inside `GetDataAsync()`, but there is no dedicated `[AsyncMemberData]` attribute that makes async data sources a first-class concept. Add an `AsyncMemberDataAttribute` that explicitly signals async data generation to the discoverer and test runner, implement a corresponding `AsyncMemberDataDiscoverer` in the Framework directory, and update `XunitDelayEnumeratedTheoryTestCase` to surface async enumeration errors distinctly from sync errors. Support configurable cancellation timeouts for async data generation via an attribute property.
 
 ### M8: Add test categorization and selective execution by category groups
 

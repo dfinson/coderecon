@@ -124,13 +124,14 @@ value of the failing element. The `Each` matcher implementation in
 `gmock-matchers.h` should include the failing element's value and
 its formatted representation in the match explanation.
 
-### N7: Fix `TEST_P` parameter values truncated in failure output on MSVC
+### N7: Fix `TEST_P` parameter values truncated in test listing output
 
-On MSVC, parameterized test failures (`TEST_P`) do not include the
-full parameter value in the failure output because `PrintToString` in
-`gtest-printers.h` truncates output at a short fixed limit. Increase
-the truncation threshold for test parameter printing and add an
-ellipsis indicator when values are truncated.
+When listing parameterized tests (`TEST_P`) with `--gtest_list_tests`
+or printing test names at runtime, the parameter value is truncated at
+a fixed limit of 250 characters (`kMaxParamLength`) by `PrintOnOneLine` in `gtest.cc`,
+with no indication that the value was cut short. Increase the
+truncation threshold for test parameter printing in `gtest.cc` and add
+an ellipsis indicator when values are truncated.
 
 ### N8: Add `SCOPED_TRACE` with automatic variable capture
 
@@ -350,12 +351,14 @@ matchers in its quick-reference table.
 
 The `CMakeLists.txt`, `BUILD.bazel`, and `MODULE.bazel` configurations
 have inconsistent option naming and missing feature parity. Add a
-`GTEST_HAS_PTHREAD` option to `CMakeLists.txt` that mirrors the Bazel
-`has_pthread` config. Update `MODULE.bazel` to declare all transitive
-dependencies explicitly for Bzlmod compatibility. Add a
-`googletest_deps.bzl` entry for the `re2` dependency when
-`GTEST_HAS_ABSL` is enabled. Update `WORKSPACE.bzlmod` to use the
-latest Bazel module resolution. Update `ci/linux-presubmit.sh` and
+`GTEST_HAS_PTHREAD` option to `CMakeLists.txt` to allow users to
+explicitly control pthread linkage, mirroring the `-pthread` compiler
+flag that `BUILD.bazel` adds unconditionally via platform conditions.
+Update `MODULE.bazel` to verify all direct dependencies are explicitly
+listed for Bzlmod compatibility. Confirm `googletest_deps.bzl` keeps
+the existing `re2` entry consistent with the `GTEST_HAS_ABSL` path in
+`CMakeLists.txt`. Update `WORKSPACE.bzlmod` to document the bzlmod
+migration status. Update `ci/linux-presubmit.sh` and
 `ci/macos-presubmit.sh` to test both CMake and Bazel build paths
 in the presubmit pipeline.
 

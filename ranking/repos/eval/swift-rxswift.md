@@ -95,13 +95,13 @@ The `Completable` extensions in `Traits/PrimitiveSequence/Completable.swift` lac
 
 ### N11: Fix `Documentation/GettingStarted.md` code samples using deprecated Swift 2 syntax
 
-The `Documentation/GettingStarted.md` file contains code examples that use obsolete Swift 2/Objective-C bridging APIs: `containsString(_:)` (replaced by `contains(_:)` in Swift 3), bare `just(...)` global functions (now `Observable.just(...)`), and `catchError { }` (renamed to `catch { }` in RxSwift 6). Update all code samples in `Documentation/GettingStarted.md` to use current RxSwift 6 and Swift 5.9+ syntax, fix broken cross-reference anchor links in `Documentation/Examples.md` and `Documentation/Traits.md` that point to renamed sections, and add a version-specific callout in `Documentation/SwiftConcurrency.md` noting that `async`/`await` bridging requires iOS 13+ / macOS 10.15+.
+The `Documentation/GettingStarted.md` file contains code examples that use obsolete Swift 2/Objective-C bridging APIs: `containsString(_:)` (replaced by `contains(_:)` in Swift 3), bare `just(...)` global functions (now `Observable.just(...)`), and `catchError { }` (renamed to `catch { }` in RxSwift 6). Update all code samples in `Documentation/GettingStarted.md` to use current RxSwift 6 and Swift 5.9+ syntax, and add a version-specific callout in `Documentation/SwiftConcurrency.md` noting that `async`/`await` bridging requires iOS 13+ / macOS 10.15+.
 
 ## Medium
 
-### M1: Add `merge`, `reduce`, and `toArray` operators to `Infallible`
+### M1: Add `merge()`, `reduce()`, and `toArray()` operators to `Infallible`
 
-The `Infallible` trait in `Traits/Infallible/` is missing three commonly-used aggregation and combining operators: `Infallible.merge(_:)` (both array and variadic overloads), `merge()` on `InfallibleType where Element: InfallibleType`, `reduce(_:accumulator:)`, and `toArray()` returning `Infallible<[Element]>`. These force `Infallible` users to call `asObservable()` and manually wrap results. Implement the operators in a new `Infallible+Operators+Gathering.swift` file following the delegation-and-wrap pattern used throughout `Infallible+Operators.swift`, adapting from `Observable.merge`, `Observable.reduce`, and `Observable.toArray` respectively.
+The `Infallible` trait in `Traits/Infallible/` is missing three operators: a `merge()` instance method on `InfallibleType where Element: InfallibleType` (for flattening a nested `Infallible<Infallible<Element>>` into `Infallible<Element>`), `reduce(_:accumulator:)`, and `toArray()` returning `Infallible<[Element]>`. These force `Infallible` users to call `asObservable()` and manually wrap results. Implement the operators in a new `Infallible+Operators+Gathering.swift` file following the delegation-and-wrap pattern used throughout `Infallible+Operators.swift`, adapting from `Observable.merge`, `Observable.reduce`, and `Observable.toArray` respectively.
 
 ### M2: Add retry with exponential backoff operator
 

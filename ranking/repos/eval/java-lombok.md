@@ -85,21 +85,21 @@ lombok/src/
 
 When a class uses both `@Builder` and `@Accessors(prefix = "m")` on fields like `mName`, the builder generates `mName(String)` setter methods instead of stripping the prefix to produce `name(String)`. The `HandleBuilder` reads the field name directly without consulting `HandleAccessors` prefix resolution.
 
-### N2: Fix `@ToString` including `static` fields when `@ToString.Include` is on a static field
+### N2: Add warning for `@ToString.Include` on static fields
 
-`@ToString` skips static fields by default, but when a user explicitly annotates a static field with `@ToString.Include`, it is silently ignored rather than producing a warning. `HandleToString` filters static fields before checking for explicit includes.
+When `@ToString.Exclude` is placed on a static field, `InclusionExclusionUtils.handleIncludeExcludeMarking` correctly emits a warning: "The @Exclude annotation is not needed; static fields aren't included anyway." However, when `@ToString.Include` is placed on a static field, the field is silently included in `toString()` output without any diagnostic — the include check at line 163 runs before the static filter at line 184, so the static field bypasses the filter and is added to members. Add a warning in the `markInclude` branch of `handleIncludeExcludeMarking` when the annotated member is a static field, for symmetry with the existing `@Exclude` warning on static fields.
 
-### N3: Add `@Getter(lazy=true)` support for `volatile` fields
+### N3: Add specific error for `@Getter(lazy=true)` on a `volatile` field
 
-`@Getter(lazy=true)` generates a double-checked locking pattern with a private `AtomicReference` backing field. However, if the original field is already declared `volatile`, the generated code adds a redundant `AtomicReference` wrapper. Detect the `volatile` modifier and emit a warning that `lazy` and `volatile` are redundant.
+`@Getter(lazy=true)` generates a double-checked locking pattern using a private `AtomicReference` backing field and requires the annotated field to be `private final`. `HandleGetter` at line 179-180 emits the generic error "'lazy' requires the field to be private and final" when this condition is not met. Since `volatile` and `final` are mutually exclusive Java modifiers, a `volatile` field with `lazy=true` triggers this generic message rather than a clear explanation. Add a dedicated check for the `volatile` modifier before the private/final check — similar to the existing check at line 184 that says "'lazy' is not supported on transient fields" — so that the error message explicitly states "'lazy' is not supported on volatile fields".
 
-### N4: Fix `@NonNull` check not generated for record constructor parameters
+### N4: Fix `@NonNull` null check inserted after `super()`/`this()` when parameter is passed to constructor call
 
-When `@NonNull` is used on a record component, `HandleNonNull` does not generate the null-check in the compact constructor because it only processes class/method-level declarations, not record components. The handler needs to detect record declarations and inject checks into the canonical constructor.
+When `@NonNull` is on a constructor parameter that is also passed as an argument to a `super()` or `this()` call, `HandleNonNull.addNullCheckIfNeeded` places the null check **after** the delegating constructor call in the generated code. The loop (lines 200–208) collects constructor calls into `head` and re-prepends them before the null check, resulting in the order `[super/this-call, nullCheck, rest-of-body]`. This means the superclass or sibling constructor already executed with the potentially-null argument before the null check throws. `HandleNonNull` should detect when the `@NonNull` parameter appears in the delegating constructor's argument list and emit a warning that the null check cannot be enforced before the `super()`/`this()` call executes.
 
-### N5: Fix `@EqualsAndHashCode` not including `transient` fields when explicitly listed in `@Include`
+### N5: Add warning for `@EqualsAndHashCode.Include` on static fields
 
-`@EqualsAndHashCode` skips `transient` fields by default. When a transient field is explicitly annotated with `@EqualsAndHashCode.Include`, it is still excluded because the transient filter runs before the include check in `HandleEqualsAndHashCode`.
+`@EqualsAndHashCode` skips static fields by default. When a static field is explicitly annotated with `@EqualsAndHashCode.Include`, `InclusionExclusionUtils.handleIncludeExcludeMarking` includes the field in equals/hashCode computation without any diagnostic — the include check at line 163 runs before the static filter at line 184, so the static field bypasses the filter. Including static (shared) state in equals/hashCode comparisons is almost always unintentional and produces semantically incorrect equality. Add a warning in the `markInclude` branch of `handleIncludeExcludeMarking` when `@EqualsAndHashCode.Include` is placed on a static field, for consistency with the existing warning behavior for `@Exclude` on fields that are redundantly annotated.
 
 ### N6: Add configuration key to set default `@Builder` method name
 
@@ -113,13 +113,13 @@ When `@NonNull` is used on a record component, `HandleNonNull` does not generate
 
 `@SneakyThrows` can be placed on methods and constructors but is silently ignored when placed on a lambda expression. `HandleSneakyThrows` should either emit a warning that lambdas are unsupported or generate the try/catch wrapping inside the lambda body.
 
-### N9: Add `@ToString.Include(name="...")` to customize field name in output
+### N9: Fix `@ToString.Include(name="...")` silently ignored when `includeFieldNames` is `false`
 
-`@ToString` uses the Java field name in the output string. Some codebases want display names different from field names (e.g., `userId` → `user_id`). Add a `name` attribute to `@ToString.Include` and update `HandleToString` to use it in the generated `toString()`.
+`@ToString.Include` already has a `String name() default "";` attribute (in `ToString.java`) that customizes the label used for a field in `toString()` output. However, when `@ToString(includeFieldNames=false)` is set at the class level (or via the `lombok.toString.includeFieldNames=false` configuration key), `HandleToString` skips the `name` attribute and emits the field value without any label — the custom name is silently ignored. `HandleToString` should emit a warning when a `@ToString.Include` member has a non-empty `name` attribute but the effective `includeFieldNames` setting is `false`, since the user-supplied display name will have no effect on the generated output.
 
-### N10: Fix `@Setter` on a `boolean` field with `is` prefix generating wrong method name
+### N10: Fix `@Setter` on a `Boolean` wrapper field with `is` prefix generating wrong method name
 
-For a field `boolean isActive`, `@Setter` generates `setIsActive(boolean)` instead of `setActive(boolean)`. `HandleSetter` does not strip the `is` prefix from boolean fields the way `HandleGetter` adds it. Align with JavaBeans convention by stripping `is` for the setter name.
+For a field `Boolean isActive` (using the `java.lang.Boolean` wrapper type, not primitive `boolean`), `@Setter` generates `setIsActive(Boolean)` instead of `setActive(Boolean)`. `JavacHandlerUtil.isBoolean()` (line 812) only returns `true` when the field type is the primitive `boolean` (`varType.toString().equals("boolean")`), so the `is`-prefix stripping logic in `HandlerUtil.toAccessorName` does not apply to `Boolean` wrapper fields. Extend `isBoolean()` to also return `true` for `java.lang.Boolean`, or apply the `is`-prefix stripping unconditionally for fields whose names start with `is` followed by an uppercase letter, regardless of whether the type is primitive or boxed.
 
 ### N11: Fix `doc/changelog.markdown` entries missing cross-references to issue tracker
 
@@ -137,11 +137,11 @@ The `doc/changelog.markdown` file lists changes per release but individual entri
 
 ### M3: Implement `@Getter`/`@Setter` support for Java records
 
-Records are immutable by design and have component accessor methods. However, `@Getter` on a record should optionally add `@Override` with custom access levels, and `@Setter` on a record should emit a clear error message rather than silently failing. Changes span `HandleGetter`, `HandleSetter`, and `JavacHandlerUtil` (record detection).
+Records are immutable by design and have component accessor methods. However, `@Getter` on a record is silently accepted without generating any methods (since records already have component accessors), and does not honor custom access levels or add `@Override` annotations to the existing accessor methods. Implement support so that `@Getter` on a record generates overriding accessor methods at the requested access level (e.g., `@Getter(AccessLevel.PROTECTED)`) or, when the same level as the default, at least emits an `@Override`-annotated pass-through. Changes span `HandleGetter`, `HandleSetter`, and `JavacHandlerUtil` (record detection).
 
-### M4: Add Checker Framework `@Pure` and `@SideEffectFree` annotations to generated methods
+### M4: Add Checker Framework `@CalledMethods` support to `@SuperBuilder`
 
-Lombok generates `@Pure` annotations for getters when Checker Framework integration is enabled, but does not annotate `toString()`, `equals()`, or `hashCode()` with `@SideEffectFree`. Update `HandleToString`, `HandleEqualsAndHashCode`, and the Checker Framework configuration to add appropriate purity annotations.
+`@Builder` generates `@CalledMethods` annotations on the builder's setter methods (in `HandleBuilder.createSetterMethodsForBuilder`, lines 715–731), enabling the Checker Framework's Object Construction Checker to verify that required fields are set before `build()` is called. `@SuperBuilder` does not generate any `@CalledMethods` annotations on its setter methods — `HandleSuperBuilder` has no equivalent logic — so the Object Construction Checker cannot verify completeness for `@SuperBuilder`-generated builders. Add `@CalledMethods` support to `HandleSuperBuilder`, mirroring the pattern from `HandleBuilder`. Changes span `HandleSuperBuilder` (setter method generation), the Eclipse equivalent, `CheckerFrameworkVersion` (verify existing constants), and new test cases.
 
 ### M5: Implement `@Builder` validation hooks
 
@@ -155,17 +155,17 @@ Add a `@Builder.Validate` annotation for a method that is called in `build()` be
 
 The delombok tool generates plain Java but uses its own code formatting. Add configuration for indentation style (tabs/spaces, width), brace placement, and blank line insertion. Changes span `delombok/` (formatting output), configuration key registration, and `LombokConfiguration` parsing. Update `build.xml` with a delombok formatting integration test target and document formatting options in `doc/publishing.txt`.
 
-### M8: Add `@Log` support for custom logger factories
+### M8: Add global `lombok.log.fieldAccess` configuration key for `@Log` default access level
 
-`@Log` supports specific logging frameworks (SLF4J, Log4j, JUL, etc.), but not custom logger factories. Add a `@CustomLog` annotation that reads the logger factory class and method from lombok.config. Changes span `HandleLog`, `ConfigurationKeys`, and annotation definitions.
+The `@Log` family of annotations (`@Slf4j`, `@Log4j2`, `@CommonsLog`, etc.) each have an `access` attribute that defaults to `AccessLevel.PRIVATE`. There is no global `lombok.config` key to override this default — the access level can only be set per-annotation. Add a `lombok.log.fieldAccess` configuration key to `ConfigurationKeys` that `HandleLog.processAnnotation` reads as the default when the annotation's `access` attribute is at its default value. This mirrors the pattern of existing global log-field keys (`lombok.log.fieldName`, `lombok.log.fieldIsStatic`). Changes span `ConfigurationKeys` (new key), `HandleLog` (reading the config key in `processAnnotation`), the Eclipse equivalent, and the annotation definition files (`Slf4j.java`, `Log4j2.java`, `CommonsLog.java`, etc.) to document the new default-override behavior.
 
-### M9: Implement `@Singular` support for Guava `ImmutableTable`
+### M9: Implement `@Singular` support for Guava `ImmutableMultimap` / `ImmutableListMultimap` / `ImmutableSetMultimap`
 
-`@Builder` with `@Singular` supports List, Set, Map, and Guava ImmutableList/ImmutableSet/ImmutableMap. Add support for Guava `ImmutableTable` with `put(R, C, V)` singular method. Changes span `JavacSingularsRecipes`, a new `JavacGuavaTableSingularizer`, and the Eclipse handler equivalent.
+`@Builder` with `@Singular` supports Guava `ImmutableMap`, `ImmutableBiMap`, and `ImmutableSortedMap` via `JavacGuavaMapSingularizer`. Support for `ImmutableMultimap`, `ImmutableListMultimap`, and `ImmutableSetMultimap` is explicitly noted as a TODO in `JavacGuavaMapSingularizer` (line 30) and `EclipseGuavaMapSingularizer` (line 30). These Guava multi-value map types require a `put(K, V)` singular method that appends values to a multi-valued key. Add singularizer support for these three types in both `JavacGuavaMapSingularizer` and `EclipseGuavaMapSingularizer`, register them in `GuavaTypeMap`, and add corresponding test cases.
 
-### M10: Add `@EqualsAndHashCode` caching for immutable classes
+### M10: Fix `@EqualsAndHashCode` hash-code caching broken for objects whose `hashCode()` is `0`
 
-For `@Value` (immutable) classes, the hash code never changes after construction. Add a `cacheHashCode` option to `@EqualsAndHashCode` that computes the hash code once and stores it. Generate a private `int $hashCodeCache` field and lazy-compute on first `hashCode()` call. Changes span `HandleEqualsAndHashCode` and `HandleValue`.
+`@EqualsAndHashCode(cacheStrategy = CacheStrategy.LAZY)` generates a `private transient int $hashCodeCache` field and uses `0` as the sentinel value meaning "not yet computed." The generated check `if (this.$hashCodeCache != 0) return this.$hashCodeCache;` means that if `hashCode()` genuinely evaluates to `0` for a particular instance, the cached value is never stored and the hash code is recomputed on every call. Fix this off-by-one sentinel issue by replacing the `int` cache field with either a nullable `Integer` reference (storing `null` for "not computed") or by adding a separate `boolean $hashCodeCacheSet` flag. Changes span `HandleEqualsAndHashCode` (javac, `createHashCode` and field generation), the Eclipse equivalent, and the `@EqualsAndHashCode` Javadoc to document the corrected behavior.
 
 ### M11: Modernize build system from Ant to Gradle
 

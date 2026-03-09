@@ -72,20 +72,31 @@ log lines via `fmt::output_file`, the output may not be visible until
 the buffer fills or the file is explicitly closed. Add an optional
 line-buffering mode that flushes after each newline.
 
-### N2: Fix `printf.h` not rejecting invalid conversion specifiers
+### N2: Fix `printf.h` error message not identifying the invalid conversion specifier
 
-The `printf_formatter` in `printf.h` silently ignores unrecognized
-conversion specifiers like `%q` or `%K` instead of reporting an error.
-Standard printf implementations reject non-standard specifiers;
-`printf_arg_formatter` should validate the conversion character against
-the known set and produce a clear `format_error` for invalid ones.
+The `vprintf` function in `printf.h` detects invalid conversion specifiers
+(like `%q` or `%K`) and type mismatches (like `%d` applied to a string
+argument) via `parse_printf_presentation_type`, but in both cases emits
+the same generic message `"invalid format specifier"` without identifying
+which character was invalid or what type mismatch occurred. Improve the
+error reporting in `vprintf` so that the error message includes the actual
+specifier character (e.g., `"invalid conversion specifier 'q'"`) to help
+users quickly locate the mistake in their format string.
 
 ### N3: Fix `fmt::join` not working with move-only range elements
 
-`fmt::join(vec_of_unique_ptr, ", ")` fails to compile because `join`
-tries to copy elements for formatting. Fix `join` to forward elements
-by reference without copying, allowing move-only types to be formatted
-in-place.
+`fmt::join(vec_of_unique_ptr, ", ")` fails to compile because
+`formatter<join_view<...>>` in `ranges.h` derives `value_type` using
+`std::iterator_traits<It>::value_type` (or `std::iter_value_t<It>`), which
+strips the reference and gives the bare element type (e.g., `unique_ptr<T>`).
+The `value_formatter_` member is then declared as
+`formatter<remove_cvref_t<value_type>>`, which instantiates
+`formatter<unique_ptr<T>>`. Since no such specialization exists, compilation
+fails. Fix the join formatter to look up the formatter using the iterator's
+reference type via `std::iter_reference_t<It>` (or the equivalent pre-C++20
+`decltype(*std::declval<It&>())`), so that a user-defined
+`formatter<unique_ptr<T>>` is correctly found and elements are formatted
+through a reference without requiring copyability.
 
 ### N4: Fix `fmt::format` stack overflow with deeply recursive format args
 
@@ -135,13 +146,20 @@ error reporting in `base.h` `format_string` validation to include
 the valid argument range (e.g., "argument index 5 out of range,
 only 1 argument provided").
 
-### N10: Fix `chrono.h` `{:%H:%M:%S}` producing incorrect output for negative durations
+### N10: Fix `chrono.h` locale-specific duration specifiers not writing the negative sign
 
-When formatting a negative `std::chrono::duration` with `{:%H:%M:%S}`,
-the negative sign is applied only to the hours component, producing
-`"-1:00:05"` instead of correctly representing -5 seconds as
-`"-0:00:05"`. The sign handling in `chrono.h` `tm_writer` does not
-correctly distribute the negative across all time components.
+When formatting a negative `std::chrono::duration` using locale-specific
+format specifiers such as `{:%OH:%OM:%OS}`, the negative sign is never
+written. The `duration_formatter` in `chrono.h` stores a `negative` flag
+and a `write_sign()` helper that writes `-` and clears the flag. For
+standard specifiers (`%H`, `%M`, `%S`), `write_sign()` is called via the
+`write()` helper, so the sign is correctly written before the hours
+component. However, for locale-specific specifiers (`%OH`, `%OM`, `%OS`),
+the code path falls through to `format_tm()`, which does not call
+`write_sign()` before delegating to `tm_writer`. Fix `format_tm()` in
+`duration_formatter` to call `write_sign()` before constructing the
+`tm_writer` so that locale-based duration formatting also emits the
+negative sign.
 
 ## Medium
 
@@ -182,12 +200,16 @@ additional specifiers after the standard width/precision/fill handling.
 
 ### M5: Implement `fmt::format` support for `std::source_location` formatting
 
-Add a `formatter<std::source_location>` specialization in `std.h` that
-formats a source location as `"file.cpp:42:function_name"`. Support
-custom format specs to control which components are included: `{:f}`
-for file only, `{:l}` for file:line, `{:c}` for file:line:column,
-and default for file:line:function. Add supporting presentation type
-handling in `format.h`.
+Extend the existing `formatter<std::source_location>` specialization in
+`std.h` to support custom format specs controlling which components are
+included in the output: `{:f}` for file path only,
+`{:l}` for file:line, `{:c}` for file:line:column, and the default
+(no spec) for the current full `"file:line:column: function"` output.
+The current `parse` implementation in `std.h` unconditionally returns
+`ctx.begin()` without reading any specifier characters. Add a
+`presentation_type` field and specifier parsing to `parse`, then update
+`format` to branch on the chosen presentation. Add supporting presentation
+type handling in `format.h` if needed.
 
 ### M6: Implement `fmt::format` support for `std::stacktrace` formatting
 
@@ -214,14 +236,19 @@ the string with a caret pointer and a colored highlight of the
 problematic specifier. Support terminal color output for `static_assert`
 messages (via ANSI codes in the error text for terminals that support it).
 
-### M9: Implement `fmt::to_string` fast path for common integral types
+### M9: Implement `fmt::to_string` fast path for non-integral arithmetic types
 
-When calling `fmt::to_string(integer)`, the current code path allocates
-a `memory_buffer` and goes through the full format machinery including
-spec parsing. Add an optimized fast path in `format.h` for small
-integers that uses a stack-allocated buffer with direct digit
-generation, bypassing the format spec parsing in `base.h`. Support
-`int`, `long`, `unsigned`, and `long long` with the fast path.
+The `fmt::to_string` specialization for integral types in `format.h` already
+uses a stack-allocated `char` buffer and `detail::write` directly, bypassing
+`memory_buffer` allocation. However, the overload for types that do not
+satisfy `std::is_integral` and do not use `format_as` (e.g., `float`,
+`double`, `long double`) still allocates a `memory_buffer` and goes through
+the full format machinery via `detail::write<char>(appender(buffer), value)`.
+Add optimized `fmt::to_string` overloads in `format.h` for `float`, `double`,
+and `long double` that use a fixed-size stack-allocated buffer (sized via
+`std::numeric_limits<T>::max_digits10` plus sign and exponent), calling
+`detail::write<char>` directly and constructing the `std::string` without
+a heap allocation for the intermediate buffer.
 
 ### M10: Implement zero-allocation formatting for embedded environments
 
@@ -260,8 +287,8 @@ a scope, capture the formatted output, and provide assertion helpers
 (`EXPECT_PRINTED("text")`, `EXPECT_PRINTED_MATCHES(regex)`). Support
 both stdout and stderr capture. Requires a global output registry,
 thread-safe capture buffers, and scope-based RAII guards. Changes span
-fmt::print, fmt::vprint, the output.cc implementation, and add a
-testing header.
+fmt::print, fmt::vprint in `base.h`, the `vprint` implementation in
+`src/format.cc`, and add a testing header.
 
 ### W4: Add structured logging built on fmt
 
@@ -342,13 +369,18 @@ expected include ordering convention.
 
 ### M11: Overhaul documentation site configuration and API docs
 
-The `support/mkdocs.yml` configuration is missing navigation structure,
-search configuration, and versioning support. Add a `nav:` section that
-organizes `doc/api.md`, `doc/syntax.md`, and `doc/get-started.md` into
-a logical hierarchy. Add `markdown_extensions` for code highlighting and
-admonitions. Update `doc/api.md` to include all public API functions with
-cross-references. Update `.github/workflows/doc.yml` to deploy the
-documentation site on tagged releases and add link-checking validation.
+The `support/mkdocs.yml` configuration already has a `nav:` section and
+basic `markdown_extensions`, but is missing an admonitions extension
+(`admonition`, `pymdownx.details`), a versioning `alias:` mapping for
+`mike`, and a `404.md` not-found page. The `.github/workflows/doc.yml`
+workflow only deploys documentation when pushing to `master`; it does
+not trigger on tagged releases. Update `support/mkdocs.yml` to add
+admonition markdown extensions and configure `mike` versioning aliases.
+Update `.github/workflows/doc.yml` to also trigger on `push` events that
+match version tags (e.g., `v*`) so that release documentation is deployed
+automatically. Update `doc/api.md` to add cross-references for any public
+API functions currently undocumented, and add link-checking validation as
+a new step in the workflow.
 
 ### W11: Overhaul CI workflows, build system options, and project metadata
 
@@ -357,10 +389,14 @@ Refactor `.github/workflows/linux.yml`, `macos.yml`, and `windows.yml`
 to use a shared reusable workflow with a matrix strategy, reducing
 duplication. Add a `.github/workflows/release.yml` that automates
 version bumping in `CMakeLists.txt` and changelog generation from
-`ChangeLog.md`. Update `CMakeLists.txt` to add `FMT_INSTALL`,
-`FMT_PEDANTIC`, and `FMT_WERROR` options with proper descriptions.
-Update `.cmake-format.yaml` to enforce consistent CMake formatting
-rules. Update `.github/dependabot.yml` to track GitHub Actions
-versions. Update `.github/issue_template.md` and
+`ChangeLog.md`. Update `CMakeLists.txt` to add descriptions to the
+existing `FMT_INSTALL`, `FMT_PEDANTIC`, and `FMT_WERROR` options and
+add a new `FMT_SYSTEM_HEADERS` option that marks fmt headers as system
+headers to suppress warnings. Update `.cmake-format` to enforce
+consistent CMake formatting rules (the file is `.cmake-format`, not
+`.cmake-format.yaml`). Update `.github/dependabot.yml` to set the
+`open-pull-requests-limit` for github-actions updates and add a
+`pip` ecosystem entry to track Python documentation dependencies.
+Update `.github/issue_template.md` and
 `.github/pull_request_template.md` to use YAML-based issue forms
 with structured fields for bug reports and feature requests.

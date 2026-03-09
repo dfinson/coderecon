@@ -64,21 +64,21 @@ src/Whoops/
 
 ## Narrow
 
-### N1: Fix `Run::handleException` not respecting handler return `LAST_HANDLER` when multiple handlers are stacked
+### N1: Fix `Run::handleException` handler loop using loose type comparison for return code check
 
-In `src/Whoops/Run.php`, the `handleException` method iterates through handlers. When a handler returns `Handler::LAST_HANDLER`, subsequent handlers should be skipped. However, when `LAST_HANDLER` is combined with `QUIT` flag (via bitwise OR), the loop breaks on `QUIT` but doesn't check `LAST_HANDLER` independently, so handlers registered after the `LAST_HANDLER` handler still execute if `QUIT` is not set.
+In `src/Whoops/Run.php`, the `handleException` method iterates through handlers and checks the return value with `in_array($handlerResponse, [Handler::LAST_HANDLER, Handler::QUIT])`. This uses PHP's default loose type comparison, so any handler returning a truthy value (e.g., `true` or any non-zero integer) accidentally satisfies the check because PHP's loose comparison equates `true` to every non-zero integer. As a result, handlers that return `true` unintentionally break the loop and can trigger quit behavior, while the loop may also fail to break for handlers that return custom integer codes intended to match the constants. Fix by passing `true` as the third argument to `in_array` to enforce strict type checking.
 
 ### N2: Fix `Frame::getFileLines` returning wrong lines when file has mixed line endings
 
-In `src/Whoops/Exception/Frame.php`, `getFileLines()` uses `SplFileObject` to read lines from the source file. Files with mixed line endings (`\r\n` and `\n`) cause the line mapping to drift, displaying the wrong source code lines in the pretty error page.
+In `src/Whoops/Exception/Frame.php`, `getFileLines()` reads the source file via `file_get_contents()` (cached in `$fileContentsCache`) and splits it with `explode("\n", $contents)`. Files with Windows or mixed line endings (`\r\n`) are not normalised before splitting, so each returned line retains a trailing `\r`, causing the source code display in the pretty error page to show garbled content. Normalise line endings before splitting by replacing `\r\n` (and bare `\r`) with `\n` before the `explode` call.
 
 ### N3: Add `Frame::getColumnNumber` for exceptions that provide column information
 
 The `Frame` class in `src/Whoops/Exception/Frame.php` tracks file and line number but not column number. PHP 8.0+ exceptions from some parsers provide column information in the trace. Add `getColumnNumber()` that extracts column data from the raw frame array when available, returning `null` otherwise.
 
-### N4: Fix `PrettyPageHandler::getEditorHref` not URL-encoding file paths with spaces
+### N4: Fix `PrettyPageHandler::getEditorHref` over-encoding file paths for path-based editor URLs
 
-In `src/Whoops/Handler/PrettyPageHandler.php`, the `getEditorHref` method generates editor URLs (e.g., `phpstorm://open?file=/path/to/file&line=42`). File paths containing spaces or special characters are not URL-encoded, causing the editor link to break when clicked. Update `docs/Open Files In An Editor.md` with the supported editor URL formats and encoding behavior.
+In `src/Whoops/Handler/PrettyPageHandler.php`, the `getEditorHref` method replaces `%file` with `rawurlencode($filePath)`. While this correctly encodes special characters for query-parameter editor URLs (e.g., `phpstorm://open?file=%file&line=%line`), it also encodes forward slashes as `%2F`, which breaks path-based editor URLs such as `vscode://file/%file:%line` and `cursor://file/%file:%line` that embed the file path in the URL path segment. The fix is to encode only special characters that are invalid in path segments while preserving `/` separators (e.g., using `str_replace('%2F', '/', rawurlencode($filePath))`). Update `docs/Open Files In An Editor.md` with the supported editor URL formats and encoding behavior.
 
 ### N5: Fix `Inspector::getFrames` not deduplicating frames from previous exception chain
 
@@ -88,9 +88,9 @@ In `src/Whoops/Exception/Inspector.php`, `getFrames()` collects frames from the 
 
 The `JsonResponseHandler` in `src/Whoops/Handler/JsonResponseHandler.php` outputs exception type, message, file, line, and trace. Add an `addRequestData()` option that includes the HTTP method, URI, headers, and query parameters in the JSON output, similar to how `PrettyPageHandler` shows environment data.
 
-### N7: Fix `PlainTextHandler` not respecting `$loggerOnly` when outputting to multiple loggers
+### N7: Fix `PlainTextHandler` silently discarding errors when `$loggerOnly` is set without a logger
 
-In `src/Whoops/Handler/PlainTextHandler.php`, the `$loggerOnly` flag should prevent output to stdout when a PSR-3 logger is configured. When multiple loggers are added (the handler only supports one), the flag check happens before the logger call, but if the logger throws, the output is sent to stdout anyway as a fallback.
+In `src/Whoops/Handler/PlainTextHandler.php`, calling `loggerOnly(true)` is intended to suppress stdout output in favour of a PSR-3 logger. However, if no logger has been configured via `setLogger()`, the `handle()` method skips the logger call (because `getLogger()` returns `null`) and then returns `Handler::DONE` without echoing anything, silently discarding the error. Add a guard in `handle()` (or in `loggerOnly()`) that throws an `\LogicException` or falls back to stdout when `loggerOnly` is `true` but no logger is set, so errors are never silently lost.
 
 ### N8: Add support for custom frame sorting in `FrameCollection`
 
@@ -152,7 +152,7 @@ Implement a template override system where users can provide their own HTML temp
 
 ### M11: Improve CI and code quality configuration
 
-Extend `.github/workflows/tests.yml` with a PHP version matrix (8.1, 8.2, 8.3, 8.4) and add static analysis steps. Update `.scrutinizer.yml` with code coverage thresholds and quality metrics. Configure `phpunit.xml.dist` with coverage report generation and strict mode. Add `composer.json` scripts section for development commands (test, lint, analyze). Create a `.github/FUNDING.yml` for sponsorship configuration and update `CONTRIBUTING.md` with development setup instructions. Changes span `.github/workflows/tests.yml`, `.scrutinizer.yml`, `phpunit.xml.dist`, `composer.json`, `CONTRIBUTING.md`, and `.github/FUNDING.yml`.
+Add static analysis steps to `.github/workflows/tests.yml` (e.g., a dedicated job running a tool such as PHPStan or Psalm). Update `.scrutinizer.yml` to replace the deprecated `php_hhvm` tool entry and add coverage metric thresholds. Update `phpunit.xml.dist` to replace the deprecated `<filter><whitelist>` coverage configuration with the modern `<coverage>` element required by PHPUnit 10, and enable strict mode attributes. Extend the `composer.json` `scripts` section with `lint` and `analyze` commands for the static analysis tool. Update `CONTRIBUTING.md` with a development setup section covering dependency installation, running tests, and running static analysis. Changes span `.github/workflows/tests.yml`, `.scrutinizer.yml`, `phpunit.xml.dist`, `composer.json`, and `CONTRIBUTING.md`.
 
 ## Wide
 

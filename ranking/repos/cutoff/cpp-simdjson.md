@@ -95,23 +95,28 @@ Also update `doc/basics.md` to add a section on error handling that
 lists all error codes with their human-readable descriptions, and
 update `README.md` to cross-reference the new documentation.
 
-### N2: Fix padded_string move constructor not zeroing source capacity
+### N2: Fix padded_string move assignment operator not guarding against self-assignment
 
-The `padded_string` move constructor in `padded_string.h` transfers
-ownership of the internal buffer but does not reset the source
-object's `viable_size` to zero. If the moved-from object is later
-queried for `size()`, it returns a stale value pointing to
-deallocated memory. Zero both `viable_size` and `data_ptr` in the
-moved-from object after transfer.
+The `padded_string` move assignment operator in `padded_string-inl.h`
+does not check for self-assignment before transferring ownership. When
+called as `x = std::move(x)`, the operator first executes
+`delete[] data_ptr`, freeing the buffer, and then copies the
+now-freed `data_ptr` and stale `viable_size` from the source object
+(which is the same object), resulting in a use-after-free. Add a
+self-assignment guard `if (this == &o) { return *this; }` at the
+top of `padded_string::operator=(padded_string&&)` in
+`padded_string-inl.h`.
 
-### N3: Add JSON Pointer escape validation to at_pointer()
+### N3: Fix is_pointer_well_formed() only validating the first tilde escape
 
-The `at_pointer()` method on `dom::element` and `ondemand::value`
-accepts RFC 6901 JSON Pointer strings but does not validate that `~`
-characters are followed by `0` or `1` as required by the spec. A
-malformed pointer like `"/foo~2/bar"` silently fails or produces
-unexpected results. Add validation in `jsonpathutil.h` that returns
-`INVALID_JSON_POINTER` for improperly escaped `~` sequences.
+The `is_pointer_well_formed()` helper function defined in both
+`dom/element-inl.h` and `generic/ondemand/value-inl.h` checks JSON
+Pointer syntax but only validates the first `~` escape sequence in the
+string. Subsequent `~` occurrences are not checked, so a pointer like
+`"/foo~1/bar~2baz"` passes validation even though `~2` is an illegal
+escape per RFC 6901. Fix both copies of `is_pointer_well_formed()` to
+loop over all `~` characters in the pointer and return `false` when any
+`~` is not followed by `0` or `1`.
 
 ### N4: Add byte-offset reporting to parse errors
 
@@ -131,13 +136,17 @@ When a JSON string contains an unpaired surrogate (`\uD800` alone),
 surrogate pair completeness during minification in `minify.h` and
 return `UTF8_ERROR` for unpaired surrogates.
 
-### N6: Add capacity() accessor to ondemand::parser
+### N6: Add load() convenience method to ondemand::parser
 
-The `ondemand::parser` allocates internal buffers sized to the input
-document but does not expose the current buffer capacity. Add a
-`capacity()` method that returns the maximum document size (in bytes)
-the parser can handle without reallocation, matching the existing
-`dom::parser::capacity()` API for consistency.
+The `dom::parser` exposes a `load(std::string_view path)` method that
+reads a file and returns a parsed element in a single call. The
+`ondemand::parser` provides no equivalent; users must manually call
+`padded_string::load(path)` and then pass the result to `iterate()`.
+Add an `iterate(std::string_view path)` overload (or a `load()` method)
+to `ondemand::parser` in `include/simdjson/generic/ondemand/parser.h`
+and `parser-inl.h` that loads the file into a `padded_string` and
+returns a `simdjson_result<document>`, matching the convenience of the
+DOM API.
 
 ### N7: Fix document_stream skipping documents on trailing whitespace
 
@@ -148,29 +157,41 @@ incorrectly count or skip the next document. Fix the document boundary
 detection in `document_stream-inl.h` to properly consume inter-document
 whitespace without double-counting.
 
-### N8: Add compile-time JSON path validation
+### N8: Add consteval JSON Pointer syntax validator
 
-The `compile_time_json.h` header supports constexpr JSON parsing but
-does not validate JSON Pointer paths at compile time. Add a
-`consteval` overload of `at_pointer()` that validates the pointer
-syntax during compilation and produces a `static_assert` failure for
-malformed pointers, improving developer feedback for hard-coded paths.
+The `constevalutil.h` header provides compile-time string utilities
+(e.g., `consteval_to_quoted_escaped`) under the `SIMDJSON_CONSTEVAL`
+guard, but there is no compile-time validator for JSON Pointer strings.
+Add a `consteval bool is_valid_json_pointer(std::string_view ptr)`
+function to `constevalutil.h` that returns `false` for any pointer that
+does not begin with `/` (unless empty) or contains a `~` not followed
+by `0` or `1`, enabling developers to embed hard-coded pointer strings
+as `static_assert(is_valid_json_pointer("/foo/bar"))` and catch
+typos at compile time.
 
-### N9: Fix from_chars not reporting overflow for uint64 values
+### N9: Fix parse_unsigned returning INCORRECT_TYPE instead of NUMBER_OUT_OF_RANGE on overflow
 
-The `from_chars.cpp` number parser handles signed 64-bit integers but
-does not correctly detect overflow for unsigned 64-bit values exceeding
-`UINT64_MAX`. Values like `18446744073709551616` (2^64) are silently
-truncated instead of returning `NUMBER_OUT_OF_RANGE`. Add overflow
-detection for the unsigned parsing path.
+The `parse_unsigned()` function in
+`include/simdjson/generic/numberparsing.h` handles 20-digit numbers
+that overflow `uint64_t` by returning `INCORRECT_TYPE` rather than
+`NUMBER_OUT_OF_RANGE`. For example, `18446744073709551616` (2^64)
+wraps to zero under overflow, is then detected as too small for a
+valid 20-digit unsigned value, and is returned as `INCORRECT_TYPE`
+instead of the semantically correct `NUMBER_OUT_OF_RANGE`. Change the
+overflow return path at the 20-digit overflow check to return
+`NUMBER_OUT_OF_RANGE` so callers receive a meaningful error code
+when an unsigned integer exceeds `UINT64_MAX`.
 
-### N10: Add element count accessor to dom::array without full iteration
+### N10: Add size() convenience method to ondemand::array
 
-The `dom::array` class supports iteration but provides no `size()`
-method to retrieve the element count without iterating. The underlying
-tape already encodes the array's span. Add a `size()` method to
-`dom::array` that computes the element count from the tape structure
-in O(n) time, and document that it requires traversal.
+The `dom::array` class exposes a `size()` method that counts elements
+by iterating the tape. The `ondemand::array` class provides only
+`count_elements()` for the same purpose, making code that must work
+with both API styles inconsistent. Add a `size()` method to
+`ondemand::array` in `include/simdjson/generic/ondemand/array.h` and
+`array-inl.h` as a convenience alias that calls `count_elements()`,
+with the same O(n) complexity caveat, improving API symmetry between
+the DOM and On Demand parsers.
 
 ## Medium
 
@@ -402,10 +423,10 @@ compilation toolchains. Add a "Cross-Architecture Testing" section
 to `HACKING.md` documenting QEMU-based testing for ARM64, PPC64,
 and s390x. Update `CONTRIBUTING.md` to describe the CI architecture
 matrix and link to the new `HACKING.md` section. Also update
-`cmake/simdjson-flags.cmake` (in the `cmake/` directory) to add a
-`SIMDJSON_CROSS_COMPILE` option that disables native architecture
-detection, and update `simdjson.pc.in` to include the target
-architecture in the pkg-config metadata.
+`cmake/implementation-flags.cmake` to add a `SIMDJSON_CROSS_COMPILE`
+option that disables native architecture detection, and update
+`simdjson.pc.in` to include the target architecture in the pkg-config
+metadata.
 
 ### W11: Overhaul build and CI configuration across all platforms
 

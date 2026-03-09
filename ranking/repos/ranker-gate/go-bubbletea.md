@@ -131,18 +131,17 @@ using the standard command pattern. Rename the internal
 triggers `checkResize()` in `tty.go` and delivers a new
 `WindowSizeMsg` to the update loop.
 
-### N9: Fix `View.AltScreen` toggle causing double alt-screen enter on startup
+### N9: Fix `Program.Println` and `Program.Printf` blocking when program has exited
 
-In `cursed_renderer.go`, the `flush` method checks
-`shouldUpdateAltScreen` by comparing `view.AltScreen` against
-`s.lastView.AltScreen`. On the very first render, `s.lastView` is nil
-and the code enters `enableAltScreen` unconditionally when
-`view.AltScreen` is true. But the `start()` method in
-`cursed_renderer.go` also initializes screen state. If a model sets
-`AltScreen = true` in its first `View()` call, the alt screen
-sequence may be emitted twice—once during `start()` initialization
-and once in the first `flush`. Guard the initial alt-screen transition
-to avoid the redundant escape sequence.
+In `tea.go`, `Program.Println` and `Program.Printf` send a
+`printLineMessage` directly to the unbuffered `p.msgs` channel
+(`p.msgs <- printLineMessage{...}`) with no `select` on
+`p.ctx.Done()`. If the event loop has already exited (e.g., the
+program received `QuitMsg`), no goroutine reads from `p.msgs` and
+both methods block indefinitely. This is the same race as the bare
+sends in `handleSignals` (N1). Fix by wrapping both sends in a
+`select` with `p.ctx.Done()`, matching the pattern already used by
+`Program.Send`.
 
 ### N10: Fix `waitForReadLoop` timeout not propagating a diagnostic error
 
@@ -346,16 +345,18 @@ discards (e.g., `fmt.Fprintf` in View rendering). Update
 to add a `lint-strict` task that runs `golangci-lint run
 --enable-all` for pre-release validation.
 
-### M11: Add fuzz testing CI workflow and improve release configuration
+### M11: Add fuzz testing targets, CI workflow, and improve release configuration
 
 The CI has `build.yml`, `coverage.yml`, and `lint.yml` (all using
 reusable workflows from `charmbracelet/meta`) but no fuzz testing.
-Create `.github/workflows/fuzz.yml` that runs Go fuzz targets in
-`commands_test.go` and `exec_test.go` with a configurable time
-budget on pushes to main. Update `Taskfile.yaml` to add `fuzz` and
-`coverage` tasks (`go test -fuzz=. -fuzztime=30s ./...` and
-`go test -coverprofile=coverage.out ./...`). Update `.goreleaser.yml`
-— which currently only includes from the remote
+Add Go fuzz targets to `commands_test.go` (fuzzing `Batch` and
+`Sequence` with arbitrary message slices) and `exec_test.go` (fuzzing
+`ExecProcess` callback paths). Then create
+`.github/workflows/fuzz.yml` that runs these fuzz targets with a
+configurable time budget on pushes to main. Update `Taskfile.yaml` to
+add `fuzz` and `coverage` tasks (`go test -fuzz=. -fuzztime=30s ./...`
+and `go test -coverprofile=coverage.out ./...`). Update
+`.goreleaser.yml` — which currently only includes from the remote
 `charmbracelet/meta/main/goreleaser-lib.yaml` — to add a local
 changelog generation block and attach SBOM artifacts to releases.
 Update the `README.md` badges section to add a coverage badge from

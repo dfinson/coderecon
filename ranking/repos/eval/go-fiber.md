@@ -84,39 +84,39 @@ fiber/
 
 ### N1: Fix route parameter parsing not handling URL-encoded slashes in catch-all params
 
-When a route uses a catch-all parameter like `/files/*filepath`, URL-encoded slashes (`%2F`) in the parameter value are decoded before matching, causing nested path segments to split incorrectly. The path parsing in `path.go` decodes percent-encoded characters before parameter extraction.
+When `UnescapePath` is enabled in the app configuration, URL-encoded slashes (`%2F`) in a catch-all parameter value (e.g., `/files/*filepath`) are decoded to literal `/` inside `ctx.go` before the `detectionPath` is built. This causes the router to treat what should be a single catch-all value as multiple path segments, potentially matching a different route.
 
 ### N2: Fix `c.Redirect().Route()` not preserving query parameters from the original request
 
 When using `c.Redirect().Route("name")` in `redirect.go`, query parameters from the incoming request are dropped. The redirect target is built from the route pattern only, without forwarding query string values.
 
-### N3: Add `c.Deadline()` method to expose request context deadline to handlers
+### N3: Fix `c.Deadline()` always returning a no-op even when a deadline context is active
 
-Handlers have no direct way to check the remaining time budget for a request. Add `c.Deadline()` to the context interface in `ctx_interface.go` and `ctx.go` that returns the deadline from the underlying `context.Context`.
+The `Deadline()` method in `ctx.go` is documented as a nop and always returns `(time.Time{}, false)`. When the timeout middleware (or any other code) calls `c.SetContext(ctxWithDeadline)` to attach a deadline-bearing `context.Context`, that deadline is accessible via `c.Context().Deadline()` but `c.Deadline()` still returns the nop value, making it useless for handlers that need to check their remaining time budget. Update `ctx.go` so that `Deadline()` delegates to the stored context by calling `c.Context().Deadline()`.
 
 ### N4: Fix `Bind().JSON()` not returning proper error for content-type mismatch
 
 When a request has `Content-Type: text/plain` but the handler calls `c.Bind().JSON()`, the binder in `binder/json.go` attempts to parse the body as JSON anyway, producing a confusing parse error instead of a content-type mismatch error.
 
-### N5: Fix CORS middleware not handling `Access-Control-Request-Private-Network` header
+### N5: Fix CORS middleware setting response headers on requests from disallowed origins
 
-The CORS middleware in `middleware/cors/` doesn't handle the `Access-Control-Request-Private-Network` preflight header from the Private Network Access specification. Preflight requests with this header receive no `Access-Control-Allow-Private-Network` response.
+The CORS middleware in `middleware/cors/cors.go` calls `setSimpleHeaders` for every cross-origin request, including those whose origin is not in the configured allowlist (`allowOrigin == ""`). Inside `setSimpleHeaders`, `Access-Control-Expose-Headers` is set unconditionally when `cfg.ExposeHeaders` is non-empty, regardless of whether the origin was allowed. Fix `cors.go` (and the `setSimpleHeaders` helper) so that `Access-Control-Expose-Headers` is only written to the response when the request origin was actually allowed.
 
 ### N6: Add `OnError` hook for global error handling lifecycle events
 
 The hooks system in `hooks.go` supports `OnRoute`, `OnListen`, and `OnShutdown` but has no hook for error handling events. Add `OnError` that fires whenever `ErrorHandler` processes an error, providing the error, context, and status code to registered callbacks.
 
-### N7: Fix rate limiter middleware not resetting counters on sliding window boundary
+### N7: Fix rate limiter fixed-window counter underflow when `SkipFailedRequests` or `SkipSuccessfulRequests` is enabled
 
-The rate limiter in `middleware/limiter/` uses fixed window counters. When a burst of requests arrives at the boundary between two windows, the effective rate can be double the configured limit. The sliding window logic doesn't properly interpolate between windows.
+The fixed-window rate limiter in `middleware/limiter/limiter_fixed.go` can underflow its hit counter when `SkipFailedRequests` or `SkipSuccessfulRequests` is configured and a slow handler causes the window to expire before the post-handler decrement runs. The decrement fetches a fresh zero-count entry and stores `-1`, corrupting the new window's count and granting an extra free request. Fix `limiter_fixed.go` by checking whether the entry's expiry has changed before decrementing.
 
 ### N8: Fix `c.SendFile()` not setting `Last-Modified` header for embedded filesystem files
 
 When serving files from an `embed.FS` via `c.SendFile()`, the `Last-Modified` header is missing because the embedded filesystem doesn't provide `ModTime()`. The file serving logic in `res.go` should fall back to the application start time.
 
-### N9: Add `MsgPack` response helper to the response interface
+### N9: Add `MsgPack()` deserializer to the HTTP client response
 
-The response interface in `res.go` supports `JSON()`, `XML()`, and `CBOR()` but lacks a `MsgPack()` helper for MessagePack serialization, despite having a MsgPack binder in `binder/msgpack.go`. Add `c.MsgPack(data)` for symmetric serialization support.
+The HTTP client's `Response` in `client/response.go` supports `JSON()`, `CBOR()`, and `XML()` methods for deserializing response bodies but lacks a `MsgPack()` counterpart, even though the server already sends MessagePack responses via `res.go`. Add `r.MsgPack(v any) error` to `client/response.go` that decodes the response body as MessagePack using the client's configured decoder, symmetric with the existing `JSON()`, `CBOR()`, and `XML()` helpers.
 
 ### N10: Fix session middleware cookie attributes not updated on `session.Save()`
 
@@ -124,7 +124,7 @@ When session configuration changes cookie attributes (e.g., `MaxAge`) between re
 
 ### N11: Update `docs/guide/error-handling.md` to document the `OnError` lifecycle hook
 
-The `OnError` hook added to the hooks system is not documented. Add a section to `docs/guide/error-handling.md` covering hook registration, callback signature, and usage examples. Cross-reference from `docs/whats_new.md` and `docs/intro.md`. Update `.github/CONTRIBUTING.md` with error hook development guidelines.
+The `OnError` hook added to the hooks system in `hooks.go` is not documented. Add a section to `docs/guide/error-handling.md` covering hook registration via `app.Hooks().OnError()`, the callback signature `func(err error, c Ctx, status int) error`, a usage example showing logging and metrics, and a note on execution order relative to the error handler.
 
 ## Medium
 

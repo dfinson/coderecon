@@ -71,17 +71,17 @@ mockito-core/src/main/java/org/mockito/
 
 When using `inOrder.verify(mock).methodA()` followed by `inOrder.verify(mock).methodB()`, extra invocations of unrelated methods between A and B are silently ignored. `InOrderWrapper` only checks the relative ordering of verified calls but does not report unverified interleaved invocations when using strict mode.
 
-### N2: Fix `ArgumentCaptor.getAllValues` returning shared mutable list
+### N2: Add `ArgumentCaptor.reset()` to clear accumulated captured values
 
-`ArgumentCaptor.getAllValues()` returns the internal list directly. Callers who modify the returned list (e.g., `clear()`) corrupt the captor's state, causing subsequent `getValue()` calls to throw `IndexOutOfBoundsException`.
+`ArgumentCaptor` provides no way to reset captured state between reuses in the same test. When the same `ArgumentCaptor` instance is passed to multiple `verify()` calls, `getAllValues()` accumulates values from every matching invocation across all verifications. Neither `ArgumentCaptor` nor the underlying `CapturingMatcher` exposes a `reset()` or `clear()` method, forcing developers to create a new captor instance for each independent verification. Add `ArgumentCaptor.reset()` delegating to a new `CapturingMatcher.clear()` method so captors can be reused without recreation.
 
-### N3: Add `verify(mock, description("..."))` to include custom message in failure output
+### N3: Fix `description()` verification mode not working with `inOrder.verify()`
 
-Verification failures print the expected/actual invocation counts but do not support custom descriptive messages. Add a `description(String)` method that can be combined with `times()`, `atLeast()`, etc., to prepend user-provided context to the failure message. Document the new API in `doc/release-notes/official.md`.
+`Description` (returned by `times(1).description("msg")` or `Mockito.description("msg")`) implements `VerificationMode` but not `VerificationInOrderMode`. When `inOrder.verify(mock, times(1).description("msg"))` is called, `InOrderImpl.verify()` checks `mode instanceof VerificationInOrderMode` and throws `MockitoException: "Description is not implemented to work with InOrder"`. Fix `Description` to also implement `VerificationInOrderMode` by delegating `verifyInOrder()` to its wrapped mode's `verifyInOrder()` and catching `AssertionError` to prepend the custom description message.
 
-### N4: Fix `MockedStatic` not restoring original behavior on `close()` when nested
+### N4: Fix `ScopedMockImpl.close()` marking mock as closed before disabling interceptor
 
-When two `MockedStatic` instances for the same class are nested (inner opened before outer closes), closing the inner one restores the pre-mock behavior instead of restoring the outer mock's stubbing. The thread-local mock stack in `MockedSingletonImpl` does not properly handle nesting.
+`ScopedMockImpl.close()` sets `closed = true` before calling `control.disable()`. If `control.disable()` throws a `MockitoException` (e.g., the interceptor was already removed due to a prior failure or concurrent access), the mock is permanently marked as closed even though its class interceptor may still be registered. Any subsequent attempt to re-register the same class as a static or construction mock then fails with "static mocking is already registered in the current thread", with no apparent cause. Fix by calling `control.disable()` first, then setting `closed = true` only after `disable()` succeeds.
 
 ### N5: Fix `doNothing().when(spy).method()` not working for final methods on spies
 
@@ -91,21 +91,21 @@ When creating a spy of a class with a final method, `doNothing().when(spy).final
 
 `Mockito.reset(mock)` requires a reference to each mock. Add a `clearAllMocks()` method that resets all mocks created in the current thread/session: clear stubbings, invocation records, and verification state. Track mocks via `MockitoFramework`.
 
-### N7: Fix `UnnecessaryStubbingException` not reporting the line where the stubbing was declared
+### N7: Fix `Reporter.formatUnncessaryStubbingException()` not providing "did you mean?" hints for argument mismatches
 
-When strictness is `STRICT_STUBS` and a stubbing is unused, the exception message mentions the method that was stubbed but does not include the source file and line number where `when()` was called. The `StubbedInvocationMatcher` stores the invocation location but `UnusedStubbingReporting` does not include it.
+When `STRICT_STUBS` reports unused stubbings via `UnnecessaryStubbingException`, the message lists each unused stubbing with its location (from `u.getLocation()`). However, it does not show whether there were actual invocations of the same method with different arguments — information that would help identify mismatched stubs. The `potentialStubbingProblem()` reporter already performs this cross-check. Extend `Reporter.formatUnncessaryStubbingException()` to scan the mock's recorded invocations for calls to the same method name with different arguments and append them as "actual invocations that may have been intended" in the exception message.
 
 ### N8: Fix `ArgumentMatchers.argThat` causing `NullPointerException` for primitive parameters
 
-`argThat(matcher)` returns null as the default value for the matcher placeholder. When the method parameter is a primitive type (e.g., `int`), the null is unboxed and throws `NullPointerException`. The `MatcherApplicationStrategy` should return the primitive default (0, false, etc.) instead.
+`argThat(matcher)` unconditionally returns `null`. When the method parameter is a primitive type (e.g., `int`), the `null` is unboxed and throws `NullPointerException` before the test assertion runs. Other matchers such as `any(Class)` already avoid this by returning `Primitives.defaultValue(type)`. Fix `ArgumentMatchers.argThat(ArgumentMatcher<T>)` to return `Primitives.defaultValue()` based on the matcher's type instead of returning `null`, mirroring the approach used by `anyInt()`, `any(Class)`, and similar matchers in `ArgumentMatchers`.
 
-### N9: Add `Answers.RETURNS_EMPTY_OPTIONALS` default answer
+### N9: Add `Answers.RETURNS_EMPTY` explicit enum constant for empty-value default answer
 
-The existing `RETURNS_EMPTY_COLLECTIONS` answer returns empty lists/maps/sets but returns null for `Optional` return types. Add `RETURNS_EMPTY_OPTIONALS` that returns `Optional.empty()` for methods returning `Optional<T>`.
+There is no `Answers` enum constant that explicitly selects `ReturnsEmptyValues` behavior. `RETURNS_DEFAULTS` uses `GloballyConfiguredAnswer`, which delegates to whatever is globally configured (default: `ReturnsEmptyValues`). When the global default is changed, any mock using `RETURNS_DEFAULTS` silently changes behavior. There is no way to use `@Mock(answer = ...)` or `withSettings().defaultAnswer(...)` to explicitly request the empty-values behavior (returning empty collections, `Optional.empty()`, `Stream.empty()`, `0`/`false` for primitives, etc.) without depending on global configuration. Add `RETURNS_EMPTY` to the `Answers` enum wrapping a `ReturnsEmptyValues` instance.
 
-### N10: Fix `verifyNoInteractions` false positive when mock was used only for stubbing setup
+### N10: Fix `verifyNoInteractions` ignoring `Mockito.ignoreStubs()` marks
 
-`verifyNoInteractions(mock)` correctly fails when the mock was invoked in the test, but when the mock was only used during `when(mock.method()).thenReturn(...)` setup and never invoked in the actual test code, it still passes. The `when()` call itself records an invocation that should be excluded from the "no interactions" check.
+`NoInteractions.verify()` calls `data.getAllInvocations().isEmpty()` to check for any invocations. It does not filter out invocations marked via `Mockito.ignoreStubs(mock)`. When `ignoreStubs(mock)` marks stub-matched invocations as `isIgnoredForVerification`, `verifyNoMoreInteractions(mock)` correctly passes (because `NoMoreInteractions` uses `findFirstUnverified()` which treats `isIgnoredForVerification` as verified). However, `verifyNoInteractions(mock)` still fails for those same invocations, making `ignoreStubs()` ineffective with `verifyNoInteractions`. Fix `NoInteractions.verify()` to filter out invocations where `isIgnoredForVerification()` returns `true`, consistent with how `NoMoreInteractions` handles them.
 
 ### N11: Fix `doc/release-notes/official.md` not documenting deprecated API removals across major versions
 
@@ -113,21 +113,21 @@ The `doc/release-notes/official.md` file lists new features per release but omit
 
 ## Medium
 
-### M1: Implement argument capture for consecutive stubbing calls
+### M1: Add `@Captor` support for JUnit 5 test method parameters
 
-When `when(mock.method(captor.capture())).thenReturn(a, b, c)` is used, the captor only captures the setup invocation, not the actual test invocations. Implement proper argument capture that records each real invocation's arguments independently of the stubbing declaration. Changes span `ArgumentCaptor`, `InvocationMatcher`, and `StubbedInvocationMatcher`.
+`@Captor` annotation is only processed on fields by `MockitoAnnotations.openMocks()`. JUnit 5 tests using `@ExtendWith(MockitoExtension.class)` cannot inject `ArgumentCaptor` instances as test method parameters. Add `ArgumentCaptor` parameter resolution to `MockitoExtension` via a `CapturingParameterResolver` that creates typed captors from each parameter's generic type using `ArgumentCaptor.forClass()`. Changes span `MockitoExtension`, `ArgumentCaptor`, and the JUnit 5 parameter resolution integration in `org.mockito.junit.jupiter`.
 
-### M2: Add mock verification timeout with polling
+### M2: Add `verify(mock, timeout(n).thenStayStable(d))` combined timeout+stability verification
 
-Implement `verify(mock, timeout(500).times(3)).method()` that polls for the expected invocation count within the timeout period. Useful for async code where the mock is invoked from another thread. Changes span `VerificationOverTimeImpl`, `VerificationModeFactory`, and add a polling mechanism in the verification checkers.
+`verify(mock, timeout(500))` succeeds as soon as the expected count is reached, and `after(500)` waits the full duration to ensure the count is not exceeded. There is no single mode that: (1) polls until the expected count is reached within a timeout, and (2) then waits an additional stabilization period to confirm no further calls happen. Add `VerificationWithTimeout.thenStayStable(long stabilizationMillis)` that delegates to a new `StableVerificationOverTime` wrapping `VerificationOverTimeImpl`. Changes span `VerificationOverTimeImpl`, `VerificationModeFactory`, `VerificationWithTimeout`, and the verification checker pipeline.
 
 ### M3: Implement deep stubs for generic return types
 
 `RETURNS_DEEP_STUBS` fails when the stubbed method returns a generic type like `List<Foo>` because the generic type information is erased at runtime. Use the method's generic signature to resolve the actual type parameter and create an appropriately typed deep stub. Changes span `ReturnsDeepStubs`, `GenericMetadataSupport`, and mock creation settings.
 
-### M4: Add BDD-style argument capture with `then()` assertions
+### M4: Add `BDDMockito.willCapture(Class<T>)` for fluent BDD-style argument capture
 
-Implement `BDDMockito.then(mock).should().method(captor.capture())` that combines verification and capture in one fluent call. Currently, BDD-style verification and argument capture require separate calls. Changes span `BDDMockito`, `BDDOngoingStubbing`, and verification mode integration.
+`BDDMockito.given()` has no built-in way to create captors inline during stub setup. Users must declare `ArgumentCaptor` fields separately and then use them in `given(mock.method(captor.capture()))`. Add `BDDMockito.willCapture(Class<T> clazz)` that returns a `BDDArgumentCaptor<T>` combining `ArgumentCaptor<T>` with a `BDDOngoingStubbing`-compatible matcher, enabling inline capture in `given()` and `then().should()` chains without pre-declaring a captor. Changes span `BDDMockito`, a new `BDDArgumentCaptor` class, `BDDOngoingStubbing`, and the `ArgumentCaptor`/`CapturingMatcher` integration.
 
 ### M5: Implement mock serialization with Kryo support
 
@@ -141,27 +141,27 @@ Mocks configured with `withSettings().serializable()` use Java's built-in serial
 
 Enhance `InOrder` to support a `strict()` mode where any invocation on any of the in-order mocks that was not explicitly verified causes a failure. Currently, `InOrder` only checks relative ordering. Changes span `InOrderImpl`, `InOrderWrapper`, `InOrderContextImpl`, and verification checkers.
 
-### M8: Add annotation-driven mock injection for constructor parameters
+### M8: Fix `ConstructorInjection.SimpleArgumentResolver` ignoring constructor parameter names when resolving duplicate-type mocks
 
-`@InjectMocks` supports field and setter injection but not constructor injection when the constructor has parameters that match mock types. Implement constructor-parameter matching by type and name. Changes span `configuration/injection/`, `ConstructorInjection`, `PropertyAndSetterInjection`, and the injection scanner.
+`@InjectMocks` already performs constructor injection via `ConstructorInjection`, but `SimpleArgumentResolver.resolveTypeInstances()` matches mocks to constructor parameters by type only. When a constructor has two parameters of the same type (e.g., `public Service(String firstName, String lastName)`), the resolver returns the first mock of that type for every parameter of that type, potentially injecting the wrong mock. Fix by using `Constructor.getParameters()` and `Parameter.getName()` to match parameters by both type and name, and update `PropertyAndSetterInjection` to use the same name-based disambiguation. Changes span `ConstructorInjection.SimpleArgumentResolver`, `PropertyAndSetterInjection`, and the `MockInjectionStrategy` base class.
 
 ### M9: Implement stubbing inheritance for spy hierarchies
 
 When a spy of a subclass is created, stubs declared on a parent class spy are not inherited. Implement stubbing inheritance so that `when(parentSpy.method()).thenReturn(x)` is visible when verifying `childSpy.method()`. Changes span `InvocationContainerImpl`, `MockHandlerImpl`, and mock creation settings.
 
-### M10: Add `MockedConstruction` support for capturing constructor arguments
+### M10: Add `MockedConstruction.contextFor(T mock)` to retrieve construction context after initialization
 
-`MockedConstruction` intercepts constructor calls but does not provide access to the constructor arguments. Add `MockedConstruction.Context.arguments()` that returns the argument list for each construction. Changes span `MockedConstructionImpl`, ByteBuddy instrumentation in `creation/bytebuddy/`, and the `MockedConstruction.Context` interface.
+`MockedConstruction.constructed()` returns all mocked instances in creation order, and the `MockInitializer` receives each mock with its `Context` at construction time. However, once the initializer returns there is no way to look up the `Context` (containing `constructor()` and `arguments()`) for a specific constructed mock. Add `MockedConstruction.contextFor(T mock)` that returns the `Context` associated with a given mock instance. Changes span the `MockedConstruction` interface, `MockedConstructionImpl`, the `InlineConstructionMockControl` in `creation/bytebuddy/`, and the construction callback mechanism.
 
-### M11: Improve build and CI configuration for cross-JDK testing
+### M11: Improve `build.gradle.kts` for strict cross-compilation and reproducible builds
 
-Extend `.github/workflows/ci.yml` to test against JDK 11, 17, and 21 using a matrix strategy. Update `build.gradle.kts` to configure cross-compilation targets and source/target compatibility. Add JDK compatibility documentation to `.github/CONTRIBUTING.md`, configure Dependabot schedule in `.github/dependabot.yml` for Gradle dependency updates, and update `gradle.properties` with reproducible build settings.
+The `build.gradle.kts` does not configure Java toolchains or explicit release targets, meaning the build inherits the JDK version used to run Gradle, potentially creating class files incompatible with the declared minimum Java version. Configure `java.toolchain.languageVersion`, add `options.release.set(11)` to `JavaCompile` tasks for strict cross-compilation, set `isReproducibleFileOrder = true` and `isPreserveFileTimestamps = false` on archive tasks for reproducible builds, and add `org.gradle.configuration-cache=true` and `org.gradle.parallel=true` to `gradle.properties`. Update `.github/CONTRIBUTING.md` with explicit JDK setup instructions and add Gradle toolchain documentation.
 
 ## Wide
 
-### W1: Implement mock generation using Java proxies as alternative to ByteBuddy
+### W1: Implement `InstrumentationMockMaker` using Java Instrumentation API
 
-Add a lightweight `ProxyMockMaker` that uses `java.lang.reflect.Proxy` for interface mocking without ByteBuddy. Support it as a plugin via the `MockMaker` SPI. Changes span a new `creation/proxy/` package, `MockMaker` plugin registration, `MockHandlerImpl` (dispatch), `InvocationContainerImpl`, and configuration/plugins.
+Add a `MockMaker` plugin that uses `java.lang.instrument.Instrumentation.redefineClasses()` to transform target class bytecode at the JVM level, enabling mocking of final classes, static methods, and constructors without ByteBuddy's inline advice approach. Unlike the existing `ProxyMockMaker` (interfaces only, in `creation/proxy/`) and `InlineByteBuddyMockMaker` (ByteBuddy-based bytecode generation), `InstrumentationMockMaker` would operate via the standard Java Instrumentation API and a Java agent, enabling mocking in environments where ByteBuddy is unavailable. Changes span a new `creation/instrumentation/` package, `MockMaker` SPI registration, `MockHandlerImpl` dispatch updates, `InvocationContainerImpl`, and `MockMakers` constants.
 
 ### W2: Add comprehensive static analysis for common Mockito mistakes
 
@@ -201,4 +201,4 @@ Implement a source-code transformation tool that migrates EasyMock `expect()`/`r
 
 ### W11: Create comprehensive contributor documentation and design doc system
 
-Establish a structured project documentation system: expand `doc/design-docs/` with design doc templates and existing architectural decisions (mock creation pipeline, stubbing resolution, ByteBuddy integration strategy); rewrite `.github/CONTRIBUTING.md` with build setup, test execution, and PR review guidelines; update `.github/ISSUE_TEMPLATE.md` with separate templates for bug reports, feature requests, and design proposals; add a `SECURITY.md` responsible disclosure process; update `README.md` with architecture overview and links to design docs; and create `.github/PULL_REQUEST_TEMPLATE.md` with a changelog and documentation checklist. Changes span `doc/design-docs/`, `.github/CONTRIBUTING.md`, `.github/ISSUE_TEMPLATE.md`, `.github/PULL_REQUEST_TEMPLATE.md`, `SECURITY.md`, and `README.md`.
+Establish a structured project documentation system: expand `doc/design-docs/` with architecture decision records (ADRs) covering the mock creation pipeline, stubbing resolution, and ByteBuddy integration strategy; improve `.github/CONTRIBUTING.md` with explicit build setup, test execution, and debugging instructions; replace the single `.github/ISSUE_TEMPLATE.md` with a `.github/ISSUE_TEMPLATE/` directory containing separate templates for `bug_report.md`, `feature_request.md`, and `design_proposal.md`; expand `SECURITY.md` with a full responsible disclosure process beyond the current single-line Tidelift reference; update `README.md` with an architecture overview section and links to design docs; and update `.github/PULL_REQUEST_TEMPLATE.md` with a documentation checklist. Changes span `doc/design-docs/`, `.github/CONTRIBUTING.md`, `.github/ISSUE_TEMPLATE/`, `SECURITY.md`, and `README.md`.

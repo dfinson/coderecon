@@ -55,17 +55,17 @@ gin/
 
 ## Narrow
 
-### N1: Fix `Context.Redirect` allowing redirect with non-redirect status codes
+### N1: Fix `Context.Redirect` allowing redirect with status code 201
 
-`Context.Redirect` only validates that the status code is 300–308 for GET requests but does not check for other HTTP methods. A POST request can be redirected with status 200, which produces a malformed response with a `Location` header but no redirect semantics.
+`render.Redirect.Render()` in `render/redirect.go` validates that the status code is in the 300–308 range but contains a special-case exception that also permits `http.StatusCreated` (201). Calling `c.Redirect(201, "/path")` sets a `Location` header and returns a 201 response with no redirect semantics, because 201 Created is not a redirect status code. Remove the `&& r.Code != http.StatusCreated` exception from the validation condition so that only genuine 3xx redirect codes are accepted.
 
-### N2: Fix route conflict panic not reporting both conflicting paths
+### N2: Fix route conflict panic not reporting the full existing conflicting path
 
-When `addRoute` detects a wildcard conflict in `tree.go`, the panic message only shows the new path being inserted. It does not include the existing conflicting route, making it hard to diagnose which prior registration caused the clash.
+When `addRoute` detects a wildcard conflict in `tree.go`, the panic message reconstructs the existing prefix by string manipulation (`fullPath[:strings.Index(fullPath, pathSeg)] + n.path`) instead of using `n.fullPath`, which stores the complete registered path of the conflicting route. The reconstructed prefix can be incomplete or misleading. Use `n.fullPath` directly in the panic message to show the actual registered route that caused the conflict.
 
-### N3: Fix `BasicAuth` middleware not using constant-time comparison
+### N3: Fix `BasicAuth` middleware leaking credential position via early-exit loop
 
-The `BasicAuth` middleware in `auth.go` uses `searchCredential` with `subtle.ConstantTimeCompare` for the password but performs an early-exit map lookup on the username. This leaks timing information about whether a username exists.
+The `searchCredential` method on `authPairs` in `auth.go` iterates over credentials using `subtle.ConstantTimeCompare` for each individual comparison, but returns immediately when a match is found. Because the loop exits early, response time varies depending on which position in the slice holds the matching credential, creating a timing side-channel that reveals which credential was accepted. Rewrite the loop to always complete all comparisons, accumulating the result in a constant-time variable without early exit.
 
 ### N4: Add `Context.RemoveHeader` method
 
@@ -75,25 +75,25 @@ The `BasicAuth` middleware in `auth.go` uses `searchCredential` with `subtle.Con
 
 The default `LoggerWithConfig` writes `c.Request.URL.Path` directly into log output. A request path containing `\n` can inject fake log lines. Sanitize control characters in the path before formatting. Update `CONTRIBUTING.md` with security-related logging guidelines for future middleware contributions.
 
-### N6: Fix `tree.getValue` not returning trailing-slash redirect for parameterized routes
+### N6: Fix `redirectTrailingSlash` not updating `RawPath` when redirecting
 
-When `RedirectTrailingSlash` is enabled and a route `/users/:id/` is registered, a request to `/users/42` (without trailing slash) does not trigger a redirect. The `getValue` function only checks the redirect flag for static parts of the path, not after consuming a parameter segment.
+`redirectTrailingSlash` in `gin.go` modifies `req.URL.Path` to add or remove a trailing slash, but does not update `req.URL.RawPath`. When the request URL contains percent-encoded characters (e.g., `/api/hello%20world`), `net/url.URL.String()` prefers `RawPath` over `Path`, so the redirect response uses the original unmodified `RawPath` and the trailing slash change is silently ignored, potentially causing an infinite redirect loop. Update `req.URL.RawPath` in `redirectTrailingSlash` consistently with `req.URL.Path` when `RawPath` is set.
 
 ### N7: Add `Context.FullError` to collect all handler errors as a single joined error
 
 `Context.Errors` collects `*Error` values, but there is no convenience method to return a single `error` that joins them. Add `FullError() error` that returns `nil` when empty or `errors.Join`-ed result.
 
-### N8: Fix `Engine.HandleContext` not resetting `Context.index` before re-dispatch
+### N8: Fix `Engine.HandleContext` not saving and restoring `Context.Keys` across re-dispatch
 
-When `HandleContext` is used for internal re-routing, it calls `engine.handleHTTPRequest(c)` without resetting `c.index` to -1. If the previous handler chain called `c.Next()`, the index is at the end and middlewares in the new chain are skipped.
+`HandleContext` in `gin.go` saves and restores `c.index` and `c.handlers` around the internal re-dispatch, but calls `c.reset()` which sets `c.Keys = nil`. Any context values stored by middlewares before the `HandleContext` call — such as authenticated user data, request IDs, or tracing spans — are permanently lost. The re-dispatched route and any subsequent middleware in the original chain cannot access those values. Save `c.Keys` before `c.reset()` and restore it after `engine.handleHTTPRequest(c)`, alongside the existing `c.index` and `c.handlers` restoration.
 
 ### N9: Fix `SecureJSON` prefix not configurable per-route
 
 `SecureJSONPrefix` is set on the `Engine` globally. When different route groups need different prefixes (e.g., internal vs. external APIs), there is no way to override it. Add a `Context.SetSecureJSONPrefix` method that takes precedence over the engine default.
 
-### N10: Fix `ShouldBindBodyWith` storing body bytes with wrong key for TOML binding
+### N10: Fix `ShouldBindBodyWith` exhausting `c.Request.Body` without restoring it
 
-`ShouldBindBodyWith` caches the raw body in `c.Set(BodyBytesKey, ...)` after the first read. But each `BindingBody` type uses the same cache key, so calling `ShouldBindBodyWithJSON` then `ShouldBindBodyWithTOML` reuses the JSON-bound bytes without re-reading. The second binding succeeds or fails based on the first format's cached bytes rather than re-parsing.
+`ShouldBindBodyWith` in `context.go` reads and caches the request body under `BodyBytesKey` in `c.Keys`. After the first call, `c.Request.Body` is fully consumed and subsequent reads return EOF. Any call that reads `c.Request.Body` directly — such as `ShouldBind`, `ShouldBindJSON`, or `c.GetRawData()` — receives empty data instead of the original body. After caching the bytes, `ShouldBindBodyWith` should replace `c.Request.Body` with `io.NopCloser(bytes.NewReader(body))` so that the body remains readable for other consumers in the same request lifecycle.
 
 ### N11: Update `docs/doc.md` and `README.md` to document the `Context.RemoveHeader` method
 

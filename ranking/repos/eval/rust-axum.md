@@ -60,13 +60,13 @@ axum/
 
 ## Narrow
 
-### N1: Fix `Router::nest` stripping the prefix from `MatchedPath`
+### N1: Improve `MatchedPath` rejection message for `nest_service` contexts
 
-When a router is nested under a prefix via `Router::nest("/api", inner)`, the `MatchedPath` extractor returns only the inner route pattern (e.g., `/:id`) instead of the full nested path (`/api/:id`). The `strip_prefix` module removes the prefix before matching but does not prepend it back.
+When `Router::nest_service` is used to nest a non-axum Tower service, the `MatchedPath` extension is not set for requests routed to that service. The outer wildcard match is stored in a private `MatchedNestedPath` extension, which is inaccessible to users. Handlers or middleware inside the nested service that extract `MatchedPath` receive a `MatchedPathMissing` rejection with the terse body "No matched path found" and no diagnostic guidance. Improve the `MatchedPathMissing` rejection body in `axum/src/extract/rejection.rs` to include a hint explaining when matched path can be unavailable, and update the `MatchedPath` documentation in `axum/src/extract/matched_path.rs` to document the `nest_service` limitation.
 
-### N2: Fix `WebSocketUpgrade` not rejecting non-GET upgrade requests
+### N2: Fix `WebSocketUpgrade` incorrectly requiring `Sec-WebSocket-Version` for HTTP/2
 
-The `WebSocketUpgrade` extractor in `extract/ws.rs` checks for the `Upgrade: websocket` header but does not validate that the HTTP method is GET. A POST request with upgrade headers is accepted, violating RFC 6455 which requires the opening handshake to be GET.
+The `WebSocketUpgrade` extractor in `extract/ws.rs` validates the `Sec-WebSocket-Version: 13` header for all upgrade requests regardless of HTTP version. The check at line 488 runs outside the HTTP/1.1 branch and therefore also applies to HTTP/2 extended CONNECT upgrades (RFC 8441). RFC 8441 does not require `Sec-WebSocket-Version` for HTTP/2 WebSocket connections. HTTP/2 clients that omit this header are incorrectly rejected with `InvalidWebSocketVersionHeader`. Move the `Sec-WebSocket-Version` check inside the `parts.version <= Version::HTTP_11` branch so it only applies to HTTP/1.1 connections.
 
 ### N3: Add `Router::has_routes` check for empty method routers
 
@@ -76,25 +76,25 @@ The `WebSocketUpgrade` extractor in `extract/ws.rs` checks for the `Upgrade: web
 
 The `Path` extractor in `extract/path/mod.rs` percent-decodes path parameters, but `%2F` (forward slash) is decoded into `/`, which can break downstream logic that splits on `/`. The extractor should preserve `%2F` as-is in individual path segments.
 
-### N5: Fix `MethodRouter::merge` silently dropping conflicting method handlers
+### N5: Improve `MethodRouter::merge` fallback conflict error message
 
-When merging two `MethodRouter` instances that both have a handler for GET, `merge` currently panics. However, the panic message does not indicate which method conflicts. Add the conflicting HTTP method name to the error message.
+When calling `MethodRouter::merge` on two method routers that both define a custom fallback handler, the operation panics with "Cannot merge two `MethodRouter`s that both have a fallback" (in `axum/src/routing/method_routing.rs`). Unlike the method-specific conflict messages that identify the HTTP method (e.g., "Cannot merge two method routes that both define `GET`"), the fallback conflict message provides no guidance on how to resolve the conflict or what a fallback means in this context. Improve the fallback conflict error message to clarify that the fallback handles all unmatched methods and suggest using `MethodRouter::layer` for shared behavior or removing one of the custom fallbacks.
 
 ### N6: Add `Redirect::see_other` convenience constructor
 
 `Redirect` provides `to`, `permanent`, and `temporary` constructors but not `see_other` (303). POST-redirect-GET flows commonly need 303 status. Add `Redirect::see_other(uri)` that returns a 303 redirect response. Update `CHANGELOG.md` with the new API addition and add a usage example to `README.md`.
 
-### N7: Fix SSE `Event::json_data` not setting event content type
+### N7: Fix SSE `Event::retry` panicking instead of overwriting on repeated calls
 
-In `response/sse.rs`, `Event::json_data` serializes the data field as JSON but the SSE `content-type` header for the overall response is already `text/event-stream`. The issue is that `json_data` silently drops serialization errors by converting them to `Event::default()`—it should propagate the error.
+In `response/sse.rs`, the `Event::retry` builder method panics when called more than once on the same `Event` instance ("Called `Event::retry` multiple times"). This is inconsistent with other `Event` setter methods (e.g., `event` and `id` which also panic, but unlike them, `retry` has no semantic reason to forbid overwriting since the last value wins per the SSE spec). The panic can cause unexpected crashes when application code conditionally builds events and calls `retry` in multiple code paths. Change `Event::retry` to silently overwrite any previously set retry duration rather than panicking.
 
 ### N8: Fix `ConnectInfo` not available in middleware added via `Router::layer`
 
 When middleware added via `Router::layer` tries to extract `ConnectInfo<SocketAddr>`, it fails because `ConnectInfo` is inserted by `into_make_service_with_connect_info` which runs after the layer. Document this limitation and add a compile-time-friendly error message in the rejection.
 
-### N9: Add `State` extractor debug assertion for missing state
+### N9: Add `#[diagnostic::on_unimplemented]` to `FromRef` for better `State` error messages
 
-When `State<T>` extraction fails because the state was not provided via `Router::with_state`, the error message is a generic "missing extension." Add a more descriptive rejection message that names the state type `T` and suggests calling `with_state`.
+The `FromRef<T>` trait in `axum-core/src/extract/from_ref.rs` lacks a `#[diagnostic::on_unimplemented]` attribute. When a handler uses `State<T>` and the type `T` does not implement `FromRef<S>` for the router's state type `S`, the compiler emits a generic trait-bound error with no guidance on how to fix it. Add `#[diagnostic::on_unimplemented(message = "...", note = "...")]` to the `FromRef` trait with a helpful message directing users to implement `FromRef`, derive it via `#[derive(FromRef)]`, or ensure the state type passed to `with_state` matches the type used in `State<T>`.
 
 ### N10: Fix `serve` not propagating `TcpListener` SO_KEEPALIVE setting
 
@@ -114,9 +114,9 @@ Add middleware that enforces a maximum request body size, returning 413 Payload 
 
 Implement a `#[derive(TypedMultipart)]` macro in axum-macros that generates `FromRequest` for structs representing multipart form uploads. Map struct fields to form fields by name, support `Vec<u8>` for file contents and `String` for text parts. Changes span axum-macros and axum-extra's multipart module.
 
-### M3: Implement graceful shutdown with connection draining
+### M3: Add configurable drain timeout to `WithGracefulShutdown`
 
-Add `Serve::with_graceful_shutdown(signal)` that stops accepting new connections when the signal fires, sends HTTP connection close to active connections, and waits for in-flight requests to complete with a configurable timeout. Changes span `serve/mod.rs` and `serve/listener.rs`.
+`Serve::with_graceful_shutdown(signal)` stops accepting new connections when the signal fires and sends HTTP connection-close notifications to active connections, but waits indefinitely for all connections to close. If a long-lived connection (e.g., SSE or WebSocket) does not close after receiving the shutdown notification, the server never exits. Add a `WithGracefulShutdown::with_drain_timeout(duration)` method to `axum/src/serve/mod.rs` that cancels remaining connections after the specified drain duration. When the timeout expires, forcibly close any connections still open and resolve the server future. Changes span `serve/mod.rs` and its test suite.
 
 ### M4: Add response caching middleware with ETag support
 
@@ -194,4 +194,4 @@ Implement a testing framework with recorded request replay, response assertion h
 
 ### W11: Implement comprehensive contributor onboarding and ecosystem documentation
 
-Overhaul the project's non-code documentation: restructure `CONTRIBUTING.md` with step-by-step build instructions, PR checklist, and coding conventions; update `ECOSYSTEM.md` with a curated list of middleware and extractor crates; add an architecture overview to `README.md` explaining the crate dependency graph; create `.github/DISCUSSION_TEMPLATE/` forms for feature requests vs. questions; and add a `deny.toml` audit policy section. Changes span `CONTRIBUTING.md`, `ECOSYSTEM.md`, `README.md`, `.github/PULL_REQUEST_TEMPLATE.md`, `.github/DISCUSSION_TEMPLATE/`, `deny.toml`, and `Cargo.toml` workspace metadata.
+Improve the project's non-code documentation: add step-by-step build and test instructions, a semver policy, and a PR checklist to `CONTRIBUTING.md`; add an architecture overview section to `README.md` explaining the crate dependency graph (axum → axum-core, axum-extra → axum-core, axum-macros → axum-core) and the Tower service model; create a `.github/DISCUSSION_TEMPLATE/feature_request.yml` discussion form for feature requests (a Q&A form already exists); and add a `PULL_REQUEST_TEMPLATE.md` checklist covering tests, documentation, and changelog entries. Changes span `CONTRIBUTING.md`, `README.md`, `.github/PULL_REQUEST_TEMPLATE.md`, `.github/DISCUSSION_TEMPLATE/feature_request.yml`, and `Cargo.toml` workspace metadata.

@@ -137,10 +137,11 @@ with `App::_parse_single()`.
 ### N8: Fix ExistingFile validator following symlinks unconditionally
 
 The `ExistingFile` validator in `Validators_inl.hpp` uses
-`std::filesystem::exists()` which follows symlinks. When a symlink
-points to a non-existent target, the validator rejects the path even
-though the symlink itself exists. Add a `follow_symlinks` parameter
-(default `true`) and use `std::filesystem::symlink_status()` when
+`std::filesystem::status()` (via `detail::check_path()`) which follows
+symlinks to their targets. When a symlink points to a non-existent
+target, the validator rejects the path even though the symlink itself
+exists. Add a `follow_symlinks` parameter (default `true`) to
+`check_path()` and use `std::filesystem::symlink_status()` when
 disabled to validate the symlink's own existence.
 
 ### N9: Add completion value hints for custom types
@@ -154,8 +155,10 @@ generators.
 
 ### N10: Fix Timer class not supporting lap timing
 
-The `Timer` class in `Timer.hpp` supports start/stop timing but
-provides no way to record intermediate lap times without stopping.
+The `Timer` class in `Timer.hpp` measures elapsed time from construction
+and provides `make_time_str()` to format the elapsed duration, but
+provides no way to record intermediate lap times without constructing
+a new timer.
 Add a `lap()` method that records the current elapsed time, stores it
 in an internal vector, and returns the duration since the last lap (or
 start). Add a `laps()` accessor that returns all recorded intervals.
@@ -249,12 +252,16 @@ values that differ from defaults. Touches `Config.hpp`,
 
 ### M10: Add command alias support
 
-Implement `app->add_subcommand("remove")->aliases({"rm", "del"})` so
-subcommands can be invoked by alternative names. Aliases should work
-in parsing, help text (listed alongside the primary name), and shell
-completion. Requires changes to `App::_find_subcommand()` for alias
-resolution, `App_inl.hpp` for registration, and the formatter for
-display.
+The `App` class already supports a single alias via `app->alias(name)`
+in `App_inl.hpp`, but there is no bulk alias method for setting
+multiple aliases at once. Implement `app->add_subcommand("remove")->aliases({"rm", "del"})`
+as a convenience method in `App.hpp` and `App_inl.hpp` that calls
+`alias()` for each entry in the vector. The `_find_subcommand()` logic
+already resolves aliases during parsing and the formatter already
+displays them via `get_display_name(true)`, but help text does not
+list aliases on a dedicated line for named subcommands. Update the
+formatter in `Formatter_inl.hpp` to show aliases alongside the primary
+name in the subcommand listing.
 
 ## Wide
 
@@ -367,8 +374,9 @@ The `.codecov.yml` file ignores `tests`, `examples`, `book`, `docs`,
 `test_package`, and `fuzz` directories for coverage reporting, but
 does not ignore `scripts/` or `single-include/` (which is generated).
 Update `.codecov.yml` to add `scripts` and `single-include` to the
-ignore list. Also update `.codacy.yml` to exclude the same directories
-from static analysis. Finally, verify that `.pre-commit-config.yaml`
+ignore list. Also update `.codacy.yml` to add `single-include` to its
+`exclude_paths` list (it already excludes `scripts/` and `fuzz/`, but
+not `single-include/`). Finally, verify that `.pre-commit-config.yaml`
 includes a hook for running `cmake-format` using the rules defined in
 `.cmake-format.yaml`.
 
@@ -376,26 +384,29 @@ includes a hook for running `cmake-format` using the rules defined in
 
 The `meson.build` and `meson_options.txt` files define the Meson build
 configuration but do not expose feature toggles for optional components
-like extra validators or JSON support. Add `cli11_extra_validators`
-and `cli11_json_support` options to `meson_options.txt` and wire them
-into `meson.build` with conditional source inclusion. Update
-`docs/mainpage.md` to add a "Build System" section documenting both
-CMake and Meson build options. Also update `CMakePresets.json` to add
-a `ci-meson` preset that mirrors the Meson defaults, and add a note
-to `CHANGELOG.md` about the new Meson options.
+available in the CMake build. The CMake build supports
+`CLI11_ENABLE_EXTRA_VALIDATORS` and `CLI11_SINGLE_FILE` options that
+have no Meson equivalents. Add `cli11_extra_validators` and
+`cli11_single_file` options to `meson_options.txt` and wire them into
+`meson.build` with conditional compile definitions (mirroring the CMake
+`CLI11_ENABLE_EXTRA_VALIDATORS` define) and single-header generation
+logic respectively. Update `docs/mainpage.md` to add a "Build System"
+section documenting both CMake and Meson build options. Also update
+`CMakePresets.json` to add a `ci-meson` preset that mirrors the Meson
+defaults, and add a note to `CHANGELOG.md` about the new Meson options.
 
 ### W11: Overhaul CI pipelines and build configuration across all systems
 
 The CI configuration spans `azure-pipelines.yml`,
 `.github/workflows/tests.yml`, `.github/workflows/build.yml`, and
-`.github/codecov.yml`, but they have divergent compiler matrix
-coverage: Azure tests C++14/17 while GitHub Actions tests C++20+.
-Unify the compiler and standard matrix across all CI systems. Update
-`azure-pipelines.yml` to add a C++20 MSVC job matching the GitHub
-Actions matrix. Update `.github/workflows/tests.yml` to add a Meson
-build step that exercises the `meson.build` configuration. Add a
-CI step in `.github/workflows/build.yml` that verifies the
-`CMakePresets.json` presets build correctly. Update `CHANGELOG.md`
-with a "CI Improvements" section, and update `.github/CONTRIBUTING.md`
-to document the full CI matrix and how contributors can trigger
-specific CI jobs.
+`.github/codecov.yml`, but they have gaps in platform and standard
+coverage: `azure-pipelines.yml` has no dedicated Linux C++20 or C++23
+jobs (only macOS and Windows cover those standards), while
+`.github/workflows/tests.yml` runs coverage only on Linux and does
+not include Windows or macOS coverage jobs. Add Linux C++20 and C++23
+jobs to `azure-pipelines.yml`. Add Windows and macOS coverage jobs
+to `.github/workflows/tests.yml`. Ensure that `.github/codecov.yml`
+notifier count is updated to match the new total number of build jobs.
+Update `CHANGELOG.md` with a "CI Improvements" section, and update
+`.github/CONTRIBUTING.md` to document the full CI matrix and how
+contributors can trigger specific CI jobs.

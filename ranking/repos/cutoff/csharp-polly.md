@@ -101,11 +101,16 @@ src/Polly.Core/
 
 ### N1: Fix RetryHelper jitter calculation producing negative delays
 
-`RetryHelper.GetRetryDelay()` applies jitter by subtracting a random
-value from the base delay, but for small base delays with high jitter
-factors, the result can go negative, producing an `ArgumentOutOfRange
-Exception` in `Task.Delay()`. Fix the jitter calculation in
-`RetryHelper.cs` to clamp the result to `TimeSpan.Zero` minimum.
+`RetryHelper.DecorrelatedJitterBackoffV2()` calculates the next delay
+as `formulaIntrinsicValue = next - prev`, where `prev` is the
+accumulated state from the previous attempt. When the exponential
+formula produces a `next` value smaller than `prev` (which can occur
+at high attempt numbers before the infinity guard kicks in), the tick
+count goes negative. In release builds, the `Debug.Assert(ticks >= 0)`
+is suppressed and `TimeSpan.FromTicks(ticks)` returns a negative
+`TimeSpan`. Fix `RetryHelper.cs` to clamp `ticks` to zero before
+constructing the return value, ensuring `TimeSpan.FromTicks` is never
+called with a negative argument.
 
 ### N2: Fix CircuitBreakerManualControl.IsolateAsync not respecting cancellation
 
@@ -116,21 +121,33 @@ isolation proceeds silently instead of throwing
 `OperationCanceledException`. Fix to check cancellation before state
 transition.
 
-### N3: Fix TimeoutResilienceStrategy not disposing linked CancellationTokenSource
+### N3: Fix TimeoutResilienceStrategy cleanup not protected by finally block
 
-When a timeout fires, `TimeoutResilienceStrategy` creates a linked
-`CancellationTokenSource` but does not dispose it in the non-timeout
-path. Under high throughput, this causes handle exhaustion. Fix the
-strategy to always dispose the linked token source via `finally` or
-the `CancellationTokenSourcePool`.
+`TimeoutResilienceStrategy.ExecuteCore` acquires a
+`CancellationTokenSource` from `_cancellationTokenSourcePool` and
+registers a `CancellationTokenRegistration` for cleanup. However,
+the cleanup sequence — `registration.Dispose()` followed by
+`_cancellationTokenSourcePool.Return(cancellationSource)` — executes
+outside any `finally` block. If an unexpected exception escapes the
+cleanup sequence, the token source is leaked from the pool. Fix the
+strategy to wrap both `registration.Dispose()` and
+`_cancellationTokenSourcePool.Return(cancellationSource)` in a
+`finally` block in `TimeoutResilienceStrategy.cs`, guaranteeing
+cleanup under all execution paths.
 
-### N4: Fix ResilienceContext.ContinueOnCapturedContext not propagated to hedging actions
+### N4: Fix HedgingResilienceStrategy secondary contexts ignoring custom ResilienceContextPool
 
-When `ResilienceContext.ContinueOnCapturedContext` is set to `false`,
-the hedging strategy ignores it for spawned hedging actions, causing
-them to resume on the captured `SynchronizationContext`. Fix
-`HedgingResilienceStrategy.cs` to propagate the context setting to
-each hedging action's inner context.
+`TaskExecution<T>` initializes its cached secondary-action context
+directly from `ResilienceContextPool.Shared` (field initializer:
+`private readonly ResilienceContext _cachedContext = ResilienceContextPool.Shared.Get()`).
+When a caller sets a custom `ResilienceContextPool` on
+`ResiliencePipelineBuilderBase.ContextPool`, that pool is used for
+primary execution contexts but is never consulted for the secondary
+action contexts created by the hedging strategy. Fix by threading the
+configured pool through `HedgingResilienceStrategy.cs` →
+`HedgingController.cs` → `TaskExecution.cs`, replacing the hardcoded
+`ResilienceContextPool.Shared.Get()` with the builder-supplied pool
+(defaulting to `ResilienceContextPool.Shared` when none is set).
 
 ### N5: Fix RetryDelayGeneratorArguments not including previous attempt execution duration
 
@@ -144,28 +161,43 @@ populate it from the execution time measured in
 `RetryResilienceStrategy.cs`, matching the `Duration` already
 available on `OnRetryArguments`.
 
-### N6: Fix FallbackResilienceStrategy swallowing original exception stack trace
+### N6: Fix FallbackResilienceStrategy losing original exception when fallback itself fails
 
-When `FallbackResilienceStrategy` catches an exception and invokes the
-fallback handler, the original exception's stack trace is lost because
-it is stored only as `Outcome.Exception` without preservation. Fix the
-fallback to use `ExceptionDispatchInfo` to preserve the original stack
-trace when re-throwing after a failed fallback.
+When `FallbackResilienceStrategy` invokes the fallback action and the
+action itself throws an exception, the catch block returns
+`Outcome.FromException<T>(e)` where `e` is only the fallback's
+exception. The original exception that triggered the fallback (stored
+in `outcome.Exception`) is silently discarded, making root-cause
+analysis impossible. Fix `FallbackResilienceStrategy.cs` to set the
+original exception as the `InnerException` of the fallback exception
+when the fallback action fails, preserving the full exception chain
+for callers and logging infrastructure.
 
-### N7: Fix RetryStrategyOptions.OnRetry delegate receiving wrong attempt number
+### N7: Fix RetryResilienceStrategy not capping DelayGenerator results to MaxDelay
 
-The `OnRetryArguments.AttemptNumber` passed to the `OnRetry` delegate
-starts at 1 instead of 0 for the first retry, inconsistent with the
-documentation and `MaxRetryAttempts` counting. Fix
-`RetryResilienceStrategy.cs` to use zero-based attempt numbering.
+`RetryResilienceStrategy.ExecuteCore` applies `MaxDelay` only to the
+algorithm-computed delay produced by `RetryHelper.GetRetryDelay`. When
+`RetryStrategyOptions.DelayGenerator` is also set and returns a valid
+`TimeSpan`, the returned value replaces the computed delay without
+being subject to the `MaxDelay` cap. A custom `DelayGenerator`
+returning 60 seconds when `MaxDelay` is 5 seconds will proceed
+uncapped. Fix `RetryResilienceStrategy.cs` to apply the `MaxDelay`
+cap to the delay returned by `DelayGenerator` (using the same
+`Math.Min` / `TimeSpan` comparison logic already present in
+`RetryHelper.GetRetryDelay`).
 
-### N8: Fix ResiliencePipelineBuilder.AddStrategy not validating null options
+### N8: Fix ResiliencePipelineBuilderBase.CreateComponent not validating factory return value
 
-`ResiliencePipelineBuilder.AddStrategy()` accepts a `null`
-`ResilienceStrategyOptions` without throwing, leading to a
-`NullReferenceException` deep in the pipeline construction. Fix the
-builder to validate options with `ArgumentNullException` at the
-`AddStrategy` call site.
+`ResiliencePipelineBuilderBase.CreateComponent` calls the
+user-supplied strategy factory (`entry.Factory(context)`) and
+immediately assigns `strategy.Options = entry.Options` without
+checking whether the factory returned `null`. If the factory returns
+`null`, the assignment throws a `NullReferenceException` deep inside
+`BuildPipelineComponent` with no indication of which factory is at
+fault. Fix `ResiliencePipelineBuilderBase.cs` to validate the factory
+return value immediately after the call and throw a descriptive
+`InvalidOperationException` if it is `null`, making the error
+actionable at the point of failure.
 
 ### N9: Fix OnCircuitOpenedArguments not including the failure rate that triggered the transition
 
@@ -178,15 +210,20 @@ the failure pattern or verify which threshold was crossed. Fix
 properties, and populate them from the health metrics in
 `CircuitStateController.cs` when the circuit transitions to `Open`.
 
-### N10: Fix TelemetryUtil not including pipeline name in enriched tags
+### N10: Fix ResilienceTelemetrySource missing a dedicated StrategyType field
 
-`TelemetryUtil` emits telemetry events with strategy name and type
-but omits the `ResiliencePipeline` name from the tags. When multiple
-pipelines use the same strategy type, events are indistinguishable.
-Fix `TelemetryUtil.cs` to include the pipeline instance name from
-`ResilienceContext.Properties`. Also update `eng/Common.props` to add
-a `<DefineConstants>` entry for `TELEMETRY_V2` that gates the new
-telemetry tag enrichment behind a build-time constant.
+`ResilienceTelemetrySource` exposes `StrategyName` (the
+user-configurable `ResilienceStrategyOptions.Name`) but provides no
+separate field for the immutable strategy type identifier (e.g.
+`"Retry"`, `"CircuitBreaker"`, `"Timeout"`). When users override the
+default `Name` with a custom value, the strategy type is lost from
+telemetry events and listeners have no way to filter or aggregate
+events by strategy type independently of the assigned name. Fix
+`ResilienceTelemetrySource.cs` to add a `StrategyType` property, and
+update `ResiliencePipelineBuilderBase.CreateComponent` to populate it
+from a new `ResilienceStrategyOptions.StrategyType` property that each
+built-in strategy sets to its well-known type name constant (e.g.
+`RetryConstants.DefaultName`).
 
 ### N11: Update stryker mutation testing configuration and CI linting workflow
 
@@ -197,10 +234,9 @@ behaviour that produces false-positive mutation survivors. Add
 `"Simmy"` to the `ignore-methods` list and add
 `"src/Polly.Core/Simmy/**"` to a new `mutate` exclusion pattern.
 Also update `.github/workflows/lint.yml` to run `dotnet format
---verify-no-changes` on pull requests, add a `.markdownlint.json`
-rule to enforce consistent heading styles across `docs/` markdown
-files, and update `.github/workflows/mutation-tests.yml` to upload
-the Stryker HTML report as a build artifact.
+--verify-no-changes` on pull requests, and update the existing
+`.markdownlint.json` to add a heading-style rule enforcing consistent
+ATX heading format across `docs/` markdown files.
 
 ## Medium
 
@@ -317,17 +353,17 @@ for weight-based metrics.
 ### M11: Update CI build workflow and DocFX documentation configuration
 
 The `.github/workflows/build.yml` matrix runs on `windows-latest`,
-`macos-latest`, and `ubuntu-latest` but does not include a documentation
-build step. Add a `docs` job to `.github/workflows/build.yml` that
-runs `docfx build docs/docfx.json` and validates the generated API
-docs. Update `docs/docfx.json` to add the `Polly.Extensions` and
-`Polly.Testing` projects to the metadata `src` list so their APIs
-appear in the generated documentation. Also update
-`docs/toc.yml` to add an "Extensions" and "Testing" navigation entry,
-add `docs/extensibility/custom-strategies.md` with a guide on
-creating custom resilience strategies, and update
-`Directory.Build.props` to set `GenerateDocumentationFile` to `true`
-for all `src/` projects.
+`macos-latest`, and `ubuntu-latest` but does not include a
+documentation build step; the separate `gh-pages.yml` builds docs only
+on push to `main` or `release/*`. Add a `docs` job to
+`.github/workflows/build.yml` that runs `docfx build docs/docfx.json`
+to validate the generated API docs on every PR. Also update
+`docs/toc.yml` to add "Extensions" and "Testing" navigation entries
+pointing to the existing `src/Polly.Extensions` and `src/Polly.Testing`
+projects, add `docs/extensibility/custom-strategies.md` with a guide
+on creating custom resilience strategies (the `docs/extensibility/`
+directory exists but lacks this page), and verify that
+`docs/strategies/toc.yml` references the strategies index correctly.
 
 ## Wide
 
@@ -458,14 +494,14 @@ The repository has extensive documentation across `docs/`, `README.md`,
 `package-readme.md`, but they reference different versions and have
 inconsistent formatting. Consolidate release documentation by updating
 `CHANGELOG.md` to follow Keep a Changelog format with `[Unreleased]`
-and version-tagged sections, update `package-readme.md` to
-auto-include code snippets via `mdsnippets.json` configuration, and
-add a `docs/community/release-process.md` guide documenting the
-release workflow. Update `.github/workflows/release.yml` to
-automatically extract the latest `CHANGELOG.md` section as GitHub
-Release notes, update `.github/workflows/after-release.yml` to bump
-the version in `Directory.Packages.props`, and add a
-`.github/workflows/gh-pages.yml` step that deploys the DocFX
-documentation site to GitHub Pages on each release tag. Also update
-`Polly.slnx` to include `docs/` and `eng/` as solution folders for
-IDE navigation.
+and version-tagged sections (e.g., `## [8.6.6]` instead of
+`## 8.6.6`), update `package-readme.md` to auto-include code snippets
+via `mdsnippets.json` configuration, and add a
+`docs/community/release-process.md` guide documenting the release
+workflow. Update `.github/workflows/release.yml` to automatically
+extract the latest `CHANGELOG.md` section as GitHub Release notes
+(currently the workflow uses `generate_release_notes: true` which
+auto-generates from PRs rather than from the curated changelog). Also
+update `Polly.slnx` to include `docs/` as a solution folder for IDE
+navigation (the `eng/` folder is already included but `docs/` is
+absent).

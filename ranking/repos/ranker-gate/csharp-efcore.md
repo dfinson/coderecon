@@ -139,15 +139,16 @@ for owned types does not check the tracking flag propagated from the
 parent materializer. Fix the entry factory so owned-type entries
 respect the no-tracking flag.
 
-### N8: Fix `string.Contains` generating case-sensitive `LIKE` on SQLite
+### N8: Fix `string.Contains` generating case-sensitive comparison on SQLite
 
 Using `.Where(e => e.Name.Contains("foo"))` generates
-`WHERE "Name" LIKE '%foo%'` on SQLite, which is case-sensitive for
-non-ASCII characters because SQLite's default `LIKE` only handles
-ASCII case folding. The SQLite method call translator in
-`EFCore.Sqlite/` should emit `WHERE "Name" LIKE '%foo%' COLLATE NOCASE`
-or use the `instr(lower(...))` pattern so that non-ASCII comparisons
-match the case-insensitive semantics of SQL Server and PostgreSQL.
+`instr("Name", 'foo') > 0` on SQLite, which is case-sensitive for
+non-ASCII characters because SQLite's `instr()` function uses the default
+byte-sequence collation. The SQLite method call translator in
+`EFCore.Sqlite.Core/` should wrap both operands with `lower()` to produce
+`instr(lower("Name"), lower('foo')) > 0` so that ASCII comparisons
+match the case-insensitive semantics of `string.Contains` on other
+providers.
 
 ### N9: Fix `decimal` precision loss in Cosmos DB provider
 
@@ -210,9 +211,9 @@ testing retry behaviour locally using transient-fault injection.
 
 Implement `BulkInsert()`, `BulkUpdate()`, and `BulkDelete()` methods
 that use database-specific bulk loading mechanisms (SQL Server
-`BULK INSERT`, PostgreSQL `COPY`, MySQL `LOAD DATA`). Bypass the
-change tracker for performance. Support configurable batch sizes and
-progress callbacks. Maintain foreign key and index constraint
+`BULK INSERT`, SQLite batch insert via parameterised multi-row `INSERT`).
+Bypass the change tracker for performance. Support configurable batch
+sizes and progress callbacks. Maintain foreign key and index constraint
 validation.
 
 ### M5: Add interceptor pipeline for raw SQL generation
@@ -311,8 +312,8 @@ databases. Add admin queries that span tenants.
 
 Add database change notification support that pushes entity changes
 to subscribers in real-time. Use database-specific change tracking
-mechanisms (SQL Server `SqlDependency`, PostgreSQL `LISTEN/NOTIFY`,
-SQLite polling). Surface changes through an `IObservable<EntityChange<T>>`
+mechanisms (SQL Server `SqlDependency`, SQLite polling). Surface
+changes through an `IObservable<EntityChange<T>>`
 API. Support filtering by entity type and property. Integrate with
 SignalR for browser push. Handle reconnection and missed event
 recovery.
@@ -354,12 +355,14 @@ merge. Add diagnostic events for each resolved conflict.
 
 Add a provider-agnostic full-text search API. Implement
 `EF.Functions.FullTextSearch(property, query)` that translates to
-`CONTAINS()`/`FREETEXT()` on SQL Server, `to_tsvector/to_tsquery` on
-PostgreSQL, and FTS5 on SQLite. Support ranked results via
-`EF.Functions.FullTextRank()`. Add model builder support for
-full-text indexes (`HasFullTextIndex()`). Generate appropriate
-migration operations to create and drop full-text indexes on each
-provider. Support multi-column indexes and language configuration.
+`CONTAINS()`/`FREETEXT()` on SQL Server (building on the existing
+`HasFullTextIndex()` in `EFCore.SqlServer/Extensions/`) and FTS5 on
+SQLite. Support ranked results via `EF.Functions.FullTextRank()`. Add
+a relational-level `HasFullTextIndex()` abstraction in
+`EFCore.Relational/` so providers can declare full-text index support.
+Generate appropriate migration operations to create and drop full-text
+indexes on each provider. Support multi-column indexes and language
+configuration.
 
 ### W8: Add query plan analysis and performance advisor
 

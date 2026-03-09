@@ -104,15 +104,15 @@ The `DateTimeHumanizeStrategy/` directory has `DefaultDateTimeHumanizeStrategy` 
 
 ### M2: Add SI decimal unit support to `ByteSize`
 
-The `ByteSize` struct in `Bytes/ByteSize.cs` uses 1024-based binary units (KB, MB, GB) but labels them with SI-style names, conflating IEC binary and SI decimal conventions. Add proper dual-mode support: IEC binary units (KiB, MiB, GiB — powers of 1024) and SI decimal units (kB, MB, GB — powers of 1000). The `Humanize()` and `ToString()` methods on `ByteSize` should accept a format flag to select the unit system. Update `ByteSizeExtensions.cs` to provide `.Humanize(ByteSizeUnit.SI)` and `.Humanize(ByteSizeUnit.IEC)` overloads. Extend `IFormatter.DataUnitHumanize` in the `Localisation/Formatters/` module to include the new unit symbols. Also update `docs/index.md` to add a "Byte Size Formatting" entry linking to a new `docs/byte-size.md` page documenting the dual-mode unit system with examples, and update the `NuSpecs/Humanizer.Core.nuspec` release notes to reflect the new `ByteSizeUnit` API surface.
+The `ByteSize` struct in `Bytes/ByteSize.cs` uses 1024-based binary units (KB, MB, GB) but labels them with SI-style names, conflating IEC binary and SI decimal conventions. Add proper dual-mode support: IEC binary units (KiB, MiB, GiB — powers of 1024) and SI decimal units (kB, MB, GB — powers of 1000). Introduce a `ByteSizeUnit` enum to select the unit system. Update `ByteSize.cs` so that `Humanize()` and `ToString()` accept the new format flag, and update `ByteSizeExtensions.cs` to provide `.Humanize(ByteSizeUnit.SI)` and `.Humanize(ByteSizeUnit.IEC)` overloads. Extend the `DataUnit` enum in `Localisation/DataUnit.cs` with IEC-specific values and update `IFormatter.DataUnitHumanize` implementations in `Localisation/Formatters/` to handle the new unit symbols.
 
 ### M3: Add configurable Oxford comma and conjunction support to collection humanization
 
 `CollectionHumanizeExtensions.cs` delegates to `ICollectionFormatter` implementations, but the current formatters (`DefaultCollectionFormatter` and `OxfordStyleCollectionFormatter` in `Localisation/CollectionFormatters/`) are limited: `OxfordStyleCollectionFormatter` is English-only, and `DefaultCollectionFormatter` takes only a conjunction string. Add a `ConfigurableCollectionFormatter` that supports: Oxford comma toggle, custom separator (not just comma), truncation with "and N more" (e.g., `["a", "b", "c", "d", "e"].Humanize(maxItems: 3)` → `"a, b, c, and 2 more"`), and custom element-to-string formatters. Register it as an option through `CollectionFormatterRegistry.cs` and expose the new parameters via overloads in `CollectionHumanizeExtensions.cs`.
 
-### M4: Add `ToWords` support for ordinal numbers in `MetricNumeralExtensions`
+### M4: Localize metric prefix names in `MetricNumeralExtensions`
 
-`MetricNumeralExtensions.cs` provides `ToMetric()` and `FromMetric()` for SI prefix formatting but only handles the symbol forms ("k", "M", "G"). Add a `MetricNumeralFormats.Words` option so that `1500.ToMetric(MetricNumeralFormats.Words)` → `"1.5 kilo"` using the full prefix word instead of just the symbol. Extend the `MetricNumeralFormats` flags enum in `MetricNumeralFormats.cs` to include the new mode. Add localization support by extending `IFormatter` with a `MetricPrefixHumanize(string prefix)` method and implementing it in `Localisation/Formatters/DefaultFormatter.cs` and language-specific formatters.
+`MetricNumeralExtensions.cs` supports `MetricNumeralFormats.UseName` to produce full prefix words (`1500.ToMetric(MetricNumeralFormats.UseName)` → `"1.5 kilo"`), but the prefix names ("kilo", "mega", "giga", etc.) are hardcoded in English inside the `UnitPrefixes` dictionary and cannot be localized. Add a `MetricPrefixHumanize(string prefix)` method to the `IFormatter` interface in `Localisation/Formatters/IFormatter.cs` and provide a default English implementation in `DefaultFormatter.cs`. Route the `UseName`, `UseShortScaleWord`, and `UseLongScaleWord` paths in `MetricNumeralExtensions.cs` through `Humanizer.Configurator.GetFormatter(culture)` so that metric prefix names honour the active locale. Implement the method in the language-specific formatters under `Localisation/Formatters/` that have distinct scale vocabulary (e.g., `GermanFormatter`, `FrenchFormatter`).
 
 ### M5: Implement heading/slug generation
 
@@ -244,9 +244,10 @@ package release notes. In `src/Directory.Packages.props`, pin the
 suffix) and add `<PackageVersion>` entries for
 `Microsoft.NET.Test.Sdk` so test projects inherit a single version.
 Update every `.nuspec` file under `NuSpecs/` to add a
-`<readme>` element pointing to the per-locale README and a
-`<license type="expression">MIT</license>` element replacing the
-deprecated `<licenseUrl>`. Update `global.json` to pin the SDK to
-`10.0.100` and add a `"msbuild-sdks"` section for the Nerdbank
-GitVersioning SDK. Add a `docs/ci-and-packaging.md` guide that
+`<readme>` element pointing to a per-locale `README.md` file (create
+a minimal per-locale `README.md` for each locale package under the
+corresponding satellite resource directory). Update
+`global.json` to add a `"msbuild-sdks"` section pinning the
+Nerdbank.GitVersioning SDK version alongside the existing SDK pin.
+Add a `docs/ci-and-packaging.md` guide that
 documents the pipeline stages and NuSpec conventions.

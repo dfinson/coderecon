@@ -140,22 +140,27 @@ absl/
 
 ## Narrow
 
-### N1: Add StrContainsIgnoreCase to strings/match.h
+### N1: Add StrFindIgnoreCase to strings/match.h
 
-The `absl/strings/match.h` header provides `StrContains()`,
-`StartsWith()`, `EndsWithIgnoreCase()`, and other matchers, but there
-is no `StrContainsIgnoreCase()`. Add a case-insensitive substring search
-function that converts both strings to lowercase using `absl::ascii_tolower`
-incrementally (not allocating a copy) and performs the substring search.
-Add the declaration to `match.h` and implementation to `match.cc`.
+The `absl/strings/match.h` header provides `StrContainsIgnoreCase()`,
+`StartsWithIgnoreCase()`, `EndsWithIgnoreCase()`, and other case-insensitive
+matchers, but there is no position-returning case-insensitive substring
+search. Add `StrFindIgnoreCase(absl::string_view haystack, absl::string_view
+needle) -> size_t` that returns the byte offset of the first case-insensitive
+match using `absl::ascii_tolower` for character comparison without allocating
+a copy, or `absl::string_view::npos` if not found. Add the declaration to
+`match.h` and the implementation to `match.cc`.
 
-### N2: Fix Cord::Compare not short-circuiting on length mismatch
+### N2: Fix Cord::Compare(string_view) missing inline fast path for non-tree cords
 
-The `Cord::Compare()` method in `strings/cord.cc` performs a
-byte-by-byte comparison of two Cords. When two Cords differ in length
-and the shorter one is a prefix of the longer, the traversal continues
-past the shorter cord's end rather than immediately returning based on
-length. Add an early length-based short-circuit for the prefix case.
+The `Cord::Compare(const Cord&)` in `strings/cord.h` has an inline fast
+path that directly calls `contents_.data_.Compare()` when both cords are
+non-tree (inline) cords. The `Cord::Compare(absl::string_view)` overload
+declared in `cord.h` and implemented in `cord.cc` lacks this fast path and
+always dispatches through `SharedCompareImpl`, which traverses the full
+chunk iterator even for short inline cords. Add an inline non-tree fast
+path to `Cord::Compare(absl::string_view)` in `cord.h` mirroring the
+existing `Cord::Compare(const Cord&)` optimization.
 
 ### N3: Add Duration::ToTimeval and Duration::ToTimespec symmetry checks
 
@@ -166,49 +171,66 @@ of `FromTimeval(ToTimeval(d)) == d` for representable durations. Add
 static assertions in `time.cc` that validate round-trip behaviour for
 edge-case durations (zero, max, negative).
 
-### N4: Fix flat_hash_map::insert_or_assign not returning correct bool on existing key
+### N4: Add flat_hash_map::clear_and_reserve to avoid redundant rehash
 
-The `flat_hash_map::insert_or_assign()` in `container/flat_hash_map.h`
-(via `raw_hash_set`) should return `{iterator, false}` when the key
-already exists and the value is assigned. Verify and fix the return
-value semantics in the internal `raw_hash_set::insert_or_assign`
-implementation to match the C++17 standard requirements for
-`std::unordered_map::insert_or_assign`.
+Calling `clear()` followed by `reserve(n)` on a `flat_hash_map` triggers
+two separate internal rehash operations: one to clear tombstones during
+`clear()`, and another to grow the table in `reserve(n)`. Add
+`clear_and_reserve(size_t n)` to `container/internal/raw_hash_set.h` that
+performs both operations in a single pass—resetting the control bytes to
+empty and immediately sizing the table to hold at least `n` elements without
+the intermediate rehash. Expose the method via `using Base::clear_and_reserve`
+in `flat_hash_map.h`, `flat_hash_set.h`, `node_hash_map.h`, and
+`node_hash_set.h`.
 
-### N5: Add absl::AsciiStrToLower and AsciiStrToUpper in-place variants
+### N5: Add AsciiStrToTitle to strings/ascii.h
 
-The `absl/strings/ascii.h` header provides `absl::AsciiStrToLower()`
-that returns a new string. Add an in-place variant `AsciiStrToLower(
-std::string* s)` that modifies the string in-place without allocating
-a new one, for use in performance-sensitive code paths. Similarly add
-`AsciiStrToUpper(std::string* s)`. Also update `FAQ.md` to include
-usage examples for the new in-place variants alongside the existing
-copy-returning overloads.
+The `absl/strings/ascii.h` header provides `AsciiStrToLower()` and
+`AsciiStrToUpper()` in both in-place (`std::string*`) and copy-returning
+(`string_view`) overloads, but has no title-case function. Add
+`AsciiStrToTitle(std::string* s)` (in-place) and
+`[[nodiscard]] std::string AsciiStrToTitle(absl::string_view s)`
+(copy-returning) that capitalize the first character of each
+whitespace-delimited word using `ascii_toupper` and lowercase the rest
+using `ascii_tolower`. Also update `FAQ.md` to include a usage example
+for the new title-case function alongside the existing case-conversion
+examples.
 
-### N6: Fix StatusOr move-assignment not clearing the error on value assignment
+### N6: Add StatusOr<T>::or_else() monadic error-handling operation
 
-When a `StatusOr<T>` that holds an error status is move-assigned from a
-`StatusOr<T>` that holds a value, the error payload memory from the
-original status should be released. Verify and fix the move-assignment
-operator in `status/statusor.h` to ensure the error payload destructor
-runs before the value is constructed in-place.
+The `StatusOr<T>` class in `status/statusor.h` supports `value()`,
+`value_or()`, `ok()`, and `status()`, but lacks monadic operations for
+chaining fallible computations. Add `StatusOr<T>::or_else(callable)`
+that invokes the callable with the held `absl::Status` when the
+`StatusOr` holds an error, returning a new `StatusOr<T>` produced by
+the callable. The callable signature should be `StatusOr<T>(absl::Status)`.
+This enables error-handling chains such as
+`auto r = Compute().or_else([](Status s) { return Fallback(); });`
+without nested if-statements.
 
-### N7: Add Notification::WaitForNotificationWithDeadline
+### N7: Add BlockingCounter::WaitWithTimeout
 
-The `Notification` class in `synchronization/notification.h` provides
-`WaitForNotificationWithTimeout(Duration)` but not a deadline-based
-variant that accepts `absl::Time`. Add
-`WaitForNotificationWithDeadline(absl::Time deadline)` that computes
-the remaining duration and delegates to the timeout variant, handling
-the case where the deadline has already passed.
+The `BlockingCounter` class in `synchronization/blocking_counter.h`
+provides `Wait()` for an indefinite block until the counter reaches zero,
+but has no timeout variant. Add
+`bool WaitWithTimeout(absl::Duration timeout)` that returns `true` if
+the counter reached zero within the timeout, or `false` if the timeout
+expired. Implement in `blocking_counter.h` (declaration) and
+`blocking_counter.cc` (implementation) using the existing `Mutex`
+infrastructure, mirroring the pattern used by
+`Notification::WaitForNotificationWithTimeout()`.
 
-### N8: Add StrSplit support for limiting the number of splits
+### N8: Add ByPredicate delimiter to strings/str_split.h
 
-The `StrSplit()` function in `strings/str_split.h` splits a string on
-a delimiter without a limit on the number of resulting pieces. Add a
-`MaxSplits(int n)` wrapper that can be composed with any delimiter
-to limit splitting: `StrSplit(s, MaxSplits(ByChar(','), 3))`, producing
-at most `n+1` pieces with the remainder in the last piece.
+The `StrSplit()` function in `strings/str_split.h` provides delimiters
+`ByChar`, `ByAnyChar`, `ByString`, `ByAsciiWhitespace`, and `ByLength`,
+but has no predicate-based delimiter. Add `ByPredicate<Callable>`
+that splits on any character satisfying a callable predicate
+`bool(char)`, for example `StrSplit(s, ByPredicate(absl::ascii_ispunct))`
+to split on punctuation. Implement the `Find(absl::string_view text,
+size_t pos)` method in `str_split.h` that scans for the first character
+satisfying the predicate and returns the matching single-character
+`absl::string_view`.
 
 ### N9: Fix CRC32C::Extend not handling zero-length input without branch
 
@@ -238,14 +260,20 @@ Requires a `consteval` format parser, integration with the existing
 `FormatSpec` machinery, compile-time type checking against the format
 argument pack, and backward-compatible runtime fallback for C++17.
 
-### M2: Add flat_hash_map::extract and merge operations
+### M2: Add compute_if_absent and compute_if_present to hash map containers
 
-The `flat_hash_map` in `container/flat_hash_map.h` does not support
-node extraction and merge operations (`extract(key)`, `merge(other_map)`)
-that `std::unordered_map` provides. Implement `extract()` returning a
-node handle, `insert(node_handle)`, and `merge()` in the `raw_hash_set`
-layer. Requires a `node_handle` type, rehashing integration, and proper
-allocator handling across merged maps.
+The `flat_hash_map` in `container/flat_hash_map.h` requires two separate
+operations to perform a conditional insert-or-update: `find()` followed
+by `insert_or_assign()` or `try_emplace()`, which involves two hash
+computations. Implement `compute_if_absent(key, factory)` that inserts
+a value only if the key is absent (calling the factory to produce it,
+avoiding construction if the key exists) and `compute_if_present(key,
+updater)` that calls the updater with a reference to the existing value
+only if the key is already present. Add both methods to
+`container/internal/raw_hash_map.h` and expose them via `using`
+declarations in `flat_hash_map.h`, `node_hash_map.h`. Each method
+should perform a single hash lookup and accept any callable with
+compatible signature.
 
 ### M3: Implement Cord::FindAll for multi-match substring search
 
@@ -432,11 +460,11 @@ via `add_subdirectory()`, but the `CMake/README.md` instructions do not
 clearly document how downstream consumers should selectively link
 individual Abseil targets. Update `CMake/README.md` to add a
 cheat-sheet table mapping public header directories to their CMake
-target names (e.g., `absl/strings/ → absl::strings`). Also update
-`CMake/AbseilHelpers.cmake` to add a comment block documenting the
-available helper macros (`absl_cc_library`, `absl_cc_test`) with their
-parameters, and update `UPGRADES.md` to note any recent build option
-changes such as the `ABSL_PROPAGATE_CXX_STD` flag.
+target names (e.g., `absl/strings/ → absl::strings`,
+`absl/container/ → absl::flat_hash_map`, etc.). Also update
+`UPGRADES.md` to document the `ABSL_PROPAGATE_CXX_STD` CMake option
+and its effect on consumers that embed Abseil via `add_subdirectory()`,
+clarifying when it should and should not be enabled.
 
 ### M11: Add CI sanitizer matrix and contributor testing guide
 

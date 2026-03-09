@@ -63,27 +63,27 @@ In `diesel/src/pg/connection/copy.rs`, the `CopyFromSink` uses `Write` trait met
 
 ### N3: Add `returning` clause support for `UPDATE` statements on SQLite
 
-The `returning_clause.rs` in `diesel/src/sqlite/query_builder/` implements returning for INSERT but the `UpdateStatement` query fragment impl for SQLite doesn't include a path for the `RETURNING` clause, even though SQLite 3.35+ supports it.
+The `returning.rs` in `diesel/src/sqlite/query_builder/` implements returning for INSERT but the `UpdateStatement` query fragment impl for SQLite doesn't include a path for the `RETURNING` clause, even though SQLite 3.35+ supports it.
 
 ### N4: Fix `debug_query` displaying incorrect bind parameter order for MySQL `LIMIT ... OFFSET`
 
 In `diesel/src/mysql/query_builder/limit_offset.rs`, MySQL uses `LIMIT ?, ?` syntax. The `DebugQuery` output shows the offset and limit parameters reversed compared to what's actually sent to MySQL, because the bind collector visits them in declaration order rather than MySQL's expected order.
 
-### N5: Add `CacheSize::Disabled` handling for the MySQL statement cache
+### N5: Add `Fixed(usize)` variant to `CacheSize` for bounded statement caching
 
-The `CacheSize` enum in `connection/mod.rs` supports `Disabled` and `Fixed(usize)` variants. The SQLite and PostgreSQL backends respect `CacheSize::Disabled` by bypassing the statement cache, but the MySQL `statement_cache` implementation in `mysql/connection/stmt/mod.rs` always caches regardless of the setting.
+The `CacheSize` enum in `connection/mod.rs` currently supports only `Unbounded` (cache all statements) and `Disabled` (no caching). Add a `Fixed(usize)` variant that limits the statement cache to a maximum number of prepared statements, evicting the least-recently-used entry when the limit is reached. Implement the LRU eviction strategy in `connection/statement_cache/mod.rs` and ensure `mysql/connection/stmt/mod.rs` respects the new variant alongside the existing two.
 
-### N6: Fix `FrameCollection::filter` in `diesel_cli` schema inference skipping composite foreign keys
+### N6: Fix `remove_unsafe_foreign_keys_for_codegen` in `diesel_cli` silently dropping composite foreign keys
 
-In `diesel_cli/src/infer_schema_internals/foreign_keys.rs`, when inferring foreign key relationships that span multiple columns (composite keys), only the first column is captured. The `remove_unsafe_foreign_keys_for_codegen` function groups by constraint name but doesn't preserve multi-column mappings. Update `guide_drafts/migration_guide.md` to document composite foreign key handling.
+In `diesel_cli/src/infer_schema_internals/foreign_keys.rs`, the `remove_unsafe_foreign_keys_for_codegen` function explicitly filters out any `ForeignKeyConstraint` whose `foreign_key_columns` field has more than one entry, logging a debug message and returning `None`. This silently omits all composite (multi-column) foreign keys from code generation. Extend the function to emit a meaningful warning via `tracing::warn!` for each dropped composite FK, and update `guide_drafts/migration_guide.md` to document why composite foreign keys are excluded and what users should do manually.
 
-### N7: Add `is not distinct from` expression support for PostgreSQL
+### N7: Add PostgreSQL regex match expression operators
 
-PostgreSQL supports `IS NOT DISTINCT FROM` which treats NULL as a comparable value (unlike `=`). The expression module in `diesel/src/expression/operators.rs` defines `Eq` and `NotEq` but has no `IsNotDistinctFrom` operator. Add it as a PG-specific expression method.
+PostgreSQL supports case-sensitive (`~`, `!~`) and case-insensitive (`~*`, `!~*`) regular expression match operators that have no equivalent in other backends. The PostgreSQL expression module at `diesel/src/pg/expression/operators.rs` defines many PG-specific infix operators but none for regex matching. Add `Regexp`, `NotRegexp`, `RegexpInsensitive`, and `NotRegexpInsensitive` infix operators in `pg/expression/operators.rs` and expose them as `regexp`, `not_regexp`, `regexp_insensitive`, and `not_regexp_insensitive` methods via `PgExpressionMethods` in `diesel/src/pg/expression/expression_methods.rs`.
 
-### N8: Fix `MigrationHarness::pending_migrations` returning wrong order when applied table has gaps
+### N8: Fix `MigrationHarness::pending_migrations` sorting migrations with non-zero-padded numeric versions
 
-In `diesel_migrations/src/migration_harness.rs`, `pending_migrations` filters source migrations against applied versions. When applied migrations have version gaps (e.g., hotfix applied out of order), the returned pending list doesn't sort properly, causing migrations to run in wrong order.
+In `diesel_migrations/src/migration_harness.rs`, `pending_migrations` sorts the remaining unapplied migrations via `sort_unstable_by` using `MigrationVersion`'s derived `Ord`, which performs lexicographic string comparison. For migration version strings that are plain integers without zero-padding (e.g. `"1"`, `"2"`, `"10"`), lexicographic order produces `"1"`, `"10"`, `"2"` instead of the correct numeric order `"1"`, `"2"`, `"10"`. Add a numeric-fallback comparator: if both version strings parse as `u64`, compare them numerically; otherwise fall back to lexicographic comparison.
 
 ### N9: Add `truncate_table` DSL function for PostgreSQL and MySQL
 
@@ -101,7 +101,7 @@ The `CHANGELOG.md` documents breaking changes as bullet points but lacks structu
 
 ### M1: Implement batch insert with automatic chunking for SQLite
 
-SQLite has a limit on the number of bind parameters per statement (default 999). When inserting a large `Vec` of records, `insert_into(table).values(&records).execute(conn)` fails if `records.len() * columns > 999`. Implement automatic chunking in the SQLite `InsertStatement` that splits large inserts into multiple statements within a transaction.
+SQLite enforces a hard limit on the number of bind parameters per statement (`SQLITE_MAX_VARIABLE_NUMBER`, which defaults to 32766 but can be compiled lower). When inserting a large `Vec` of records, `insert_into(table).values(&records).execute(conn)` fails with a "too many SQL variables" error if `records.len() * columns` exceeds that limit. Implement automatic chunking in the SQLite `InsertStatement` that splits large inserts into multiple statements within a transaction.
 
 ### M2: Add query logging with execution timing to the Instrumentation system
 
@@ -111,17 +111,17 @@ The `InstrumentationEvent` enum in `connection/instrumentation.rs` tracks `Start
 
 PostgreSQL supports `LATERAL JOIN` which allows subqueries in `FROM` to reference columns from preceding tables. Add `lateral_join` and `lateral_left_join` methods to `QueryDsl`, implement the query fragment for PostgreSQL's `PgQueryBuilder`, and add the necessary type-level machinery in `query_builder/select_statement/`.
 
-### M4: Add schema migration diffing to `diesel_cli`
+### M4: Add standalone `diesel migration diff` subcommand to `diesel_cli`
 
-Implement a `diesel migration diff` command in `diesel_cli` that compares the current database schema against the expected schema from migration files. Add a `diff_schema.rs` module that queries information_schema, compares against `print_schema` output, and reports missing tables, columns, indices, and type mismatches. Add CI workflow steps in `.github/workflows/ci.yml` to run migration diff checks, and update `CONTRIBUTING.md` with instructions for validating schema changes.
+The `diesel_cli` exposes schema-diff functionality only as a flag (`--diff-schema`) on the `diesel migration generate` subcommand, via `diesel_cli/src/migrations/diff_schema.rs`. Add a dedicated `diesel migration diff` subcommand in `diesel_cli/src/cli.rs` and `diesel_cli/src/migrations/mod.rs` that prints a human-readable report of tables, columns, indices, and type mismatches between the live database and the `schema.rs` file without generating migration files. Update `CONTRIBUTING.md` with instructions for using `diesel migration diff` to validate schema changes before committing.
 
-### M5: Implement connection health checking for the r2d2 pool integration
+### M5: Add backend-specific custom health check support to the r2d2 pool integration
 
-The `r2d2.rs` module provides basic `ManageConnection` implementation. Add configurable health check queries (not just `SELECT 1`) that verify the connection's transaction state is clean, the statement cache is valid, and the backend-specific settings (e.g., `search_path` for PostgreSQL) are correct. Support periodic health checks and connection age limits.
+The `r2d2.rs` module implements `ManageConnection` for `ConnectionManager<T>` using the `R2D2Connection` trait. The `is_valid()` implementation unconditionally calls `ping()` which executes a fixed backend-specific query. Extend `R2D2Connection` with a `CustomizeConnection` callback trait that lets users supply an arbitrary validation query and post-connect setup closure (e.g. setting `search_path` for PostgreSQL or `PRAGMA journal_mode` for SQLite). Wire the callback into `is_valid()` and `on_acquire()` so each backend's settings are checked and restored on every connection handout. Implement the callback for `PgConnection`, `MysqlConnection`, and `SqliteConnection` in their respective backend modules and update `r2d2.rs`.
 
-### M6: Add `INSERT ... ON CONFLICT` support for MySQL using `ON DUPLICATE KEY UPDATE`
+### M6: Add MySQL `FULLTEXT` search expression support
 
-The `upsert` module in `diesel/src/upsert/` implements PostgreSQL's `ON CONFLICT` and SQLite's `ON CONFLICT`. Add MySQL's equivalent `ON DUPLICATE KEY UPDATE` syntax. Implement the necessary query fragment traits in `mysql/query_builder/`, add the `on_duplicate_key_update` extension method, and handle MySQL's `VALUES()` function for referencing proposed values.
+MySQL supports `MATCH(columns) AGAINST(expr IN BOOLEAN MODE)` for full-text search, a backend-specific expression with no equivalent in PostgreSQL or SQLite. Add a `match_against` DSL method for MySQL: define `MatchAgainst` and its search mode enum (`NaturalLanguage`, `Boolean`, `QueryExpansion`) in a new `diesel/src/mysql/expression/` module, implement `QueryFragment<Mysql>` for the expression, expose it via `MysqlExpressionMethods` in `diesel/src/mysql/expression/expression_methods.rs`, add corresponding helper types, and re-export from `diesel/src/mysql/mod.rs`. Changes touch `mysql/expression/`, `mysql/mod.rs`, and expression helper infrastructure.
 
 ### M7: Implement compile-time query validation for `diesel_dynamic_schema`
 
@@ -137,11 +137,11 @@ The existing `CopyToBuffer` in `pg/connection/copy.rs` reads raw bytes. Implemen
 
 ### M10: Add stored procedure and function call support
 
-Diesel supports `sql_function!` for SQL functions in expressions but not `CALL` for stored procedures or standalone `SELECT function()`. Implement a `call_procedure` DSL function that generates `CALL proc_name(args)` for MySQL/PostgreSQL and handles output parameters. Add return type mapping for functions that return tables.
+Diesel supports `define_sql_function!` for SQL scalar functions in expressions but not `CALL` for stored procedures or standalone procedure invocation. Implement a `call_procedure` DSL function that generates `CALL proc_name(args)` for MySQL/PostgreSQL and handles output parameters. Add return type mapping for functions that return tables.
 
-### M11: Add CI workflow for cross-database integration testing with Docker Compose
+### M11: Extend CI workflow and Docker Compose setup for full cross-database integration testing
 
-Create a unified CI pipeline using `docker-compose.yml` to spin up PostgreSQL, MySQL, and SQLite test environments. Extend `.github/workflows/ci.yml` with a matrix strategy that runs the full test suite against each backend. Update `.env.sample` with documented environment variables for each database, add a Docker-based development setup guide to `CONTRIBUTING.md`, and configure `docker/` with backend-specific initialization scripts.
+The repository already has a `docker-compose.yml` with PostgreSQL and MySQL services, a `docker/` directory with backend initialization scripts, and `.github/workflows/ci.yml` with a multi-backend matrix. However, the CI pipeline installs databases via system packages rather than using `docker-compose.yml`, so the two setups are not kept in sync. Refactor `.github/workflows/ci.yml` to use `docker-compose.yml` for the Linux job matrix (PostgreSQL and MySQL), add an SQLite service container entry to `docker-compose.yml`, align the environment variable names in `.env.sample` with those used in CI, and update `CONTRIBUTING.md` with a Docker-based local development setup guide that matches what CI does.
 
 ## Wide
 
