@@ -1511,7 +1511,7 @@
       },
       "exec_n": {
         "status": "merged",
-        "note": "11 N-task JSONs from earlier local work"
+        "note": "done via local VS Code agent chat, 11 JSONs in data/"
       },
       "exec_m": {
         "status": "pending"
