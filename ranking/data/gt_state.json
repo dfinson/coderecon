@@ -10,7 +10,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -31,7 +32,9 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -52,7 +55,9 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -73,7 +78,9 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -92,7 +99,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -111,7 +120,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -130,7 +141,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -149,7 +162,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -168,7 +183,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -188,7 +205,9 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -207,7 +226,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -226,7 +247,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -245,7 +268,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -264,7 +289,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -283,7 +310,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -302,7 +331,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -321,7 +352,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -340,7 +373,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -359,7 +394,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -378,7 +415,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -397,7 +436,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -416,7 +457,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -435,7 +478,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -454,7 +499,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -473,7 +520,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -492,7 +541,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -511,7 +562,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -530,7 +583,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -549,7 +604,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -568,7 +625,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -587,7 +646,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -606,7 +667,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -625,7 +688,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -644,7 +709,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -663,7 +730,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -682,7 +751,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -701,7 +772,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -720,7 +793,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -739,7 +814,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -758,7 +835,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -777,7 +856,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -796,7 +877,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -815,7 +898,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -834,7 +919,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -853,7 +940,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -872,7 +961,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -891,7 +982,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -910,7 +1003,9 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "failed",
+        "error": "No module named 'copilot'",
+        "attempts": 3
       },
       "exec_m": {
         "status": "pending"
@@ -931,7 +1026,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -952,7 +1048,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -971,7 +1068,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -992,7 +1090,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1013,7 +1112,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1034,7 +1134,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1054,7 +1155,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1073,7 +1175,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1092,7 +1195,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1111,7 +1215,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1130,7 +1235,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1149,7 +1255,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1168,7 +1275,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1187,7 +1295,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1206,7 +1315,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1225,7 +1335,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1244,7 +1355,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1263,7 +1375,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1282,7 +1395,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1301,7 +1415,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1320,7 +1435,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1339,7 +1455,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1358,7 +1475,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1377,7 +1495,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1396,7 +1515,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1415,7 +1535,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1434,7 +1555,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1453,7 +1575,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1472,7 +1595,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1491,7 +1615,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1533,7 +1658,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1574,7 +1700,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1594,7 +1721,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1614,7 +1742,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1634,7 +1763,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1654,7 +1784,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1674,7 +1805,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1695,7 +1827,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1714,7 +1847,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1733,7 +1867,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1774,7 +1909,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1795,7 +1931,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1815,7 +1952,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1835,7 +1973,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1855,7 +1994,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1874,7 +2014,8 @@
         "status": "pending"
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
@@ -1895,7 +2036,8 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 1
       },
       "exec_m": {
         "status": "pending"
