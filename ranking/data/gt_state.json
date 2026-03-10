@@ -14,13 +14,16 @@
         "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "cpp-cli11": {
@@ -32,17 +35,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "active",
-        "attempts": 1
+        "status": "done",
+        "jsons": 4
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 3
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 5
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "cpp-nlohmann-json": {
@@ -54,17 +60,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "active",
-        "attempts": 1
+        "status": "done",
+        "jsons": 1
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 3
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "cpp-simdjson": {
@@ -80,13 +89,16 @@
         "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "cpp-spdlog": {
@@ -96,17 +108,20 @@
         "status": "merged"
       },
       "exec_n": {
-        "status": "active",
-        "attempts": 1
+        "status": "done",
+        "jsons": 1
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "csharp-aspnetcore": {
@@ -120,13 +135,16 @@
         "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       }
     },
     "csharp-dapper": {
@@ -140,13 +158,16 @@
         "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "csharp-fluentvalidation": {
@@ -160,13 +181,16 @@
         "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 5
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 5
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 9
       }
     },
     "csharp-mediatr": {
@@ -180,13 +204,16 @@
         "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "csharp-polly": {
@@ -201,13 +228,16 @@
         "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 3
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "go-chi": {
@@ -221,13 +251,16 @@
         "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       }
     },
     "go-cobra": {
@@ -241,13 +274,16 @@
         "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "go-echo": {
@@ -261,13 +297,16 @@
         "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 5
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "go-mux": {
@@ -281,13 +320,16 @@
         "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "java-assertj": {
@@ -298,17 +340,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "active",
-        "attempts": 1
+        "status": "done",
+        "jsons": 5
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 5
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "java-guava": {
@@ -323,13 +368,16 @@
         "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "java-jackson": {
@@ -339,17 +387,20 @@
         "status": "merged"
       },
       "exec_n": {
-        "status": "active",
-        "attempts": 1
+        "status": "done",
+        "jsons": 2
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "java-kafka": {
@@ -364,13 +415,16 @@
         "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "java-retrofit": {
@@ -384,13 +438,16 @@
         "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "php-carbon": {
@@ -400,17 +457,20 @@
         "status": "merged"
       },
       "exec_n": {
-        "status": "active",
-        "attempts": 1
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "php-flysystem": {
@@ -425,13 +485,16 @@
         "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 3
       }
     },
     "php-monolog": {
@@ -442,17 +505,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "active",
-        "attempts": 1
+        "status": "done",
+        "jsons": 1
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "php-phpunit": {
@@ -463,17 +529,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "active",
-        "attempts": 1
+        "status": "done",
+        "jsons": 3
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 6
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "python-click": {
@@ -484,17 +553,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "active",
-        "attempts": 1
+        "status": "done",
+        "jsons": 7
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 5
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "python-flask": {
@@ -505,17 +577,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "active",
-        "attempts": 1
+        "status": "done",
+        "jsons": 8
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       }
     },
     "python-jinja": {
@@ -526,16 +601,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 3
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "python-markupsafe": {
@@ -546,16 +625,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 6
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "python-marshmallow": {
@@ -566,16 +649,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "python-requests": {
@@ -586,16 +673,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       }
     },
     "python-rich": {
@@ -606,16 +697,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 6
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "python-typer": {
@@ -626,16 +721,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "ruby-devise": {
@@ -646,16 +745,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "ruby-faraday": {
@@ -666,16 +769,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "ruby-puma": {
@@ -686,16 +793,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 3
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "ruby-sidekiq": {
@@ -706,16 +817,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 5
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 3
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "rust-clap": {
@@ -726,16 +841,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 6
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       }
     },
     "rust-crossbeam": {
@@ -746,16 +865,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 6
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "rust-hyper": {
@@ -766,16 +889,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "rust-reqwest": {
@@ -786,16 +913,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 6
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 3
       }
     },
     "swift-kingfisher": {
@@ -806,16 +937,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 3
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "swift-lottie": {
@@ -826,16 +961,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 6
       }
     },
     "swift-moya": {
@@ -846,16 +985,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "swift-snapkit": {
@@ -866,16 +1009,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "typescript-commander": {
@@ -886,16 +1033,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 16
       }
     },
     "typescript-date-fns": {
@@ -906,16 +1057,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 3
       }
     },
     "typescript-execa": {
@@ -926,16 +1081,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 5
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 6
       }
     },
     "typescript-fastify": {
@@ -946,16 +1105,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 8
       }
     },
     "typescript-trpc": {
@@ -966,16 +1129,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "cpp-fmt": {
@@ -987,16 +1154,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 3
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 5
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "cpp-googletest": {
@@ -1008,16 +1179,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 3
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "cpp-opencv": {
@@ -1028,16 +1203,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 5
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 3
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "csharp-efcore": {
@@ -1049,13 +1228,16 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 4
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 7
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "review": {
         "status": "pending"
@@ -1070,16 +1252,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 15
       }
     },
     "csharp-newtonsoft-json": {
@@ -1091,16 +1277,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "go-bubbletea": {
@@ -1111,16 +1301,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 9
       }
     },
     "go-caddy": {
@@ -1131,16 +1325,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       }
     },
     "go-gitea": {
@@ -1151,16 +1349,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "java-gson": {
@@ -1171,16 +1373,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 10
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "java-okhttp": {
@@ -1191,16 +1397,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "java-spring-boot": {
@@ -1211,16 +1421,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "php-composer": {
@@ -1231,16 +1445,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "php-guzzle": {
@@ -1251,16 +1469,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "php-laravel": {
@@ -1271,16 +1493,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "python-django": {
@@ -1291,16 +1517,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 7
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 7
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "python-fastapi": {
@@ -1311,16 +1541,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "python-httpx": {
@@ -1331,16 +1565,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "ruby-jekyll": {
@@ -1351,16 +1589,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "ruby-rack": {
@@ -1371,16 +1613,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "ruby-rails": {
@@ -1391,16 +1637,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 3
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "rust-ripgrep": {
@@ -1411,16 +1661,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 7
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "rust-serde": {
@@ -1431,13 +1685,16 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 8
       },
       "exec_m": {
-        "status": "pending"
+        "status": "active",
+        "attempts": 4
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "review": {
         "status": "pending"
@@ -1451,16 +1708,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       }
     },
     "swift-alamofire": {
@@ -1471,16 +1732,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 6
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "swift-package-manager": {
@@ -1491,16 +1756,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "swift-vapor": {
@@ -1511,16 +1780,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 5
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       }
     },
     "typescript-mermaid": {
@@ -1531,16 +1804,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       }
     },
     "typescript-nestjs": {
@@ -1551,16 +1828,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 5
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       }
     },
     "typescript-zod": {
@@ -1571,16 +1852,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 6
       }
     },
     "cpp-catch2": {
@@ -1595,13 +1880,16 @@
         "note": "done via local VS Code agent chat, 11 JSONs in data/"
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 3
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "cpp-grpc": {
@@ -1613,16 +1901,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 3
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "csharp-automapper": {
@@ -1654,16 +1946,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 6
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       }
     },
     "go-fiber": {
@@ -1674,16 +1970,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 5
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 3
       }
     },
     "go-gin": {
@@ -1694,16 +1994,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "java-lombok": {
@@ -1714,16 +2018,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 6
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "java-mockito": {
@@ -1734,16 +2042,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "php-console": {
@@ -1754,16 +2066,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 10
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 5
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "php-whoops": {
@@ -1775,16 +2091,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       }
     },
     "python-celery": {
@@ -1795,16 +2115,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 3
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 7
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "python-pydantic": {
@@ -1815,16 +2139,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 3
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "ruby-grape": {
@@ -1857,16 +2185,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 5
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "rust-axum": {
@@ -1878,16 +2210,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 5
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 8
       }
     },
     "rust-diesel": {
@@ -1898,16 +2234,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 5
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "swift-composable-architecture": {
@@ -1918,16 +2258,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 10
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 6
       }
     },
     "swift-rxswift": {
@@ -1938,16 +2282,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "typescript-esbuild": {
@@ -1958,16 +2306,20 @@
         "jsons": 0
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 4
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 5
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     },
     "typescript-vitest": {
@@ -1979,16 +2331,20 @@
         "local_synced": true
       },
       "exec_n": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 2
       },
       "exec_m": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 1
       },
       "exec_w": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 11
       },
       "review": {
-        "status": "pending"
+        "status": "done",
+        "jsons": 0
       }
     }
   }
