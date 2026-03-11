@@ -154,7 +154,12 @@ def merge(ctx: click.Context, what: str) -> None:
     from cpl_lab.merge import run_merge
 
     cfg = ctx.obj["config"]
-    run_merge(data_dir=cfg["data_dir"], what=what, verbose=ctx.obj["verbose"])
+    run_merge(
+        data_dir=cfg["data_dir"],
+        clones_dir=cfg["clones_dir"],
+        what=what,
+        verbose=ctx.obj["verbose"],
+    )
 
 
 # ── train ────────────────────────────────────────────────────────

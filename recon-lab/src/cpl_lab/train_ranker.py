@@ -1,8 +1,10 @@
 """LambdaMART ranker training (§6.1).
 
 Trains a LightGBM LambdaMART model on ``candidates_rank`` data,
-grouped by (run_id, query_id), optimizing NDCG with binary relevance.
-Only OK-labeled queries participate.
+grouped by (run_id, query_id), optimizing NDCG with graded relevance.
+Only OK-labeled queries from ranker-gate repos participate.
+
+Reads one table: ``data/merged/candidates_rank.parquet``.
 """
 
 from __future__ import annotations
@@ -32,18 +34,18 @@ RANKER_FEATURES = [
 ]
 
 
-def _load_candidates_from_parquet(merged_dir: Path) -> pd.DataFrame:
-    """Load candidates from merged Parquet, filter to OK queries."""
-    candidates_df = pd.read_parquet(merged_dir / "candidates_rank.parquet")
-    queries_df = pd.read_parquet(merged_dir / "queries.parquet")
-
-    ok_query_ids = set(
-        queries_df.loc[
-            queries_df["query_type"].isin(OK_QUERY_TYPES), "query_id"
-        ]
-    )
-
-    return candidates_df[candidates_df["query_id"].isin(ok_query_ids)].copy()
+def _load_candidates(
+    merged_dir: Path,
+    repo_sets: set[str] | None = None,
+    ok_only: bool = True,
+) -> pd.DataFrame:
+    """Load the single denormalized parquet, filter by set and query type."""
+    df = pd.read_parquet(merged_dir / "candidates_rank.parquet")
+    if repo_sets is not None:
+        df = df[df["repo_set"].isin(repo_sets)]
+    if ok_only:
+        df = df[df["query_type"].isin(OK_QUERY_TYPES)]
+    return df.copy()
 
 
 def _prepare_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -99,9 +101,9 @@ def train_ranker(
     Returns:
         Training summary dict.
     """
-    df = _load_candidates_from_parquet(merged_dir)
+    df = _load_candidates(merged_dir, repo_sets={"ranker-gate"})
     if df.empty:
-        raise ValueError("No candidate data found")
+        raise ValueError("No candidate data found (ranker-gate set)")
 
     df = _prepare_features(df)
 

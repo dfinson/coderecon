@@ -1,8 +1,10 @@
 """Multiclass gate classifier training (§6.3).
 
 Trains a LightGBM multiclass classifier on retrieval distribution
-features. All query types participate (OK, UNSAT, BROAD, AMBIG).
-Optimizes cross-entropy.
+features. All query types from non-eval repos participate
+(OK, UNSAT, BROAD, AMBIG).  Optimizes cross-entropy.
+
+Reads one table: ``data/merged/candidates_rank.parquet``.
 """
 
 from __future__ import annotations
@@ -14,8 +16,6 @@ from pathlib import Path
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
-
-from cpl_lab.schema import OK_QUERY_TYPES
 
 
 GATE_FEATURES = [
@@ -122,22 +122,30 @@ def train_gate(
     Returns:
         Training summary dict.
     """
-    queries_df = pd.read_parquet(merged_dir / "queries.parquet")
-    candidates_df = pd.read_parquet(merged_dir / "candidates_rank.parquet")
+    # Everything comes from the single denormalized table
+    from cpl_lab.train_ranker import _load_candidates
+    all_df = _load_candidates(merged_dir, repo_sets={"ranker-gate", "cutoff"}, ok_only=False)
+    if all_df.empty:
+        raise ValueError("No candidate data found (non-eval repos)")
 
-    # Group candidates by query_id
+    # Group candidates by (query_id); deduce per-query metadata from first row
     candidates_by_query: dict[str, list[dict]] = {}
-    for _, row in candidates_df.iterrows():
+    query_info: dict[str, dict] = {}
+    for _, row in all_df.iterrows():
         qid = row["query_id"]
         candidates_by_query.setdefault(qid, []).append(row.to_dict())
-
-    repo_features = {"object_count": 0, "file_count": 0}
+        if qid not in query_info:
+            query_info[qid] = row.to_dict()
 
     rows: list[dict] = []
-    for _, q in queries_df.iterrows():
-        cands = candidates_by_query.get(q["query_id"], [])
-        feat = _compute_gate_features(cands, q.to_dict(), repo_features)
-        feat["label_gate"] = q["label_gate"]
+    for qid, cands in candidates_by_query.items():
+        q = query_info[qid]
+        repo_features = {
+            "object_count": q.get("object_count", 0),
+            "file_count": q.get("file_count", 0),
+        }
+        feat = _compute_gate_features(cands, q, repo_features)
+        feat["label_gate"] = q.get("label_gate", "OK")
         rows.append(feat)
 
     if not rows:

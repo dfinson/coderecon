@@ -83,7 +83,7 @@ def collect_ground_truth(
         Summary dict with counts and unmatched defs.
     """
     gt_dir = data_dir / "ground_truth"
-    task_files = sorted(gt_dir.glob("*.json"))
+    task_files = sorted(gt_dir.glob("[NMW]*.json"))
     if not task_files:
         raise FileNotFoundError(f"No ground truth JSON files in {gt_dir}")
 
@@ -98,7 +98,9 @@ def collect_ground_truth(
 
     for tf in task_files:
         task = json.loads(tf.read_text())
-        task_id = task["task_id"]
+        raw_task_id = task["task_id"]
+        # task_id may be "repo_id/N1" or just "N1"
+        task_id = raw_task_id.split("/")[-1] if "/" in raw_task_id else raw_task_id
         run_id = f"{repo_id}_{task_id}"
 
         runs.append({
@@ -171,8 +173,8 @@ def collect_ground_truth(
 
     con.close()
 
-    # Process non-OK queries (separate per-repo file)
-    non_ok_path = data_dir / "non_ok_queries.json"
+    # Process non-OK queries (separate per-repo file, inside ground_truth/)
+    non_ok_path = gt_dir / "non_ok_queries.json"
     if non_ok_path.exists():
         non_ok = json.loads(non_ok_path.read_text())
         # Non-OK queries aren't tied to a specific task — use repo-level run_id

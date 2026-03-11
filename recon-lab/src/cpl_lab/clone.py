@@ -116,7 +116,6 @@ EVAL: list[tuple[str, str]] = [
     ("https://github.com/vitest-dev/vitest", "e06f175cba08346bf0382c0b3e137a822bced280"),
     ("https://github.com/diesel-rs/diesel", "f5e93c0125694914dca6888ae09f8d84528353f6"),
     ("https://github.com/xunit/xunit", "63aad206c62c2db373a9420486aa8ebc1a3daad9"),
-    ("https://github.com/ruby-grape/grape", "f2fc392dcae0c1e1fbf4196fa3f51a024e7f22db"),
     ("https://github.com/filp/whoops", "67342bc807854844244f219fb74687fdf2f62e00"),
     ("https://github.com/pointfreeco/swift-composable-architecture", "68a0237ea65261f8694d131d33a36288cfd93863"),
 ]
@@ -126,6 +125,123 @@ REPO_SETS: dict[str, list[tuple[str, str]]] = {
     "cutoff": CUTOFF,
     "eval": EVAL,
 }
+
+# Canonical mapping: repo_id → {set, clone_name}.
+# repo_id is the task definition stem (e.g. "python-flask").
+# clone_name is the GitHub repo name used as the directory under clones/{set}/.
+REPO_MANIFEST: dict[str, dict[str, str]] = {
+    "cpp-abseil": {"set": "cutoff", "clone_name": "abseil-cpp"},
+    "cpp-catch2": {"set": "eval", "clone_name": "Catch2"},
+    "cpp-cli11": {"set": "cutoff", "clone_name": "CLI11"},
+    "cpp-fmt": {"set": "ranker-gate", "clone_name": "fmt"},
+    "cpp-googletest": {"set": "ranker-gate", "clone_name": "googletest"},
+    "cpp-grpc": {"set": "eval", "clone_name": "grpc"},
+    "cpp-nlohmann-json": {"set": "cutoff", "clone_name": "json"},
+    "cpp-opencv": {"set": "ranker-gate", "clone_name": "opencv"},
+    "cpp-simdjson": {"set": "cutoff", "clone_name": "simdjson"},
+    "cpp-spdlog": {"set": "cutoff", "clone_name": "spdlog"},
+    "csharp-aspnetcore": {"set": "cutoff", "clone_name": "aspnetcore"},
+    "csharp-automapper": {"set": "eval", "clone_name": "AutoMapper"},
+    "csharp-dapper": {"set": "cutoff", "clone_name": "Dapper"},
+    "csharp-efcore": {"set": "ranker-gate", "clone_name": "efcore"},
+    "csharp-fluentvalidation": {"set": "cutoff", "clone_name": "FluentValidation"},
+    "csharp-humanizer": {"set": "ranker-gate", "clone_name": "Humanizer"},
+    "csharp-mediatr": {"set": "cutoff", "clone_name": "MediatR"},
+    "csharp-newtonsoft-json": {"set": "ranker-gate", "clone_name": "Newtonsoft.Json"},
+    "csharp-polly": {"set": "cutoff", "clone_name": "Polly"},
+    "csharp-xunit": {"set": "eval", "clone_name": "xunit"},
+    "go-bubbletea": {"set": "ranker-gate", "clone_name": "bubbletea"},
+    "go-caddy": {"set": "ranker-gate", "clone_name": "caddy"},
+    "go-chi": {"set": "cutoff", "clone_name": "chi"},
+    "go-cobra": {"set": "cutoff", "clone_name": "cobra"},
+    "go-echo": {"set": "cutoff", "clone_name": "echo"},
+    "go-fiber": {"set": "eval", "clone_name": "fiber"},
+    "go-gin": {"set": "eval", "clone_name": "gin"},
+    "go-gitea": {"set": "ranker-gate", "clone_name": "gitea"},
+    "go-mux": {"set": "cutoff", "clone_name": "mux"},
+    "java-assertj": {"set": "cutoff", "clone_name": "assertj"},
+    "java-gson": {"set": "ranker-gate", "clone_name": "gson"},
+    "java-guava": {"set": "cutoff", "clone_name": "guava"},
+    "java-jackson": {"set": "cutoff", "clone_name": "jackson-databind"},
+    "java-kafka": {"set": "cutoff", "clone_name": "kafka"},
+    "java-lombok": {"set": "eval", "clone_name": "lombok"},
+    "java-mockito": {"set": "eval", "clone_name": "mockito"},
+    "java-okhttp": {"set": "ranker-gate", "clone_name": "okhttp"},
+    "java-retrofit": {"set": "cutoff", "clone_name": "retrofit"},
+    "java-spring-boot": {"set": "ranker-gate", "clone_name": "spring-boot"},
+    "php-carbon": {"set": "cutoff", "clone_name": "Carbon"},
+    "php-composer": {"set": "ranker-gate", "clone_name": "composer"},
+    "php-console": {"set": "eval", "clone_name": "console"},
+    "php-flysystem": {"set": "cutoff", "clone_name": "flysystem"},
+    "php-guzzle": {"set": "ranker-gate", "clone_name": "guzzle"},
+    "php-laravel": {"set": "ranker-gate", "clone_name": "framework"},
+    "php-monolog": {"set": "cutoff", "clone_name": "monolog"},
+    "php-phpunit": {"set": "cutoff", "clone_name": "phpunit"},
+    "php-whoops": {"set": "eval", "clone_name": "whoops"},
+    "python-celery": {"set": "eval", "clone_name": "celery"},
+    "python-click": {"set": "cutoff", "clone_name": "click"},
+    "python-django": {"set": "ranker-gate", "clone_name": "django"},
+    "python-fastapi": {"set": "ranker-gate", "clone_name": "fastapi"},
+    "python-flask": {"set": "cutoff", "clone_name": "flask"},
+    "python-httpx": {"set": "ranker-gate", "clone_name": "httpx"},
+    "python-jinja": {"set": "cutoff", "clone_name": "jinja"},
+    "python-markupsafe": {"set": "cutoff", "clone_name": "markupsafe"},
+    "python-marshmallow": {"set": "cutoff", "clone_name": "marshmallow"},
+    "python-pydantic": {"set": "eval", "clone_name": "pydantic"},
+    "python-requests": {"set": "cutoff", "clone_name": "requests"},
+    "python-rich": {"set": "cutoff", "clone_name": "rich"},
+    "python-typer": {"set": "cutoff", "clone_name": "typer"},
+    "ruby-devise": {"set": "cutoff", "clone_name": "devise"},
+    "ruby-faraday": {"set": "cutoff", "clone_name": "faraday"},
+    "ruby-jekyll": {"set": "ranker-gate", "clone_name": "jekyll"},
+    "ruby-puma": {"set": "cutoff", "clone_name": "puma"},
+    "ruby-rack": {"set": "ranker-gate", "clone_name": "rack"},
+    "ruby-rails": {"set": "ranker-gate", "clone_name": "rails"},
+    "ruby-sidekiq": {"set": "cutoff", "clone_name": "sidekiq"},
+    "ruby-sinatra": {"set": "eval", "clone_name": "sinatra"},
+    "rust-axum": {"set": "eval", "clone_name": "axum"},
+    "rust-clap": {"set": "cutoff", "clone_name": "clap"},
+    "rust-crossbeam": {"set": "cutoff", "clone_name": "crossbeam"},
+    "rust-diesel": {"set": "eval", "clone_name": "diesel"},
+    "rust-hyper": {"set": "cutoff", "clone_name": "hyper"},
+    "rust-reqwest": {"set": "cutoff", "clone_name": "reqwest"},
+    "rust-ripgrep": {"set": "ranker-gate", "clone_name": "ripgrep"},
+    "rust-serde": {"set": "ranker-gate", "clone_name": "serde"},
+    "rust-tokio": {"set": "ranker-gate", "clone_name": "tokio"},
+    "swift-alamofire": {"set": "ranker-gate", "clone_name": "Alamofire"},
+    "swift-composable-architecture": {"set": "eval", "clone_name": "swift-composable-architecture"},
+    "swift-kingfisher": {"set": "cutoff", "clone_name": "Kingfisher"},
+    "swift-lottie": {"set": "cutoff", "clone_name": "lottie-ios"},
+    "swift-moya": {"set": "cutoff", "clone_name": "Moya"},
+    "swift-package-manager": {"set": "ranker-gate", "clone_name": "swift-package-manager"},
+    "swift-rxswift": {"set": "eval", "clone_name": "RxSwift"},
+    "swift-snapkit": {"set": "cutoff", "clone_name": "SnapKit"},
+    "swift-vapor": {"set": "ranker-gate", "clone_name": "vapor"},
+    "typescript-commander": {"set": "cutoff", "clone_name": "commander.js"},
+    "typescript-date-fns": {"set": "cutoff", "clone_name": "date-fns"},
+    "typescript-esbuild": {"set": "eval", "clone_name": "esbuild"},
+    "typescript-execa": {"set": "cutoff", "clone_name": "execa"},
+    "typescript-fastify": {"set": "cutoff", "clone_name": "fastify"},
+    "typescript-mermaid": {"set": "ranker-gate", "clone_name": "mermaid"},
+    "typescript-nestjs": {"set": "ranker-gate", "clone_name": "nest"},
+    "typescript-trpc": {"set": "cutoff", "clone_name": "trpc"},
+    "typescript-vitest": {"set": "eval", "clone_name": "vitest"},
+    "typescript-zod": {"set": "ranker-gate", "clone_name": "zod"},
+}
+
+
+def clone_dir_for(repo_id: str, clones_dir: Path) -> Path | None:
+    """Resolve the clone directory for a repo_id."""
+    entry = REPO_MANIFEST.get(repo_id)
+    if entry is None:
+        return None
+    return clones_dir / entry["set"] / entry["clone_name"]
+
+
+def repo_set_for(repo_id: str) -> str | None:
+    """Return the set name for a repo_id."""
+    entry = REPO_MANIFEST.get(repo_id)
+    return entry["set"] if entry else None
 
 
 def _repo_name(url: str) -> str:

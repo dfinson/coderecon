@@ -69,13 +69,13 @@ In `lib/grape/router.rb`, the `rotation` method iterates candidate routes for a 
 
 In `lib/grape/validations/params_scope.rb`, the `mutually_exclusive` validator checks that at most one of the listed parameters is present. When the mutually exclusive parameters are declared inside different nested `group` blocks, the cross-group validation is silently skipped because each group creates its own scope.
 
-### N3: Add `length` validator support for `Hash` parameters
+### N3: Add `length` validator type-safety check for non-collection parameters
 
-The `LengthValidator` in `lib/grape/validations/validators/length_validator.rb` validates the length of strings and arrays. When applied to a `Hash` parameter (e.g., `requires :metadata, type: Hash, length: { max: 10 }`), it raises a `NoMethodError` because `Hash` doesn't respond to `length` the same way. Add `Hash#size` support to the length validator.
+The `LengthValidator` in `lib/grape/validations/validators/length_validator.rb` validates length using duck-typing (`param.respond_to?(:length)`). When applied to a non-collection type such as `Integer`, `Float`, or `Symbol`, the validator silently skips validation (returns early) rather than raising a clear configuration error. Developers who mistakenly write `requires :count, type: Integer, length: { max: 10 }` get no feedback that the constraint is ignored. Add a type-check in `LengthValidator#initialize` that raises `ArgumentError` when the declared coerce type is not one of `String`, `Array`, or `Hash`, matching the pattern already used by other validators in the same directory.
 
-### N4: Fix `Endpoint#run_filters` swallowing exceptions from `after` callbacks
+### N4: Fix `Endpoint#run` losing the computed response when `after` callbacks raise
 
-In `lib/grape/endpoint.rb`, the `run_filters` method for `:after` type filters catches and silently ignores exceptions. If an `after` callback raises, the exception is lost and the response is returned as if the callback succeeded. After-filter exceptions should be captured and re-raised after cleanup.
+In `lib/grape/endpoint.rb`, the `run` method calls `run_filters afters, :after` after `response_object = execute` computes the response. If an `after` callback raises an unhandled exception, it propagates before `[status, header, response_object]` is returned, bypassing Grape's error-handling middleware and producing a raw 500 error instead of a formatted Grape error response. Wrap `after`-filter execution in a rescue block that re-raises via `error!` so the response is formatted consistently with other runtime errors.
 
 ### N5: Add `params_builder` option for `Hashie::Mash` with symbolized keys
 
@@ -89,9 +89,9 @@ In `lib/grape/validations/types/primitive_coercer.rb`, coercing a string like `"
 
 In `lib/grape/dsl/routing.rb`, when an API uses `version 'v1', using: :path` and is mounted inside another API that also uses path versioning, the version prefix is duplicated in the URL (e.g., `/v1/v1/resource`). The `prepare_version` method in `endpoint.rb` doesn't check for already-present version prefixes from the parent mount.
 
-### N8: Add `regexp` validator support for array elements
+### N8: Fix `RegexpValidator` error message not identifying the failing array element index
 
-The `RegexpValidator` in `lib/grape/validations/validators/regexp_validator.rb` validates that a string parameter matches a pattern. When applied to an `Array[String]` parameter, it validates the array itself against the regexp rather than each element. Add element-wise validation for array-typed parameters.
+The `RegexpValidator` in `lib/grape/validations/validators/regexp_validator.rb` validates array parameters element-by-element via `Array.wrap(params[attr_name]).all? { |param| param.nil? || scrub(param.to_s).match?(value) }`. When an element fails the regexp check the validator raises a single `Grape::Exceptions::Validation` that reports only the top-level parameter name (e.g., `items`), giving no indication of which index failed. Modify `validate_param!` so that when the parameter is an `Array`, it iterates with an index and reports the failing element as `items[0]`, `items[1]`, etc., matching the convention used by other array-aware validators in the codebase.
 
 ### N9: Fix `content_type` override in `dsl/request_response.rb` not taking effect for error responses
 
@@ -139,17 +139,17 @@ Add WebSocket support via `websocket` route DSL method. Implement WebSocket hand
 
 Implement content-type-based API versioning (`Accept: application/vnd.myapp.v2+json`) with deprecation tracking. Add `deprecated` DSL method that marks versions/endpoints as deprecated with sunset dates. Return `Sunset` and `Deprecation` headers automatically. Track deprecated endpoint usage. Changes span `dsl/routing.rb`, middleware/versioner, formatter, and configuration.
 
-### M9: Implement request validation contracts using dry-validation
+### M9: Extend dry-validation contract integration with namespace inheritance and array error paths
 
-Extend the validation system to support full `dry-validation` contracts as an alternative to individual validators. Add `contract` DSL method: `contract MyContract` that applies a Dry::Validation::Contract to the entire parameter set. Map contract error messages to Grape's validation error format. Changes span `validations/contract_scope.rb`, `params_scope.rb`, and error handling.
+The existing `contract` DSL (`lib/grape/dsl/validations.rb`), `ContractScope` (`lib/grape/validations/contract_scope.rb`), and `ContractScopeValidator` (`lib/grape/validations/validators/contract_scope_validator.rb`) support `Dry::Schema` and `Dry::Validation::Contract` as validation backends. Three gaps remain: (1) when a `contract` is declared inside a `namespace` or `mount` block, the `namespace_stackable[:contract_key_map]` is not merged with the parent scope's key map, silently dropping parent-scope key constraints; (2) `build_errors_from_messages` does not handle message paths with integer indices (array element errors), generating malformed param names such as `items[]` instead of `items[0]`; (3) combining a `contract` block with regular `requires`/`optional` declarations in the same endpoint silently drops the regular validations. Fix all three issues, add integration specs for each, and update `CHANGELOG.md`.
 
 ### M10: Add endpoint-level caching with conditional GET support
 
 Implement response caching with `cache` DSL method supporting TTL, ETag, and Last-Modified strategies. Handle conditional GET (`If-None-Match`, `If-Modified-Since`) returning 304 responses. Support cache key customization and cache store backends (memory, Redis). Changes span `dsl/inside_route.rb`, middleware, and add a `caching/` module.
 
-### M11: Improve CI matrix and Docker-based testing
+### M11: Modernize release and documentation infrastructure
 
-Extend `.github/workflows/test.yml` with a Ruby version matrix (3.1, 3.2, 3.3) and add Docker-based integration testing using `docker-compose.yml`. Update `Gemfile` with platform-specific dependencies for CI environments, add a `.github/workflows/danger.yml` configuration for automated PR review, configure `.rubocop.yml` with project-specific cop settings for the `lib/grape/` directory, and add CI status badges to `README.md`. Changes span `.github/workflows/test.yml`, `.github/workflows/danger.yml`, `docker-compose.yml`, `Gemfile`, `.rubocop.yml`, and `README.md`.
+Update the project's release and documentation files to match the current tooling: rewrite `RELEASING.md` so its release steps reference the automated edge release workflow in `.github/workflows/edge.yml` instead of the hand-crafted `rake release` instructions from version 0.6.0; update `CONTRIBUTING.md` to add a "Validation Breaking Changes" section that requires a `UPGRADING.md` entry for any change to parameter coercion or validation semantics; reformat `CHANGELOG.md` headers from version 3.0.0 onward to follow the [Keep a Changelog](https://keepachangelog.com/) specification (`## [version] - YYYY-MM-DD`, `### Added`, `### Fixed`, etc.); expand `SECURITY.md` with a disclosure timeline (initial response ≤ 7 days, patch release ≤ 30 days) and a supported-versions table; and update `README.md` with a quickstart code example and links to `CONTRIBUTING.md`, `UPGRADING.md`, and `SECURITY.md`. Changes span `RELEASING.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `SECURITY.md`, and `README.md`.
 
 ## Wide
 
@@ -187,7 +187,7 @@ Implement tools for migrating between API versions: request/response adapters th
 
 ### W9: Implement pluggable authentication framework with multiple strategies
 
-Add a comprehensive auth framework supporting OAuth2, JWT, API keys, HMAC signing, and basic auth with a unified DSL. Implement token management, scope-based authorization, rate limiting per auth level, and auth event logging. Changes span `dsl/request_response.rb`, middleware, endpoint, helpers, and add an `auth/` module with strategy implementations.
+Extend the existing `lib/grape/middleware/auth/` module (which currently supports only HTTP Basic and HTTP Digest via Rack strategies) to add a comprehensive pluggable auth framework. Add strategy classes for OAuth2 bearer tokens, JWT, API keys (header and query-string), and HMAC request signing under `lib/grape/middleware/auth/strategies/`. Add a unified DSL in `lib/grape/middleware/auth/dsl.rb` with `authenticate_with`, `require_scope`, and `rate_limit_by_auth_level` helpers. Implement token management and scope-based authorization modules. Add auth event logging via `ActiveSupport::Notifications`. Changes span `lib/grape/middleware/auth/dsl.rb`, `lib/grape/middleware/auth/strategies.rb`, `lib/grape/middleware/auth/base.rb`, new strategy files, and `lib/grape/endpoint.rb` for auth context access.
 
 ### W10: Add gRPC service generation from Grape API definitions
 

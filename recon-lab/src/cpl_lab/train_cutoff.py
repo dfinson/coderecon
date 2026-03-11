@@ -1,14 +1,10 @@
-"""No-leakage K-fold cutoff training (§6.2).
+"""No-leakage cutoff training (§6.2).
 
 Trains a LightGBM regressor to predict N(q) — how many top-ranked
-objects to return.  Uses out-of-fold ranker scores to avoid label
-leakage.
+objects to return.  The ranker (trained on ranker-gate repos) scores
+cutoff-set candidates.  N* is computed from those scores.  Zero leakage.
 
-Pipeline:
-  1. K-fold split across repos.
-  2. Per fold: train ranker on K-1, score held-out fold.
-  3. Per held-out query: compute N* = argmax_N F1(top-N, ground truth).
-  4. Train cutoff regressor on aggregated out-of-fold data.
+Reads one table: ``data/merged/candidates_rank.parquet``.
 """
 
 from __future__ import annotations
@@ -135,10 +131,11 @@ def train_cutoff(
 
     ranker = lgb.Booster(model_file=str(ranker_model_path))
 
-    # Load cutoff candidates
-    candidates_df = pd.read_parquet(merged_dir / "candidates_rank.parquet")
+    # Load cutoff candidates (cutoff set only — disjoint from ranker training)
+    from cpl_lab.train_ranker import _load_candidates
+    candidates_df = _load_candidates(merged_dir, repo_sets={"cutoff"})
     if candidates_df.empty:
-        raise ValueError("No candidate data found")
+        raise ValueError("No candidate data found (cutoff set)")
 
     candidates_df = _prepare_features(candidates_df)
 
