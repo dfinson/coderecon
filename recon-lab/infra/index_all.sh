@@ -2,12 +2,12 @@
 # Index all cloned repos with codeplane. 30-minute timeout per repo.
 # Usage: bash index_all.sh [--reindex]
 #
-# Logs: ranking/infra/index_all.log
-# Flagged repos (>30min or error): ranking/infra/index_flagged.txt
+# Logs: recon-lab/infra/index_all.log
+# Flagged repos (>30min or error): recon-lab/infra/index_flagged.txt
 
 set -euo pipefail
 
-CLONES_DIR="${CPL_RANKING_WORKSPACE:-$HOME/.codeplane/ranking}/clones"
+CLONES_DIR="${CPL_LAB_WORKSPACE:-$HOME/.codeplane/recon-lab}/clones"
 CPL="$(cd "$(dirname "$0")/../../" && pwd)/.venv/bin/cpl"
 LOG="$(dirname "$0")/index_all.log"
 FLAGGED="$(dirname "$0")/index_flagged.txt"

@@ -5,7 +5,7 @@
 #
 # Prerequisites:
 #   1. Start CodePlane daemon on the target repo
-#   2. Generate ranking ground truth via ranking/src/cpl_ranking/collector.py
+#   2. Generate ranking ground truth via recon-lab/src/cpl_lab/collector.py
 #
 # Run:
 #   cd benchmarking && python run.py experiments/recon_ranking.yaml

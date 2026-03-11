@@ -19,7 +19,7 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 
-from cpl_ranking.train_ranker import (
+from cpl_lab.train_ranker import (
     RANKER_FEATURES,
 )
 
@@ -131,7 +131,7 @@ def train_cutoff(
             f"Train the ranker first."
         )
 
-    from cpl_ranking.train_ranker import _prepare_features
+    from cpl_lab.train_ranker import _prepare_features
 
     ranker = lgb.Booster(model_file=str(ranker_model_path))
 

@@ -13,7 +13,7 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 
-from cpl_ranking.schema import OK_QUERY_TYPES
+from cpl_lab.schema import OK_QUERY_TYPES
 
 # Features used by the ranker (must match extract_ranker_features output)
 RANKER_FEATURES = [

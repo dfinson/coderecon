@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Clone all ranking repos pinned to exact commits.
+# Clone all recon-lab repos pinned to exact commits.
 #
 # Usage:
-#   cd ranking && bash clone_repos.sh
+#   cd recon-lab && bash clone_repos.sh
 #
 # Idempotent: safe to re-run. Each stage is independently skipped if
 # already done (clone exists, commit matches, origin already removed,
@@ -11,7 +11,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CLONES_DIR="${CPL_RANKING_WORKSPACE:-$HOME/.codeplane/ranking}/clones"
+CLONES_DIR="${CPL_LAB_WORKSPACE:-$HOME/.codeplane/recon-lab}/clones"
 
 mkdir -p "$CLONES_DIR/ranker-gate" "$CLONES_DIR/cutoff" "$CLONES_DIR/eval"
 

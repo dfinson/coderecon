@@ -2,7 +2,7 @@
 
 Usage::
 
-    python -m cpl_ranking.train_all --data-dir ranking/data --output-dir output/
+    python -m cpl_lab.train_all --data-dir ranking/data --output-dir output/
 
 Pre-requisites:
   - merge_ground_truth.py has been run once (writes merged/*.parquet)
@@ -33,9 +33,9 @@ def train_all(data_dir: Path, output_dir: Path, skip_merge: bool = False) -> Non
         output_dir: Where to write model artifacts.
         skip_merge: If True, skip signal merge (use existing parquet).
     """
-    from cpl_ranking.train_cutoff import train_cutoff
-    from cpl_ranking.train_gate import train_gate
-    from cpl_ranking.train_ranker import train_ranker
+    from cpl_lab.train_cutoff import train_cutoff
+    from cpl_lab.train_gate import train_gate
+    from cpl_lab.train_ranker import train_ranker
 
     merged_dir = data_dir / "merged"
 
@@ -53,7 +53,7 @@ def train_all(data_dir: Path, output_dir: Path, skip_merge: bool = False) -> Non
 
     # 0. Merge signals (re-runnable, re-derives labels)
     if not skip_merge:
-        from cpl_ranking.merge_signals import merge_signals
+        from cpl_lab.merge_signals import merge_signals
 
         print("=== Merging Signals ===")
         sig_summary = merge_signals(data_dir)

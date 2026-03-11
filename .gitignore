@@ -211,13 +211,12 @@ __marimo__/
 # Benchmark raw chatreplay exports (large)
 benchmarking/**/results/*_raw.json
 
-# Ranking pipeline — mutable data lives outside repo at $CPL_RANKING_WORKSPACE
-# Legacy: ignore if someone hasn't migrated yet
-ranking/clones/
-ranking/data/
-ranking/.venv/
-ranking/infra/terraform.tfvars
-ranking/infra/.terraform/
-ranking/infra/terraform.tfstate*
-ranking/infra/codeplane_wheel/
-ranking/infra/.terraform.lock.hcl
+# Recon-lab pipeline — mutable data lives outside repo at $CPL_LAB_WORKSPACE
+recon-lab/clones/
+recon-lab/data/
+recon-lab/.venv/
+recon-lab/infra/terraform.tfvars
+recon-lab/infra/.terraform/
+recon-lab/infra/terraform.tfstate*
+recon-lab/infra/codeplane_wheel/
+recon-lab/infra/.terraform.lock.hcl

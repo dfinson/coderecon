@@ -5,7 +5,7 @@ missing fields, wrong types, and kind vocabulary violations before
 post-processing.
 
 Usage:
-    python -m cpl_ranking.validate_ground_truth data/python-fastapi
+    python -m cpl_lab.validate_ground_truth data/python-fastapi
 """
 
 from __future__ import annotations
@@ -222,7 +222,7 @@ def validate_repo(data_dir: Path) -> list[str]:
 
 def main() -> None:
     if len(sys.argv) != 2:
-        print("Usage: python -m cpl_ranking.validate_ground_truth data/{repo_id}")
+        print("Usage: python -m cpl_lab.validate_ground_truth data/{repo_id}")
         sys.exit(1)
 
     data_dir = Path(sys.argv[1])

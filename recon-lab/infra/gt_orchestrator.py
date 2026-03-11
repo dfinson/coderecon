@@ -5,10 +5,10 @@ Replaces the GitHub coding agent (fork/issue/PR) approach with local
 SDK sessions that run against cloned repos and write directly to the
 pipeline workspace.
 
-Workspace layout (controlled by CPL_RANKING_WORKSPACE env var,
-default: ~/.codeplane/ranking):
+Workspace layout (controlled by CPL_LAB_WORKSPACE env var,
+default: ~/.codeplane/recon-lab):
 
-    $CPL_RANKING_WORKSPACE/
+    $CPL_LAB_WORKSPACE/
     ├── clones/{set}/{repo}/       # cloned repos
     ├── data/{repo_id}/            # ground truth, signals
     │   ├── ground_truth/
@@ -18,18 +18,14 @@ default: ~/.codeplane/ranking):
     └── data/logs/                 # session transcripts
 
 Pipeline source (repos/, roles/, infra/) stays in the git repo under
-ranking/.
+recon-lab/.
 
 Usage:
-    python gt_orchestrator.py run                  # run all stages
-    python gt_orchestrator.py run --stage audit     # only audit stage
-    python gt_orchestrator.py run --repo cpp-abseil # one repo
-    python gt_orchestrator.py run --concurrency 10  # override default
-    python gt_orchestrator.py status               # show state table
-    python gt_orchestrator.py retry                # reset failed → pending
-    python gt_orchestrator.py retry cpp-abseil     # reset one repo
-    python gt_orchestrator.py logs cpp-abseil audit  # show session log
-    python gt_orchestrator.py collect              # merge JSONLs
+    cpl-lab generate                        # run all stages
+    cpl-lab generate --stage audit          # only audit stage
+    cpl-lab generate --repo cpp-abseil      # one repo
+    cpl-lab generate --concurrency 10       # override default
+    cpl-lab status                          # show state table
 """
 from __future__ import annotations
 
@@ -49,13 +45,13 @@ from pydantic import BaseModel, Field
 
 # ── Paths ──
 
-RANKING_SRC = Path(__file__).resolve().parent.parent  # in-repo pipeline source
+LAB_SRC = Path(__file__).resolve().parent.parent  # in-repo pipeline source
 WORKSPACE = Path(
-    os.environ.get("CPL_RANKING_WORKSPACE", Path.home() / ".codeplane" / "ranking")
+    os.environ.get("CPL_LAB_WORKSPACE", Path.home() / ".codeplane" / "recon-lab")
 )
 
-REPOS_DIR = RANKING_SRC / "repos"   # task definitions (versioned, in-repo)
-ROLES_DIR = RANKING_SRC / "roles"   # agent role prompts (versioned, in-repo)
+REPOS_DIR = LAB_SRC / "repos"   # task definitions (versioned, in-repo)
+ROLES_DIR = LAB_SRC / "roles"   # agent role prompts (versioned, in-repo)
 CLONES_DIR = WORKSPACE / "clones"   # cloned repos (mutable, outside repo)
 DATA_DIR = WORKSPACE / "data"       # ground truth + signals (mutable, outside repo)
 STATE_FILE = DATA_DIR / "gt_state.json"
@@ -499,7 +495,7 @@ class SessionRunner:
             role_content
             .replace("../../../roles/", f"{ROLES_DIR}/")
             .replace("../../../repos/", f"{REPOS_DIR}/")
-            .replace("../../../infra/", f"{RANKING_SRC / 'infra'}/")
+            .replace("../../../infra/", f"{LAB_SRC / 'infra'}/")
             .replace("../../../data/", f"{DATA_DIR}/")
             .replace("../../data/", f"{DATA_DIR}/")
         )
@@ -1037,7 +1033,7 @@ def cmd_logs(repo_id: str, stage: str) -> None:
 
 def cmd_collect(state: dict) -> None:
     """Merge per-task JSONs into JSONL for all completed repos."""
-    merge_script = RANKING_SRC / "infra" / "merge_ground_truth.py"
+    merge_script = LAB_SRC / "infra" / "merge_ground_truth.py"
     for rid, rd in state["repos"].items():
         if rd.get("review", {}).get("status") in ("done", "merged"):
             repo_dir = DATA_DIR / rid

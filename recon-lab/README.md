@@ -1,6 +1,6 @@
-# cpl-ranking
+# recon-lab
 
-Training pipeline for CodePlane's recon ranking models.
+Training pipeline for CodePlane's recon models.
 
 Produces three LightGBM models that ship as package data in
 `src/codeplane/ranking/data/`:
@@ -17,15 +17,15 @@ See `docs/ranking-design.md` in the repo root for the full design.
 
 The pipeline separates **versioned source** (in the git repo) from **mutable
 workspace data** (outside the repo). All mutable data lives under a single
-configurable root controlled by the `CPL_RANKING_WORKSPACE` environment
-variable (default: `~/.codeplane/ranking`).
+configurable root controlled by the `CPL_LAB_WORKSPACE` environment
+variable (default: `~/.codeplane/recon-lab`).
 
 ### In-repo (versioned pipeline source)
 
 ```
-ranking/
+recon-lab/
 ├── pyproject.toml
-├── clone_repos.sh             # Clone all 98 repos to workspace
+├── lab.toml                    # Default pipeline configuration
 ├── repos/                     # 98 task definitions (30 ranker-gate + 48 cutoff + 20 eval)
 │   ├── ranker-gate/           #   30 repos — training set for ranker + gate
 │   ├── cutoff/                #   48 repos — training set for cutoff
@@ -39,20 +39,33 @@ ranking/
 │   ├── merge_ground_truth.py  #   Merge per-task JSONs → single JSONL per repo
 │   ├── index_all.sh           #   Local cpl init for all clones
 │   └── parse_traces.py        #   Benchmarking trace parser
-└── src/cpl_ranking/           # Training code
+└── src/cpl_lab/               # Training code + unified CLI
+    ├── cli.py                 # Click CLI entry point (cpl-lab)
+    ├── config.py              # Configuration resolution
     ├── schema.py              # §7 dataset table schemas
+    ├── clone.py               # Repo cloning (Python port of clone_repos.sh)
+    ├── index.py               # Indexing (Python port of index_all.sh)
+    ├── generate.py            # GT generation wrapper
     ├── collector.py           # Ground truth collection (stable, run once)
+    ├── collect.py             # Signal collection adapter
     ├── collect_signals.py     # Retrieval signal collection (re-runnable)
+    ├── merge.py               # Merge adapter
+    ├── merge_ground_truth.py  # Merge per-task JSONs into JSONL
+    ├── merge_signals.py       # Merge signal data
+    ├── train.py               # Training adapter (all 3 models)
     ├── train_ranker.py        # §8.1 LambdaMART training
     ├── train_cutoff.py        # §8.2 no-leakage K-fold cutoff training
     ├── train_gate.py          # §8.3 multiclass gate training
-    └── train_all.py           # Orchestrates all 3 training stages
+    ├── train_all.py           # Orchestrates all 3 training stages
+    ├── evaluate.py            # EVEE evaluation integration
+    ├── validate.py            # Ground truth validation
+    └── status.py              # Pipeline status dashboard
 ```
 
 ### External workspace (mutable data, outside repo)
 
 ```
-$CPL_RANKING_WORKSPACE/          (default: ~/.codeplane/ranking)
+$CPL_LAB_WORKSPACE/              (default: ~/.codeplane/recon-lab)
 ├── clones/                      # Cloned + codeplane-indexed repos
 │   ├── ranker-gate/
 │   ├── cutoff/
@@ -74,14 +87,53 @@ $CPL_RANKING_WORKSPACE/          (default: ~/.codeplane/ranking)
 
 ```bash
 # Initialize the workspace (one-time)
-bash ranking/setup_workspace.sh
+bash recon-lab/setup_workspace.sh
 
 # Or with a custom location:
-export CPL_RANKING_WORKSPACE=/mnt/data/ranking
-bash ranking/setup_workspace.sh
+export CPL_LAB_WORKSPACE=/mnt/data/recon-lab
+bash recon-lab/setup_workspace.sh
 
 # Add to .bashrc to persist:
-echo 'export CPL_RANKING_WORKSPACE=~/.codeplane/ranking' >> ~/.bashrc
+echo 'export CPL_LAB_WORKSPACE=~/.codeplane/recon-lab' >> ~/.bashrc
+```
+
+## Unified CLI
+
+All pipeline stages are orchestrated via the `cpl-lab` CLI:
+
+```bash
+cd recon-lab && source .venv/bin/activate
+
+# Clone repos
+cpl-lab clone --set ranker-gate
+cpl-lab clone --set all
+
+# Index cloned repos
+cpl-lab index
+
+# Generate ground truth
+cpl-lab generate run
+cpl-lab generate run --stage audit
+cpl-lab generate status
+
+# Collect signals
+cpl-lab collect
+
+# Merge data
+cpl-lab merge
+
+# Train models
+cpl-lab train --model all
+cpl-lab train --model ranker
+
+# Evaluate with EVEE
+cpl-lab eval --experiment recon_ranking.yaml
+
+# Validate ground truth
+cpl-lab validate
+
+# Check pipeline status
+cpl-lab status
 ```
 
 ## Ground truth generation
@@ -101,43 +153,15 @@ which runs local agentic sessions against the cloned repos using GitHub Copilot 
 
 Each stage must complete for **all 98 repos** before the next stage begins.
 
-### Commands
-
-```bash
-cd ranking && source .venv/bin/activate
-
-# Run the full pipeline (auto-advances through stages)
-python3 infra/gt_orchestrator.py run
-
-# Run a specific stage only
-python3 infra/gt_orchestrator.py run --stage audit
-
-# Run one repo only
-python3 infra/gt_orchestrator.py run --repo cpp-abseil --stage exec_n
-
-# Check progress
-python3 infra/gt_orchestrator.py status
-
-# Reset failed repos for retry
-python3 infra/gt_orchestrator.py retry
-python3 infra/gt_orchestrator.py retry cpp-abseil
-
-# View session logs
-python3 infra/gt_orchestrator.py logs cpp-abseil audit
-
-# Merge completed repos into JSONL (after review stage)
-python3 infra/gt_orchestrator.py collect
-```
-
 ### Output
 
-Each repo produces one file: `$CPL_RANKING_WORKSPACE/data/{repo_id}/ground_truth.jsonl` — 34 lines:
+Each repo produces one file: `$CPL_LAB_WORKSPACE/data/{repo_id}/ground_truth.jsonl` — 34 lines:
 - Lines 1-33: task ground truth (N1-N11, M1-M11, W1-W11)
 - Line 34: non-OK queries (UNSAT, BROAD, AMBIG)
 
 ## Training workflow
 
-1. **Ground truth** — `gt_orchestrator.py run` (once, takes ~24h for all 98 repos)
-2. **Signals** — `collect_signals.py` calls `recon_raw_signals()` per query
-3. **Train** — `train_all.py --data-dir $CPL_RANKING_WORKSPACE/data` runs K-fold ranker → cutoff → gate
+1. **Ground truth** — `cpl-lab generate run` (once, takes ~24h for all 98 repos)
+2. **Signals** — `cpl-lab collect` calls `recon_raw_signals()` per query
+3. **Train** — `cpl-lab train --model all` runs K-fold ranker → cutoff → gate
 4. **Deploy** — copy `*.lgbm` into `src/codeplane/ranking/data/`

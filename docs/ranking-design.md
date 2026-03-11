@@ -253,7 +253,7 @@ Three phases, three agent roles:
   JSONs in-place, fill `reviewer_corrections`.
 - **Phase 4 — Signal collection** (automated, re-runnable).
 
-Role prompts live in `ranking/roles/`:
+Role prompts live in `recon-lab/roles/`:
 
 | File | Role | Job |
 |------|------|-----|
@@ -536,17 +536,18 @@ src/codeplane/ranking/          # Runtime inference (ships with codeplane)
 ├── ranker.py, cutoff.py, gate.py, features.py, models.py
 └── data/                       # Serialized .lgbm model artifacts
 
-ranking/                        # Training pipeline (separate project)
+recon-lab/                      # Training pipeline (separate project)
 ├── roles/
 │   ├── auditor.md              # Role 1: pre-flight audit prompt
 │   ├── executor.md             # Role 2: task execution prompt
 │   └── reviewer.md             # Role 3: outputs review prompt
 ├── repos/{set}/{repo}.md       # Task definitions per repo
-├── src/cpl_ranking/
+├── src/cpl_lab/
+│   ├── cli.py, config.py       # Unified Click CLI
 │   ├── collector.py, collect_signals.py
 │   ├── train_ranker.py, train_cutoff.py, train_gate.py
 │   └── schema.py
-└── data/{repo_id}/             # Ground truth + signals (tracked in git)
+└── data/{repo_id}/             # Ground truth + signals (in workspace)
 
 benchmarking/                   # EVEE evaluation
 ├── datasets/ranking_gt.py
