@@ -47,27 +47,28 @@ async def _harvest_def_embedding(
     query_text = parsed.query_text or parsed.raw
     candidates: dict[str, HarvestCandidate] = {}
 
-    # Per-def embedding results (code defs)
+    # Per-def embedding results (code defs) — batch lookup
     def_results = coordinator.query_def_embeddings(query_text, top_k=top_k)
     if def_results:
         from codeplane.index._internal.indexing.graph import FactQueries
 
         with coordinator.db.session() as session:
             fq = FactQueries(session)
-            for uid, sim in def_results:
-                d = fq.get_def(uid)
-                if d is not None:
-                    candidates[uid] = HarvestCandidate(
-                        def_uid=uid,
-                        def_fact=d,
-                        evidence=[
-                            EvidenceRecord(
-                                category="embedding",
-                                detail=f"def embedding sim={sim:.3f}",
-                                score=sim,
-                            )
-                        ],
-                    )
+            uids = [uid for uid, _ in def_results]
+            defs_map = fq.batch_get_defs(uids)
+            sim_map = {uid: sim for uid, sim in def_results}
+            for uid, d in defs_map.items():
+                candidates[uid] = HarvestCandidate(
+                    def_uid=uid,
+                    def_fact=d,
+                    evidence=[
+                        EvidenceRecord(
+                            category="embedding",
+                            detail=f"def embedding sim={sim_map[uid]:.3f}",
+                            score=sim_map[uid],
+                        )
+                    ],
+                )
 
     # File-level embedding results (non-code files) → expand to defs in those files
     file_results = coordinator.query_file_embeddings(query_text, top_k=top_k)
@@ -76,11 +77,14 @@ async def _harvest_def_embedding(
 
         with coordinator.db.session() as session:
             fq = FactQueries(session)
-            for path, sim in file_results:
-                frec = fq.get_file_by_path(path)
-                if frec is None or frec.id is None:
+            paths = [path for path, _ in file_results]
+            files_map = fq.batch_get_files_by_paths(paths)
+            sim_by_path = {path: sim for path, sim in file_results}
+            for path, frec in files_map.items():
+                if frec.id is None:
                     continue
-                defs_in_file = fq.list_defs_in_file(frec.id, limit=200)
+                defs_in_file = fq.list_defs_in_file(frec.id)
+                sim = sim_by_path[path]
                 for d in defs_in_file:
                     if d.def_uid not in candidates:
                         candidates[d.def_uid] = HarvestCandidate(
@@ -167,91 +171,6 @@ async def _harvest_term_match(
 
 
 # ===================================================================
-# Harvester C: Lexical (Tantivy full-text search)
-# ===================================================================
-
-
-async def _harvest_lexical(
-    app_ctx: AppContext,
-    parsed: ParsedTask,
-) -> dict[str, HarvestCandidate]:
-    """Harvester C: Tantivy full-text search -> map hits to containing DefFact.
-
-    Searches file content via Tantivy, then maps each line hit to the
-    DefFact whose span contains that line.
-    """
-    from codeplane.index._internal.indexing.graph import FactQueries
-
-    coordinator = app_ctx.coordinator
-    candidates: dict[str, HarvestCandidate] = {}
-
-    terms = parsed.primary_terms + parsed.secondary_terms
-    if not terms:
-        return candidates
-
-    if coordinator._lexical is None:
-        return candidates
-
-    query = " ".join(terms)
-    search_results = coordinator._lexical.search(query, limit=5000)
-
-    if not search_results.results:
-        return candidates
-
-    # Group hits by file path
-    file_hits: dict[str, list[int]] = {}
-    for hit in search_results.results:
-        if hit.file_path not in file_hits:
-            file_hits[hit.file_path] = []
-        file_hits[hit.file_path].append(hit.line)
-
-    # Map line hits to containing DefFacts
-    with coordinator.db.session() as session:
-        fq = FactQueries(session)
-
-        for file_path, lines in file_hits.items():
-            frec = fq.get_file_by_path(file_path)
-            if frec is None or frec.id is None:
-                continue
-
-            defs_in_file = fq.list_defs_in_file(frec.id, limit=200)
-            if not defs_in_file:
-                continue
-
-            for line in lines:
-                for d in defs_in_file:
-                    if d.start_line <= line <= d.end_line:
-                        uid = d.def_uid
-                        if uid not in candidates:
-                            candidates[uid] = HarvestCandidate(
-                                def_uid=uid,
-                                def_fact=d,
-                                from_lexical=True,
-                                lexical_hit_count=1,
-                                evidence=[
-                                    EvidenceRecord(
-                                        category="lexical",
-                                        detail=f"full-text hit in {file_path}:{line}",
-                                        score=1.0,
-                                    )
-                                ],
-                            )
-                        else:
-                            candidates[uid].from_lexical = True
-                            candidates[uid].lexical_hit_count += 1
-                            if candidates[uid].def_fact is None:
-                                candidates[uid].def_fact = d
-                        break
-
-    log.debug(
-        "recon.harvest.lexical",
-        count=len(candidates),
-        files_searched=len(file_hits),
-    )
-    return candidates
-
-
-# ===================================================================
 # Harvester D: Explicit mentions (paths + symbols from task text)
 # ===================================================================
 
@@ -320,11 +239,11 @@ async def _harvest_explicit(
     if parsed.explicit_paths:
         with coordinator.db.session() as session:
             fq = FactQueries(session)
-            for epath in parsed.explicit_paths:
-                frec = fq.get_file_by_path(epath)
-                if frec is None or frec.id is None:
+            files_map = fq.batch_get_files_by_paths(parsed.explicit_paths)
+            for epath, frec in files_map.items():
+                if frec.id is None:
                     continue
-                defs_in = fq.list_defs_in_file(frec.id, limit=200)
+                defs_in = fq.list_defs_in_file(frec.id)
                 for d in defs_in:
                     if d.def_uid not in candidates:
                         candidates[d.def_uid] = HarvestCandidate(
@@ -423,16 +342,17 @@ async def _harvest_graph(
     if not seed_uids:
         return candidates
 
-    # Resolve DefFacts for seeds
+    # Resolve DefFacts for seeds — batch lookup for missing ones
     seeds_with_facts: list[tuple[str, HarvestCandidate]] = []
     with coordinator.db.session() as session:
         fq = FactQueries(session)
+        missing_uids = [uid for uid in seed_uids if merged[uid].def_fact is None]
+        if missing_uids:
+            defs_map = fq.batch_get_defs(missing_uids)
+            for uid, d in defs_map.items():
+                merged[uid].def_fact = d
         for uid in seed_uids:
             cand = merged[uid]
-            if cand.def_fact is None:
-                d = fq.get_def(uid)
-                if d is not None:
-                    cand.def_fact = d
             if cand.def_fact is not None:
                 seeds_with_facts.append((uid, cand))
 
@@ -445,7 +365,10 @@ async def _harvest_graph(
 
     with coordinator.db.session() as session:
         fq = FactQueries(session)
-        from codeplane.index.models import File as FileModel
+
+        # Pre-resolve all seed file IDs to File objects in one batch
+        seed_file_ids = list({sc.def_fact.file_id for _, sc in seeds_with_facts if sc.def_fact})
+        files_by_id = fq.batch_get_files(seed_file_ids)
 
         for seed_idx, (seed_uid, seed_cand) in enumerate(seeds_with_facts, 1):
             seed_def = seed_cand.def_fact
@@ -456,7 +379,6 @@ async def _harvest_graph(
                 seed_def.file_id,
                 seed_def.start_line,
                 seed_def.end_line,
-                limit=200,
             )
             for callee in callees:
                 if callee.def_uid == seed_uid:
@@ -467,7 +389,7 @@ async def _harvest_graph(
                 ))
 
             # (b) Callers
-            refs = fq.list_refs_by_def_uid(seed_uid, limit=200)
+            refs = fq.list_refs_by_def_uid(seed_uid)
             caller_file_ids: set[int] = set()
             for ref in refs:
                 if ref.file_id == seed_def.file_id:
@@ -475,7 +397,7 @@ async def _harvest_graph(
                 if ref.file_id in caller_file_ids:
                     continue
                 caller_file_ids.add(ref.file_id)
-                caller_defs = fq.list_defs_in_file(ref.file_id, limit=200)
+                caller_defs = fq.list_defs_in_file(ref.file_id)
                 for cd in caller_defs:
                     if (
                         ref.start_line is not None
@@ -488,9 +410,9 @@ async def _harvest_graph(
                         break
 
             # (c) Same-file siblings
-            frec = session.get(FileModel, seed_def.file_id)
+            frec = files_by_id.get(seed_def.file_id)
             if frec is not None and frec.id is not None:
-                sibling_defs = fq.list_defs_in_file(frec.id, limit=200)
+                sibling_defs = fq.list_defs_in_file(frec.id)
                 for sd in sibling_defs:
                     if sd.def_uid == seed_uid:
                         continue
@@ -587,23 +509,24 @@ async def _harvest_imports(
     with coordinator.db.session() as session:
         fq = FactQueries(session)
 
-        # Resolve seed file paths
-        seed_file_paths: dict[int, str] = {}  # file_id → path
-        seed_file_ids: set[int] = set()
+        # Resolve seed file paths — batch lookup for missing defs, then batch file resolution
+        missing_uids = [uid for uid in seed_uids if merged[uid].def_fact is None]
+        if missing_uids:
+            defs_map = fq.batch_get_defs(missing_uids)
+            for uid, d in defs_map.items():
+                merged[uid].def_fact = d
+
+        seed_file_ids_list: list[int] = []
         for uid in seed_uids:
             cand = merged[uid]
-            if cand.def_fact is None:
-                d = fq.get_def(uid)
-                if d is not None:
-                    cand.def_fact = d
-            if cand.def_fact is None:
-                continue
-            fid = cand.def_fact.file_id
-            if fid not in seed_file_paths:
-                frec = session.get(FileModel, fid)
-                if frec is not None:
-                    seed_file_paths[fid] = frec.path
-                    seed_file_ids.add(fid)
+            if cand.def_fact is not None:
+                fid = cand.def_fact.file_id
+                if fid not in seed_file_ids_list:
+                    seed_file_ids_list.append(fid)
+
+        files_by_id = fq.batch_get_files(seed_file_ids_list)
+        seed_file_paths: dict[int, str] = {fid: f.path for fid, f in files_by_id.items()}
+        seed_file_ids: set[int] = set(seed_file_paths.keys())
 
         if not seed_file_ids:
             return candidates
@@ -612,13 +535,27 @@ async def _harvest_imports(
         seed_paths_set = set(seed_file_paths.values())
 
         # (a) Forward deps: files imported by seed files
+        # Collect all resolved import paths across all seeds, then batch lookup
+        all_import_paths: set[str] = set()
+        imports_by_fid: dict[int, list[ImportFact]] = {}
+        for fid in seed_file_ids:
+            imports = fq.list_imports(fid)
+            imports_by_fid[fid] = imports
+            for imp in imports:
+                if imp.resolved_path:
+                    all_import_paths.add(imp.resolved_path)
+
+        if all_import_paths:
+            import_files_map = fq.batch_get_files_by_paths(list(all_import_paths))
+        else:
+            import_files_map = {}
+
         seen_import_fids: set[int] = set()
         for fid in seed_file_ids:
-            imports = fq.list_imports(fid, limit=200)
-            for imp in imports:
+            for imp in imports_by_fid.get(fid, []):
                 if not imp.resolved_path:
                     continue
-                imp_file = fq.get_file_by_path(imp.resolved_path)
+                imp_file = import_files_map.get(imp.resolved_path)
                 if imp_file is None or imp_file.id is None:
                     continue
                 if imp_file.id in seed_file_ids or imp_file.id in seen_import_fids:
@@ -645,24 +582,25 @@ async def _harvest_imports(
                 .distinct()
             )
             reverse_fids = list(session.exec(reverse_stmt).all())
-            for rfid in reverse_fids:
-                if rfid in seed_file_ids:
-                    continue
-                rfile = session.get(FileModel, rfid)
-                if rfile is None:
-                    continue
-                _add_file_defs_as_candidates(
-                    fq,
-                    rfile,
-                    candidates,
-                    merged,
-                    category="import_reverse",
-                    detail=f"imports a seed file ({rfile.path})",
-                    score=1.0,
-                    import_direction="reverse",
-                )
+            # Batch lookup all reverse file IDs
+            reverse_fids_to_lookup = [rfid for rfid in reverse_fids if rfid not in seed_file_ids]
+            if reverse_fids_to_lookup:
+                reverse_files = fq.batch_get_files(reverse_fids_to_lookup)
+                for rfid, rfile in reverse_files.items():
+                    _add_file_defs_as_candidates(
+                        fq,
+                        rfile,
+                        candidates,
+                        merged,
+                        category="import_reverse",
+                        detail=f"imports a seed file ({rfile.path})",
+                        score=1.0,
+                        import_direction="reverse",
+                    )
 
         # (c) __init__.py barrels + conftest.py in seed directories
+        # Collect all candidate barrel/conftest paths, then batch lookup
+        barrel_paths: list[str] = []
         seen_dirs: set[str] = set()
         for seed_path in seed_paths_set:
             import os
@@ -673,11 +611,31 @@ async def _harvest_imports(
             seen_dirs.add(dir_path)
             for special_name in ("__init__.py", "conftest.py"):
                 barrel_path = f"{dir_path}/{special_name}"
-                if barrel_path in seed_paths_set:
-                    continue
-                barrel_file = fq.get_file_by_path(barrel_path)
-                if barrel_file is None or barrel_file.id is None:
-                    continue
+                if barrel_path not in seed_paths_set:
+                    barrel_paths.append(barrel_path)
+
+        # (d) Test file pattern matching — collect all candidate paths
+        test_lookup_paths: list[str] = []
+        test_path_to_seed: dict[str, str] = {}
+        for seed_path in seed_paths_set:
+            test_paths = _infer_test_paths(seed_path)
+            for tp in test_paths:
+                test_lookup_paths.append(tp)
+                test_path_to_seed[tp] = seed_path
+
+        # Single batch lookup for all barrel + test paths
+        all_lookup_paths = barrel_paths + test_lookup_paths
+        if all_lookup_paths:
+            lookup_files = fq.batch_get_files_by_paths(all_lookup_paths)
+        else:
+            lookup_files = {}
+
+        # Process barrel files
+        for bp in barrel_paths:
+            barrel_file = lookup_files.get(bp)
+            if barrel_file is not None and barrel_file.id is not None:
+                import os
+                dir_path = os.path.dirname(bp)
                 _add_file_defs_as_candidates(
                     fq,
                     barrel_file,
@@ -689,22 +647,20 @@ async def _harvest_imports(
                     import_direction="barrel",
                 )
 
-        # (d) Test file pattern matching
-        for seed_path in seed_paths_set:
-            test_paths = _infer_test_paths(seed_path)
-            for tp in test_paths:
-                tf = fq.get_file_by_path(tp)
-                if tf is not None and tf.id is not None:
-                    _add_file_defs_as_candidates(
-                        fq,
-                        tf,
-                        candidates,
-                        merged,
-                        category="import_test",
-                        detail=f"test file for {seed_path}",
-                        score=1.0,
-                        import_direction="test_pair",
-                    )
+        # Process test files
+        for tp in test_lookup_paths:
+            tf = lookup_files.get(tp)
+            if tf is not None and tf.id is not None:
+                _add_file_defs_as_candidates(
+                    fq,
+                    tf,
+                    candidates,
+                    merged,
+                    category="import_test",
+                    detail=f"test file for {test_path_to_seed[tp]}",
+                    score=1.0,
+                    import_direction="test_pair",
+                )
 
     log.debug(
         "recon.harvest.imports",

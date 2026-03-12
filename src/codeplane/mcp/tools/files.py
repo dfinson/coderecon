@@ -11,14 +11,9 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from codeplane.core.languages import EXTENSION_TO_NAME
-from codeplane.mcp.delivery import ScopeManager
 
 if TYPE_CHECKING:
     from codeplane.mcp.context import AppContext
-
-
-# Global scope manager for budget tracking
-_scope_manager = ScopeManager()
 
 
 def _compute_file_sha256(full_path: Any) -> str:

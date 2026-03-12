@@ -61,19 +61,17 @@ async def _enrich_candidates(
     to minimize repeated queries.
     """
     from codeplane.index._internal.indexing.graph import FactQueries
-    from codeplane.index.models import File as FileModel
 
     coordinator = app_ctx.coordinator
 
-    # Resolve missing DefFacts in one session
+    # Resolve missing DefFacts in one batch query
     missing_uids = [uid for uid, c in candidates.items() if c.def_fact is None]
     if missing_uids:
         with coordinator.db.session() as session:
             fq = FactQueries(session)
-            for uid in missing_uids:
-                d = fq.get_def(uid)
-                if d is not None:
-                    candidates[uid].def_fact = d
+            found = fq.batch_get_defs(missing_uids)
+            for uid, d in found.items():
+                candidates[uid].def_fact = d
 
     # Remove candidates that still lack a DefFact
     dead = [uid for uid, c in candidates.items() if c.def_fact is None]
@@ -88,20 +86,21 @@ async def _enrich_candidates(
         fq = FactQueries(session)
 
         # Batch resolve all unique file_ids to paths
-        unique_fids = {c.def_fact.file_id for c in candidates.values() if c.def_fact}
-        for fid in unique_fids:
-            if fid not in fid_path_cache:
-                frec = session.get(FileModel, fid)
-                fid_path_cache[fid] = frec.path if frec else ""
+        unique_fids = list({c.def_fact.file_id for c in candidates.values() if c.def_fact})
+        file_map = fq.batch_get_files(unique_fids)
+        for fid, frec in file_map.items():
+            fid_path_cache[fid] = frec.path if frec else ""
+
+        # Batch resolve all hub scores
+        all_uids = [uid for uid, c in candidates.items() if c.def_fact is not None]
+        hub_score_cache = fq.batch_count_callers(all_uids)
 
         for uid, cand in list(candidates.items()):
             if cand.def_fact is None:
                 continue
             d = cand.def_fact
 
-            if uid not in hub_score_cache:
-                hub_score_cache[uid] = fq.count_callers(uid)
-            cand.hub_score = hub_score_cache[uid]
+            cand.hub_score = hub_score_cache.get(uid, 0)
 
             cand.file_path = fid_path_cache.get(d.file_id, "")
             cand.is_test = _is_test_file(cand.file_path)
@@ -137,7 +136,6 @@ async def _enrich_candidates(
                     anchor_cand.def_fact.file_id,
                     anchor_cand.def_fact.start_line,
                     anchor_cand.def_fact.end_line,
-                    limit=50,
                 )
                 for c in callees:
                     anchor_callee_uids.add(c.def_uid)
@@ -152,12 +150,12 @@ async def _enrich_candidates(
                 if not anchor_path or anchor_path in seen_import_files:
                     continue
                 seen_import_files.add(anchor_path)
-                imports = fq.list_imports(anchor_cand.def_fact.file_id, limit=50)
+                imports = fq.list_imports(anchor_cand.def_fact.file_id)
                 for imp in imports:
                     if imp.resolved_path:
                         imp_file = fq.get_file_by_path(imp.resolved_path)
                         if imp_file is not None and imp_file.id is not None:
-                            imp_defs = fq.list_defs_in_file(imp_file.id, limit=50)
+                            imp_defs = fq.list_defs_in_file(imp_file.id)
                             for idef in imp_defs:
                                 anchor_import_uids.add(idef.def_uid)
 
@@ -204,7 +202,7 @@ def _add_file_defs_as_candidates(
     if file_id is None:
         return
 
-    defs = fq_typed.list_defs_in_file(file_id, limit=200)
+    defs = fq_typed.list_defs_in_file(file_id)
 
     for d in defs:
         if d.def_uid in merged:

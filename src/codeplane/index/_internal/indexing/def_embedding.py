@@ -9,10 +9,13 @@ The embedded text is a compact anglicized per-def scaffold::
     DEF_SCAFFOLD
     module <file path phrase>
     <kind> <anglicized name>(<compact signature>)
-    describes <first sentence of docstring>
     calls <callees within this def's body>
-    decorated <decorator names>
     mentions <string literals within this def>
+    describes <first sentence of docstring>
+
+Components are ordered by measured marginal recall contribution
+(callees > strings > signature > docstring) and greedily filled
+until the model's 512-token context window is exhausted.
 
 Per-def scaffolds are tiny: median ~48 chars (~14 tokens), p95 ~151 chars.
 99.9% fall under 500 chars.  With adaptive batching (batch size ×4 for short
@@ -84,12 +87,10 @@ _CODE_KINDS = frozenset(
     }
 )
 
-# Per-def enrichment budgets
-_DEF_DOC_BUDGET_CHARS = 120
-_DEF_CALLS_MAX = 10
-_DEF_DECORATORS_MAX = 5
-_DEF_STRING_LITS_MAX = 5
-_DEF_STRING_LIT_BUDGET_CHARS = 150
+# Approximate char budget for greedy scaffold fill.
+# bge-small-en-v1.5 context = 512 tokens ≈ 1,800 scaffold chars.
+# Not arbitrary — derived from the model's fixed positional embedding.
+_DEF_SCAFFOLD_CHAR_BUDGET = 1_800
 
 
 # ===================================================================
@@ -105,12 +106,21 @@ def build_def_scaffold(
 
     Returns a compact text suitable for embedding that captures the
     def's identity, purpose, and context within the file.
+
+    Components are filled in priority order derived from ablation data
+    (marginal recall@100): name > callees(+4.8%) > strings(+1.5%)
+    > signature(+0.7%) > docstring(+0.2%). Decorators are excluded
+    (net negative: -0.4%). Filling stops when the model's 512-token
+    context window (~1800 chars) is exhausted.
     """
     kind = d.get("kind", "")
     name = d.get("name", "")
     if not name:
         return ""
 
+    budget = _DEF_SCAFFOLD_CHAR_BUDGET
+
+    # --- Fixed header (always present: identity) ---
     lines: list[str] = []
 
     # Module context from file path
@@ -118,10 +128,9 @@ def build_def_scaffold(
     if path_phrase:
         lines.append(f"module {path_phrase}")
 
-    # Kind + name + signature
-    sig = d.get("signature_text", "") or ""
-    compact = _compact_sig(name, sig)
-    lines.append(f"{kind} {compact}")
+    # Kind + name (signature added later at its priority)
+    name_words = " ".join(_word_split(name))
+    lines.append(f"{kind} {name_words}")
 
     # Parent class/module context
     qualified = d.get("qualified_name", "") or d.get("lexical_path", "") or ""
@@ -131,54 +140,83 @@ def build_def_scaffold(
         if parent_words:
             lines.append(f"in {parent_words}")
 
-    # Docstring (first sentence)
-    doc = (d.get("docstring") or "").strip()
-    if doc and len(doc) > 15:
-        first_sentence = doc.split(".")[0].strip() if "." in doc else doc[:_DEF_DOC_BUDGET_CHARS]
-        if first_sentence:
-            lines.append(f"describes {first_sentence[:_DEF_DOC_BUDGET_CHARS]}")
+    used = sum(len(ln) + 1 for ln in lines)  # +1 for newline
 
-    # Calls (from semantic facts)
+    # --- Priority 1: Callees (+4.8% marginal recall) ---
     sf = d.get("_sem_facts", {})
     calls = sf.get("calls", []) if isinstance(sf, dict) else []
     if calls:
-        sorted_calls = sorted({c for c in calls if c and len(c) >= 2})[:_DEF_CALLS_MAX]
-        if sorted_calls:
-            lines.append(f"calls {', '.join(sorted_calls)}")
+        sorted_calls = sorted({c for c in calls if c and len(c) >= 2})
+        call_line = f"calls {', '.join(sorted_calls)}"
+        if used + len(call_line) + 1 <= budget:
+            lines.append(call_line)
+            used += len(call_line) + 1
+        else:
+            # Fit as many callees as the remaining budget allows
+            remaining = budget - used - len("calls ") - 1
+            if remaining > 4:
+                partial: list[str] = []
+                partial_len = 0
+                for c in sorted_calls:
+                    add_len = len(c) + (2 if partial else 0)
+                    if partial_len + add_len > remaining:
+                        break
+                    partial.append(c)
+                    partial_len += add_len
+                if partial:
+                    call_line = f"calls {', '.join(partial)}"
+                    lines.append(call_line)
+                    used += len(call_line) + 1
 
-    # Decorators
-    dec_json = d.get("decorators_json", "")
-    if dec_json and dec_json != "[]":
-        try:
-            decs: list[str] = []
-            for dec_str in json.loads(dec_json):
-                name_str = dec_str.lstrip("@").split("(")[0].strip()
-                if name_str and len(name_str) >= 2:
-                    decs.append(name_str)
-            if decs:
-                lines.append(f"decorated {', '.join(decs[:_DEF_DECORATORS_MAX])}")
-        except (json.JSONDecodeError, TypeError):
-            pass
-
-    # String literals (from semantic facts)
+    # --- Priority 2: String literals (+1.5% marginal recall) ---
     lits = d.get("_string_literals", [])
-    if lits:
+    if lits and used < budget:
         clean_lits: list[str] = []
         chars_used = 0
+        remaining = budget - used - len("mentions ") - 1
         for lit in lits:
             lit_clean = lit.strip()
             if lit_clean.lower() in ("true", "false", "none", "", "0", "1"):
                 continue
             if len(lit_clean) < 3:
                 continue
-            if chars_used + len(lit_clean) + 2 > _DEF_STRING_LIT_BUDGET_CHARS:
+            add_len = len(lit_clean) + (2 if clean_lits else 0)
+            if chars_used + add_len > remaining:
                 break
             clean_lits.append(lit_clean)
-            chars_used += len(lit_clean) + 2
-            if len(clean_lits) >= _DEF_STRING_LITS_MAX:
-                break
+            chars_used += add_len
         if clean_lits:
-            lines.append(f"mentions {', '.join(clean_lits)}")
+            lit_line = f"mentions {', '.join(clean_lits)}"
+            lines.append(lit_line)
+            used += len(lit_line) + 1
+
+    # --- Priority 3: Signature (+0.7% marginal recall) ---
+    sig = d.get("signature_text", "") or ""
+    if sig and used < budget:
+        compact = _compact_sig(name, sig)
+        # Replace the kind+name line with kind+compact_sig
+        kind_line = f"{kind} {compact}"
+        old_kind_line = f"{kind} {name_words}"
+        for i, ln in enumerate(lines):
+            if ln == old_kind_line:
+                extra = len(kind_line) - len(old_kind_line)
+                if used + extra <= budget:
+                    lines[i] = kind_line
+                    used += extra
+                break
+
+    # --- Priority 4: Docstring (+0.2% marginal recall) ---
+    doc = (d.get("docstring") or "").strip()
+    if doc and len(doc) > 15 and used < budget:
+        first_sentence = doc.split(".")[0].strip() if "." in doc else doc
+        remaining = budget - used - len("describes ") - 1
+        if remaining > 10:
+            doc_text = first_sentence[:remaining]
+            doc_line = f"describes {doc_text}"
+            lines.append(doc_line)
+            used += len(doc_line) + 1
+
+    # Decorators intentionally excluded (ablation: -0.4% net negative)
 
     if not lines:
         return ""

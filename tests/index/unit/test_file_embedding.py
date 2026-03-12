@@ -10,7 +10,6 @@ from __future__ import annotations
 import pytest
 
 from codeplane.index._internal.indexing.file_embedding import (
-    _DOC_MAX_COUNT,
     _build_config_defines,
     _build_embed_text,
     _build_enriched_chunks,
@@ -186,8 +185,8 @@ class TestBuildFileScaffold:
         assert "disconnect:" in result.lower()
         assert result.lower().count("describes") == 2
 
-    def test_docstring_count_capped(self) -> None:
-        """Should cap docstrings at _DOC_MAX_COUNT."""
+    def test_many_docstrings_all_included(self) -> None:
+        """All docstrings should be included (no arbitrary count cap)."""
         defs = [
             {
                 "kind": "function",
@@ -195,10 +194,10 @@ class TestBuildFileScaffold:
                 "signature_text": "()",
                 "docstring": f"This is the docstring for function number {i} in the module.",
             }
-            for i in range(_DOC_MAX_COUNT + 5)
+            for i in range(25)
         ]
         result = build_file_scaffold("src/big.py", defs, [])
-        assert result.count("describes") == _DOC_MAX_COUNT
+        assert result.count("describes") == 25
 
     def test_dedup_imports(self) -> None:
         """Duplicate import sources should be deduplicated."""
@@ -455,8 +454,8 @@ class TestBuildEnrichmentLines:
         assert "ab" not in result["S"]
         assert "true" not in result["S"]
 
-    def test_string_literals_budget(self) -> None:
-        """S signal respects the character budget."""
+    def test_string_literals_no_per_signal_budget(self) -> None:
+        """S signal includes all literals (no per-signal budget; model token limit is the cap)."""
         defs = [
             {
                 "name": "f",
@@ -465,11 +464,8 @@ class TestBuildEnrichmentLines:
         ]
         result = _build_enrichment_lines(defs, [])
         assert "S" in result
-        from codeplane.index._internal.indexing.file_embedding import _STRING_LIT_BUDGET_CHARS
-
-        # The mentions line prefix + content should stay within budget
-        content_part = result["S"][len("mentions ") :]
-        assert len(content_part) <= _STRING_LIT_BUDGET_CHARS + 50  # allow for last item
+        # All 100 literals should be present
+        assert result["S"].count("literal_value_") == 100
 
     def test_full_imports_signal(self) -> None:
         """I signal: full dotted import path, not just last segment."""
@@ -504,8 +500,8 @@ class TestBuildEnrichmentLines:
         # Single-char call 'x' should be excluded (len < 2)
         assert ", x" not in result["C"]
 
-    def test_decorators_signal(self) -> None:
-        """D signal: decorator names from decorators_json."""
+    def test_decorators_signal_excluded(self) -> None:
+        """D signal: decorators are excluded (ablation: net negative)."""
         defs = [
             {
                 "name": "cli",
@@ -513,13 +509,10 @@ class TestBuildEnrichmentLines:
             }
         ]
         result = _build_enrichment_lines(defs, [])
-        assert "D" in result
-        assert result["D"].startswith("decorated ")
-        assert "click.command" in result["D"]
-        assert "property" in result["D"]
+        assert "D" not in result
 
     def test_all_signals_present(self) -> None:
-        """All four signals should be generated when data is available."""
+        """C, S, I signals should be generated when data is available (D excluded)."""
         defs = [
             {
                 "name": "handler",
@@ -533,7 +526,7 @@ class TestBuildEnrichmentLines:
         assert "S" in result
         assert "I" in result
         assert "C" in result
-        assert "D" in result
+        assert "D" not in result  # Decorators excluded by ablation
 
     def test_dedup_calls(self) -> None:
         """Duplicate call names across defs should be deduplicated."""
@@ -600,7 +593,6 @@ class TestBuildEnrichedChunks:
             "I": "imports " + ", ".join(f"package_{i} module_{i}" for i in range(20)),
             "S": "mentions " + ", ".join(f"CONFIG_KEY_{i}" for i in range(20)),
             "C": "calls " + ", ".join(f"function_call_{i}" for i in range(15)),
-            "D": "decorated dataclass, property, classmethod",
         }
         chunks = _build_enriched_chunks(scaffold, enrichment, "")
         assert len(chunks) == 2
@@ -613,7 +605,6 @@ class TestBuildEnrichedChunks:
         assert "module " in chunks[1]
         assert "mentions " in chunks[1]
         assert "calls " in chunks[1]
-        assert "decorated " in chunks[1]
 
     def test_fallback_no_scaffold(self) -> None:
         """Without scaffold, falls back to truncated content."""

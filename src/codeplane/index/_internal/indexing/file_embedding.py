@@ -7,21 +7,22 @@ the anglicified scaffold enriched with tree-sitter signals::
     module <path phrase>
     imports <full dotted import paths>
     defines <anglicified defs with signatures>
-    describes <docstring summaries>
-    mentions <string literals — env vars, config keys, URLs>
     calls <function/method names called within definitions>
-    decorated <decorator names>
+    mentions <string literals — env vars, config keys, URLs>
+    describes <docstring summaries>
 
 The scaffold converts tree-sitter-extracted defs and imports into
 English-like tokens (identifier splitting, signature compaction)
 so that natural-language queries match code structure.  No
 language-specific keyword lists — purely mechanical extraction.
 
-Four enrichment signals (S+I+C+D) are appended:
+Three enrichment signals (C+S+I) are appended in priority order
+derived from ablation data (marginal recall contribution):
+  C = sem_calls        (function/method names called within each def)
   S = string_literals  (env var names, config keys, error messages)
   I = full_imports     (full dotted import paths, not just last segment)
-  C = sem_calls        (function/method names called within each def)
-  D = decorators       (decorator names like click.command, dataclass)
+
+Decorators are excluded — ablation measured net negative recall impact.
 
 When enriched text exceeds ~450 tokens, the file is split into two
 chunks: chunk 0 = base scaffold, chunk 1 = module context + enrichment
@@ -77,7 +78,7 @@ FILE_EMBED_MODEL = "BAAI/bge-small-en-v1.5"
 FILE_EMBED_DIM = 384
 FILE_EMBED_MAX_CHARS = 2_048  # ~512 tokens; aligned with max_length=512
 FILE_EMBED_BATCH_SIZE = 8  # default; overridden by _detect_batch_size()
-FILE_EMBED_VERSION = 7  # v7: config-file scaffold enrichment (targets, sections, keys, headings)
+FILE_EMBED_VERSION = 8  # v8: scaffold redesign — drop decorators, reorder by ablation, greedy fill
 
 # Maximum token length passed to ONNX model (caps attention cost)
 FILE_EMBED_MAX_LENGTH = 512
@@ -90,18 +91,10 @@ _BATCH_SHORT_THRESHOLD = 500  # <~140 tokens
 _BATCH_MEDIUM_THRESHOLD = 1_200  # <~340 tokens
 FILE_EMBED_SUBDIR = "file_embedding"
 
-# Per-docstring budget (first sentence or first N chars)
-_DOC_BUDGET_CHARS = 120
-# Maximum number of docstrings to include in scaffold
-_DOC_MAX_COUNT = 10
-
-# Enrichment signal budgets
-_STRING_LIT_BUDGET_CHARS = 300  # char budget for string literals signal (S)
-_SEM_CALLS_MAX = 20  # max number of call names in calls signal (C)
-_DECORATORS_MAX = 10  # max number of decorator names (D)
-# Approximate 450-token threshold for 2-chunk splitting.
-# bge-small averages ~3.5 chars/token for scaffold text.
-_CHUNK_SPLIT_CHARS = 1_600
+# Approximate char budget for greedy scaffold fill.
+# bge-small-en-v1.5 context = 512 tokens ≈ 1,800 scaffold chars.
+# Not arbitrary — derived from the model's fixed positional embedding.
+_FILE_SCAFFOLD_CHAR_BUDGET = 1_800
 
 # Word split regex: camelCase / PascalCase / snake_case → words
 _CAMEL_SPLIT = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z][a-z]|\d|\b)|[0-9]+")
@@ -248,25 +241,18 @@ def build_file_scaffold(
         config_lines = _build_config_defines(defs)
         lines.extend(config_lines)
 
-        # Docstring / comment summaries — include ALL meaningful ones
-        doc_count = 0
+        # Docstring / comment summaries — first sentence of each
         for d in sorted_defs:
-            if doc_count >= _DOC_MAX_COUNT:
-                break
             doc = (d.get("docstring") or "").strip()
             if doc and len(doc) > 15:
-                # First sentence or first N chars
-                first_sentence = (
-                    doc.split(".")[0].strip() if "." in doc else doc[:_DOC_BUDGET_CHARS]
-                )
+                first_sentence = doc.split(".")[0].strip() if "." in doc else doc
                 if first_sentence:
                     name = d.get("name", "")
                     prefix = " ".join(_word_split(name)) if name else ""
                     if prefix:
-                        lines.append(f"describes {prefix}: {first_sentence[:_DOC_BUDGET_CHARS]}")
+                        lines.append(f"describes {prefix}: {first_sentence}")
                     else:
-                        lines.append(f"describes {first_sentence[:_DOC_BUDGET_CHARS]}")
-                    doc_count += 1
+                        lines.append(f"describes {first_sentence}")
 
     if not lines:
         return ""
@@ -286,12 +272,6 @@ def _compact_sig(name: str, sig: str) -> str:
             return f"{words}{compact}"
     return words
 
-
-# Maximum config-kind items per category in scaffold
-_CONFIG_TARGETS_MAX = 15
-_CONFIG_SECTIONS_MAX = 12
-_CONFIG_KEYS_MAX = 20
-_CONFIG_HEADINGS_MAX = 10
 
 # Names too generic to add signal — always skip
 _CONFIG_SKIP_NAMES = frozenset(
@@ -366,15 +346,15 @@ def _build_config_defines(defs: list[dict[str, Any]]) -> list[str]:
 
     lines: list[str] = []
     if targets:
-        lines.append(f"targets {', '.join(targets[:_CONFIG_TARGETS_MAX])}")
+        lines.append(f"targets {', '.join(targets)}")
     if sections:
-        lines.append(f"sections {', '.join(sections[:_CONFIG_SECTIONS_MAX])}")
+        lines.append(f"sections {', '.join(sections)}")
     if config_keys:
-        lines.append(f"configures {', '.join(config_keys[:_CONFIG_KEYS_MAX])}")
+        lines.append(f"configures {', '.join(config_keys)}")
     if headings:
-        lines.append(f"topics {', '.join(headings[:_CONFIG_HEADINGS_MAX])}")
+        lines.append(f"topics {', '.join(headings)}")
     if variables:
-        lines.append(f"variables {', '.join(variables[:_CONFIG_TARGETS_MAX])}")
+        lines.append(f"variables {', '.join(variables)}")
 
     return lines
 
@@ -393,15 +373,31 @@ def _build_enrichment_lines(
     Returns a dict mapping signal name to the composed text line.
     Only populated signals are included; empty dict if nothing useful.
 
-    Signals:
+    Signals (ordered by measured marginal recall contribution):
+      C - calls: function/method names called within definitions
       S - string_literals: env vars, config keys, error messages
       I - full_imports: full dotted import paths (not just last segment)
-      C - calls: function/method names called within definitions
-      D - decorators: decorator names (click.command, dataclass, etc.)
+
+    Decorators excluded (ablation: net negative -0.4%).
+    No per-signal budgets — the model's 512-token context window
+    is the only natural limit, enforced by the chunk builder.
     """
     lines: dict[str, str] = {}
 
+    # C: sem_calls → "calls load_dotenv, Progress, SpinnerColumn, ..."
+    # Priority 1 enrichment signal (callees: +4.8% marginal recall)
+    all_calls: set[str] = set()
+    for d in defs:
+        sf = d.get("_sem_facts", {})
+        for call_name in sf.get("calls", []):
+            if call_name and len(call_name) >= 2:
+                all_calls.add(call_name)
+    if all_calls:
+        sorted_calls = sorted(all_calls)
+        lines["C"] = "calls " + ", ".join(sorted_calls)
+
     # S: string_literals → "mentions EVEE_MCP_MODE, config.yaml, ..."
+    # Priority 2 enrichment signal (strings: +1.5% marginal recall)
     all_lits: list[str] = []
     seen_lits: set[str] = set()
     for d in defs:
@@ -415,14 +411,7 @@ def _build_enrichment_lines(
                 seen_lits.add(lit_clean)
                 all_lits.append(lit_clean)
     if all_lits:
-        parts: list[str] = []
-        chars_used = 0
-        for lit in all_lits:
-            if chars_used + len(lit) + 2 > _STRING_LIT_BUDGET_CHARS:
-                break
-            parts.append(lit)
-            chars_used += len(lit) + 2
-        lines["S"] = "mentions " + ", ".join(parts)
+        lines["S"] = "mentions " + ", ".join(all_lits)
 
     # I: full imports → "imports rich progress, evaluation progress tracker, ..."
     if imports:
@@ -443,32 +432,7 @@ def _build_enrichment_lines(
         if import_tokens:
             lines["I"] = "imports " + ", ".join(import_tokens)
 
-    # C: sem_calls → "calls load_dotenv, Progress, SpinnerColumn, ..."
-    all_calls: set[str] = set()
-    for d in defs:
-        sf = d.get("_sem_facts", {})
-        for call_name in sf.get("calls", []):
-            if call_name and len(call_name) >= 2:
-                all_calls.add(call_name)
-    if all_calls:
-        sorted_calls = sorted(all_calls)[:_SEM_CALLS_MAX]
-        lines["C"] = "calls " + ", ".join(sorted_calls)
-
-    # D: decorators → "decorated click.command, dataclass, property"
-    all_decs: set[str] = set()
-    for d in defs:
-        dec_json = d.get("decorators_json", "")
-        if dec_json and dec_json != "[]":
-            try:
-                for dec_str in json.loads(dec_json):
-                    name_str = dec_str.lstrip("@").split("(")[0].strip()
-                    if name_str and len(name_str) >= 2:
-                        all_decs.add(name_str)
-            except (json.JSONDecodeError, TypeError):
-                pass
-    if all_decs:
-        sorted_decs = sorted(all_decs)[:_DECORATORS_MAX]
-        lines["D"] = "decorated " + ", ".join(sorted_decs)
+    # Decorators intentionally excluded (ablation: -0.4% net negative)
 
     return lines
 
@@ -490,9 +454,11 @@ def _build_enriched_chunks(
 
     At query time, max-pool similarity selects the best chunk per file.
     """
+    budget = _FILE_SCAFFOLD_CHAR_BUDGET
+
     if not scaffold:
         # Fallback: no scaffold, use truncated content
-        fallback = _truncate_semantic(content, max_chars=FILE_EMBED_MAX_CHARS, defs=defs)
+        fallback = _truncate_semantic(content, max_chars=budget, defs=defs)
         return [fallback]
 
     # Build the full enriched text
@@ -512,21 +478,20 @@ def _build_enriched_chunks(
             insert_at = min(1, len(lines))
             lines.insert(insert_at, full_import_line)
 
-    # Append S, C, D signals
-    if "S" in enrichment:
-        lines.append(enrichment["S"])
+    # Append enrichment signals in priority order (C > S)
+    # Decorators intentionally excluded (ablation: net negative)
     if "C" in enrichment:
         lines.append(enrichment["C"])
-    if "D" in enrichment:
-        lines.append(enrichment["D"])
+    if "S" in enrichment:
+        lines.append(enrichment["S"])
 
     full_text = "FILE_SCAFFOLD\n" + "\n".join(lines)
 
-    if len(full_text) <= _CHUNK_SPLIT_CHARS:
-        return [full_text[:FILE_EMBED_MAX_CHARS]]
+    if len(full_text) <= budget:
+        return [full_text]
 
     # --- 2-chunk split ---
-    chunk0 = f"FILE_SCAFFOLD\n{scaffold}"[:FILE_EMBED_MAX_CHARS]
+    chunk0 = f"FILE_SCAFFOLD\n{scaffold}"[:budget]
 
     # chunk 1: module context + enrichment signals
     enrich_lines: list[str] = ["FILE_SCAFFOLD"]
@@ -536,18 +501,16 @@ def _build_enriched_chunks(
             break
     if "I" in enrichment:
         enrich_lines.append(enrichment["I"])
-    if "S" in enrichment:
-        enrich_lines.append(enrichment["S"])
     if "C" in enrichment:
         enrich_lines.append(enrichment["C"])
-    if "D" in enrichment:
-        enrich_lines.append(enrichment["D"])
+    if "S" in enrichment:
+        enrich_lines.append(enrichment["S"])
 
     # Only emit chunk 1 if it has actual enrichment content
     if len(enrich_lines) <= 2:
         return [chunk0]
 
-    chunk1 = "\n".join(enrich_lines)[:FILE_EMBED_MAX_CHARS]
+    chunk1 = "\n".join(enrich_lines)[:budget]
     return [chunk0, chunk1]
 
 
@@ -571,11 +534,12 @@ def _build_embed_text(
     The *content* and *defs* parameters are accepted for API
     compatibility but are not used when a scaffold is available.
     """
+    budget = _FILE_SCAFFOLD_CHAR_BUDGET
     if scaffold:
         text = f"FILE_SCAFFOLD\n{scaffold}"
-        return text[:FILE_EMBED_MAX_CHARS]
+        return text[:budget]
     # Fallback: no scaffold available, use truncated content
-    return _truncate_semantic(content, max_chars=FILE_EMBED_MAX_CHARS, defs=defs)
+    return _truncate_semantic(content, max_chars=budget, defs=defs)
 
 
 # ===================================================================

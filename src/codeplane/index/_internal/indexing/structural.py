@@ -111,8 +111,6 @@ def _collect_string_literals(
     start_line: int,
     end_line: int,
     string_node_types: frozenset[str],
-    *,
-    budget: int = 120,
 ) -> list[str]:
     """Collect string literal content from parse tree within a def span.
 
@@ -126,18 +124,13 @@ def _collect_string_literals(
         start_line: Def start line (0-indexed tree-sitter convention).
         end_line: Def end line.
         string_node_types: Set of node type names to match.
-        budget: Maximum total chars of extracted literals.
 
     Returns:
         List of string literal texts (unquoted, non-empty).
     """
     results: list[str] = []
-    total_chars = 0
 
     def walk(node: Any) -> None:
-        nonlocal total_chars
-        if total_chars >= budget:
-            return
         # Skip nodes entirely outside the def span
         if node.end_point[0] < start_line or node.start_point[0] > end_line:
             return
@@ -154,11 +147,7 @@ def _collect_string_literals(
                 raw = content[node.start_byte : node.end_byte]
                 text = raw.decode("utf-8", errors="replace").strip("\"'`")
             if text and 4 <= len(text) <= 80:
-                remaining = budget - total_chars
-                if remaining > 0:
-                    text = text[:remaining]
-                    results.append(text)
-                    total_chars += len(text)
+                results.append(text)
             return  # Don't recurse into string children
         for child in node.children:
             walk(child)
@@ -171,8 +160,6 @@ def _extract_string_literals_regex(
     content_text: str,
     start_line: int,
     end_line: int,
-    *,
-    budget: int = 120,
 ) -> list[str]:
     """Regex fallback for string literal extraction.
 
@@ -185,21 +172,12 @@ def _extract_string_literals_regex(
     source_slice = "\n".join(lines[sl:el])
 
     results: list[str] = []
-    total_chars = 0
     for match in _STRING_REGEX_DQ.finditer(source_slice):
         text = match.group(1)
-        remaining = budget - total_chars
-        if remaining <= 0:
-            break
-        results.append(text[:remaining])
-        total_chars += len(text[:remaining])
+        results.append(text)
     for match in _STRING_REGEX_SQ.finditer(source_slice):
         text = match.group(1)
-        remaining = budget - total_chars
-        if remaining <= 0:
-            break
-        results.append(text[:remaining])
-        total_chars += len(text[:remaining])
+        results.append(text)
     return results
 
 

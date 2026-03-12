@@ -20,7 +20,6 @@ from codeplane.mcp.tools.recon.harvesters import (
     _harvest_def_embedding,
     _harvest_explicit,
     _harvest_graph,
-    _harvest_lexical,
     _harvest_term_match,
 )
 from codeplane.mcp.tools.recon.merge import (
@@ -61,16 +60,13 @@ async def _raw_signals_pipeline(
     # B: Term match
     term_candidates = await _harvest_term_match(app_ctx, parsed)
 
-    # C: Lexical
-    lex_candidates = await _harvest_lexical(app_ctx, parsed)
-
     # D: Explicit (symbols/paths from query text + agent seeds)
     explicit_candidates = await _harvest_explicit(
         app_ctx, parsed, explicit_seeds=seeds or None,
     )
 
     # Merge A-D
-    merged = _merge_candidates(emb_candidates, term_candidates, lex_candidates, explicit_candidates)
+    merged = _merge_candidates(emb_candidates, term_candidates, explicit_candidates)
 
     # D2: Pin injection — add all defs from pinned files
     if pins:
@@ -84,7 +80,7 @@ async def _raw_signals_pipeline(
                 frec = fq.get_file_by_path(pin_path)
                 if frec is None or frec.id is None:
                     continue
-                defs_in = fq.list_defs_in_file(frec.id, limit=200)
+                defs_in = fq.list_defs_in_file(frec.id)
                 for d in defs_in:
                     if d.def_uid not in merged:
                         merged[d.def_uid] = HarvestCandidate(

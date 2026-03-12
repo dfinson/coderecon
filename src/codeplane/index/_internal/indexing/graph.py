@@ -46,6 +46,18 @@ class FactQueries:
         """Get a definition by its stable UID."""
         return self._session.get(DefFact, def_uid)
 
+    def batch_get_defs(self, def_uids: list[str]) -> dict[str, DefFact]:
+        """Get multiple definitions by UID in a single query.
+
+        Returns a dict mapping def_uid → DefFact for found UIDs.
+        Missing UIDs are silently omitted.
+        """
+        if not def_uids:
+            return {}
+        stmt = select(DefFact).where(col(DefFact.def_uid).in_(def_uids))
+        results = list(self._session.exec(stmt).all())
+        return {d.def_uid: d for d in results}
+
     def list_defs_by_name(self, unit_id: int, name: str, *, limit: int = 100) -> list[DefFact]:
         """List definitions by simple name within a build unit."""
         stmt = select(DefFact).where(DefFact.unit_id == unit_id, DefFact.name == name).limit(limit)
@@ -177,6 +189,30 @@ class FactQueries:
         result = self._session.exec(stmt).one()
         return int(result) if result else 0
 
+    def batch_count_callers(self, def_uids: list[str]) -> dict[str, int]:
+        """Count distinct caller files for multiple defs in a single query.
+
+        Returns a dict mapping def_uid → caller count. UIDs with zero
+        callers are included with count 0.
+        """
+        if not def_uids:
+            return {}
+        from sqlalchemy import func
+
+        stmt = (
+            select(
+                RefFact.target_def_uid,
+                func.count(func.distinct(RefFact.file_id)),
+            )
+            .where(col(RefFact.target_def_uid).in_(def_uids))
+            .group_by(RefFact.target_def_uid)
+        )
+        rows = list(self._session.exec(stmt).all())
+        result = {uid: 0 for uid in def_uids}
+        for uid, count in rows:
+            result[uid] = int(count)
+        return result
+
     def list_refs_by_token(
         self, unit_id: int, token_text: str, *, limit: int = 100
     ) -> list[RefFact]:
@@ -280,10 +316,32 @@ class FactQueries:
         """Get a file by ID."""
         return self._session.get(File, file_id)
 
+    def batch_get_files(self, file_ids: list[int]) -> dict[int, File]:
+        """Get multiple files by ID in a single query.
+
+        Returns a dict mapping file_id → File for found IDs.
+        """
+        if not file_ids:
+            return {}
+        stmt = select(File).where(col(File.id).in_(file_ids))
+        results = list(self._session.exec(stmt).all())
+        return {f.id: f for f in results if f.id is not None}
+
     def get_file_by_path(self, path: str) -> File | None:
         """Get a file by path."""
         stmt = select(File).where(File.path == path)
         return self._session.exec(stmt).first()
+
+    def batch_get_files_by_paths(self, paths: list[str]) -> dict[str, File]:
+        """Get multiple files by path in a single query.
+
+        Returns a dict mapping path → File for found paths.
+        """
+        if not paths:
+            return {}
+        stmt = select(File).where(col(File.path).in_(paths))
+        results = list(self._session.exec(stmt).all())
+        return {f.path: f for f in results}
 
     def list_files(self, *, limit: int = 10000) -> list[File]:
         """List all indexed files."""
