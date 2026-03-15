@@ -2,6 +2,13 @@
 
 Registered as ``@model("cpl-ranking")`` for EVEE evaluation.
 
+Supports two modes:
+
+- **baseline** — no learned models; uses ``emb_score`` for ranking,
+  always predicts ``GateLabel.OK``, and returns a fixed cutoff of 20.
+- **ranking** — loads trained LightGBM models (gate, ranker, cutoff)
+  from *models_dir* and applies the full inference pipeline.
+
 Loads each repo's index in-process via ``AppContext``, then runs
 raw_signals → gate → ranker → cutoff.  Caches one ``AppContext`` at a
 time (repos are processed sequentially via ``max_workers: 1``).
@@ -12,7 +19,6 @@ from __future__ import annotations
 import asyncio
 import gc
 import logging
-import sys
 from pathlib import Path
 
 from evee import model
@@ -29,10 +35,22 @@ class RankingModel:
 
     Args:
         clone_dir: Root directory containing cloned eval repos.
+        mode: ``"baseline"`` (emb_score fallbacks) or ``"ranking"``
+            (trained LightGBM models).
+        models_dir: Path to directory containing ``{gate,ranker,cutoff}.lgbm``.
+            Only used when *mode* is ``"ranking"``.
     """
 
-    def __init__(self, clone_dir: str = "~/.cpl-lab/clones", **kwargs: object) -> None:
+    def __init__(
+        self,
+        clone_dir: str = "~/.cpl-lab/clones",
+        mode: str = "baseline",
+        models_dir: str = "~/.cpl-lab/models",
+        **kwargs: object,
+    ) -> None:
         self._clone_root = Path(clone_dir).expanduser()
+        self._mode = mode
+        self._models_dir = Path(models_dir).expanduser()
         self._cached_repo: str | None = None
         self._ctx = None
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -52,9 +70,7 @@ class RankingModel:
             self._cached_repo = None
             gc.collect()
 
-        # Lazy imports — keeps module importable without codeplane installed
         from codeplane.mcp.context import AppContext
-
         from cpl_lab.clone import REPO_MANIFEST
 
         info = REPO_MANIFEST.get(repo_id)
@@ -67,7 +83,6 @@ class RankingModel:
             msg = f"No codeplane index at {cp}"
             raise FileNotFoundError(msg)
 
-        # Silence noisy library loggers during eval
         logging.disable(logging.WARNING)
 
         self._ctx = AppContext.create(
@@ -83,14 +98,21 @@ class RankingModel:
         self._loop.run_until_complete(self._ctx.coordinator.load_existing())
         self._cached_repo = repo_id
 
-        # Cache gate/ranker/cutoff once per repo (avoids per-query warnings)
+        # Load models based on mode
         from codeplane.ranking.cutoff import load_cutoff
         from codeplane.ranking.gate import load_gate
         from codeplane.ranking.ranker import load_ranker
 
-        self._gate = load_gate()
-        self._ranker = load_ranker()
-        self._cutoff = load_cutoff()
+        if self._mode == "ranking":
+            self._gate = load_gate(self._models_dir / "gate.lgbm")
+            self._ranker = load_ranker(self._models_dir / "ranker.lgbm")
+            self._cutoff = load_cutoff(self._models_dir / "cutoff.lgbm")
+        else:
+            # Baseline: pass a non-existent path so load_* returns fallback
+            _dummy = Path("/dev/null/no_model.lgbm")
+            self._gate = load_gate(_dummy)
+            self._ranker = load_ranker(_dummy)
+            self._cutoff = load_cutoff(_dummy)
 
     def infer(self, input: dict) -> dict:  # noqa: A002
         """Run the full pipeline for a single query record.
@@ -98,7 +120,7 @@ class RankingModel:
         Expects keys from the dataset: ``repo_id``, ``query_text``,
         ``seeds``, ``pins``.
 
-        Returns ``ranked_def_uids``, ``predicted_relevances``,
+        Returns ``ranked_candidate_keys``, ``predicted_relevances``,
         ``predicted_n``, ``predicted_gate``.
         """
         repo_id = input["repo_id"]
@@ -132,7 +154,7 @@ class RankingModel:
 
         if gate_label != GateLabel.OK:
             return {
-                "ranked_def_uids": [],
+                "ranked_candidate_keys": [],
                 "predicted_relevances": [],
                 "predicted_n": 0,
                 "predicted_gate": gate_label.value,
@@ -144,19 +166,18 @@ class RankingModel:
         scored = sorted(zip(candidates, scores), key=lambda x: -x[1])
 
         # 4. Cutoff
-        cutoff = self._cutoff
         ranked_for_cutoff = [{**c, "ranker_score": s} for c, s in scored]
         cutoff_features = extract_cutoff_features(
             ranked_for_cutoff, query_features, repo_features,
         )
-        predicted_n = cutoff.predict(cutoff_features)
+        predicted_n = self._cutoff.predict(cutoff_features)
 
         # 5. Build output in ground-truth key format
-        ranked_def_uids = [_def_key(c) for c, _ in scored]
+        ranked_candidate_keys = [_def_key(c) for c, _ in scored]
         predicted_relevances = [round(s, 4) for _, s in scored]
 
         return {
-            "ranked_def_uids": ranked_def_uids,
+            "ranked_candidate_keys": ranked_candidate_keys,
             "predicted_relevances": predicted_relevances,
             "predicted_n": predicted_n,
             "predicted_gate": gate_label.value,

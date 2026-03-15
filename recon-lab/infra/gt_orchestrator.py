@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Ground truth pipeline — local Copilot SDK orchestrator.
+"""Ground truth pipeline — local Copilot SDK orchestrator (v2).
 
-Replaces the GitHub coding agent (fork/issue/PR) approach with local
-SDK sessions that run against cloned repos and write directly to the
-pipeline workspace.
+Trace-based pipeline: one task per executor session, passive trace
+capture, deterministic candidate extraction, analyst-produced GT.
 
 Workspace layout (controlled by CPL_LAB_WORKSPACE env var,
 default: ~/.codeplane/recon-lab):
@@ -12,6 +11,8 @@ default: ~/.codeplane/recon-lab):
     ├── clones/{set}/{repo}/       # cloned repos
     ├── data/{repo_id}/            # ground truth, signals
     │   ├── ground_truth/
+    │   ├── traces/
+    │   ├── candidates/
     │   └── signals/
     ├── data/merged/               # training parquets
     ├── data/gt_state.json         # pipeline state
@@ -57,54 +58,96 @@ DATA_DIR = WORKSPACE / "data"       # ground truth + signals (mutable, outside r
 STATE_FILE = DATA_DIR / "gt_state.json"
 LOGS_DIR = DATA_DIR / "logs"
 
-STAGES = ["audit", "exec_n", "exec_m", "exec_w", "review"]
-EXEC_STAGES = {"exec_n", "exec_m", "exec_w"}
+# ── Pipeline stages ──
+# setup (1/repo: prework + agent env setup) → audit (33/repo) → exec (33) → analyze (33) → non_ok (1) → review (33)
+# setup/non_ok are single-session; audit/exec/analyze/review are per-task (33 each).
+STAGES = ["setup", "audit", "exec", "analyze", "non_ok", "review"]
+TASK_PREFIXES = ["N", "M", "W"]
+TASKS_PER_PREFIX = 11
+ALL_HEADINGS = [f"{p}{i}" for p in TASK_PREFIXES for i in range(1, TASKS_PER_PREFIX + 1)]
+
 DEFAULT_CONCURRENCY = 12
 MAX_ATTEMPTS = 3
 RATE_LIMIT_RETRIES = 4
 RATE_LIMIT_BACKOFF = [30, 60, 120, 300]  # seconds between retries
 
 MODELS = {
+    "setup": "claude-sonnet-4.6",
     "audit": "claude-sonnet-4.6",
-    "exec_n": "claude-opus-4.6",
-    "exec_m": "claude-opus-4.6",
-    "exec_w": "claude-opus-4.6",
-    "review": "claude-opus-4.6",
+    "exec": "claude-opus-4.6",
+    "analyze": "claude-opus-4.6",
+    "non_ok": "claude-opus-4.6",
+    "review": "claude-sonnet-4.6",
 }
 
-# helpers
-
-def exec_stage_prefix(stage: str) -> str | None:
-    return {
-        "exec_n": "N",
-        "exec_m": "M",
-        "exec_w": "W",
-    }.get(stage)
+# ── Helpers ──
 
 
-def exec_stage_expected_jsons(stage: str) -> int:
-    return 11 if stage in EXEC_STAGES else 0
+def headings_for_stage(stage: str) -> list[str]:
+    """Return task headings relevant to a per-task stage."""
+    if stage in ("audit", "exec", "analyze", "review"):
+        return ALL_HEADINGS
+    return []
 
 
-def exec_stage_artifacts_satisfied(repo_id: str, stage: str) -> tuple[bool, str, int]:
-    if stage not in EXEC_STAGES:
-        return True, "not an exec stage", 0
+def task_artifact_exists(repo_id: str, heading_id: str, kind: str) -> bool:
+    """Check if a specific artifact exists for a heading.
+    kind: 'audit', 'trace', 'candidates', 'ground_truth', 'review'
+    """
+    if kind == "audit":
+        return (DATA_DIR / repo_id / "audit" / f"{heading_id}.json").exists()
+    if kind == "trace":
+        return (DATA_DIR / repo_id / "traces" / f"{heading_id}.jsonl").exists()
+    if kind == "candidates":
+        return (DATA_DIR / repo_id / "candidates" / f"{heading_id}.json").exists()
+    if kind == "ground_truth":
+        return (DATA_DIR / repo_id / "ground_truth" / f"{heading_id}.json").exists()
+    if kind == "review":
+        return (DATA_DIR / repo_id / "review" / f"{heading_id}.json").exists()
+    return False
 
-    gt_dir = DATA_DIR / repo_id / "ground_truth"
-    prefix = exec_stage_prefix(stage)
-    required = exec_stage_expected_jsons(stage)
 
-    if not gt_dir.exists():
-        return False, f"{gt_dir} does not exist", 0
+def all_tasks_have_artifact(repo_id: str, kind: str) -> tuple[bool, int, int]:
+    """Check if all 33 headings have a given artifact.
+    Returns (all_done, done_count, total).
+    """
+    done = sum(1 for h in ALL_HEADINGS if task_artifact_exists(repo_id, h, kind))
+    return done == len(ALL_HEADINGS), done, len(ALL_HEADINGS)
 
-    json_count = len(list(gt_dir.glob(f"{prefix}*.json")))
-    if json_count < required:
-        return False, f"have {json_count}/{required} required {prefix} JSONs", json_count
 
-    if stage == "exec_w" and not (gt_dir / "non_ok_queries.json").exists():
-        return False, "non_ok_queries.json missing", json_count
+def stage_artifacts_satisfied(repo_id: str, stage: str) -> tuple[bool, str, int]:
+    """Check if a stage's output artifacts are complete."""
+    if stage == "setup":
+        # Setup is done if the setup marker exists
+        marker = DATA_DIR / repo_id / "audit" / "_setup_done.json"
+        return marker.exists(), "setup marker", int(marker.exists())
+    if stage == "audit":
+        ok, done, total = all_tasks_have_artifact(repo_id, "audit")
+        if ok:
+            return True, "ok", done
+        return False, f"audit: {done}/{total}", done
+    if stage == "exec":
+        ok, done, total = all_tasks_have_artifact(repo_id, "trace")
+        if ok:
+            return True, "ok", done
+        return False, f"traces: {done}/{total}", done
+    if stage == "analyze":
+        ok, done, total = all_tasks_have_artifact(repo_id, "ground_truth")
+        if ok:
+            return True, "ok", done
+        return False, f"ground_truth: {done}/{total}", done
+    if stage == "non_ok":
+        gt_dir = DATA_DIR / repo_id / "ground_truth"
+        if (gt_dir / "non_ok_queries.json").exists():
+            return True, "ok", 1
+        return False, "non_ok_queries.json missing", 0
+    if stage == "review":
+        ok, done, total = all_tasks_have_artifact(repo_id, "review")
+        if ok:
+            return True, "ok", done
+        return False, f"review: {done}/{total}", done
+    return True, "unknown stage", 0
 
-    return True, "ok", json_count
 
 # ── State management ──
 
@@ -134,51 +177,18 @@ def save_state(state: dict) -> None:
     _atomic_write(STATE_FILE, json.dumps(state, indent=2) + "\n")
 
 
-def current_global_stage(state: dict) -> str:
-    """Legacy: returns the earliest stage with any incomplete repo."""
-    for stage in STAGES:
-        for rd in state["repos"].values():
-            if rd.get(stage, {}).get("status") not in ("merged", "done"):
-                return stage
-    return "done"
-
-
-def repos_for_stage(state: dict, stage: str, status: str) -> list[str]:
-    return [
-        rid for rid, rd in state["repos"].items()
-        if rd.get(stage, {}).get("status") == status
-    ]
-
-
 def next_stage_for_repo(rd: dict) -> str | None:
-    """Return the next stage this repo is eligible to run, or None if all done.
-
-    Dependencies:
-      - audit must be done before any exec stage
-      - exec_n, exec_m, exec_w are independent of each other (but serialized
-        per-repo because they share a clone worktree)
-      - review requires all three exec stages done
-    """
+    """Return the next stage this repo is eligible to run, or None if all done."""
     def _done(stage: str) -> bool:
         return rd.get(stage, {}).get("status") in ("merged", "done")
 
     def _pending(stage: str) -> bool:
         return rd.get(stage, {}).get("status") in ("pending", "") or stage not in rd
 
-    # Audit must finish first
-    if not _done("audit"):
-        return "audit" if _pending("audit") else None  # active/failed = not eligible
-
-    # Exec stages: pick first pending one (serialized per-repo via lock)
-    for s in ("exec_n", "exec_m", "exec_w"):
-        if _pending(s):
-            return s
-
-    # Review: only after all exec stages done
-    if all(_done(s) for s in ("exec_n", "exec_m", "exec_w")):
-        if _pending("review"):
-            return "review"
-
+    # Stages must run in order
+    for stage in STAGES:
+        if not _done(stage):
+            return stage if _pending(stage) else None
     return None
 
 
@@ -202,32 +212,23 @@ def all_eligible_tasks(
 
 
 def recover_orphaned_active(state: dict) -> int:
-    """Reset any 'active' statuses left from a previous interrupted run.
-
-    Repos with all expected JSONs on disk are marked 'done';
-    others are reset to 'pending' for retry.
-    """
+    """Reset any 'active' statuses left from a previous interrupted run."""
     recovered = 0
     for rid, rd in state["repos"].items():
         for stage in STAGES:
             if rd.get(stage, {}).get("status") != "active":
                 continue
             recovered += 1
-            # Check if enough JSONs were written
-            gt_dir = DATA_DIR / rid / "ground_truth"
-            prefix = stage.split("_")[1].upper() if "_" in stage else None
-            if prefix and gt_dir.exists():
-                jsons = list(gt_dir.glob(f"{prefix}*.json"))
-                if len(jsons) >= 11:
-                    rd[stage] = {
-                        "status": "done",
-                        "jsons": len(jsons),
-                        "note": "recovered from interrupted run",
-                    }
-                    continue
-            attempts = rd[stage].get("attempts", 0)
-            _archive_log(rid, stage, attempts)
-            rd[stage] = {"status": "pending", "attempts": attempts}
+            ok, reason, count = stage_artifacts_satisfied(rid, stage)
+            if ok:
+                rd[stage] = {
+                    "status": "done",
+                    "note": "recovered from interrupted run",
+                }
+            else:
+                attempts = rd[stage].get("attempts", 0)
+                _archive_log(rid, stage, attempts)
+                rd[stage] = {"status": "pending", "attempts": attempts}
     if recovered:
         save_state(state)
     return recovered
@@ -250,7 +251,6 @@ def find_clone(repo_id: str) -> Path | None:
         for d in set_dir.iterdir():
             if not d.is_dir():
                 continue
-            # Match by checking .gt-pipeline.json or by name heuristic
             config = d / ".gt-pipeline.json"
             if config.exists():
                 try:
@@ -259,7 +259,7 @@ def find_clone(repo_id: str) -> Path | None:
                         return d
                 except Exception:
                     pass
-    # Fallback: try to match by repo name from state
+    # Fallback: match by repo name from state
     state = load_state()
     rd = state.get("repos", {}).get(repo_id, {})
     fork = rd.get("fork", "")
@@ -284,12 +284,41 @@ def find_task_file(repo_id: str) -> Path | None:
     return None
 
 
+def _parse_task_headings(task_file: Path) -> dict[str, str]:
+    """Parse a tasks markdown file and extract heading_id → task_text."""
+    content = task_file.read_text()
+    headings: dict[str, str] = {}
+    current_id = None
+    current_lines: list[str] = []
+
+    for line in content.split("\n"):
+        m = re.match(r"^###\s+(N\d+|M\d+|W\d+):\s*(.*)", line)
+        if m:
+            if current_id:
+                headings[current_id] = "\n".join(current_lines).strip()
+            current_id = m.group(1)
+            current_lines = [m.group(2).strip()] if m.group(2).strip() else []
+        elif current_id:
+            # Stop at next heading of same or higher level
+            if re.match(r"^#{1,3}\s", line):
+                headings[current_id] = "\n".join(current_lines).strip()
+                current_id = None
+                current_lines = []
+            else:
+                current_lines.append(line)
+
+    if current_id:
+        headings[current_id] = "\n".join(current_lines).strip()
+
+    return headings
+
+
 # ── Schema validation ──
 
 
 GT_REQUIRED_KEYS = {
     "task_id", "task_complexity", "task_text", "diff", "solve_notes",
-    "exploration_log", "confidence", "minimum_sufficient_defs",
+    "confidence", "minimum_sufficient_defs",
     "thrash_preventing_defs", "tier_difference_reasoning",
     "excluded_defs", "queries", "test_selection", "reviewer_corrections",
 }
@@ -324,24 +353,21 @@ def validate_non_ok_schema(data: dict) -> list[str]:
     return errors
 
 
-# ── Custom tools ──
+# ── Retryable error detection ──
 
-# Retryable error detection — prefer typed exceptions, fall back to heuristics
 
 def _is_retryable(exc: Exception) -> bool:
     """Determine if an exception is a transient/rate-limit error worth retrying."""
     try:
         from copilot.jsonrpc import JsonRpcError, ProcessExitedError
         if isinstance(exc, JsonRpcError):
-            # HTTP 429 or server-side rate limit codes
             if isinstance(exc.code, int) and exc.code in (429, -32000, -32001, -32603):
                 return True
         if isinstance(exc, ProcessExitedError):
-            return True  # CLI crashed — always retry
+            return True
     except ImportError:
         pass
 
-    # Fallback: string heuristic for errors that don't use typed exceptions
     err = str(exc).lower()
     return any(
         k in err for k in (
@@ -350,8 +376,8 @@ def _is_retryable(exc: Exception) -> bool:
         )
     )
 
-# These are defined as functions that will be wrapped with @define_tool
-# at session creation time (they need closure over the SessionRunner).
+
+# ── Tool parameter models ──
 
 
 class WriteGTParams(BaseModel):
@@ -365,6 +391,26 @@ class WriteNonOKParams(BaseModel):
     data: dict = Field(description="Complete non-ok queries JSON object")
 
 
+class WriteAuditResultParams(BaseModel):
+    heading_id: str = Field(description="Task heading ID (e.g. 'N1', 'M3')")
+    status: str = Field(description="'ok' or 'corrected'")
+    corrections: str = Field(description="What was corrected, or empty string if ok")
+
+
+class WriteReviewResultParams(BaseModel):
+    heading_id: str = Field(description="Task heading ID (e.g. 'N1', 'M3')")
+    status: str = Field(description="'ok' or 'corrected'")
+    corrections: str = Field(description="What was corrected, or empty string if ok")
+
+
+class WriteSetupResultParams(BaseModel):
+    language: str = Field(description="Primary language detected (e.g. 'python', 'typescript')")
+    test_framework: str = Field(description="Test framework used (e.g. 'pytest', 'vitest', 'go test')")
+    tests_pass: bool = Field(description="Whether the test suite passes")
+    coverage_generated: bool = Field(description="Whether a coverage report was produced")
+    notes: str = Field(description="Notable setup details, workarounds, or issues encountered")
+
+
 class ReportCompleteParams(BaseModel):
     summary: str = Field(description="Brief summary of what was accomplished")
 
@@ -373,10 +419,19 @@ class ReportCompleteParams(BaseModel):
 
 
 class SessionRunner:
-    def __init__(self, repo_id: str, stage: str, state: dict):
+    """Runs a single Copilot SDK session for one stage/task combination."""
+
+    def __init__(
+        self,
+        repo_id: str,
+        stage: str,
+        state: dict,
+        heading_id: str | None = None,
+    ):
         self.repo_id = repo_id
         self.stage = stage
         self.state = state
+        self.heading_id = heading_id  # Set for exec/analyze tasks
         self.start_time = time.time()
         self.status_line = "starting..."
         self.jsons_written = 0
@@ -386,7 +441,8 @@ class SessionRunner:
         # Logs
         session_log_dir = LOGS_DIR / "sessions"
         session_log_dir.mkdir(parents=True, exist_ok=True)
-        self.log_path = session_log_dir / f"{repo_id}_{stage}.log"
+        suffix = f"_{heading_id}" if heading_id else ""
+        self.log_path = session_log_dir / f"{repo_id}_{stage}{suffix}.log"
 
     def log(self, msg: str, level: str = "INFO") -> None:
         ts = datetime.now().strftime("%H:%M:%S")
@@ -397,6 +453,7 @@ class SessionRunner:
             "ERROR": "├─❌",
             "DONE": "└─✅",
             "START": "┌─▶",
+            "PROMPT": "├─📨",
         }.get(level, "│")
         with open(self.log_path, "a") as f:
             f.write(f"[{ts}] {prefix} {msg}\n")
@@ -412,7 +469,7 @@ class SessionRunner:
 
         runner = self
 
-        @define_tool(description="Write a validated ground truth JSON for a completed task. Call this after solving each task.")
+        @define_tool(description="Write a validated ground truth JSON for a completed task.")
         async def write_ground_truth(params: WriteGTParams) -> str:
             errors = validate_gt_schema(params.data)
             if errors:
@@ -423,11 +480,11 @@ class SessionRunner:
             path = DATA_DIR / params.repo_id / "ground_truth" / f"{params.task_id}.json"
             _atomic_write(path, json.dumps(params.data, indent=2) + "\n")
             runner.jsons_written += 1
-            runner.log(f"{params.task_id}.json written ({runner.jsons_written}/11)", "WRITE")
-            runner.status_line = f"wrote {params.task_id}.json ({runner.jsons_written}/11)"
-            return f"Written successfully: {path} ({runner.jsons_written} JSONs total)"
+            runner.log(f"{params.task_id}.json written", "WRITE")
+            runner.status_line = f"wrote {params.task_id}.json"
+            return f"Written successfully: {path}"
 
-        @define_tool(description="Write the non-OK queries JSON file to ground_truth/non_ok_queries.json. Call AFTER all W tasks are done (executor session C only). This file goes in the SAME directory as the task JSONs.")
+        @define_tool(description="Write the non-OK queries JSON file.")
         async def write_non_ok_queries(params: WriteNonOKParams) -> str:
             errors = validate_non_ok_schema(params.data)
             if errors:
@@ -441,56 +498,85 @@ class SessionRunner:
             )
             return f"Written: {path}"
 
-        @define_tool(description="Signal that you have completed all assigned tasks for this session.")
+        @define_tool(description="Signal that you have completed your assigned work for this session.")
         async def report_complete(params: ReportCompleteParams) -> str:
-            if runner.stage in EXEC_STAGES:
-                ok, reason, json_count = exec_stage_artifacts_satisfied(runner.repo_id, runner.stage)
-                if not ok:
-                    runner.log(f"report_complete rejected: {reason}", "ERROR")
-                    runner.status_line = f"incomplete: {reason}"
-                    return (
-                        "CANNOT COMPLETE YET.\n"
-                        f"Missing required outputs for {runner.stage}: {reason}\n"
-                        "Continue writing the remaining JSON files, then call report_complete again."
-                    )
-            else:
-                json_count = runner.jsons_written
-
             runner.log(f"{params.summary}", "DONE")
             runner.status_line = "✅ done"
-            rd = runner.state["repos"].get(runner.repo_id, {})
-            rd[runner.stage] = {"status": "done", "jsons": json_count}
-            save_state(runner.state)
             runner.done_event.set()
             return "Session marked complete."
 
-        tools = [write_ground_truth, report_complete]
-        if self.stage == "exec_w":
-            tools.append(write_non_ok_queries)
+        # Select tools based on stage
+        if self.stage == "exec":
+            return [report_complete]  # Executor only signals completion
+        if self.stage == "audit":
+            @define_tool(description="Record the audit result for a single task.")
+            async def write_audit_result(params: WriteAuditResultParams) -> str:
+                path = DATA_DIR / runner.repo_id / "audit" / f"{params.heading_id}.json"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                _atomic_write(path, json.dumps({
+                    "heading_id": params.heading_id,
+                    "status": params.status,
+                    "corrections": params.corrections,
+                }, indent=2) + "\n")
+                runner.log(f"audit/{params.heading_id}.json → {params.status}", "WRITE")
+                runner.status_line = f"audited {params.heading_id}"
+                return f"Audit result recorded: {params.heading_id} → {params.status}"
+            return [write_audit_result, report_complete]
+        if self.stage == "analyze":
+            return [write_ground_truth, report_complete]
+        if self.stage == "non_ok":
+            return [write_non_ok_queries, report_complete]
         if self.stage == "review":
-            # Reviewer also writes ground truth (corrections)
-            pass  # write_ground_truth already included
+            @define_tool(description="Record the review result for a single task.")
+            async def write_review_result(params: WriteReviewResultParams) -> str:
+                path = DATA_DIR / runner.repo_id / "review" / f"{params.heading_id}.json"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                _atomic_write(path, json.dumps({
+                    "heading_id": params.heading_id,
+                    "status": params.status,
+                    "corrections": params.corrections,
+                }, indent=2) + "\n")
+                runner.log(f"review/{params.heading_id}.json → {params.status}", "WRITE")
+                runner.status_line = f"reviewed {params.heading_id}"
+                return f"Review recorded: {params.heading_id} → {params.status}"
+            return [write_ground_truth, write_review_result, report_complete]
+        if self.stage == "setup":
+            @define_tool(description="Record the environment setup result for this repository.")
+            async def write_setup_result(params: WriteSetupResultParams) -> str:
+                marker = DATA_DIR / runner.repo_id / "audit" / "_setup_done.json"
+                marker.parent.mkdir(parents=True, exist_ok=True)
+                _atomic_write(marker, json.dumps({
+                    "repo_id": runner.repo_id,
+                    "language": params.language,
+                    "test_framework": params.test_framework,
+                    "tests_pass": params.tests_pass,
+                    "coverage_generated": params.coverage_generated,
+                    "notes": params.notes,
+                }, indent=2) + "\n")
+                runner.log(
+                    f"setup done: lang={params.language} tests={'pass' if params.tests_pass else 'fail'} "
+                    f"cov={'yes' if params.coverage_generated else 'no'}",
+                    "WRITE",
+                )
+                runner.status_line = "setup recorded"
+                return f"Setup result recorded for {runner.repo_id}"
+            return [write_setup_result, report_complete]
+        return [report_complete]
 
-        return tools
-
-    def build_prompt(self) -> str:
-        task_file = find_task_file(self.repo_id)
-        if not task_file:
-            raise FileNotFoundError(f"No task file for {self.repo_id}")
-
+    def _get_role_content(self) -> str:
+        """Load and prepare role file content."""
         role_file = {
+            "setup": ROLES_DIR / "setup.md",
             "audit": ROLES_DIR / "auditor.md",
-            "exec_n": ROLES_DIR / "executor.md",
-            "exec_m": ROLES_DIR / "executor.md",
-            "exec_w": ROLES_DIR / "executor.md",
+            "exec": ROLES_DIR / "executor.md",
+            "analyze": ROLES_DIR / "analyst.md",
+            "non_ok": ROLES_DIR / "non_ok_author.md",
             "review": ROLES_DIR / "reviewer.md",
         }[self.stage]
 
         role_content = role_file.read_text()
 
-        # Adapt relative paths in role content to absolute paths.
-        # Roles were written for agents running from clones/{set}/{repo}/,
-        # so ../../ → clones/ and ../../../ → ranking/.
+        # Adapt relative paths to absolute paths
         role_content = (
             role_content
             .replace("../../../roles/", f"{ROLES_DIR}/")
@@ -499,64 +585,157 @@ class SessionRunner:
             .replace("../../../data/", f"{DATA_DIR}/")
             .replace("../../data/", f"{DATA_DIR}/")
         )
-        # Resolve {repo_id} placeholders
         role_content = role_content.replace("{repo_id}", self.repo_id)
         role_content = role_content.replace("{REPO_NAME}", self.repo_id)
 
+        return role_content
+
+    def build_prompt(self) -> str:
+        role_content = self._get_role_content()
+
+        if self.stage == "setup":
+            clone_dir = find_clone(self.repo_id)
+            base_prompt = (
+                f"The repo_id is: {self.repo_id}\n"
+                f"You are working inside: {clone_dir}\n\n"
+                f"Set up this repository's development environment, run its "
+                f"test suite, and generate a baseline coverage report.\n"
+                f"When done, call write_setup_result and then report_complete.\n"
+            )
+            return role_content + "\n\n---\n\n" + base_prompt
+
+        task_file = find_task_file(self.repo_id)
+        if not task_file:
+            raise FileNotFoundError(f"No task file for {self.repo_id}")
+
         base_prompt = f"Your tasks file is: {task_file}\nThe repo_id is: {self.repo_id}\n\n"
 
-        # Check for already-completed task JSONs on disk
-        def _existing_jsons(prefix: str) -> list[str]:
-            gt_dir = DATA_DIR / self.repo_id / "ground_truth"
-            if not gt_dir.exists():
-                return []
-            return sorted(
-                f.stem for f in gt_dir.glob(f"{prefix}*.json")
-                if f.stem != "non_ok_queries"
-            )
-
-        def _skip_instruction(prefix: str, label: str) -> str:
-            existing = _existing_jsons(prefix)
-            if not existing:
-                return ""
-            return (
-                f"\nThe following {label} task JSONs already exist and should be SKIPPED "
-                f"(do NOT redo them): {', '.join(existing)}\n"
-                f"Only solve the remaining {label} tasks that are missing.\n"
-            )
-
         if self.stage == "audit":
-            base_prompt += "Begin the pre-flight audit.\n"
-        elif self.stage == "exec_n":
+            heading_id = self.heading_id
+            task_headings = _parse_task_headings(task_file)
+            task_text = task_headings.get(heading_id, f"(Task {heading_id} — read from tasks file)")
             base_prompt += (
-                "Execute tasks N1 through N11 only. Skip all M and W tasks.\n"
-                "For each task, solve it, then call write_ground_truth with the complete JSON.\n"
-                "When all N tasks are done, call report_complete.\n"
+                f"You are auditing task **{heading_id}** only.\n\n"
+                f"Task description:\n{task_text}\n\n"
+                f"Verify this task's grounding, coherence, and solvability.\n"
+                f"If the task needs correction, edit the tasks markdown, then "
+                f"call write_audit_result with status='corrected'.\n"
+                f"If it is fine, call write_audit_result with status='ok'.\n"
+                f"Then call report_complete.\n"
             )
-            base_prompt += _skip_instruction("N", "N")
-        elif self.stage == "exec_m":
+
+        elif self.stage == "exec":
+            # One task per session
+            heading_id = self.heading_id
+            task_headings = _parse_task_headings(task_file)
+            task_text = task_headings.get(heading_id, f"(Task {heading_id} — read from tasks file)")
             base_prompt += (
-                "Execute tasks M1 through M11 only. Skip all N and W tasks.\n"
-                "For each task, solve it, then call write_ground_truth with the complete JSON.\n"
-                "When all M tasks are done, call report_complete.\n"
+                f"You are solving task **{heading_id}** only.\n\n"
+                f"Task description:\n{task_text}\n\n"
+                f"Solve this one task, then call report_complete.\n"
             )
-            base_prompt += _skip_instruction("M", "M")
-        elif self.stage == "exec_w":
+
+        elif self.stage == "analyze":
+            heading_id = self.heading_id
+            # Load the trace-derived candidates
+            candidates_path = DATA_DIR / self.repo_id / "candidates" / f"{heading_id}.json"
+            if candidates_path.exists():
+                candidates = json.loads(candidates_path.read_text())
+            else:
+                candidates = []
+
+            # Get the diff from git history
+            clone_dir = find_clone(self.repo_id)
+            diff_text = "(diff not available)"
+            if clone_dir:
+                import subprocess
+                # Find the task commit by message pattern
+                result = subprocess.run(
+                    ["git", "log", "--all", "--oneline", f"--grep=task {heading_id}:"],
+                    cwd=clone_dir, capture_output=True, text=True, check=False,
+                )
+                if result.stdout.strip():
+                    commit_hash = result.stdout.strip().split("\n")[0].split()[0]
+                    diff_result = subprocess.run(
+                        ["git", "diff", f"{commit_hash}~1..{commit_hash}"],
+                        cwd=clone_dir, capture_output=True, text=True, check=False,
+                    )
+                    if diff_result.stdout:
+                        diff_text = diff_result.stdout
+
+            task_headings = _parse_task_headings(task_file)
+            task_text = task_headings.get(heading_id, f"(Task {heading_id})")
+
+            # Get executor's completion summary from log
+            exec_log = LOGS_DIR / "sessions" / f"{self.repo_id}_exec_{heading_id}.log"
+            exec_summary = ""
+            if exec_log.exists():
+                log_content = exec_log.read_text()
+                # Extract the last DONE message
+                for line in reversed(log_content.split("\n")):
+                    if "✅" in line or "DONE" in line.upper():
+                        exec_summary = line.strip()
+                        break
+
             base_prompt += (
-                "Execute tasks W1 through W11 only. Skip all N and M tasks.\n"
-                "For each task, solve it, then call write_ground_truth with the complete JSON.\n"
-                "After ALL W tasks are done, write the non-OK queries by calling write_non_ok_queries.\n"
-                "The non_ok_queries file will be written to ground_truth/non_ok_queries.json — "
-                "the SAME directory as the task JSONs. Do NOT write it anywhere else.\n"
-                "When everything is complete (all W JSONs + non_ok_queries), call report_complete.\n"
+                f"You are analyzing task **{heading_id}**.\n\n"
+                f"Task description:\n{task_text}\n\n"
+                f"## Diff\n```\n{diff_text}\n```\n\n"
+                f"## Exploration map ({len(candidates)} candidate defs)\n"
+                f"```json\n{json.dumps(candidates, indent=2)}\n```\n\n"
             )
-            base_prompt += _skip_instruction("W", "W")
+            if exec_summary:
+                base_prompt += f"## Executor summary\n{exec_summary}\n\n"
+            base_prompt += (
+                "Classify these candidates, write queries, and call "
+                "write_ground_truth with the complete JSON.\n"
+                "Then call report_complete.\n"
+            )
+
+        elif self.stage == "non_ok":
+            base_prompt += (
+                "Write non-OK queries (UNSAT, BROAD, AMBIG) for this repository.\n"
+                "Explore the codebase thoroughly, then call write_non_ok_queries.\n"
+                "When done, call report_complete.\n"
+            )
+
         elif self.stage == "review":
-            gt_dir = DATA_DIR / self.repo_id / "ground_truth"
+            heading_id = self.heading_id
+            gt_path = DATA_DIR / self.repo_id / "ground_truth" / f"{heading_id}.json"
+            gt_content = ""
+            if gt_path.exists():
+                gt_content = gt_path.read_text()
+
+            task_headings = _parse_task_headings(task_file)
+            task_text = task_headings.get(heading_id, f"(Task {heading_id})")
+
+            # Get the diff from git history
+            clone_dir = find_clone(self.repo_id)
+            diff_text = "(diff not available)"
+            if clone_dir:
+                import subprocess
+                result = subprocess.run(
+                    ["git", "log", "--all", "--oneline", f"--grep=task {heading_id}:"],
+                    cwd=clone_dir, capture_output=True, text=True, check=False,
+                )
+                if result.stdout.strip():
+                    commit_hash = result.stdout.strip().split("\n")[0].split()[0]
+                    diff_result = subprocess.run(
+                        ["git", "diff", f"{commit_hash}~1..{commit_hash}"],
+                        cwd=clone_dir, capture_output=True, text=True, check=False,
+                    )
+                    if diff_result.stdout:
+                        diff_text = diff_result.stdout
+
             base_prompt += (
-                f"Ground truth files are in: {gt_dir}\n"
-                "Review each one. To correct a JSON, call write_ground_truth with the fixed version.\n"
-                "When all tasks are reviewed, call report_complete.\n"
+                f"You are reviewing task **{heading_id}** only.\n\n"
+                f"Task description:\n{task_text}\n\n"
+                f"## Diff\n```\n{diff_text}\n```\n\n"
+                f"## Ground truth JSON\n```json\n{gt_content}\n```\n\n"
+                f"Review this task's ground truth. If corrections are needed, "
+                f"call write_ground_truth with the corrected JSON.\n"
+                f"Then call write_review_result with your findings.\n"
+                f"Then call report_complete.\n"
             )
 
         return role_content + "\n\n---\n\n" + base_prompt
@@ -568,13 +747,14 @@ class SessionRunner:
         if not clone_dir:
             raise FileNotFoundError(f"No clone found for {self.repo_id}")
 
-        self.log(f"{self.repo_id}/{self.stage} cwd={clone_dir}", "START")
+        suffix = f"/{self.heading_id}" if self.heading_id else ""
+        self.log(f"{self.repo_id}/{self.stage}{suffix} cwd={clone_dir}", "START")
         self.status_line = "initializing..."
 
         for attempt in range(RATE_LIMIT_RETRIES):
             try:
                 await self._run_session(clone_dir)
-                return  # success
+                return
             except Exception as e:
                 if _is_retryable(e) and attempt < RATE_LIMIT_RETRIES - 1:
                     wait = RATE_LIMIT_BACKOFF[attempt]
@@ -585,16 +765,23 @@ class SessionRunner:
                     self.status_line = f"⏳ retry in {wait}s"
                     await asyncio.sleep(wait)
                     continue
-                raise  # not retryable, or exhausted retries
+                raise
 
     async def _run_session(self, clone_dir: Path) -> None:
         from copilot import CopilotClient, PermissionHandler
+        from trace_collector import TraceCollector
 
         client = CopilotClient({
             "cwd": str(clone_dir),
             "log_level": "warning",
         })
         await client.start()
+
+        # Set up trace collector for exec sessions
+        collector = None
+        if self.stage == "exec" and self.heading_id:
+            traces_dir = DATA_DIR / self.repo_id / "traces"
+            collector = TraceCollector(self.repo_id, self.heading_id, traces_dir)
 
         try:
             session = await client.create_session({
@@ -616,44 +803,17 @@ class SessionRunner:
                             break
                 elif etype == "session.idle":
                     if not self.done_event.is_set():
-                        if self.stage in EXEC_STAGES:
-                            ok, reason, json_count = exec_stage_artifacts_satisfied(
-                                self.repo_id,
-                                self.stage,
-                            )
-                            rd = self.state["repos"].get(self.repo_id, {})
-
-                            if ok:
-                                self.log(
-                                    "Session went idle, but exec artifacts are complete; marking done",
-                                    "DONE",
-                                )
-                                self.status_line = "idle but complete"
-                                rd[self.stage] = {"status": "done", "jsons": json_count}
-                            else:
-                                attempts = rd.get(self.stage, {}).get("attempts", 0)
-                                self.log(
-                                    f"Session went idle before completion: {reason}; resetting to pending",
-                                    "ERROR",
-                                )
-                                self.status_line = f"idle incomplete: {reason}"
-                                rd[self.stage] = {
-                                    "status": "pending",
-                                    "attempts": attempts,
-                                    "note": f"idle before completion: {reason}",
-                                }
-
-                            save_state(self.state)
-                            self.done_event.set()
-
-                        else:
-                            self.log("Session ended naturally", "DONE")
-                            self.done_event.set()
+                        self.log("Session ended naturally", "DONE")
+                        self.done_event.set()
 
             session.on(on_event)
 
+            # Attach trace collector (passive — before first send)
+            if collector:
+                session.on(collector.handle_event)
+
             prompt = self.build_prompt()
-            self.log(f"PROMPT ({len(prompt)} chars)")
+            self.log(f"PROMPT ({len(prompt)} chars)", "PROMPT")
             self.status_line = "prompt sent..."
 
             await session.send({"prompt": prompt})
@@ -661,9 +821,287 @@ class SessionRunner:
 
             await session.disconnect()
         finally:
+            # Flush trace if we were tracing
+            if collector:
+                trace_path = collector.flush()
+                self.log(f"Trace written: {trace_path} ({collector.record_count} records)", "WRITE")
+
+                # Run trace_to_candidates immediately
+                self._run_candidate_extraction(clone_dir, trace_path)
+
             await client.stop()
 
-        self.log(f"Completed in {self.elapsed()} — {self.jsons_written} JSONs written", "DONE")
+        self.log(f"Completed in {self.elapsed()}", "DONE")
+
+    def _run_candidate_extraction(self, clone_dir: Path, trace_path: Path) -> None:
+        """Run deterministic candidate extraction after an exec session."""
+        from trace_to_candidates import trace_to_candidates, write_candidates
+
+        index_db = clone_dir / ".codeplane" / "index.db"
+        if not index_db.exists():
+            self.log(f"Index DB not found at {index_db} — skipping candidate extraction", "ERROR")
+            return
+
+        candidates = trace_to_candidates(
+            trace_path=trace_path,
+            index_db_path=index_db,
+            clone_root=clone_dir,
+        )
+
+        output_path = DATA_DIR / self.repo_id / "candidates" / f"{self.heading_id}.json"
+        write_candidates(candidates, output_path)
+        self.log(f"Candidates written: {output_path} ({len(candidates)} defs)", "WRITE")
+
+
+# ── Programmatic repo pre-work ──
+
+
+def _run_repo_prework(repo_id: str) -> None:
+    """Fast, deterministic pre-work before the setup agent session.
+
+    1. Create output directories
+    2. Remove git remotes
+    3. Clean copilot-instructions.md
+    4. Commit the changes
+
+    Environment setup, dependency installation, and coverage are
+    handled by the setup agent session that runs after this.
+    """
+    import subprocess
+
+    clone_dir = find_clone(repo_id)
+    if not clone_dir:
+        raise FileNotFoundError(f"No clone found for {repo_id}")
+
+    # Create output directories
+    for subdir in ("ground_truth", "traces", "candidates", "audit", "review"):
+        (DATA_DIR / repo_id / subdir).mkdir(parents=True, exist_ok=True)
+
+    # Remove all git remotes
+    result = subprocess.run(
+        ["git", "remote"], cwd=clone_dir,
+        capture_output=True, text=True, check=False,
+    )
+    for remote in result.stdout.strip().split("\n"):
+        remote = remote.strip()
+        if remote:
+            subprocess.run(
+                ["git", "remote", "remove", remote], cwd=clone_dir,
+                capture_output=True, check=False,
+            )
+
+    # Clean copilot-instructions.md
+    ci_path = clone_dir / ".github" / "copilot-instructions.md"
+    enforcement = (
+        "# MANDATORY INSTRUCTIONS — READ BEFORE DOING ANYTHING\n\n"
+        "You MUST follow ALL instructions in the role file you were given.\n"
+        "Every field in the JSON output MUST be completed — no nulls, no\n"
+        "empty arrays, no skipped sections. Incomplete outputs will be\n"
+        "rejected by the reviewer.\n"
+    )
+    if ci_path.exists():
+        content = ci_path.read_text()
+        import re as _re
+        content = _re.sub(
+            r"<!-- codeplane-instructions -->.*?<!-- /codeplane-instructions -->",
+            "", content, flags=_re.DOTALL,
+        )
+        content = enforcement + "\n" + content.strip() + "\n"
+    else:
+        ci_path.parent.mkdir(parents=True, exist_ok=True)
+        content = enforcement
+    ci_path.write_text(content)
+
+    subprocess.run(
+        ["git", "add", "-A"], cwd=clone_dir,
+        capture_output=True, check=False,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "setup: clean copilot instructions + remove remotes",
+         "--allow-empty"],
+        cwd=clone_dir, capture_output=True, check=False,
+    )
+
+
+# ── Repo pipeline ──
+
+
+async def run_repo_pipeline(
+    repo_id: str,
+    state: dict,
+    sem: asyncio.Semaphore,
+    stage_filter: str | None,
+    runners: dict[str, SessionRunner],
+    repo_locks: dict[str, asyncio.Lock],
+) -> None:
+    """Run all remaining stages for one repo, serialized via per-repo lock."""
+    if repo_id not in repo_locks:
+        repo_locks[repo_id] = asyncio.Lock()
+    lock = repo_locks[repo_id]
+
+    async with lock:
+        while True:
+            state_snap = load_state()
+            rd = state_snap["repos"].get(repo_id, {})
+            state["repos"][repo_id] = rd
+
+            ns = next_stage_for_repo(rd)
+            if ns is None:
+                break
+            if stage_filter and ns != stage_filter:
+                break
+
+            if ns == "setup":
+                # Mechanical pre-work (dirs, remotes, copilot-instructions)
+                # then setup agent session (env, deps, coverage)
+                try:
+                    _run_repo_prework(repo_id)
+                except Exception as e:
+                    rd["setup"] = {"status": "failed", "error": f"prework: {str(e)[:180]}"}
+                    save_state(state)
+                    break
+                # Run agent session for env setup + coverage
+                await _run_single_session(repo_id, ns, state, sem, runners)
+            elif ns in ("audit", "exec", "analyze", "review"):
+                # Per-task: one session per heading
+                await _run_per_task_stage(repo_id, ns, state, sem, runners)
+            else:
+                # Single session: non_ok
+                await _run_single_session(repo_id, ns, state, sem, runners)
+
+
+async def _run_per_task_stage(
+    repo_id: str,
+    stage: str,
+    state: dict,
+    sem: asyncio.Semaphore,
+    runners: dict[str, SessionRunner],
+) -> None:
+    """Run one session per task heading (audit, exec, analyze, or review).
+
+    Exec sessions serialize (shared worktree). Audit, analyze, and
+    review sessions run concurrently up to the semaphore limit.
+    """
+    rd = state["repos"].get(repo_id, {})
+    attempts = rd.get(stage, {}).get("attempts", 0) + 1
+    rd[stage] = {"status": "active", "attempts": attempts}
+    save_state(state)
+
+    artifact_kind = {
+        "audit": "audit",
+        "exec": "trace",
+        "analyze": "ground_truth",
+        "review": "review",
+    }[stage]
+    pending_headings = [
+        h for h in ALL_HEADINGS
+        if not task_artifact_exists(repo_id, h, artifact_kind)
+    ]
+
+    if not pending_headings:
+        rd[stage] = {"status": "done"}
+        save_state(state)
+        return
+
+    errors: list[str] = []
+
+    if stage == "exec":
+        # Serialize exec sessions (shared clone worktree)
+        for heading_id in pending_headings:
+            try:
+                async with sem:
+                    await _run_task_session(repo_id, stage, heading_id, state, runners)
+            except Exception as e:
+                errors.append(f"{heading_id}: {e}")
+                if not _is_retryable(e):
+                    break  # Fatal error — stop this repo
+    else:
+        # Audit, analyze, review sessions can run concurrently (read-only)
+        async def _run_one(heading_id: str):
+            try:
+                async with sem:
+                    await _run_task_session(repo_id, stage, heading_id, state, runners)
+            except Exception as e:
+                errors.append(f"{heading_id}: {e}")
+
+        await asyncio.gather(
+            *[_run_one(h) for h in pending_headings],
+            return_exceptions=True,
+        )
+
+    # Check completion
+    ok, reason, count = stage_artifacts_satisfied(repo_id, stage)
+    if ok:
+        rd[stage] = {"status": "done", "artifacts": count}
+    elif errors:
+        if attempts < MAX_ATTEMPTS:
+            rd[stage] = {"status": "pending", "attempts": attempts, "note": "; ".join(errors[:3])}
+        else:
+            rd[stage] = {"status": "failed", "error": "; ".join(errors[:3]), "attempts": attempts}
+    else:
+        rd[stage] = {"status": "pending", "attempts": attempts, "note": reason}
+    save_state(state)
+
+
+async def _run_task_session(
+    repo_id: str,
+    stage: str,
+    heading_id: str,
+    state: dict,
+    runners: dict[str, SessionRunner],
+) -> None:
+    """Run a single executor or analyst session for one heading."""
+    runner = SessionRunner(repo_id, stage, state, heading_id=heading_id)
+    key = f"{repo_id}/{stage}/{heading_id}"
+    runners[key] = runner
+    try:
+        await runner.run()
+    finally:
+        runners.pop(key, None)
+
+
+async def _run_single_session(
+    repo_id: str,
+    stage: str,
+    state: dict,
+    sem: asyncio.Semaphore,
+    runners: dict[str, SessionRunner],
+) -> None:
+    """Run a single agent session for a 1-session-per-repo stage (setup, non_ok)."""
+    rd = state["repos"].get(repo_id, {})
+    attempts = rd.get(stage, {}).get("attempts", 0) + 1
+    rd[stage] = {"status": "active", "attempts": attempts}
+    save_state(state)
+
+    runner = SessionRunner(repo_id, stage, state)
+    runners[repo_id] = runner
+
+    try:
+        async with sem:
+            await runner.run()
+
+        if rd.get(stage, {}).get("status") == "active":
+            rd[stage] = {"status": "done"}
+            save_state(state)
+
+    except asyncio.TimeoutError:
+        runner.log(f"TIMEOUT after 90min (attempt {attempts}/{MAX_ATTEMPTS})", "ERROR")
+        _archive_log(repo_id, stage, attempts)
+        if attempts < MAX_ATTEMPTS:
+            rd[stage] = {"status": "pending", "attempts": attempts}
+        else:
+            rd[stage] = {"status": "failed", "error": "timeout", "attempts": attempts}
+        save_state(state)
+    except Exception as e:
+        runner.log(f"{e}", "ERROR")
+        _archive_log(repo_id, stage, attempts)
+        if attempts < MAX_ATTEMPTS:
+            rd[stage] = {"status": "pending", "attempts": attempts}
+        else:
+            rd[stage] = {"status": "failed", "error": str(e)[:200], "attempts": attempts}
+        save_state(state)
+    finally:
+        runners.pop(repo_id, None)
 
 
 # ── Progress display ──
@@ -673,14 +1111,10 @@ def cmd_status(state: dict) -> None:
     from rich.console import Console
     from rich.table import Table
     from rich.panel import Panel
-    from rich.columns import Columns
-    from rich.text import Text
 
     console = Console()
-    stage = current_global_stage(state)
     total = len(state.get("repos", {}))
 
-    # Stage progress
     stage_table = Table(show_header=True, box=None, padding=(0, 2))
     stage_table.add_column("Stage", style="bold")
     stage_table.add_column("Progress", min_width=32)
@@ -688,10 +1122,9 @@ def cmd_status(state: dict) -> None:
     stage_table.add_column("Active", justify="right", style="cyan")
     stage_table.add_column("Failed", justify="right", style="red")
     stage_table.add_column("Pending", justify="right", style="dim")
-    stage_table.add_column("", width=2)
 
     for s in STAGES:
-        counts = {}
+        counts: dict[str, int] = {}
         for rd in state["repos"].values():
             st = rd.get(s, {}).get("status", "pending")
             counts[st] = counts.get(st, 0) + 1
@@ -702,14 +1135,7 @@ def cmd_status(state: dict) -> None:
         pct = done / total if total else 0
         filled = int(pct * 25)
         bar = f"[green]{'━' * filled}[/green][dim]{'─' * (25 - filled)}[/dim] {done*100//total}%"
-        marker = "[bold yellow]◀[/bold yellow]" if s == stage else ""
-        s_display = {
-            "audit": "Audit",
-            "exec_n": "Exec N",
-            "exec_m": "Exec M",
-            "exec_w": "Exec W",
-            "review": "Review",
-        }.get(s, s)
+        s_display = s.replace("_", " ").title()
         stage_table.add_row(
             s_display,
             bar,
@@ -717,14 +1143,12 @@ def cmd_status(state: dict) -> None:
             str(active) if active else "·",
             str(failed) if failed else "·",
             str(pending) if pending else "·",
-            marker,
         )
 
     console.print(
         Panel(
             stage_table,
-            title="[bold]Ground Truth Pipeline[/bold]",
-            subtitle=f"stage: [yellow]{stage}[/yellow]",
+            title="[bold]Ground Truth Pipeline v2[/bold]",
             border_style="blue",
         )
     )
@@ -757,103 +1181,53 @@ async def cmd_run(
     from rich.table import Table
     from rich.panel import Panel
     from rich.text import Text
+    from rich.console import Group
 
     console = Console()
     sem = asyncio.Semaphore(concurrency)
-    runners: dict[str, SessionRunner] = {}  # keyed by repo_id
-    repo_locks: dict[str, asyncio.Lock] = {}  # per-repo lock (shared clone dir)
+    runners: dict[str, SessionRunner] = {}
+    repo_locks: dict[str, asyncio.Lock] = {}
     start_wall = time.time()
 
-    def get_repo_lock(repo_id: str) -> asyncio.Lock:
-        if repo_id not in repo_locks:
-            repo_locks[repo_id] = asyncio.Lock()
-        return repo_locks[repo_id]
-
-    # ── Recover orphaned 'active' from previous interrupted run ──
+    # Recover orphaned 'active' from previous interrupted run
     n_recovered = recover_orphaned_active(state)
     if n_recovered:
         console.print(
-            f"[yellow]Recovered {n_recovered} orphaned 'active' session(s) from previous run[/yellow]"
+            f"[yellow]Recovered {n_recovered} orphaned 'active' session(s)[/yellow]"
         )
         state = load_state()
 
-    async def run_one(repo_id: str, stage: str):
-        async with sem:  # Global concurrency gate
-            runner = SessionRunner(repo_id, stage, state)
-            runners[repo_id] = runner
+    targets = all_eligible_tasks(state, stage_filter, repo_filter)
+    if not targets:
+        if pipeline_done(state):
+            console.print("[bold green]✅ All stages complete![/bold green]")
+        else:
+            failed_repos = {
+                rid for rid, rd in state["repos"].items()
+                for s in STAGES if rd.get(s, {}).get("status") == "failed"
+            }
+            if failed_repos:
+                console.print(
+                    f"[yellow]{len(failed_repos)} repo(s) have failed stages. Run 'retry' to reset.[/yellow]"
+                )
+            else:
+                console.print("[yellow]Nothing to do.[/yellow]")
+        return
 
-            # Mark active
-            rd = state["repos"].get(repo_id, {})
-            attempts = rd.get(stage, {}).get("attempts", 0) + 1
-            rd[stage] = {"status": "active", "attempts": attempts}
-            save_state(state)
+    target_repos = sorted(set(rid for rid, _ in targets))
+    console.print(f"[bold]━━━ Launching pipelines for {len(target_repos)} repo(s) ━━━[/bold]")
 
-            try:
-                await runner.run()
-
-                # If session ended naturally (session.idle) without report_complete,
-                # mark as done anyway — auditor sessions don't use report_complete
-                if rd.get(stage, {}).get("status") == "active":
-                    if stage in EXEC_STAGES:
-                        ok, reason, json_count = exec_stage_artifacts_satisfied(repo_id, stage)
-                        if ok:
-                            rd[stage] = {"status": "done", "jsons": json_count}
-                        else:
-                            attempts = rd.get(stage, {}).get("attempts", 0)
-                            rd[stage] = {
-                                "status": "pending",
-                                "attempts": attempts,
-                                "note": f"session exited incomplete: {reason}",
-                            }
-                        save_state(state)
-                    else:
-                        rd[stage] = {"status": "done", "jsons": runner.jsons_written}
-                        save_state(state)
-
-            except asyncio.TimeoutError:
-                runner.log(f"TIMEOUT after 90min (attempt {attempts}/{MAX_ATTEMPTS})", "ERROR")
-                _archive_log(repo_id, stage, attempts)
-                if attempts < MAX_ATTEMPTS:
-                    rd[stage] = {"status": "pending", "attempts": attempts}
-                    runner.log("Will auto-retry with skip instruction")
-                else:
-                    rd[stage] = {"status": "failed", "error": "timeout", "attempts": attempts}
-                save_state(state)
-            except Exception as e:
-                runner.log(f"{e}", "ERROR")
-                _archive_log(repo_id, stage, attempts)
-                if attempts < MAX_ATTEMPTS:
-                    rd[stage] = {"status": "pending", "attempts": attempts}
-                    runner.log(f"Will retry (attempt {attempts}/{MAX_ATTEMPTS})")
-                else:
-                    rd[stage] = {"status": "failed", "error": str(e)[:200], "attempts": attempts}
-                save_state(state)
-            finally:
-                runners.pop(repo_id, None)
-
-    async def run_repo_pipeline(repo_id: str):
-        """Run all remaining stages for one repo, serialized via per-repo lock."""
-        lock = get_repo_lock(repo_id)
-        async with lock:
-            while True:
-                state_snap = load_state()
-                rd = state_snap["repos"].get(repo_id, {})
-                # Update our in-memory state
-                state["repos"][repo_id] = rd
-
-                ns = next_stage_for_repo(rd)
-                if ns is None:
-                    break
-                if stage_filter and ns != stage_filter:
-                    break
-                await run_one(repo_id, ns)
+    flight = [
+        asyncio.create_task(
+            run_repo_pipeline(rid, state, sem, stage_filter, runners, repo_locks)
+        )
+        for rid in target_repos
+    ]
 
     def render_display() -> Panel:
-        from rich.console import Group
         total = len(state.get("repos", {}))
         fresh = load_state()
 
-        # Stage bars
         stage_lines = []
         for s in STAGES:
             done = sum(
@@ -864,124 +1238,63 @@ async def cmd_run(
                 1 for rd in fresh["repos"].values()
                 if rd.get(s, {}).get("status") == "active"
             )
-            failed = sum(
-                1 for rd in fresh["repos"].values()
-                if rd.get(s, {}).get("status") == "failed"
-            )
             pct = done / total if total else 0
             filled = int(pct * 20)
             bar = f"[green]{'━' * filled}[/green][dim]{'─' * (20 - filled)}[/dim]"
-            s_name = {
-                "audit": "Audit",
-                "exec_n": "Exec N",
-                "exec_m": "Exec M",
-                "exec_w": "Exec W",
-                "review": "Review",
-            }.get(s, s)
             active_str = f" [cyan]+{active}[/cyan]" if active else ""
-            failed_str = f" [red]✗{failed}[/red]" if failed else ""
+            s_name = s.replace("_", " ").title()
             stage_lines.append(
-                Text.from_markup(f"  {s_name:8} {bar} {done}/{total}{active_str}{failed_str}")
+                Text.from_markup(f"  {s_name:10} {bar} {done}/{total}{active_str}")
             )
 
-        # Active sessions table
         if runners:
             session_table = Table(
-                show_header=True,
-                box=None,
-                padding=(0, 1),
-                show_edge=False,
+                show_header=True, box=None, padding=(0, 1), show_edge=False,
             )
             session_table.add_column("", width=1)
-            session_table.add_column("Repo", style="bold", min_width=28)
-            session_table.add_column("Stage", style="magenta", width=7)
+            session_table.add_column("Session", style="bold", min_width=32)
             session_table.add_column("Time", justify="right", style="cyan", width=5)
-            session_table.add_column("JSONs", justify="right", style="green", width=5)
             session_table.add_column("Status", max_width=40, no_wrap=True)
 
-            for rid in sorted(runners.keys()):
-                runner = runners[rid]
-                jsons = str(runner.jsons_written) if runner.jsons_written else "·"
-                status = runner.status_line[:40]
-                s_short = runner.stage.replace("exec_", "").upper() if "exec_" in runner.stage else runner.stage.title()
-                session_table.add_row("●", rid, s_short, runner.elapsed(), jsons, status)
+            for key in sorted(runners.keys()):
+                runner = runners[key]
+                session_table.add_row("●", key, runner.elapsed(), runner.status_line[:40])
         else:
             session_table = Text("[dim]  No active sessions[/dim]")
 
-        # Footer
-        total_done = sum(
-            1 for rd in fresh["repos"].values()
-            if all(rd.get(s, {}).get("status") in ("merged", "done") for s in STAGES)
-        )
-        total_failed = sum(
-            1 for rd in fresh["repos"].values()
-            if any(rd.get(s, {}).get("status") == "failed" for s in STAGES)
-        )
         wall_m = int((time.time() - start_wall) / 60)
-
         footer = Text.from_markup(
-            f"  [dim]{total_done}[/dim]/{total} repos done  "
-            f"[cyan]{len(runners)}[/cyan]/{concurrency} active  "
-            f"[red]{total_failed}[/red] failed │ wall: {wall_m}m"
+            f"  [cyan]{len(runners)}[/cyan]/{concurrency} active │ wall: {wall_m}m"
         )
 
         return Panel(
             Group(*stage_lines, Text(""), session_table, Text(""), footer),
-            title="[bold]Ground Truth Pipeline[/bold]",
+            title="[bold]Ground Truth Pipeline v2[/bold]",
             border_style="blue",
         )
 
-    # ── Build initial task list: one pipeline coroutine per repo ──
-
-    targets = all_eligible_tasks(state, stage_filter, repo_filter)
-    if not targets:
-        if pipeline_done(state):
-            console.print("[bold green]✅ All stages complete![/bold green]")
-        else:
-            # Check for failed repos
-            failed_repos = set()
-            for rid, rd in state["repos"].items():
-                for s in STAGES:
-                    if rd.get(s, {}).get("status") == "failed":
-                        failed_repos.add(rid)
-            if failed_repos:
-                console.print(
-                    f"[yellow]{len(failed_repos)} repo(s) have failed stages. Run 'retry' to reset.[/yellow]"
-                )
-            else:
-                console.print("[yellow]Nothing to do.[/yellow]")
-        return
-
-    # Deduplicate to one pipeline task per repo (the pipeline loop handles stage sequencing)
-    target_repos = sorted(set(rid for rid, _ in targets))
-    console.print(f"[bold]━━━ Launching pipelines for {len(target_repos)} repo(s) ━━━[/bold]")
-
-    flight = [asyncio.create_task(run_repo_pipeline(rid)) for rid in target_repos]
     with Live(render_display(), console=console, refresh_per_second=0.5) as live:
         while not all(t.done() for t in flight):
             live.update(render_display())
             await asyncio.sleep(2)
         live.update(render_display())
 
-    # Report exceptions
     for t, rid in zip(flight, target_repos):
         exc = t.exception() if t.done() and not t.cancelled() else None
         if exc:
             console.print(f"  [red]✗ {rid}: {exc}[/red]")
 
-    # Final status
     state = load_state()
     if pipeline_done(state):
         console.print("[bold green]✅ All stages complete![/bold green]")
     else:
-        failed_repos = set()
-        for rid, rd in state["repos"].items():
-            for s in STAGES:
-                if rd.get(s, {}).get("status") == "failed":
-                    failed_repos.add(rid)
+        failed_repos = {
+            rid for rid, rd in state["repos"].items()
+            for s in STAGES if rd.get(s, {}).get("status") == "failed"
+        }
         if failed_repos:
             console.print(
-                f"[yellow]{len(failed_repos)} repo(s) have failed stages. Run 'retry' to reset, then 'run' again.[/yellow]"
+                f"[yellow]{len(failed_repos)} repo(s) failed. Run 'retry' then 'run' again.[/yellow]"
             )
 
 
@@ -998,7 +1311,7 @@ def _archive_log(repo_id: str, stage: str, attempt: int) -> None:
 
 
 def cmd_retry(state: dict, target: str | None) -> None:
-    """Reset failed stages to pending. Works per-repo across all stages."""
+    """Reset failed stages to pending."""
     reset_count = 0
     for rid, rd in state["repos"].items():
         if target and rid != target:
@@ -1015,20 +1328,20 @@ def cmd_retry(state: dict, target: str | None) -> None:
     save_state(state)
 
 
-def cmd_logs(repo_id: str, stage: str) -> None:
-    log_path = LOGS_DIR / "sessions" / f"{repo_id}_{stage}.log"
+def cmd_logs(repo_id: str, stage: str, heading: str | None = None) -> None:
+    suffix = f"_{heading}" if heading else ""
+    log_path = LOGS_DIR / "sessions" / f"{repo_id}_{stage}{suffix}.log"
     if log_path.exists():
         print(log_path.read_text())
     else:
-        # Check errors
         err_dir = LOGS_DIR / "errors"
         if err_dir.exists():
-            for f in sorted(err_dir.glob(f"{repo_id}_{stage}_*.log")):
+            for f in sorted(err_dir.glob(f"{repo_id}_{stage}*.log")):
                 print(f"=== {f.name} ===")
                 print(f.read_text())
                 print()
         else:
-            print(f"No logs found for {repo_id}/{stage}")
+            print(f"No logs found for {repo_id}/{stage}{suffix}")
 
 
 def cmd_collect(state: dict) -> None:
@@ -1056,7 +1369,7 @@ def cmd_collect(state: dict) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="GT pipeline orchestrator (Copilot SDK)")
+    parser = argparse.ArgumentParser(description="GT pipeline orchestrator v2 (Copilot SDK)")
     sub = parser.add_subparsers(dest="command")
 
     sub.add_parser("status")
@@ -1072,6 +1385,7 @@ def main():
     logs_p = sub.add_parser("logs")
     logs_p.add_argument("repo_id")
     logs_p.add_argument("stage", choices=STAGES)
+    logs_p.add_argument("--heading", default=None)
 
     sub.add_parser("collect")
 
@@ -1089,7 +1403,7 @@ def main():
     elif args.command == "retry":
         cmd_retry(state, args.target)
     elif args.command == "logs":
-        cmd_logs(args.repo_id, args.stage)
+        cmd_logs(args.repo_id, args.stage, getattr(args, "heading", None))
     elif args.command == "collect":
         cmd_collect(state)
 

@@ -1,19 +1,24 @@
 # Agent Prompt Templates
 
-Copy-paste these into VS Code agent chat to start each session.
-Open the chat with cwd set to the clone directory
-(`ranking/clones/{SET}/{CLONE}/`). All paths below are relative to that.
+> **These are reference prompts for manual sessions.**
+> The orchestrator (`gt_orchestrator.py`) builds prompts automatically.
+> These are only needed if running sessions by hand.
 
 Replace `{SET}` with `ranker-gate`, `cutoff`, or `eval`.
 Replace `{REPO_NAME}` with e.g. `python-fastapi`.
+Replace `{HEADING}` with e.g. `N1`, `M3`, `W11`.
 
 ---
 
 ## Auditor
 
+Run **33 separate sessions** per repo, one per task heading.
+(Pre-flight setup is handled by the setup agent session.)
+
 ```
 Read ../../../roles/auditor.md — those are your instructions.
 Your tasks file is ../../../repos/{SET}/{REPO_NAME}.md
+You are auditing task {HEADING} only.
 Begin.
 ```
 
@@ -21,37 +26,40 @@ Begin.
 
 ## Executor
 
-Run **3 separate sessions** per repo, one per task tier.
-This keeps context manageable (~150-200K tokens per session).
-
-### Session A — Narrow tasks
+Run **33 separate sessions** per repo, one per task heading.
 
 ```
 Read ../../../roles/executor.md — those are your instructions.
 Your tasks file is ../../../repos/{SET}/{REPO_NAME}.md
-Execute tasks N1 through N10 and N11 only. Skip all M and W tasks.
-Do NOT touch, read, or modify any ground truth files from other sessions.
+You are solving task {HEADING} only.
 Begin.
 ```
 
-### Session B — Medium tasks
+---
+
+## Analyst
+
+Run **33 separate sessions** per repo, one per task heading.
+Each session needs the candidate exploration map from
+`data/{REPO_NAME}/candidates/{HEADING}.json`.
 
 ```
-Read ../../../roles/executor.md — those are your instructions.
+Read ../../../roles/analyst.md — those are your instructions.
 Your tasks file is ../../../repos/{SET}/{REPO_NAME}.md
-Execute tasks M1 through M10 and M11 only. Skip all N and W tasks.
-Do NOT touch, read, or modify any ground truth files from other sessions.
+You are analyzing task {HEADING}.
+The exploration map is at ../../../data/{REPO_NAME}/candidates/{HEADING}.json
 Begin.
 ```
 
-### Session C — Wide tasks + non-OK queries
+---
+
+## Non-OK Author
+
+One session per repo. Run after all 33 executor+analyst sessions.
 
 ```
-Read ../../../roles/executor.md — those are your instructions.
-Your tasks file is ../../../repos/{SET}/{REPO_NAME}.md
-Execute tasks W1 through W10 and W11 only. Skip all N and M tasks.
-Do NOT touch, read, or modify any ground truth files from other sessions.
-After all W tasks, execute STEP 4 (non-OK queries).
+Read ../../../roles/non_ok_author.md — those are your instructions.
+The repo_id is {REPO_NAME}.
 Begin.
 ```
 
@@ -59,11 +67,13 @@ Begin.
 
 ## Reviewer
 
-Run **after all 3 executor sessions** for a repo are complete.
+Run **33 separate sessions** per repo, one per task heading.
+Run after all executor+analyst sessions and non-OK author.
 
 ```
 Read ../../../roles/reviewer.md — those are your instructions.
-The tasks file is ../../../repos/{SET}/{REPO_NAME}.md
-The ground truth outputs are at ../../../data/{REPO_NAME}/ground_truth/
+Your tasks file is ../../../repos/{SET}/{REPO_NAME}.md
+You are reviewing task {HEADING} only.
+The ground truth JSON is at ../../../data/{REPO_NAME}/ground_truth/{HEADING}.json
 Begin.
 ```

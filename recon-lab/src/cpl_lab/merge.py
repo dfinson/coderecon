@@ -23,11 +23,11 @@ def run_merge(
             click.echo(f"  {table}: {count} rows")
 
     if what in ("signals", "all"):
-        click.echo("\n=== Merging Signals ===")
         from cpl_lab.merge_signals import merge_signals
 
         summary = merge_signals(data_dir)
-        click.echo(f"  {summary['total_candidates']} candidates, "
-                   f"positive rate: {summary['positive_rate']:.3f}")
+        pos = summary['total_candidates'] * summary['positive_rate']
+        click.echo(f"  {summary['total_candidates']:,} candidates merged, "
+                   f"{int(pos):,} positive ({summary['positive_rate']*100:.4f}%)")
 
     click.echo("\nMerge complete.")

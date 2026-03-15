@@ -220,3 +220,6 @@ recon-lab/infra/.terraform/
 recon-lab/infra/terraform.tfstate*
 recon-lab/infra/codeplane_wheel/
 recon-lab/infra/.terraform.lock.hcl
+.tower-worktrees/
+output/
+recon-lab/src/cpl_lab/eval/output/

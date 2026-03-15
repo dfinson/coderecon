@@ -29,6 +29,8 @@ experiment:
     - name: cpl-ranking
       args:
         - clone_dir: ["~/.cpl-lab/clones"]
+        - mode: ["baseline", "ranking"]
+        - models_dir: ["~/.cpl-lab/models"]
 
   dataset:
     name: cpl-eval-gt

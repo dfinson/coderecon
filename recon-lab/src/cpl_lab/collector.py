@@ -4,38 +4,37 @@ After the agent completes all tasks for a repo, this module reads the
 per-task JSON files from ``data/{repo_id}/ground_truth/`` and assembles
 ``runs.jsonl``, ``touched_objects.jsonl``, and ``queries.jsonl``.
 
-Each ``relevant_defs`` entry is resolved against the codeplane index
-to get ``def_uid``, ``start_line``, ``end_line``.
+Each ``relevant_defs`` entry is optionally resolved against the codeplane
+index to get ``end_line``.
 """
 
 from __future__ import annotations
 
 import json
 import sqlite3
-import uuid
 from pathlib import Path
 from typing import Any
 
 
-def _resolve_def(
+def _resolve_end_line(
     cursor: sqlite3.Cursor,
     path: str,
     name: str,
     kind: str,
     start_line: int,
-) -> dict[str, Any] | None:
-    """Look up a DefFact in the index by (path, name, kind, start_line).
+) -> int | None:
+    """Look up end_line for a def in the index by (path, name, kind, start_line).
 
     Uses start_line for exact match first. If the exact line doesn't
     match (index may have shifted slightly), falls back to nearest
     match within 5 lines.
 
-    Returns dict with def_uid, start_line, end_line or None if not found.
+    Returns end_line or None if not found.
     """
     # Exact match
     row = cursor.execute(
         """
-        SELECT d.def_uid, d.start_line, d.end_line
+        SELECT d.end_line
         FROM def_facts d
         JOIN files f ON d.file_id = f.id
         WHERE f.path = ? AND d.name = ? AND d.kind = ?
@@ -45,12 +44,12 @@ def _resolve_def(
         (path, name, kind, start_line),
     ).fetchone()
     if row is not None:
-        return {"def_uid": row[0], "start_line": row[1], "end_line": row[2]}
+        return row[0]
 
     # Nearest match within 5 lines (handles minor index drift)
     row = cursor.execute(
         """
-        SELECT d.def_uid, d.start_line, d.end_line
+        SELECT d.end_line
         FROM def_facts d
         JOIN files f ON d.file_id = f.id
         WHERE f.path = ? AND d.name = ? AND d.kind = ?
@@ -61,7 +60,7 @@ def _resolve_def(
         (path, name, kind, start_line, start_line),
     ).fetchone()
     if row is not None:
-        return {"def_uid": row[0], "start_line": row[1], "end_line": row[2]}
+        return row[0]
 
     return None
 
@@ -118,11 +117,11 @@ def collect_ground_truth(
             for rd in task.get(tier_key, []):
                 # Optionally resolve against index for end_line, but don't
                 # skip if unresolved — the GT itself is the source of truth.
-                resolved = _resolve_def(
+                end_line = _resolve_end_line(
                     cur, rd["path"], rd["name"], rd["kind"],
                     start_line=rd["start_line"],
                 )
-                if resolved is None:
+                if end_line is None:
                     unmatched.append({
                         "task_id": task_id,
                         "tier": tier_label,
@@ -137,7 +136,7 @@ def collect_ground_truth(
                     "kind": rd["kind"],
                     "name": rd["name"],
                     "start_line": rd["start_line"],
-                    "end_line": resolved["end_line"] if resolved else rd["start_line"],
+                    "end_line": end_line if end_line is not None else rd["start_line"],
                     "tier": tier_label,
                 })
 

@@ -41,7 +41,6 @@ class TouchedObject:
     """
 
     run_id: str
-    def_uid: str
     path: str
     kind: str
     name: str
@@ -75,7 +74,6 @@ class CandidateRank:
 
     run_id: str
     query_id: str
-    def_uid: str
     # Identity
     path: str
     kind: str

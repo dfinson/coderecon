@@ -1,6 +1,6 @@
 """Validate ground truth JSON files against expected schema.
 
-Run after each repo's executor + reviewer pass to catch schema drift,
+Run after each repo's analyst + reviewer pass to catch schema drift,
 missing fields, wrong types, and kind vocabulary violations before
 post-processing.
 
@@ -56,10 +56,6 @@ def _check_query(query: dict, context: str) -> list[str]:
     qt = query.get("query_type", "")
     if qt not in VALID_QUERY_TYPES:
         errors.append(f"{context}: invalid query_type '{qt}'")
-    if "expected_defs" not in query:
-        errors.append(f"{context}: missing 'expected_defs'")
-    elif not isinstance(query["expected_defs"], list):
-        errors.append(f"{context}: 'expected_defs' must be a list")
     return errors
 
 
@@ -71,7 +67,7 @@ def validate_task(task: dict, file_path: str) -> list[str]:
     # Required top-level fields
     for field in (
         "task_id", "task_complexity", "task_text", "diff", "solve_notes",
-        "exploration_log", "confidence",
+        "confidence",
         "minimum_sufficient_defs", "thrash_preventing_defs",
         "tier_difference_reasoning", "excluded_defs", "queries",
     ):
@@ -97,15 +93,6 @@ def validate_task(task: dict, file_path: str) -> list[str]:
         for i, d in enumerate(defs):
             errors.extend(_check_def_entry(d, f"{ctx}/{tier_key}[{i}]"))
 
-    # minimum_sufficient must have at least one edited def
-    min_defs = task.get("minimum_sufficient_defs", [])
-    has_edited = any(
-        d.get("reason", "").startswith("edited:")
-        for d in min_defs if isinstance(d, dict)
-    )
-    if min_defs and not has_edited:
-        errors.append(f"{ctx}: no 'edited:' reason in minimum_sufficient_defs")
-
     # Queries
     queries = task.get("queries", [])
     if not isinstance(queries, list):
@@ -119,15 +106,6 @@ def validate_task(task: dict, file_path: str) -> list[str]:
         min_queries = 6 if tc == "narrow" else 8
         if len(queries) < min_queries:
             errors.append(f"{ctx}: expected >= {min_queries} queries, got {len(queries)}")
-
-    # exploration_log structure
-    elog = task.get("exploration_log")
-    if isinstance(elog, dict):
-        for key in ("search_sequence", "dead_ends", "key_decisions", "aha_moment", "hindsight"):
-            if key not in elog:
-                errors.append(f"{ctx}/exploration_log: missing '{key}'")
-    elif elog is not None:
-        errors.append(f"{ctx}: 'exploration_log' must be a dict")
 
     return errors
 

@@ -31,7 +31,6 @@ _SIGNALS_SCHEMA = pa.schema([
     pa.field("query_type", pa.string()),
     pa.field("candidate_key", pa.string()),
     # Candidate identity
-    pa.field("def_uid", pa.string()),
     pa.field("path", pa.string()),
     pa.field("kind", pa.string()),
     pa.field("name", pa.string()),

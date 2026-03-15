@@ -48,7 +48,7 @@ class RankingMetric:
 
     def compute(
         self,
-        ranked_def_uids: list[str],
+        ranked_candidate_keys: list[str],
         predicted_relevances: list[float],
         predicted_n: int,
         gt_edited: list[str],
@@ -63,10 +63,10 @@ class RankingMetric:
         ideal_relevances = [2.0] * len(edited_set) + [1.0] * len(read_set)
 
         actual_relevances = []
-        for uid in ranked_def_uids:
-            if uid in edited_set:
+        for key in ranked_candidate_keys:
+            if key in edited_set:
                 actual_relevances.append(2.0)
-            elif uid in read_set:
+            elif key in read_set:
                 actual_relevances.append(1.0)
             else:
                 actual_relevances.append(0.0)
@@ -76,12 +76,12 @@ class RankingMetric:
         ndcg_20 = _ndcg(actual_relevances, ideal_relevances, k=20)
         ndcg_full = _ndcg(actual_relevances, ideal_relevances)
 
-        top_5 = set(ranked_def_uids[:5])
-        top_10 = set(ranked_def_uids[:10])
+        top_5 = set(ranked_candidate_keys[:5])
+        top_10 = set(ranked_candidate_keys[:10])
         hit_5 = 1.0 if top_5 & edited_set else 0.0
         hit_10 = 1.0 if top_10 & edited_set else 0.0
 
-        returned = set(ranked_def_uids[:predicted_n])
+        returned = set(ranked_candidate_keys[:predicted_n])
         cutoff_prf = _prf(returned, all_gt)
 
         return {
