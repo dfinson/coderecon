@@ -462,6 +462,7 @@ class HarvestCandidate:
     artifact_kind: ArtifactKind = ArtifactKind.code
 
     # Which harvesters found this candidate
+    from_embedding: bool = False
     from_term_match: bool = False
     from_explicit: bool = False
     from_graph: bool = False
@@ -498,6 +499,7 @@ class HarvestCandidate:
         """Count of independent harvester sources that found this candidate."""
         return sum(
             [
+                self.from_embedding,
                 self.from_term_match,
                 self.from_explicit,
                 self.from_graph,

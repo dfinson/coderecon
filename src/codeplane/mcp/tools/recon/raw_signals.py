@@ -20,6 +20,7 @@ from codeplane.mcp.tools.recon.harvesters import (
     _harvest_def_embedding,
     _harvest_explicit,
     _harvest_graph,
+    _harvest_imports,
     _harvest_term_match,
 )
 from codeplane.mcp.tools.recon.merge import (
@@ -107,6 +108,10 @@ async def raw_signals_pipeline(
 
     # Final merge with graph
     merged = _merge_candidates(merged, graph_candidates)
+
+    # F: Import-chain discovery from top merged candidates
+    import_candidates = await _harvest_imports(app_ctx, merged, parsed)
+    merged = _merge_candidates(merged, import_candidates)
 
     # Enrich: resolve missing DefFacts, populate metadata
     await _enrich_candidates(app_ctx, merged)
@@ -238,9 +243,9 @@ async def raw_signals_pipeline(
             "candidate_count": len(candidates_out),
             "emb_hits": len(emb_scores),
             "term_hits": sum(1 for c in merged.values() if c.from_term_match),
-
             "graph_hits": sum(1 for c in merged.values() if c.from_graph),
             "symbol_hits": sum(1 for c in merged.values() if c.from_explicit),
+            "import_hits": sum(1 for c in merged.values() if c.import_direction is not None),
         },
     }
 

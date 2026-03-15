@@ -36,10 +36,18 @@ def _merge_candidates(
                 merged[uid] = cand
             else:
                 existing = merged[uid]
+                existing.from_embedding = existing.from_embedding or cand.from_embedding
                 existing.from_term_match = existing.from_term_match or cand.from_term_match
                 existing.from_explicit = existing.from_explicit or cand.from_explicit
                 existing.from_graph = existing.from_graph or cand.from_graph
                 existing.matched_terms |= cand.matched_terms
+                existing.term_match_count = max(existing.term_match_count, cand.term_match_count)
+                existing.term_total_matches = max(existing.term_total_matches, cand.term_total_matches)
+                if cand.graph_edge_type and not existing.graph_edge_type:
+                    existing.graph_edge_type = cand.graph_edge_type
+                    existing.graph_seed_rank = cand.graph_seed_rank
+                if cand.import_direction and not existing.import_direction:
+                    existing.import_direction = cand.import_direction
                 existing.evidence.extend(cand.evidence)
                 if existing.def_fact is None and cand.def_fact is not None:
                     existing.def_fact = cand.def_fact
@@ -203,10 +211,10 @@ def _add_file_defs_as_candidates(
     for d in defs:
         if d.def_uid in merged:
             existing = merged[d.def_uid]
-            if not existing.from_graph:
-                existing.from_graph = True
-                if existing.import_direction is None:
-                    existing.import_direction = import_direction
+            existing.from_graph = True
+            if existing.import_direction is None:
+                existing.import_direction = import_direction
+            if not any(e.category == category and e.detail == detail for e in existing.evidence):
                 existing.evidence.append(
                     EvidenceRecord(category=category, detail=detail, score=score)
                 )

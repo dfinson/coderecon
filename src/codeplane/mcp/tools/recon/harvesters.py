@@ -37,15 +37,34 @@ async def _harvest_def_embedding(
 ) -> dict[str, HarvestCandidate]:
     """Per-def embedding harvest for raw signal collection.
 
+    Uses multi-view queries (NL + code-style + keyword-focused) to
+    improve recall over a single query text.
+
     Returns HarvestCandidate objects keyed by def_uid with embedding
     similarity as evidence. All defs with positive similarity are returned.
     """
+    from codeplane.mcp.tools.recon.parsing import (
+        _build_query_views,
+        _merge_multi_view_results,
+    )
+
     coordinator = app_ctx.coordinator
-    query_text = parsed.query_text or parsed.raw
     candidates: dict[str, HarvestCandidate] = {}
 
+    # Multi-view: embed several reformulations and merge by max similarity
+    views = _build_query_views(parsed)
+    per_view_results: list[list[tuple[str, float]]] = []
+    for view_text in views:
+        view_results = coordinator.query_def_embeddings(view_text)
+        if view_results:
+            per_view_results.append(view_results)
+
+    if per_view_results:
+        def_results = _merge_multi_view_results(per_view_results)
+    else:
+        def_results = []
+
     # Per-def embedding results (code defs) — batch lookup
-    def_results = coordinator.query_def_embeddings(query_text)
     if def_results:
         uids = [uid for uid, _ in def_results]
         defs_map = coordinator.batch_get_defs(uids)
@@ -54,6 +73,7 @@ async def _harvest_def_embedding(
             candidates[uid] = HarvestCandidate(
                 def_uid=uid,
                 def_fact=d,
+                from_embedding=True,
                 evidence=[
                     EvidenceRecord(
                         category="embedding",
@@ -64,6 +84,7 @@ async def _harvest_def_embedding(
             )
 
     # File-level embedding results (non-code files) → expand to defs in those files
+    query_text = parsed.query_text or parsed.raw
     file_results = coordinator.query_file_embeddings(query_text)
     if file_results:
         from codeplane.index._internal.indexing.graph import FactQueries
@@ -83,6 +104,7 @@ async def _harvest_def_embedding(
                         candidates[d.def_uid] = HarvestCandidate(
                             def_uid=d.def_uid,
                             def_fact=d,
+                            from_embedding=True,
                             evidence=[
                                 EvidenceRecord(
                                     category="embedding",
@@ -108,7 +130,11 @@ async def _harvest_term_match(
     app_ctx: AppContext,
     parsed: ParsedTask,
 ) -> dict[str, HarvestCandidate]:
-    """Harvester B: DefFact term matching via SQL LIKE.
+    """Harvester B: DefFact term matching via SQL LIKE + Tantivy BM25.
+
+    Two-phase approach:
+      Phase 1 — SQL LIKE on def names/qualified_names/docstrings (existing).
+      Phase 2 — Tantivy BM25 file scoring, expand top files to defs.
 
     Returns all matching defs with raw match counts.
     No IDF pre-computation — the ranker learns its own weighting.
@@ -122,6 +148,7 @@ async def _harvest_term_match(
     if not all_terms:
         return candidates
 
+    # Phase 1: SQL LIKE on def names (existing logic)
     with coordinator.db.session() as session:
         fq = FactQueries(session)
         for term in all_terms:
@@ -154,6 +181,43 @@ async def _harvest_term_match(
                         score=1.0,
                     )
                 )
+
+    # Phase 2: Tantivy BM25 file scoring — full-text search on file
+    # content+symbols+path.  Expand top-scored files to their defs.
+    query_text = parsed.query_text or parsed.raw
+    bm25_scores = coordinator.score_files_bm25(query_text, limit=200)
+    if bm25_scores:
+        # Take top 50 files by BM25 score
+        top_files = sorted(bm25_scores.items(), key=lambda x: -x[1])[:50]
+        with coordinator.db.session() as session:
+            fq = FactQueries(session)
+            paths = [path for path, _ in top_files]
+            files_map = fq.batch_get_files_by_paths(paths)
+            bm25_by_path = dict(top_files)
+            for path, frec in files_map.items():
+                if frec.id is None:
+                    continue
+                defs_in_file = fq.list_defs_in_file(frec.id)
+                score = bm25_by_path.get(path, 0.0)
+                for d in defs_in_file:
+                    uid = d.def_uid
+                    if uid not in candidates:
+                        candidates[uid] = HarvestCandidate(
+                            def_uid=uid,
+                            def_fact=d,
+                            from_term_match=True,
+                            term_match_count=1,
+                            term_total_matches=len(defs_in_file),
+                        )
+                        candidates[uid].evidence.append(
+                            EvidenceRecord(
+                                category="term_match",
+                                detail=f"BM25 file hit '{path}' score={score:.2f}",
+                                score=score,
+                            )
+                        )
+                    else:
+                        candidates[uid].from_term_match = True
 
     log.debug(
         "recon.harvest.term_match",
@@ -549,7 +613,7 @@ async def _harvest_imports(
                 imp_file = import_files_map.get(imp.resolved_path)
                 if imp_file is None or imp_file.id is None:
                     continue
-                if imp_file.id in seed_file_ids or imp_file.id in seen_import_fids:
+                if imp_file.id in seen_import_fids:
                     continue
                 seen_import_fids.add(imp_file.id)
                 _add_file_defs_as_candidates(
@@ -573,8 +637,8 @@ async def _harvest_imports(
                 .distinct()
             )
             reverse_fids = list(session.exec(reverse_stmt).all())
-            # Batch lookup all reverse file IDs
-            reverse_fids_to_lookup = [rfid for rfid in reverse_fids if rfid not in seed_file_ids]
+            # Batch lookup all reverse file IDs (include seed files for import_direction tagging)
+            reverse_fids_to_lookup = [rfid for rfid in reverse_fids]
             if reverse_fids_to_lookup:
                 reverse_files = fq.batch_get_files(reverse_fids_to_lookup)
                 for rfid, rfile in reverse_files.items():
