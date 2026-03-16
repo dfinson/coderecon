@@ -9,10 +9,10 @@ from unittest.mock import MagicMock
 import pytest
 from fastmcp import FastMCP
 
-from codeplane.mcp._compat import get_tools_sync
-from codeplane.mcp.errors import MCPError, MCPErrorCode
-from codeplane.mcp.session import _MAX_EDIT_BATCHES, MutationContext
-from codeplane.mcp.tools.refactor import (
+from coderecon.mcp._compat import get_tools_sync
+from coderecon.mcp.errors import MCPError, MCPErrorCode
+from coderecon.mcp.session import _MAX_EDIT_BATCHES, MutationContext
+from coderecon.mcp.tools.refactor import (
     _display_refactor,
     _serialize_refactor_result,
     _summarize_refactor,
@@ -240,7 +240,7 @@ class TestRefactorReconGate:
         self, mcp_app: FastMCP, app_ctx: MagicMock, fastmcp_ctx: MagicMock
     ) -> None:
         """refactor_rename without recon raises INVALID_PARAMS."""
-        from codeplane.mcp.tools.refactor import register_tools
+        from coderecon.mcp.tools.refactor import register_tools
 
         register_tools(mcp_app, app_ctx)
         tools = get_tools_sync(mcp_app)
@@ -264,7 +264,7 @@ class TestRefactorReconGate:
         session = app_ctx.session_manager.get_or_create.return_value
         session.candidate_maps = {"r1": {"r1:0": "foo.py"}}  # recon was called
 
-        from codeplane.mcp.tools.refactor import register_tools
+        from coderecon.mcp.tools.refactor import register_tools
 
         register_tools(mcp_app, app_ctx)
         tools = get_tools_sync(mcp_app)
@@ -285,7 +285,7 @@ class TestRefactorReconGate:
         self, mcp_app: FastMCP, app_ctx: MagicMock, fastmcp_ctx: MagicMock
     ) -> None:
         """refactor_move without recon raises INVALID_PARAMS."""
-        from codeplane.mcp.tools.refactor import register_tools
+        from coderecon.mcp.tools.refactor import register_tools
 
         register_tools(mcp_app, app_ctx)
         tools = get_tools_sync(mcp_app)
@@ -305,7 +305,7 @@ class TestRefactorReconGate:
         self, mcp_app: FastMCP, app_ctx: MagicMock, fastmcp_ctx: MagicMock
     ) -> None:
         """recon_impact without recon raises INVALID_PARAMS."""
-        from codeplane.mcp.tools.refactor import register_tools
+        from coderecon.mcp.tools.refactor import register_tools
 
         register_tools(mcp_app, app_ctx)
         tools = get_tools_sync(mcp_app)
@@ -365,7 +365,7 @@ class TestRefactorPlan:
         self, mcp_app: FastMCP, app_ctx: MagicMock, fastmcp_ctx: MagicMock
     ) -> None:
         """Basic plan creation mints edit tickets and sets active_plan."""
-        from codeplane.mcp.tools.refactor import register_tools
+        from coderecon.mcp.tools.refactor import register_tools
 
         register_tools(mcp_app, app_ctx)
         tools = get_tools_sync(mcp_app)
@@ -391,7 +391,7 @@ class TestRefactorPlan:
         self, mcp_app: FastMCP, app_ctx: MagicMock, fastmcp_ctx: MagicMock
     ) -> None:
         """Default expected_edit_calls is 1."""
-        from codeplane.mcp.tools.refactor import register_tools
+        from coderecon.mcp.tools.refactor import register_tools
 
         register_tools(mcp_app, app_ctx)
         tools = get_tools_sync(mcp_app)
@@ -413,7 +413,7 @@ class TestRefactorPlan:
         self, mcp_app: FastMCP, app_ctx: MagicMock, fastmcp_ctx: MagicMock
     ) -> None:
         """expected_edit_calls > 1 without batch_justification raises."""
-        from codeplane.mcp.tools.refactor import register_tools
+        from coderecon.mcp.tools.refactor import register_tools
 
         register_tools(mcp_app, app_ctx)
         tools = get_tools_sync(mcp_app)
@@ -435,7 +435,7 @@ class TestRefactorPlan:
         self, mcp_app: FastMCP, app_ctx: MagicMock, fastmcp_ctx: MagicMock
     ) -> None:
         """batch_justification under 100 chars raises."""
-        from codeplane.mcp.tools.refactor import register_tools
+        from coderecon.mcp.tools.refactor import register_tools
 
         register_tools(mcp_app, app_ctx)
         tools = get_tools_sync(mcp_app)
@@ -457,7 +457,7 @@ class TestRefactorPlan:
         self, mcp_app: FastMCP, app_ctx: MagicMock, fastmcp_ctx: MagicMock
     ) -> None:
         """expected_edit_calls > 1 with valid justification succeeds."""
-        from codeplane.mcp.tools.refactor import register_tools
+        from coderecon.mcp.tools.refactor import register_tools
 
         register_tools(mcp_app, app_ctx)
         tools = get_tools_sync(mcp_app)
@@ -485,7 +485,7 @@ class TestRefactorPlan:
             "r1": {"r1:0": "foo.py", "r1:1": "bar.py", "r1:2": "missing.py"},
         }
 
-        from codeplane.mcp.tools.refactor import register_tools
+        from coderecon.mcp.tools.refactor import register_tools
 
         register_tools(mcp_app, app_ctx)
         tools = get_tools_sync(mcp_app)
@@ -509,7 +509,7 @@ class TestRefactorPlan:
         session = app_ctx.session_manager.get_or_create.return_value
         session.active_plan = MagicMock(plan_id="existing")
 
-        from codeplane.mcp.tools.refactor import register_tools
+        from coderecon.mcp.tools.refactor import register_tools
 
         register_tools(mcp_app, app_ctx)
         tools = get_tools_sync(mcp_app)
@@ -533,7 +533,7 @@ class TestRefactorPlan:
         session = app_ctx.session_manager.get_or_create.return_value
         session.read_only = True
 
-        from codeplane.mcp.tools.refactor import register_tools
+        from coderecon.mcp.tools.refactor import register_tools
 
         register_tools(mcp_app, app_ctx)
         tools = get_tools_sync(mcp_app)
@@ -554,7 +554,7 @@ class TestRefactorPlan:
         self, mcp_app: FastMCP, app_ctx: MagicMock, fastmcp_ctx: MagicMock
     ) -> None:
         """Plan mints edit tickets into session.edit_tickets."""
-        from codeplane.mcp.tools.refactor import register_tools
+        from coderecon.mcp.tools.refactor import register_tools
 
         register_tools(mcp_app, app_ctx)
         tools = get_tools_sync(mcp_app)
@@ -581,7 +581,7 @@ class TestRefactorPlan:
         self, mcp_app: FastMCP, app_ctx: MagicMock, fastmcp_ctx: MagicMock
     ) -> None:
         """Empty edit_targets raises."""
-        from codeplane.mcp.tools.refactor import register_tools
+        from coderecon.mcp.tools.refactor import register_tools
 
         register_tools(mcp_app, app_ctx)
         tools = get_tools_sync(mcp_app)
@@ -606,7 +606,7 @@ class TestRefactorPlan:
         # All but 1 batch used → only 1 remains
         session.mutation_ctx.mutations_since_checkpoint = _MAX_EDIT_BATCHES - 1
 
-        from codeplane.mcp.tools.refactor import register_tools
+        from coderecon.mcp.tools.refactor import register_tools
 
         register_tools(mcp_app, app_ctx)
         tools = get_tools_sync(mcp_app)
@@ -633,7 +633,7 @@ class TestRefactorPlan:
         session = app_ctx.session_manager.get_or_create.return_value
         session.mutation_ctx.mutations_since_checkpoint = _MAX_EDIT_BATCHES  # fully spent
 
-        from codeplane.mcp.tools.refactor import register_tools
+        from coderecon.mcp.tools.refactor import register_tools
 
         register_tools(mcp_app, app_ctx)
         tools = get_tools_sync(mcp_app)

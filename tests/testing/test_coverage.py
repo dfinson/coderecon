@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from codeplane.testing.emitters import (
+from coderecon.testing.emitters import (
     EMITTER_REGISTRY,
     CoverageCapability,
     GoCoverageEmitter,
@@ -159,7 +159,7 @@ class TestVitestEmitter:
     """Tests for Vitest coverage emitter."""
 
     def test_capability_available_when_runner_present(self) -> None:
-        from codeplane.testing.emitters import VitestCoverageEmitter
+        from coderecon.testing.emitters import VitestCoverageEmitter
 
         emitter = VitestCoverageEmitter()
         runtime = PackRuntime(
@@ -170,13 +170,13 @@ class TestVitestEmitter:
         assert emitter.capability(runtime) == CoverageCapability.AVAILABLE
 
     def test_format_id(self) -> None:
-        from codeplane.testing.emitters import VitestCoverageEmitter
+        from coderecon.testing.emitters import VitestCoverageEmitter
 
         emitter = VitestCoverageEmitter()
         assert emitter.format_id == "istanbul"
 
     def test_modify_command(self) -> None:
-        from codeplane.testing.emitters import VitestCoverageEmitter
+        from coderecon.testing.emitters import VitestCoverageEmitter
 
         emitter = VitestCoverageEmitter()
         with TemporaryDirectory() as tmpdir:
@@ -185,7 +185,7 @@ class TestVitestEmitter:
             assert "--coverage" in modified
 
     def test_artifact_path(self) -> None:
-        from codeplane.testing.emitters import VitestCoverageEmitter
+        from coderecon.testing.emitters import VitestCoverageEmitter
 
         emitter = VitestCoverageEmitter()
         with TemporaryDirectory() as tmpdir:
@@ -198,7 +198,7 @@ class TestCargoLlvmCovEmitter:
     """Tests for Rust cargo-llvm-cov emitter."""
 
     def test_capability_unsupported_when_runner_unavailable(self) -> None:
-        from codeplane.testing.emitters import CargoLlvmCovEmitter
+        from coderecon.testing.emitters import CargoLlvmCovEmitter
 
         emitter = CargoLlvmCovEmitter()
         runtime = PackRuntime(
@@ -209,13 +209,13 @@ class TestCargoLlvmCovEmitter:
         assert emitter.capability(runtime) == CoverageCapability.UNSUPPORTED
 
     def test_format_id(self) -> None:
-        from codeplane.testing.emitters import CargoLlvmCovEmitter
+        from coderecon.testing.emitters import CargoLlvmCovEmitter
 
         emitter = CargoLlvmCovEmitter()
         assert emitter.format_id == "lcov"
 
     def test_modify_command(self) -> None:
-        from codeplane.testing.emitters import CargoLlvmCovEmitter
+        from coderecon.testing.emitters import CargoLlvmCovEmitter
 
         emitter = CargoLlvmCovEmitter()
         with TemporaryDirectory() as tmpdir:
@@ -225,7 +225,7 @@ class TestCargoLlvmCovEmitter:
             assert "--lcov" in modified
 
     def test_artifact_path(self) -> None:
-        from codeplane.testing.emitters import CargoLlvmCovEmitter
+        from coderecon.testing.emitters import CargoLlvmCovEmitter
 
         emitter = CargoLlvmCovEmitter()
         with TemporaryDirectory() as tmpdir:
@@ -238,7 +238,7 @@ class TestMavenJacocoEmitter:
     """Tests for Maven JaCoCo emitter."""
 
     def test_capability_available_when_runner_present(self) -> None:
-        from codeplane.testing.emitters import MavenJacocoEmitter
+        from coderecon.testing.emitters import MavenJacocoEmitter
 
         emitter = MavenJacocoEmitter()
         runtime = PackRuntime(
@@ -249,13 +249,13 @@ class TestMavenJacocoEmitter:
         assert emitter.capability(runtime) == CoverageCapability.AVAILABLE
 
     def test_format_id(self) -> None:
-        from codeplane.testing.emitters import MavenJacocoEmitter
+        from coderecon.testing.emitters import MavenJacocoEmitter
 
         emitter = MavenJacocoEmitter()
         assert emitter.format_id == "jacoco"
 
     def test_modify_command(self) -> None:
-        from codeplane.testing.emitters import MavenJacocoEmitter
+        from coderecon.testing.emitters import MavenJacocoEmitter
 
         emitter = MavenJacocoEmitter()
         with TemporaryDirectory() as tmpdir:
@@ -268,7 +268,7 @@ class TestGradleJacocoEmitter:
     """Tests for Gradle JaCoCo emitter."""
 
     def test_capability_available_when_runner_present(self) -> None:
-        from codeplane.testing.emitters import GradleJacocoEmitter
+        from coderecon.testing.emitters import GradleJacocoEmitter
 
         emitter = GradleJacocoEmitter()
         runtime = PackRuntime(
@@ -279,7 +279,7 @@ class TestGradleJacocoEmitter:
         assert emitter.capability(runtime) == CoverageCapability.AVAILABLE
 
     def test_modify_command(self) -> None:
-        from codeplane.testing.emitters import GradleJacocoEmitter
+        from coderecon.testing.emitters import GradleJacocoEmitter
 
         emitter = GradleJacocoEmitter()
         with TemporaryDirectory() as tmpdir:
@@ -292,7 +292,7 @@ class TestDotnetCoverletEmitter:
     """Tests for .NET Coverlet emitter."""
 
     def test_capability_unsupported_when_runner_unavailable(self) -> None:
-        from codeplane.testing.emitters import DotnetCoverletEmitter
+        from coderecon.testing.emitters import DotnetCoverletEmitter
 
         emitter = DotnetCoverletEmitter()
         runtime = PackRuntime(
@@ -303,13 +303,13 @@ class TestDotnetCoverletEmitter:
         assert emitter.capability(runtime) == CoverageCapability.UNSUPPORTED
 
     def test_format_id(self) -> None:
-        from codeplane.testing.emitters import DotnetCoverletEmitter
+        from coderecon.testing.emitters import DotnetCoverletEmitter
 
         emitter = DotnetCoverletEmitter()
         assert emitter.format_id == "cobertura"
 
     def test_modify_command(self) -> None:
-        from codeplane.testing.emitters import DotnetCoverletEmitter
+        from coderecon.testing.emitters import DotnetCoverletEmitter
 
         emitter = DotnetCoverletEmitter()
         with TemporaryDirectory() as tmpdir:
@@ -322,7 +322,7 @@ class TestSimpleCovEmitter:
     """Tests for Ruby SimpleCov emitter."""
 
     def test_capability_unsupported_when_runner_unavailable(self) -> None:
-        from codeplane.testing.emitters import SimpleCovEmitter
+        from coderecon.testing.emitters import SimpleCovEmitter
 
         emitter = SimpleCovEmitter()
         runtime = PackRuntime(
@@ -333,13 +333,13 @@ class TestSimpleCovEmitter:
         assert emitter.capability(runtime) == CoverageCapability.UNSUPPORTED
 
     def test_format_id(self) -> None:
-        from codeplane.testing.emitters import SimpleCovEmitter
+        from coderecon.testing.emitters import SimpleCovEmitter
 
         emitter = SimpleCovEmitter()
         assert emitter.format_id == "simplecov"
 
     def test_modify_command(self) -> None:
-        from codeplane.testing.emitters import SimpleCovEmitter
+        from coderecon.testing.emitters import SimpleCovEmitter
 
         emitter = SimpleCovEmitter()
         with TemporaryDirectory() as tmpdir:
@@ -353,7 +353,7 @@ class TestPHPUnitCoverageEmitter:
     """Tests for PHPUnit coverage emitter."""
 
     def test_capability_unsupported_when_runner_unavailable(self) -> None:
-        from codeplane.testing.emitters import PHPUnitCoverageEmitter
+        from coderecon.testing.emitters import PHPUnitCoverageEmitter
 
         emitter = PHPUnitCoverageEmitter()
         runtime = PackRuntime(
@@ -364,13 +364,13 @@ class TestPHPUnitCoverageEmitter:
         assert emitter.capability(runtime) == CoverageCapability.UNSUPPORTED
 
     def test_format_id(self) -> None:
-        from codeplane.testing.emitters import PHPUnitCoverageEmitter
+        from coderecon.testing.emitters import PHPUnitCoverageEmitter
 
         emitter = PHPUnitCoverageEmitter()
         assert emitter.format_id == "clover"
 
     def test_modify_command(self) -> None:
-        from codeplane.testing.emitters import PHPUnitCoverageEmitter
+        from coderecon.testing.emitters import PHPUnitCoverageEmitter
 
         emitter = PHPUnitCoverageEmitter()
         with TemporaryDirectory() as tmpdir:
@@ -383,7 +383,7 @@ class TestDartCoverageEmitter:
     """Tests for Dart coverage emitter."""
 
     def test_capability_unsupported_when_runner_unavailable(self) -> None:
-        from codeplane.testing.emitters import DartCoverageEmitter
+        from coderecon.testing.emitters import DartCoverageEmitter
 
         emitter = DartCoverageEmitter()
         runtime = PackRuntime(
@@ -394,13 +394,13 @@ class TestDartCoverageEmitter:
         assert emitter.capability(runtime) == CoverageCapability.UNSUPPORTED
 
     def test_format_id(self) -> None:
-        from codeplane.testing.emitters import DartCoverageEmitter
+        from coderecon.testing.emitters import DartCoverageEmitter
 
         emitter = DartCoverageEmitter()
         assert emitter.format_id == "dart"
 
     def test_modify_command(self) -> None:
-        from codeplane.testing.emitters import DartCoverageEmitter
+        from coderecon.testing.emitters import DartCoverageEmitter
 
         emitter = DartCoverageEmitter()
         with TemporaryDirectory() as tmpdir:

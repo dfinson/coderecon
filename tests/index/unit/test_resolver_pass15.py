@@ -13,9 +13,9 @@ from pathlib import Path
 import pytest
 from sqlmodel import select
 
-from codeplane.index._internal.db import Database, create_additional_indexes
-from codeplane.index._internal.indexing.graph import FactQueries
-from codeplane.index._internal.indexing.resolver import (
+from coderecon.index._internal.db import Database, create_additional_indexes
+from coderecon.index._internal.indexing.graph import FactQueries
+from coderecon.index._internal.indexing.resolver import (
     _TYPE_KIND_FILTER,
     _build_file_filter,
     _build_unit_filter,
@@ -23,8 +23,8 @@ from codeplane.index._internal.indexing.resolver import (
     resolve_same_namespace_refs,
     resolve_star_import_refs,
 )
-from codeplane.index._internal.indexing.structural import StructuralIndexer
-from codeplane.index.models import (
+from coderecon.index._internal.indexing.structural import StructuralIndexer
+from coderecon.index.models import (
     Certainty,
     Context,
     DefFact,
@@ -591,7 +591,7 @@ class TestPaginatedReferencesIntegration:
         indexer.index_files(["utils.py", "heavy.py"], context_id=context_id)
 
         # Resolve Pass 2 references
-        from codeplane.index._internal.indexing.resolver import (
+        from coderecon.index._internal.indexing.resolver import (
             resolve_references,
         )
 

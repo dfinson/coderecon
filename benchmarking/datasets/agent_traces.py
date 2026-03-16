@@ -6,7 +6,7 @@ Each record contains:
     session_name:   Canonical name (repo_issue_model_variant)
     issue:          GitHub issue number
     model:          Agent model (e.g. claude-opus-4.6-fast)
-    variant:        "codeplane" or "native"
+    variant:        "coderecon" or "native"
     events:         List of trace events
     outcome:        Pre-scored outcome dict (may be empty)
 """
@@ -54,7 +54,7 @@ class AgentTracesDataset:
                     "session_name": trace.get("session_name", trace_file.stem),
                     "issue": str(trace.get("issue", "unknown")),
                     "model": trace.get("model", "unknown"),
-                    "variant": "codeplane" if trace.get("codeplane", False) else "native",
+                    "variant": "coderecon" if trace.get("coderecon", False) else "native",
                     "events": trace.get("events", []),
                     "outcome": trace.get("outcome", {}),
                 }

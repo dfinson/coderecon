@@ -17,9 +17,9 @@ from pathlib import Path
 import pytest
 from sqlmodel import select
 
-from codeplane.index._internal.db import Database, create_additional_indexes
-from codeplane.index._internal.indexing import FactQueries, LexicalIndex, StructuralIndexer
-from codeplane.index.models import (
+from coderecon.index._internal.db import Database, create_additional_indexes
+from coderecon.index._internal.indexing import FactQueries, LexicalIndex, StructuralIndexer
+from coderecon.index.models import (
     Context,
     DefFact,
     File,

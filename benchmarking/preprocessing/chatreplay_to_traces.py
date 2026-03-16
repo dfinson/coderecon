@@ -42,8 +42,8 @@ def convert_chatreplay(chatreplay_path: Path, repo: str, output_dir: Path) -> Pa
 
     issue = _detect_issue(prompts)
     model = _detect_model(prompts)
-    codeplane = _has_codeplane(prompts)
-    session_name = _build_session_name(repo, issue, model, codeplane)
+    coderecon = _has_codeplane(prompts)
+    session_name = _build_session_name(repo, issue, model, coderecon)
 
     events = extract_trace(prompts)
     trace = {
@@ -51,8 +51,8 @@ def convert_chatreplay(chatreplay_path: Path, repo: str, output_dir: Path) -> Pa
         "repo": repo,
         "issue": issue,
         "model": model,
-        "codeplane": codeplane,
-        "variant": "codeplane" if codeplane else "native",
+        "coderecon": coderecon,
+        "variant": "coderecon" if coderecon else "native",
         "exported_at": data.get("exportedAt"),
         "total_prompts": len(prompts),
         "total_events": len(events),

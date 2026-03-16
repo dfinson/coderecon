@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codeplane.index._internal.discovery import (
+from coderecon.index._internal.discovery import (
     AMBIENT_NAMES,
     INCLUDE_SPECS,
     MARKER_DEFINITIONS,
@@ -20,7 +20,7 @@ from codeplane.index._internal.discovery import (
     ContextDiscovery,
     DiscoveryResult,
 )
-from codeplane.index.models import LanguageFamily, MarkerTier
+from coderecon.index.models import LanguageFamily, MarkerTier
 
 
 class TestMarkerDefinitions:

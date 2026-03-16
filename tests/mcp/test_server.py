@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from codeplane.mcp.server import create_mcp_server
+from coderecon.mcp.server import create_mcp_server
 
 
 class TestCreateMcpServer:
@@ -33,19 +33,19 @@ class TestCreateMcpServer:
         """Creates a FastMCP server instance."""
         mcp = create_mcp_server(mock_context)
         assert mcp is not None
-        assert mcp.name == "codeplane"
+        assert mcp.name == "coderecon"
 
     def test_registers_tools(self, mock_context: MagicMock) -> None:
         """Registers tools from all tool modules."""
         mcp = create_mcp_server(mock_context)
-        from codeplane.mcp._compat import get_tools_sync
+        from coderecon.mcp._compat import get_tools_sync
 
         assert len(get_tools_sync(mcp)) > 0
 
     def test_has_expected_tools(self, mock_context: MagicMock) -> None:
         """Has core v2 tools registered."""
         mcp = create_mcp_server(mock_context)
-        from codeplane.mcp._compat import get_tools_sync
+        from coderecon.mcp._compat import get_tools_sync
 
         tool_names = set(get_tools_sync(mcp).keys())
         assert "recon" in tool_names
@@ -61,7 +61,7 @@ class TestPatchFastmcpDocket:
         """Patches _docket_lifespan when it exists on FastMCP."""
         from fastmcp import FastMCP
 
-        from codeplane.mcp.server import _patch_fastmcp_docket
+        from coderecon.mcp.server import _patch_fastmcp_docket
 
         # Clean up any prior patch markers
         if hasattr(FastMCP, "_docket_patched"):
@@ -75,7 +75,7 @@ class TestPatchFastmcpDocket:
         """Does not re-patch when already patched."""
         from fastmcp import FastMCP
 
-        from codeplane.mcp.server import _patch_fastmcp_docket
+        from coderecon.mcp.server import _patch_fastmcp_docket
 
         # Ensure it's marked as patched
         FastMCP._docket_patched = True  # type: ignore[attr-defined]
@@ -90,7 +90,7 @@ class TestPatchFastmcpDocket:
 
         from fastmcp import FastMCP
 
-        from codeplane.mcp.server import _patch_fastmcp_docket
+        from coderecon.mcp.server import _patch_fastmcp_docket
 
         # Remove _docket_patched so the guard isn't short-circuited
         had_patched = hasattr(FastMCP, "_docket_patched")
@@ -124,8 +124,8 @@ class TestEnrichToolDescriptions:
         """Enriches tool description when TOOL_DOCS has an entry."""
         from fastmcp import FastMCP
 
-        from codeplane.mcp._compat import get_tools_sync
-        from codeplane.mcp.server import _enrich_tool_descriptions
+        from coderecon.mcp._compat import get_tools_sync
+        from coderecon.mcp.server import _enrich_tool_descriptions
 
         mcp = FastMCP("test")
 
@@ -144,8 +144,8 @@ class TestEnrichToolDescriptions:
         """Doesn't crash or modify tools without TOOL_DOCS entry."""
         from fastmcp import FastMCP
 
-        from codeplane.mcp._compat import get_tools_sync
-        from codeplane.mcp.server import _enrich_tool_descriptions
+        from coderecon.mcp._compat import get_tools_sync
+        from coderecon.mcp.server import _enrich_tool_descriptions
 
         mcp = FastMCP("test")
 

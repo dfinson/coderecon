@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.git import GitOps
+from coderecon.git import GitOps
 
 pytestmark = pytest.mark.integration
 
@@ -171,7 +171,7 @@ class TestFetchNonexistentRemote:
 
     def test_fetch_nonexistent_remote_raises(self, local_bare_remote: tuple[Path, Path]) -> None:
         """Fetching from nonexistent remote should raise."""
-        from codeplane.git import RemoteError
+        from coderecon.git import RemoteError
 
         work, _ = local_bare_remote
         ops = GitOps(work)

@@ -5,9 +5,9 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from codeplane.index._internal.db import Database, EpochManager
-from codeplane.index._internal.indexing import LexicalIndex
-from codeplane.index.models import RepoState
+from coderecon.index._internal.db import Database, EpochManager
+from coderecon.index._internal.indexing import LexicalIndex
+from coderecon.index.models import RepoState
 
 
 class TestEpochManager:

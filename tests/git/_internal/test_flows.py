@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from codeplane.git._internal.flows import ConflictCheckResult, WriteFlows
+from coderecon.git._internal.flows import ConflictCheckResult, WriteFlows
 
 
 class TestConflictCheckResult:

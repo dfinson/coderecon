@@ -8,7 +8,7 @@ from pathlib import Path
 import pygit2
 import pytest
 
-from codeplane.templates import get_cplignore_template
+from coderecon.templates import get_reconignore_template
 
 
 @pytest.fixture
@@ -18,7 +18,7 @@ def integration_repo(tmp_path: Path) -> Generator[Path, None, None]:
     Includes:
     - Git repository with initial commit
     - Python source files with proper structure
-    - .codeplane directory (simulates cpl init)
+    - .recon directory (simulates recon init)
     - Tests directory with basic tests
     """
     repo_path = tmp_path / "integration_repo"
@@ -91,10 +91,10 @@ pythonpath = ["."]
 line-length = 100
 """)
 
-    # Create .codeplane directory (simulating cpl init)
-    codeplane_dir = repo_path / ".codeplane"
-    codeplane_dir.mkdir()
-    (codeplane_dir / ".cplignore").write_text(get_cplignore_template())
+    # Create .recon directory (simulating recon init)
+    coderecon_dir = repo_path / ".recon"
+    coderecon_dir.mkdir()
+    (coderecon_dir / ".reconignore").write_text(get_reconignore_template())
 
     # Create tests directory
     (repo_path / "tests").mkdir()
@@ -210,10 +210,10 @@ version = "0.1.0"
 testpaths = ["tests"]
 """)
 
-    # Create .codeplane directory
-    codeplane_dir = repo_path / ".codeplane"
-    codeplane_dir.mkdir()
-    (codeplane_dir / ".cplignore").write_text(get_cplignore_template())
+    # Create .recon directory
+    coderecon_dir = repo_path / ".recon"
+    coderecon_dir.mkdir()
+    (coderecon_dir / ".reconignore").write_text(get_reconignore_template())
 
     # Commit
     repo.index.add_all()

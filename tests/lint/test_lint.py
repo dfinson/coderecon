@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from codeplane.lint import (
+from coderecon.lint import (
     Diagnostic,
     LintOps,
     LintResult,
@@ -16,12 +16,12 @@ from codeplane.lint import (
     parsers,
     registry,
 )
-from codeplane.lint.ops import (
+from coderecon.lint.ops import (
     _LANGUAGE_TO_TOOL_PREFIX,
     LINT_TIMEOUT_SECONDS,
     _generate_agentic_hint,
 )
-from codeplane.lint.tools import LintTool
+from coderecon.lint.tools import LintTool
 
 
 def create_mock_coordinator() -> MagicMock:
@@ -354,7 +354,7 @@ class TestLintTool:
 
 class TestSeverityFromStr:
     def test_error_variants(self) -> None:
-        from codeplane.lint.parsers import _severity_from_str
+        from coderecon.lint.parsers import _severity_from_str
 
         assert _severity_from_str("error") == Severity.ERROR
         assert _severity_from_str("ERROR") == Severity.ERROR
@@ -362,14 +362,14 @@ class TestSeverityFromStr:
         assert _severity_from_str("fatal") == Severity.ERROR
 
     def test_warning_variants(self) -> None:
-        from codeplane.lint.parsers import _severity_from_str
+        from coderecon.lint.parsers import _severity_from_str
 
         assert _severity_from_str("warning") == Severity.WARNING
         assert _severity_from_str("warn") == Severity.WARNING
         assert _severity_from_str("w") == Severity.WARNING
 
     def test_info_variants(self) -> None:
-        from codeplane.lint.parsers import _severity_from_str
+        from coderecon.lint.parsers import _severity_from_str
 
         assert _severity_from_str("info") == Severity.INFO
         assert _severity_from_str("information") == Severity.INFO
@@ -377,7 +377,7 @@ class TestSeverityFromStr:
         assert _severity_from_str("note") == Severity.INFO
 
     def test_default_to_hint(self) -> None:
-        from codeplane.lint.parsers import _severity_from_str
+        from coderecon.lint.parsers import _severity_from_str
 
         assert _severity_from_str("unknown") == Severity.HINT
         assert _severity_from_str("") == Severity.HINT

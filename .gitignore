@@ -218,7 +218,7 @@ recon-lab/.venv/
 recon-lab/infra/terraform.tfvars
 recon-lab/infra/.terraform/
 recon-lab/infra/terraform.tfstate*
-recon-lab/infra/codeplane_wheel/
+recon-lab/infra/coderecon_wheel/
 recon-lab/infra/.terraform.lock.hcl
 .tower-worktrees/
 output/

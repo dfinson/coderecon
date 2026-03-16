@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.lint.tools import registry as lint_registry
+from coderecon.lint.tools import registry as lint_registry
 
 pytestmark = pytest.mark.integration
 

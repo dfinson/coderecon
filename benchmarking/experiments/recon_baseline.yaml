@@ -1,10 +1,10 @@
-# CodePlane Recon Baseline Evaluation
+# CodeRecon Recon Baseline Evaluation
 #
 # Evaluates recon's file retrieval quality against ground-truth issue annotations.
-# Requires a running CodePlane daemon on the target repo.
+# Requires a running CodeRecon daemon on the target repo.
 #
 # Prerequisites:
-#   1. Start CodePlane daemon on the target repo
+#   1. Start CodeRecon daemon on the target repo
 #   2. Set CPL_BENCH_TARGET_REPO env var (default: ~/wsl-repos/evees/evee_cpl/evee)
 #
 # Run:
@@ -13,7 +13,7 @@
 experiment:
   name: cpl-recon-baseline
   description: >-
-    Evaluate CodePlane recon file retrieval precision, recall, F1,
+    Evaluate CodeRecon recon file retrieval precision, recall, F1,
     and tier alignment against hand-annotated ground truth across
     24 issues × 3 query levels (anchored, exploratory, vague).
   version: "1.0"

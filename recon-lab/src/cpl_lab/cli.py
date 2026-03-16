@@ -31,7 +31,7 @@ MERGE_TARGETS = ("gt", "signals", "all")
 @click.option("--dry-run", is_flag=True, help="Show what would be done.")
 @click.pass_context
 def main(ctx: click.Context, workspace: str | None, verbose: bool, dry_run: bool) -> None:
-    """Recon Lab — training pipeline for CodePlane's recon models."""
+    """Recon Lab — training pipeline for CodeRecon's recon models."""
     ctx.ensure_object(dict)
     ctx.obj["config"] = get_config(workspace)
     ctx.obj["verbose"] = verbose
@@ -69,7 +69,7 @@ def clone(ctx: click.Context, repo_set: str, jobs: int | None) -> None:
 @click.option("--set", "repo_set", type=click.Choice(SETS), default="all",
               help="Which repo set to index.")
 @click.option("--timeout", type=int, default=None, help="Timeout per repo (seconds).")
-@click.option("--reindex", is_flag=True, help="Force re-index even if .codeplane/ exists.")
+@click.option("--reindex", is_flag=True, help="Force re-index even if .recon/ exists.")
 @click.pass_context
 def index(ctx: click.Context, repo_set: str, timeout: int | None, reindex: bool) -> None:
     """Run `cpl init` on each clone."""

@@ -13,7 +13,7 @@ import pytest
 from starlette.applications import Starlette
 from starlette.routing import Mount, Route
 
-from codeplane.daemon.app import create_app
+from coderecon.daemon.app import create_app
 
 
 @pytest.fixture
@@ -21,7 +21,7 @@ def temp_repo(tmp_path: Path) -> Path:
     """Create a temporary repository structure with git initialized."""
     # Initialize git repo
     pygit2.init_repository(str(tmp_path))
-    (tmp_path / ".codeplane").mkdir()
+    (tmp_path / ".recon").mkdir()
     return tmp_path
 
 

@@ -1,18 +1,18 @@
-# CodePlane Ranking Pipeline Evaluation (In-Process)
+# CodeRecon Ranking Pipeline Evaluation (In-Process)
 #
 # Evaluates the full ranking pipeline (gate + ranker + cutoff) against
 # def-level ground truth from the eval repo set.
 #
 # Prerequisites:
-#   1. Clone eval repos:     cpl-lab clone --set eval
-#   2. Index eval repos:     cpl-lab index --set eval
+#   1. Clone eval repos:     recon-lab clone --set eval
+#   2. Index eval repos:     recon-lab index --set eval
 #   3. Generate ground truth (or have it present in data dirs)
 #
 # Run:
-#   cpl-lab eval experiments/eval_pipeline.yaml
+#   recon-lab eval experiments/eval_pipeline.yaml
 
 experiment:
-  name: cpl-eval-pipeline
+  name: recon-eval-pipeline
   description: >-
     In-process evaluation of the ranking pipeline end-to-end:
     gate classification, ranker NDCG/Hit@K, and cutoff F1/P/R
@@ -26,20 +26,20 @@ experiment:
     type: local
 
   models:
-    - name: cpl-ranking
+    - name: recon-ranking
       args:
-        - clone_dir: ["~/.cpl-lab/clones"]
+        - clone_dir: ["~/.recon-lab/clones"]
         - mode: ["baseline", "ranking"]
-        - models_dir: ["~/.cpl-lab/models"]
+        - models_dir: ["~/.recon-lab/models"]
 
   dataset:
-    name: cpl-eval-gt
+    name: recon-eval-gt
     type: custom
     args:
-      data_dir: "~/.cpl-lab/data"
+      data_dir: "~/.recon-lab/data"
 
   metrics:
-    - name: cpl-ranking
+    - name: recon-ranking
       mapping:
         ranked_def_uids: model.ranked_def_uids
         predicted_relevances: model.predicted_relevances
@@ -47,7 +47,7 @@ experiment:
         gt_edited: dataset.gt_edited
         gt_read_necessary: dataset.gt_read_necessary
         query_type: dataset.query_type
-    - name: cpl-gate
+    - name: recon-gate
       mapping:
         predicted_gate: model.predicted_gate
         gt_gate: dataset.label_gate

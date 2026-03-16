@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.files.ops import FileOps
+from coderecon.files.ops import FileOps
 
 
 @pytest.fixture

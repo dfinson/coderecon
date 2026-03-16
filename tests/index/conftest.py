@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
-    from codeplane.index._internal.db import Database
+    from coderecon.index._internal.db import Database
 
 
 @pytest.fixture
@@ -23,7 +23,7 @@ def temp_dir() -> Generator[Path, None, None]:
 @pytest.fixture
 def temp_db(temp_dir: Path) -> Generator[Database, None, None]:
     """Create a temporary database with schema."""
-    from codeplane.index._internal.db import Database, create_additional_indexes
+    from coderecon.index._internal.db import Database, create_additional_indexes
 
     db_path = temp_dir / "test.db"
     db = Database(db_path)
@@ -62,7 +62,7 @@ def temp_repo_with_db(
     temp_repo: Path, temp_dir: Path
 ) -> Generator[tuple[Path, Database], None, None]:
     """Create a temporary repo with an associated database."""
-    from codeplane.index._internal.db import Database, create_additional_indexes
+    from coderecon.index._internal.db import Database, create_additional_indexes
 
     db_path = temp_dir / "index.db"
     db = Database(db_path)

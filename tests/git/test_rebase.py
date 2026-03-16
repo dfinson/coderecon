@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.git import (
+from coderecon.git import (
     GitOps,
     NoRebaseInProgressError,
     RebaseInProgressError,
@@ -159,7 +159,7 @@ class TestRebaseContinue:
         self, git_repo_with_branch: tuple[Path, GitOps, str]
     ) -> None:
         """Continuing after resolving conflicts should proceed."""
-        from codeplane.git.errors import RebaseConflictError
+        from coderecon.git.errors import RebaseConflictError
 
         repo_path, ops, _ = git_repo_with_branch
         default_branch = ops.current_branch()
@@ -262,7 +262,7 @@ class TestRebaseActions:
         self, git_repo_with_commits: tuple[Path, GitOps, list[str]]
     ) -> None:
         """Rebase with drop action should skip dropped commits."""
-        from codeplane.git import RebasePlan, RebaseStep
+        from coderecon.git import RebasePlan, RebaseStep
 
         repo_path, ops, shas = git_repo_with_commits
 
@@ -297,7 +297,7 @@ class TestRebaseActions:
         self, git_repo_with_commits: tuple[Path, GitOps, list[str]]
     ) -> None:
         """Rebase with reword action should change commit message."""
-        from codeplane.git import RebasePlan, RebaseStep
+        from coderecon.git import RebasePlan, RebaseStep
 
         repo_path, ops, shas = git_repo_with_commits
 
@@ -340,7 +340,7 @@ class TestRebaseActions:
         self, git_repo_with_commits: tuple[Path, GitOps, list[str]]
     ) -> None:
         """Rebase with squash action should combine commits."""
-        from codeplane.git import RebasePlan, RebaseStep
+        from coderecon.git import RebasePlan, RebaseStep
 
         repo_path, ops, shas = git_repo_with_commits
 
@@ -378,7 +378,7 @@ class TestRebaseActions:
         self, git_repo_with_commits: tuple[Path, GitOps, list[str]]
     ) -> None:
         """Rebase with fixup action should combine commits without message."""
-        from codeplane.git import RebasePlan, RebaseStep
+        from coderecon.git import RebasePlan, RebaseStep
 
         repo_path, ops, shas = git_repo_with_commits
 
@@ -415,7 +415,7 @@ class TestRebaseActions:
         self, git_repo_with_commits: tuple[Path, GitOps, list[str]]
     ) -> None:
         """Rebase with edit action should pause for editing."""
-        from codeplane.git import RebasePlan, RebaseStep
+        from coderecon.git import RebasePlan, RebaseStep
 
         repo_path, ops, shas = git_repo_with_commits
 

@@ -17,16 +17,16 @@ from pathlib import Path
 
 logging.disable(logging.WARNING)
 
-from codeplane.mcp.context import AppContext
-from codeplane.mcp.tools.recon.raw_signals import raw_signals_pipeline
-from codeplane.ranking.features import extract_ranker_features
+from coderecon.mcp.context import AppContext
+from coderecon.mcp.tools.recon.raw_signals import raw_signals_pipeline
+from coderecon.ranking.features import extract_ranker_features
 
 CLONE_DIR = Path(os.path.expanduser("~/.cpl-lab/clones/eval"))
 DATA_DIR = Path(os.path.expanduser("~/.cpl-lab/data"))
 
 REPO_CLONE_MAP = {}
 for d in CLONE_DIR.iterdir():
-    if d.is_dir() and (d / ".codeplane" / "index.db").exists():
+    if d.is_dir() and (d / ".recon" / "index.db").exists():
         REPO_CLONE_MAP[d.name.lower()] = d.name
 
 
@@ -108,7 +108,7 @@ def main():
             continue
 
         clone_path = CLONE_DIR / clone_name
-        db_path = clone_path / ".codeplane" / "index.db"
+        db_path = clone_path / ".recon" / "index.db"
         if not db_path.exists():
             continue
 
@@ -117,7 +117,7 @@ def main():
                 ctx.coordinator.close()
                 ctx = None
                 gc.collect()
-            cp = clone_path / ".codeplane"
+            cp = clone_path / ".recon"
             ctx = AppContext.create(
                 repo_root=clone_path,
                 db_path=cp / "index.db",

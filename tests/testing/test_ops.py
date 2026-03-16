@@ -7,18 +7,18 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from codeplane.testing.models import (
+from coderecon.testing.models import (
     TargetProgress,
     TestCaseProgress,
     TestProgress,
 )
-from codeplane.testing.ops import (
+from coderecon.testing.ops import (
     DetectedWorkspace,
     TestOps,
     _is_prunable_path,
     detect_workspaces,
 )
-from codeplane.testing.runner_pack import runner_registry
+from coderecon.testing.runner_pack import runner_registry
 
 
 def create_mock_coordinator() -> MagicMock:
@@ -547,7 +547,7 @@ class TestPersistAndLoadResult:
             coordinator = create_mock_coordinator()
             ops = TestOps(root, coordinator)
 
-            from codeplane.testing.models import TestRunStatus
+            from coderecon.testing.models import TestRunStatus
 
             artifact_dir = root / "artifacts" / "test-run"
             artifact_dir.mkdir(parents=True)

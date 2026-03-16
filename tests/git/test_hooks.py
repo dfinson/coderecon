@@ -5,7 +5,7 @@ from __future__ import annotations
 import stat
 from pathlib import Path
 
-from codeplane.git._internal.hooks import HookResult, run_hook
+from coderecon.git._internal.hooks import HookResult, run_hook
 
 
 class TestRunHook:

@@ -13,11 +13,11 @@ if TYPE_CHECKING:
     from collections.abc import Generator
 
 # Test repository URLs
-PUBLIC_REPO = "https://github.com/dfinson/codeplane-test-public.git"
-PRIVATE_REPO = "https://github.com/dfinson/codeplane-test-private.git"
+PUBLIC_REPO = "https://github.com/dfinson/coderecon-test-public.git"
+PRIVATE_REPO = "https://github.com/dfinson/coderecon-test-private.git"
 
-PUBLIC_REPO_SSH = "git@github.com:dfinson/codeplane-test-public.git"
-PRIVATE_REPO_SSH = "git@github.com:dfinson/codeplane-test-private.git"
+PUBLIC_REPO_SSH = "git@github.com:dfinson/coderecon-test-public.git"
+PRIVATE_REPO_SSH = "git@github.com:dfinson/coderecon-test-private.git"
 
 
 @pytest.fixture(scope="session", autouse=True)

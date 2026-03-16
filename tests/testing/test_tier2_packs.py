@@ -5,8 +5,8 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from codeplane.testing.models import TestTarget
-from codeplane.testing.runner_pack import runner_registry
+from coderecon.testing.models import TestTarget
+from coderecon.testing.runner_pack import runner_registry
 
 # =============================================================================
 # Kotlin - Gradle

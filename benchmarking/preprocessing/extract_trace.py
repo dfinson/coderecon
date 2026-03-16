@@ -5,11 +5,11 @@ Usage:
 
 Steps:
   1. Load the chatreplay JSON (each export = one benchmark run).
-  2. Auto-detect: issue number, model, codeplane vs native.
+  2. Auto-detect: issue number, model, coderecon vs native.
   3. Save raw JSON as  <output-dir>/<name>_raw.json
   4. Extract trace events and save as <output-dir>/<name>_trace.json
 
-Naming:  {repo}_{issue}_{model}_{codeplane|native}
+Naming:  {repo}_{issue}_{model}_{coderecon|native}
 """
 
 from __future__ import annotations
@@ -84,25 +84,25 @@ def _detect_model(prompts: list[dict[str, Any]]) -> str:
 
 
 def _has_codeplane(prompts: list[dict[str, Any]]) -> bool:
-    """Return True if any tool call targets a codeplane MCP tool."""
+    """Return True if any tool call targets a coderecon MCP tool."""
     for p in prompts:
         for log in p.get("logs", []):
             if not isinstance(log, dict) or log.get("kind") != "toolCall":
                 continue
             tool = log.get("tool", "")
-            if "codeplane" in tool.lower():
+            if "coderecon" in tool.lower():
                 return True
     return False
 
 
-def _build_session_name(repo: str, issue: str, model: str, codeplane: bool) -> str:
+def _build_session_name(repo: str, issue: str, model: str, coderecon: bool) -> str:
     """Build the canonical file-name prefix.
 
-    Format: {repo}_{issue}_{model}_{codeplane|native}
+    Format: {repo}_{issue}_{model}_{coderecon|native}
     Model names are sanitised (dots/slashes replaced with dashes).
     """
     safe_model = re.sub(r"[./]", "-", model)
-    variant = "codeplane" if codeplane else "native"
+    variant = "coderecon" if coderecon else "native"
     return f"{repo}_{issue}_{safe_model}_{variant}"
 
 
@@ -252,10 +252,10 @@ def main(argv: list[str] | None = None) -> int:
     repo = args.repo
     issue = _detect_issue(prompts)
     model = _detect_model(prompts)
-    codeplane = _has_codeplane(prompts)
-    session_name = _build_session_name(repo, issue, model, codeplane)
+    coderecon = _has_codeplane(prompts)
+    session_name = _build_session_name(repo, issue, model, coderecon)
 
-    print(f"Detected: repo={repo} issue={issue} model={model} codeplane={codeplane}")
+    print(f"Detected: repo={repo} issue={issue} model={model} coderecon={coderecon}")
     print(f"Session name: {session_name}")
 
     # Output dir -------------------------------------------------------------
@@ -275,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
         "repo": repo,
         "issue": issue,
         "model": model,
-        "codeplane": codeplane,
+        "coderecon": coderecon,
         "exported_at": data.get("exportedAt"),
         "total_prompts": len(prompts),
         "total_events": len(events),

@@ -4,7 +4,7 @@ Registered as ``@metric("cpl-outcome")`` for EVEE evaluation.
 
 The ``@metric`` wrapper handles field mapping.  ``compute()`` receives:
     outcome: dict   (from model.outcome — pre-scored quality dimensions)
-    variant: str    (from model.variant — "codeplane" or "native")
+    variant: str    (from model.variant — "coderecon" or "native")
 """
 
 from __future__ import annotations
@@ -77,8 +77,8 @@ class AgentOutcomeMetric:
                     result[f"{prefix}avg_{dim}"] = round(statistics.mean(values), 2)
 
         # Head-to-head
-        if "codeplane" in by_variant and "native" in by_variant:
-            cp_mean = statistics.mean(s["score"] for s in by_variant["codeplane"])
+        if "coderecon" in by_variant and "native" in by_variant:
+            cp_mean = statistics.mean(s["score"] for s in by_variant["coderecon"])
             nat_mean = statistics.mean(s["score"] for s in by_variant["native"])
             result["delta_score"] = round(cp_mean - nat_mean, 2)
 

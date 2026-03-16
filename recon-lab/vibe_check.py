@@ -10,17 +10,17 @@ from pathlib import Path
 # Suppress noisy logs during loading
 logging.disable(logging.WARNING)
 
-from codeplane.mcp.context import AppContext
-from codeplane.mcp.tools.recon.raw_signals import raw_signals_pipeline
-from codeplane.ranking.cutoff import load_cutoff
-from codeplane.ranking.features import (
+from coderecon.mcp.context import AppContext
+from coderecon.mcp.tools.recon.raw_signals import raw_signals_pipeline
+from coderecon.ranking.cutoff import load_cutoff
+from coderecon.ranking.features import (
     extract_cutoff_features,
     extract_gate_features,
     extract_ranker_features,
 )
-from codeplane.ranking.gate import load_gate
-from codeplane.ranking.models import GateLabel
-from codeplane.ranking.ranker import load_ranker
+from coderecon.ranking.gate import load_gate
+from coderecon.ranking.models import GateLabel
+from coderecon.ranking.ranker import load_ranker
 
 CLONE_DIR = Path("~/.cpl-lab/clones/eval/celery").expanduser()
 MODELS_DIR = Path("~/.cpl-lab/models").expanduser()
@@ -82,7 +82,7 @@ def run_pipeline(ctx, loop, query_text, seeds, pins, gate, ranker, cutoff):
 
 def main():
     # Load context
-    cp = CLONE_DIR / ".codeplane"
+    cp = CLONE_DIR / ".recon"
     ctx = AppContext.create(
         repo_root=CLONE_DIR,
         db_path=cp / "index.db",

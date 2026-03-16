@@ -3,8 +3,8 @@
 Verifies all registered lint tools have valid configurations.
 """
 
-from codeplane.lint import registry
-from codeplane.lint.models import ParseResult, ToolCategory
+from coderecon.lint import registry
+from coderecon.lint.models import ParseResult, ToolCategory
 
 
 class TestToolRegistry:

@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.index._internal.parsing import TreeSitterParser
+from coderecon.index._internal.parsing import TreeSitterParser
 
 
 @pytest.fixture
@@ -417,7 +417,7 @@ class TestImportKindEnumValues:
 
     def test_all_import_kinds_defined(self) -> None:
         """All new import kinds should be defined in the enum."""
-        from codeplane.index.models import ImportKind
+        from coderecon.index.models import ImportKind
 
         # Tier 1 languages
         assert hasattr(ImportKind, "GO_IMPORT")

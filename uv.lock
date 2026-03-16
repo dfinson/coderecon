@@ -261,7 +261,7 @@ wheels = [
 ]
 
 [[package]]
-name = "codeplane"
+name = "coderecon"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

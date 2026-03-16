@@ -105,11 +105,11 @@ jobs:
 
       - name: Configure git identity
         run: |
-          git config --global user.email "ci@codeplane.dev"
-          git config --global user.name "CodePlane CI"
+          git config --global user.email "ci@coderecon.dev"
+          git config --global user.name "CodeRecon CI"
 
       - name: Run unit tests with coverage
-        run: pytest -m "not integration and not e2e" --cov=src/codeplane --cov-branch --cov-report=xml --cov-report=term --junitxml=junit.xml -o junit_family=legacy
+        run: pytest -m "not integration and not e2e" --cov=src/coderecon --cov-branch --cov-report=xml --cov-report=term --junitxml=junit.xml -o junit_family=legacy
 
       - name: Check coverage threshold (warning only)
         run: |
@@ -153,17 +153,17 @@ jobs:
 
       - name: Configure git identity
         run: |
-          git config --global user.email "ci@codeplane.dev"
-          git config --global user.name "CodePlane CI"
+          git config --global user.email "ci@coderecon.dev"
+          git config --global user.name "CodeRecon CI"
 
       - name: Run integration tests
         run: pytest -m "integration" -v --tb=short --junitxml=junit-integration.xml -o junit_family=legacy
 
       # Note: Integration test results NOT uploaded to Codecov Test Analytics
       # because they contain intentional failures from nested pytest runs
-      # (e.g., tests that verify CodePlane handles test failures correctly)
+      # (e.g., tests that verify CodeRecon handles test failures correctly)
 
-  # E2E tests - disabled pending fix: https://github.com/dfinson/codeplane/issues/130
+  # E2E tests - disabled pending fix: https://github.com/dfinson/coderecon/issues/130
   # e2e-test:
   #   needs: [preflight, unit-test]
   #   if: needs.preflight.outputs.has_tests == 'true'
@@ -185,8 +185,8 @@ jobs:
 
   #     - name: Configure git identity
   #       run: |
-  #         git config --global user.email "ci@codeplane.dev"
-  #         git config --global user.name "CodePlane CI"
+  #         git config --global user.email "ci@coderecon.dev"
+  #         git config --global user.name "CodeRecon CI"
 
   #     - name: Run e2e tests
   #       run: pytest -m "e2e" -v --tb=short --junitxml=junit-e2e.xml -o junit_family=legacy

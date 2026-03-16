@@ -10,17 +10,17 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.index.ops import IndexCoordinatorEngine
+from coderecon.index.ops import IndexCoordinatorEngine
 
 pytestmark = pytest.mark.integration
 
 
 def _make_coordinator(repo_path: Path) -> IndexCoordinatorEngine:
     """Create an IndexCoordinatorEngine with proper paths."""
-    codeplane_dir = repo_path / ".codeplane"
-    codeplane_dir.mkdir(exist_ok=True)
-    db_path = codeplane_dir / "index.db"
-    tantivy_path = codeplane_dir / "tantivy"
+    coderecon_dir = repo_path / ".recon"
+    coderecon_dir.mkdir(exist_ok=True)
+    db_path = coderecon_dir / "index.db"
+    tantivy_path = coderecon_dir / "tantivy"
     return IndexCoordinatorEngine(repo_path, db_path, tantivy_path)
 
 
@@ -41,8 +41,8 @@ class TestIndexInitialization:
         # Init should complete without errors
         assert len(result.errors) == 0
         # Database and tantivy directory should exist
-        assert (integration_repo / ".codeplane" / "index.db").exists()
-        assert (integration_repo / ".codeplane" / "tantivy").exists()
+        assert (integration_repo / ".recon" / "index.db").exists()
+        assert (integration_repo / ".recon" / "tantivy").exists()
 
     @pytest.mark.asyncio
     async def test_init_idempotent(self, integration_repo: Path) -> None:

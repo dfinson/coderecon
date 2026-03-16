@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.core.languages import (
+from coderecon.core.languages import (
     ALL_LANGUAGES,
     AMBIENT_NAMES,
     EXTENSION_TO_NAME,
@@ -603,13 +603,13 @@ class TestFindTestPairs:
     # ── Python ──
 
     def test_python_src_to_tests(self) -> None:
-        result = find_test_pairs("src/codeplane/foo/bar.py")
-        assert "src/codeplane/foo/test_bar.py" in result
+        result = find_test_pairs("src/coderecon/foo/bar.py")
+        assert "src/coderecon/foo/test_bar.py" in result
         assert "tests/foo/test_bar.py" in result
 
     def test_python_src_to_tests_underscore(self) -> None:
-        result = find_test_pairs("src/codeplane/foo/bar.py")
-        assert "src/codeplane/foo/bar_test.py" in result
+        result = find_test_pairs("src/coderecon/foo/bar.py")
+        assert "src/coderecon/foo/bar_test.py" in result
         assert "tests/foo/bar_test.py" in result
 
     def test_python_plain_path(self) -> None:
@@ -705,7 +705,7 @@ class TestFindTestPairs:
 
     def test_no_duplicates(self) -> None:
         """Results should have no duplicate paths."""
-        result = find_test_pairs("src/codeplane/foo/bar.py")
+        result = find_test_pairs("src/coderecon/foo/bar.py")
         assert len(result) == len(set(result))
 
     @pytest.mark.parametrize(

@@ -1,6 +1,6 @@
 """Tests for testing models."""
 
-from codeplane.testing.models import (
+from coderecon.testing.models import (
     ParsedTestRun,
     ParsedTestSuite,
     TargetProgress,

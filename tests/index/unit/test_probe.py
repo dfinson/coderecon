@@ -12,14 +12,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codeplane.index._internal.discovery import (
+from coderecon.index._internal.discovery import (
     BatchProbeResult,
     ContextProbe,
     ProbeConfig,
     ProbeResult,
 )
-from codeplane.index._internal.parsing import TreeSitterParser
-from codeplane.index.models import CandidateContext, LanguageFamily, ProbeStatus
+from coderecon.index._internal.parsing import TreeSitterParser
+from coderecon.index.models import CandidateContext, LanguageFamily, ProbeStatus
 
 
 def make_candidate(
@@ -210,7 +210,7 @@ class TestBatchProbe:
 
     def test_validate_contexts_batch(self, temp_dir: Path) -> None:
         """Should validate multiple contexts in batch."""
-        from codeplane.index._internal.discovery import validate_contexts
+        from coderecon.index._internal.discovery import validate_contexts
 
         repo_path = temp_dir / "repo"
         repo_path.mkdir()

@@ -11,7 +11,7 @@ Covers:
 
 from __future__ import annotations
 
-from codeplane.git._internal.parsing import (
+from coderecon.git._internal.parsing import (
     extract_branch_name,
     extract_local_branch_from_remote,
     extract_tag_name,

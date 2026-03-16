@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from codeplane.index._internal.db.integrity import (
+from coderecon.index._internal.db.integrity import (
     IndexRecovery,
     IntegrityChecker,
     IntegrityIssue,

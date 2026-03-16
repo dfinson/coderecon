@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from codeplane.git._internal.hooks import HookResult
+from coderecon.git._internal.hooks import HookResult
 
 
 def _hook_ok() -> HookResult:
@@ -47,7 +47,7 @@ def _lint_dirty() -> MagicMock:
 
 
 def _test_result_ok() -> MagicMock:
-    from codeplane.testing.models import TestResult, TestRunStatus
+    from coderecon.testing.models import TestResult, TestRunStatus
 
     status = MagicMock(spec=TestRunStatus)
     status.status = "completed"
@@ -81,12 +81,12 @@ def checkpoint_tool(mock_context: MagicMock) -> Any:
     """Register checkpoint tool and return a wrapper that resolves Field defaults."""
     from fastmcp import FastMCP
 
-    from codeplane.mcp.tools.checkpoint import register_tools
+    from coderecon.mcp.tools.checkpoint import register_tools
 
     mcp = FastMCP("test")
     register_tools(mcp, mock_context)
 
-    from codeplane.mcp._compat import get_tools_sync
+    from coderecon.mcp._compat import get_tools_sync
 
     raw_fn = get_tools_sync(mcp)["checkpoint"].fn
 
@@ -143,9 +143,9 @@ class TestCheckpointCommitChain:
         fake_diff.files_analyzed = 1
 
         with (
-            patch("codeplane.mcp.tools.checkpoint._validate_paths_exist"),
-            patch("codeplane.mcp.tools.checkpoint._run_hook_with_retry") as mock_hook,
-            patch("codeplane.mcp.tools.diff._run_git_diff", return_value=fake_diff),
+            patch("coderecon.mcp.tools.checkpoint._validate_paths_exist"),
+            patch("coderecon.mcp.tools.checkpoint._run_hook_with_retry") as mock_hook,
+            patch("coderecon.mcp.tools.diff._run_git_diff", return_value=fake_diff),
         ):
             mock_hook.return_value = (_hook_ok(), None)
             result = await checkpoint_tool(
@@ -221,9 +221,9 @@ class TestCheckpointCommitChain:
         mock_context.git_ops.repo.workdir = "/tmp/repo"
 
         with (
-            patch("codeplane.mcp.tools.checkpoint._validate_paths_exist"),
-            patch("codeplane.mcp.tools.checkpoint._run_hook_with_retry") as mock_hook,
-            patch("codeplane.mcp.tools.diff._run_git_diff", side_effect=Exception("no index")),
+            patch("coderecon.mcp.tools.checkpoint._validate_paths_exist"),
+            patch("coderecon.mcp.tools.checkpoint._run_hook_with_retry") as mock_hook,
+            patch("coderecon.mcp.tools.diff._run_git_diff", side_effect=Exception("no index")),
         ):
             mock_hook.return_value = (_hook_ok(), None)
             result = await checkpoint_tool(
@@ -269,9 +269,9 @@ class TestCheckpointSemanticDiff:
         fake_diff.files_analyzed = 2
 
         with (
-            patch("codeplane.mcp.tools.checkpoint._validate_paths_exist"),
-            patch("codeplane.mcp.tools.checkpoint._run_hook_with_retry") as mock_hook,
-            patch("codeplane.mcp.tools.diff._run_git_diff", return_value=fake_diff),
+            patch("coderecon.mcp.tools.checkpoint._validate_paths_exist"),
+            patch("coderecon.mcp.tools.checkpoint._run_hook_with_retry") as mock_hook,
+            patch("coderecon.mcp.tools.diff._run_git_diff", return_value=fake_diff),
         ):
             mock_hook.return_value = (_hook_ok(), None)
             result = await checkpoint_tool(
@@ -301,9 +301,9 @@ class TestCheckpointSemanticDiff:
         mock_context.git_ops.repo.workdir = "/tmp/repo"
 
         with (
-            patch("codeplane.mcp.tools.checkpoint._validate_paths_exist"),
-            patch("codeplane.mcp.tools.checkpoint._run_hook_with_retry") as mock_hook,
-            patch("codeplane.mcp.tools.diff._run_git_diff", side_effect=RuntimeError("boom")),
+            patch("coderecon.mcp.tools.checkpoint._validate_paths_exist"),
+            patch("coderecon.mcp.tools.checkpoint._run_hook_with_retry") as mock_hook,
+            patch("coderecon.mcp.tools.diff._run_git_diff", side_effect=RuntimeError("boom")),
         ):
             mock_hook.return_value = (_hook_ok(), None)
             result = await checkpoint_tool(
@@ -326,29 +326,29 @@ class TestValidatePathsExist:
     """Unit tests for _validate_paths_exist with git-aware deletion support."""
 
     def test_existing_file_passes(self, tmp_path: Path) -> None:
-        from codeplane.mcp.tools.checkpoint import _validate_paths_exist
+        from coderecon.mcp.tools.checkpoint import _validate_paths_exist
 
         (tmp_path / "foo.py").write_text("x = 1")
         _validate_paths_exist(tmp_path, ["foo.py"])  # should not raise
 
     def test_missing_untracked_file_raises(self, tmp_path: Path) -> None:
-        from codeplane.git.errors import PathsNotFoundError
-        from codeplane.mcp.tools.checkpoint import _validate_paths_exist
+        from coderecon.git.errors import PathsNotFoundError
+        from coderecon.mcp.tools.checkpoint import _validate_paths_exist
 
         with pytest.raises(PathsNotFoundError):
             _validate_paths_exist(tmp_path, ["typo.py"])
 
     def test_deleted_tracked_file_passes(self, tmp_path: Path) -> None:
         """A file that doesn't exist on disk but is tracked by git is a valid deletion."""
-        from codeplane.mcp.tools.checkpoint import _validate_paths_exist
+        from coderecon.mcp.tools.checkpoint import _validate_paths_exist
 
         tracked = {"deleted.py", "other.py"}
         _validate_paths_exist(tmp_path, ["deleted.py"], tracked_files=tracked)  # should not raise
 
     def test_deleted_untracked_file_raises(self, tmp_path: Path) -> None:
         """A file that doesn't exist on disk AND isn't tracked is a typo."""
-        from codeplane.git.errors import PathsNotFoundError
-        from codeplane.mcp.tools.checkpoint import _validate_paths_exist
+        from coderecon.git.errors import PathsNotFoundError
+        from coderecon.mcp.tools.checkpoint import _validate_paths_exist
 
         tracked = {"other.py"}
         with pytest.raises(PathsNotFoundError):
@@ -356,7 +356,7 @@ class TestValidatePathsExist:
 
     def test_mixed_existing_and_deleted_tracked(self, tmp_path: Path) -> None:
         """Mix of existing files and tracked deletions should pass."""
-        from codeplane.mcp.tools.checkpoint import _validate_paths_exist
+        from coderecon.mcp.tools.checkpoint import _validate_paths_exist
 
         (tmp_path / "alive.py").write_text("x = 1")
         tracked = {"alive.py", "deleted.py"}
@@ -365,6 +365,6 @@ class TestValidatePathsExist:
         )  # should not raise
 
     def test_empty_paths_is_noop(self, tmp_path: Path) -> None:
-        from codeplane.mcp.tools.checkpoint import _validate_paths_exist
+        from coderecon.mcp.tools.checkpoint import _validate_paths_exist
 
         _validate_paths_exist(tmp_path, [])  # should not raise

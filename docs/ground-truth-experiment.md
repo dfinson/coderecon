@@ -7,7 +7,7 @@ diverge in practice, or is the two-tier design overengineering?
 
 ## Method
 
-Invented 2 realistic tasks on the codeplane repo (1 narrow, 1 medium).
+Invented 2 realistic tasks on the coderecon repo (1 narrow, 1 medium).
 Solved N1 for real (captured diff, reverted). Analyzed M1 by tracing
 the code without editing. Produced full ground truth for both, then
 compared the two tiers.
@@ -79,7 +79,7 @@ candidates? Can a ranker learn to surface ground truth defs?
    directory named `coverage` at any depth. 14 source files missing.
    Fixed: removed from prunable, `.cplignore` pattern root-only.
 
-2. **Def embeddings not persisted by `cpl init -r`** — embedding
+2. **Def embeddings not persisted by `recon init -r`** — embedding
    computation takes ~90s and runs at the end of indexing. If init
    was killed (SIGPIPE, Ctrl-C, daemon restart), embeddings were
    lost and never rebuilt. Fixed: added `_validate_embeddings()` to

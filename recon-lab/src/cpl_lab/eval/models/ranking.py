@@ -70,7 +70,7 @@ class RankingModel:
             self._cached_repo = None
             gc.collect()
 
-        from codeplane.mcp.context import AppContext
+        from coderecon.mcp.context import AppContext
         from cpl_lab.clone import REPO_MANIFEST
 
         info = REPO_MANIFEST.get(repo_id)
@@ -78,9 +78,9 @@ class RankingModel:
             msg = f"Unknown repo_id: {repo_id}"
             raise ValueError(msg)
         clone_dir = self._clone_root / info["set"] / info["clone_name"]
-        cp = clone_dir / ".codeplane"
+        cp = clone_dir / ".recon"
         if not cp.exists():
-            msg = f"No codeplane index at {cp}"
+            msg = f"No coderecon index at {cp}"
             raise FileNotFoundError(msg)
 
         logging.disable(logging.WARNING)
@@ -99,9 +99,9 @@ class RankingModel:
         self._cached_repo = repo_id
 
         # Load models based on mode
-        from codeplane.ranking.cutoff import load_cutoff
-        from codeplane.ranking.gate import load_gate
-        from codeplane.ranking.ranker import load_ranker
+        from coderecon.ranking.cutoff import load_cutoff
+        from coderecon.ranking.gate import load_gate
+        from coderecon.ranking.ranker import load_ranker
 
         if self._mode == "ranking":
             self._gate = load_gate(self._models_dir / "gate.lgbm")
@@ -132,13 +132,13 @@ class RankingModel:
         assert self._ctx is not None  # noqa: S101
         assert self._loop is not None  # noqa: S101
 
-        from codeplane.mcp.tools.recon.raw_signals import raw_signals_pipeline
-        from codeplane.ranking.features import (
+        from coderecon.mcp.tools.recon.raw_signals import raw_signals_pipeline
+        from coderecon.ranking.features import (
             extract_cutoff_features,
             extract_gate_features,
             extract_ranker_features,
         )
-        from codeplane.ranking.models import GateLabel
+        from coderecon.ranking.models import GateLabel
 
         # 1. Raw signals
         raw = self._loop.run_until_complete(

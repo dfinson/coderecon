@@ -1,4 +1,4 @@
-"""Tests for cpl up command."""
+"""Tests for recon up command."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pygit2
 import pytest
 from click.testing import CliRunner
 
-from codeplane.cli.main import cli
+from coderecon.cli.main import cli
 
 runner = CliRunner()
 
@@ -47,17 +47,17 @@ def temp_non_git(tmp_path: Path) -> Generator[Path, None, None]:
 @pytest.fixture
 def initialized_repo(temp_git_repo: Path) -> Path:
     """Create an initialized repo."""
-    codeplane_dir = temp_git_repo / ".codeplane"
-    codeplane_dir.mkdir()
-    (codeplane_dir / "config.yaml").write_text(
+    coderecon_dir = temp_git_repo / ".recon"
+    coderecon_dir.mkdir()
+    (coderecon_dir / "config.yaml").write_text(
         "logging:\n  level: INFO\nserver:\n  host: 127.0.0.1\n  port: 0\n"
     )
-    (codeplane_dir / ".cplignore").write_text("# Test\n")
+    (coderecon_dir / ".reconignore").write_text("# Test\n")
     return temp_git_repo
 
 
 class TestUpCommand:
-    """cpl up command tests."""
+    """recon up command tests."""
 
     def test_given_non_git_dir_when_up_then_fails(self, temp_non_git: Path) -> None:
         """Up fails with error when run outside git repository."""
@@ -65,8 +65,8 @@ class TestUpCommand:
         assert result.exit_code != 0
         assert "Not inside a git repository" in result.output
 
-    @patch("codeplane.daemon.lifecycle.read_server_info")
-    @patch("codeplane.daemon.lifecycle.is_server_running")
+    @patch("coderecon.daemon.lifecycle.read_server_info")
+    @patch("coderecon.daemon.lifecycle.is_server_running")
     def test_given_already_running_when_up_then_reports_running(
         self,
         mock_is_running: MagicMock,
@@ -83,9 +83,9 @@ class TestUpCommand:
         assert "12345" in result.output
         assert "8765" in result.output
 
-    @patch("codeplane.daemon.lifecycle.run_server")
-    @patch("codeplane.daemon.lifecycle.is_server_running")
-    @patch("codeplane.cli.up.IndexCoordinatorEngine")
+    @patch("coderecon.daemon.lifecycle.run_server")
+    @patch("coderecon.daemon.lifecycle.is_server_running")
+    @patch("coderecon.cli.up.IndexCoordinatorEngine")
     def test_given_not_running_when_up_then_starts_server(
         self,
         mock_coordinator_class: MagicMock,
@@ -109,8 +109,8 @@ class TestUpCommand:
         assert "stopped" in result.output.lower() or result.exit_code == 0
         mock_coordinator.close.assert_called()
 
-    @patch("codeplane.daemon.lifecycle.is_server_running")
-    @patch("codeplane.cli.up.initialize_repo")
+    @patch("coderecon.daemon.lifecycle.is_server_running")
+    @patch("coderecon.cli.up.initialize_repo")
     def test_given_uninitialized_repo_when_up_then_auto_inits(
         self,
         mock_init: MagicMock,
@@ -122,15 +122,15 @@ class TestUpCommand:
         mock_init.return_value = False  # Simulate init failure to avoid full daemon start
 
         runner.invoke(cli, ["up", str(temp_git_repo)])
-        # Should call initialize_repo with show_cpl_up_hint=False for auto-init
+        # Should call initialize_repo with show_recon_up_hint=False for auto-init
         mock_init.assert_called_once_with(
-            temp_git_repo.resolve(), show_cpl_up_hint=False, port=None
+            temp_git_repo.resolve(), show_recon_up_hint=False, port=None
         )
 
-    @patch("codeplane.daemon.lifecycle.run_server")
-    @patch("codeplane.daemon.lifecycle.is_server_running")
-    @patch("codeplane.cli.up.IndexCoordinatorEngine")
-    @patch("codeplane.cli.up.load_config")
+    @patch("coderecon.daemon.lifecycle.run_server")
+    @patch("coderecon.daemon.lifecycle.is_server_running")
+    @patch("coderecon.cli.up.IndexCoordinatorEngine")
+    @patch("coderecon.cli.up.load_config")
     def test_given_port_option_when_up_then_uses_specified_port(
         self,
         mock_load_config: MagicMock,

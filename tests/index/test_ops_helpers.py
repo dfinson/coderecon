@@ -9,7 +9,7 @@ Tests the utility functions and data structures:
 - SearchMode: Search mode enum
 """
 
-from codeplane.index.ops import (
+from coderecon.index.ops import (
     IndexStats,
     InitResult,
     SearchMode,

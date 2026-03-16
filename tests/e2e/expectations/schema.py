@@ -20,7 +20,7 @@ class TimeoutConfig(BaseModel):
     """
 
     clone_sec: float = Field(default=120.0, description="Timeout for git clone")
-    init_sec: float = Field(default=120.0, description="Timeout for cpl init")
+    init_sec: float = Field(default=120.0, description="Timeout for recon init")
     server_ready_sec: float = Field(default=60.0, description="Timeout waiting for server ready")
     health_check_sec: float = Field(default=10.0, description="Timeout for health check requests")
     tool_call_sec: float = Field(default=60.0, description="Default timeout for MCP tool calls")

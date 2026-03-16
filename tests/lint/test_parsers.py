@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import json
 
-from codeplane.lint.models import Severity
-from codeplane.lint.parsers import (
+from coderecon.lint.models import Severity
+from coderecon.lint.parsers import (
     _severity_from_str,
     parse_black_check,
     parse_eslint,

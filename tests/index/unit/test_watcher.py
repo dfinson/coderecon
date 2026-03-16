@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.index._internal.watcher import (
+from coderecon.index._internal.watcher import (
     BackgroundIndexer,
     FileChangeEvent,
     FileChangeKind,
@@ -92,12 +92,12 @@ class TestIgnoreChecker:
         # Nothing should be ignored without patterns
         assert not checker.should_ignore(tmp_path / "test.py")
 
-    def test_cplignore_patterns(self, tmp_path: Path) -> None:
-        """Checker loads patterns from .codeplane/.cplignore."""
-        cpl_dir = tmp_path / ".codeplane"
+    def test_reconignore_patterns(self, tmp_path: Path) -> None:
+        """Checker loads patterns from .recon/.reconignore."""
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        cplignore = cpl_dir / ".cplignore"
-        cplignore.write_text("*.pyc\n__pycache__/\n")
+        reconignore = cpl_dir / ".reconignore"
+        reconignore.write_text("*.pyc\n__pycache__/\n")
 
         checker = IgnoreChecker(tmp_path)
 
@@ -105,16 +105,16 @@ class TestIgnoreChecker:
         assert checker.should_ignore(tmp_path / "__pycache__" / "module.pyc")
         assert not checker.should_ignore(tmp_path / "test.py")
 
-    def test_cplignore_directory_patterns(self, tmp_path: Path) -> None:
-        """Checker correctly handles directory patterns from .cplignore."""
-        cpl_dir = tmp_path / ".codeplane"
+    def test_reconignore_directory_patterns(self, tmp_path: Path) -> None:
+        """Checker correctly handles directory patterns from .reconignore."""
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        cplignore = cpl_dir / ".cplignore"
-        cplignore.write_text("*.tantivy\nbuild_output/\n")
+        reconignore = cpl_dir / ".reconignore"
+        reconignore.write_text("*.tantivy\nbuild_output/\n")
 
         checker = IgnoreChecker(tmp_path)
 
-        # Patterns from .codeplane/.cplignore should be applied
+        # Patterns from .recon/.reconignore should be applied
         assert checker.should_ignore(tmp_path / "search.tantivy")
         assert checker.should_ignore(tmp_path / "build_output" / "file.txt")
 
@@ -127,11 +127,11 @@ class TestIgnoreChecker:
         assert not checker.should_ignore(tmp_path / "main.py")
 
     def test_comment_lines_ignored(self, tmp_path: Path) -> None:
-        """Comment lines in .cplignore are ignored."""
-        cpl_dir = tmp_path / ".codeplane"
+        """Comment lines in .reconignore are ignored."""
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        cplignore = cpl_dir / ".cplignore"
-        cplignore.write_text("# This is a comment\n*.pyc\n# Another comment\n")
+        reconignore = cpl_dir / ".reconignore"
+        reconignore.write_text("# This is a comment\n*.pyc\n# Another comment\n")
 
         checker = IgnoreChecker(tmp_path)
 
@@ -140,11 +140,11 @@ class TestIgnoreChecker:
         assert not checker.should_ignore(tmp_path / "# This is a comment")
 
     def test_empty_lines_ignored(self, tmp_path: Path) -> None:
-        """Empty lines in .cplignore are ignored."""
-        cpl_dir = tmp_path / ".codeplane"
+        """Empty lines in .reconignore are ignored."""
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        cplignore = cpl_dir / ".cplignore"
-        cplignore.write_text("*.pyc\n\n\n*.log\n")
+        reconignore = cpl_dir / ".reconignore"
+        reconignore.write_text("*.pyc\n\n\n*.log\n")
 
         checker = IgnoreChecker(tmp_path)
 
@@ -301,12 +301,12 @@ class TestFileWatcher:
         assert any("to_delete.py" in str(p) for p in deleted_paths)
 
     @pytest.mark.asyncio
-    async def test_ignores_cplignored_files(self, tmp_path: Path) -> None:
-        """Watcher ignores files matching .cplignore patterns."""
-        # Create .codeplane/.cplignore
-        cpl_dir = tmp_path / ".codeplane"
+    async def test_ignores_reconignored_files(self, tmp_path: Path) -> None:
+        """Watcher ignores files matching .reconignore patterns."""
+        # Create .recon/.reconignore
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        (cpl_dir / ".cplignore").write_text("*.log\n")
+        (cpl_dir / ".reconignore").write_text("*.log\n")
 
         config = WatcherConfig(root=tmp_path, debounce_seconds=0.1)
         watcher = FileWatcher(config)

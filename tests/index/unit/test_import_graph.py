@@ -14,14 +14,14 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.index._internal.db import Database, create_additional_indexes
-from codeplane.index._internal.indexing.import_graph import (
+from coderecon.index._internal.db import Database, create_additional_indexes
+from coderecon.index._internal.indexing.import_graph import (
     CoverageGap,
     CoverageSourceResult,
     ImportGraph,
     ImportGraphResult,
 )
-from codeplane.index.models import Context, File, ImportFact
+from coderecon.index.models import Context, File, ImportFact
 
 # ---------------------------------------------------------------------------
 # Fixtures

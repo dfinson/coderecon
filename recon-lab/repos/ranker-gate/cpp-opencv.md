@@ -71,7 +71,7 @@ modules/
 ## Notes
 
 - Some modules use CUDA/OpenCL for GPU acceleration. These code paths
-  are structurally complex but codeplane should index the C++ portions
+  are structurally complex but coderecon should index the C++ portions
   well. The `contrib` repo (opencv_contrib) is separate and excluded.
 
 ---

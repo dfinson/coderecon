@@ -13,7 +13,7 @@ from pathlib import Path
 import click
 import pytest
 
-from codeplane.cli.utils import find_repo_root
+from coderecon.cli.utils import find_repo_root
 
 
 class TestFindRepoRoot:

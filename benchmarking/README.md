@@ -1,9 +1,9 @@
-# cpl-bench — EVEE Benchmarking for CodePlane
+# cpl-bench — EVEE Benchmarking for CodeRecon
 
-EVEE-native benchmarking suite that evaluates two aspects of CodePlane:
+EVEE-native benchmarking suite that evaluates two aspects of CodeRecon:
 
 1. **Recon quality** — Does `recon` retrieve the right files at the right tiers?
-2. **Agent efficiency & outcome** — Do CodePlane-augmented sessions outperform native ones?
+2. **Agent efficiency & outcome** — Do CodeRecon-augmented sessions outperform native ones?
 
 Built on [EVEE](https://github.com/microsoft/evee) (`evee-ms-core`), Microsoft's
 evaluation framework for AI coding tools.
@@ -16,7 +16,7 @@ benchmarking/
 ├── setup_and_run.py                # Automated setup: init + daemon + EVEE invocation
 ├── pyproject.toml                  # Package metadata
 ├── models/
-│   ├── recon.py                    # cpl-recon — calls CodePlane recon via MCP
+│   ├── recon.py                    # cpl-recon — calls CodeRecon recon via MCP
 │   ├── recon_enhanced.py           # cpl-recon-enhanced — recon with per-issue seeds
 │   └── agent_replay.py            # cpl-agent-replay — passes pre-collected traces through
 ├── datasets/
@@ -52,11 +52,11 @@ benchmarking/
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/) (deps are managed at the repo root)
-- A running CodePlane daemon (for recon evaluation only)
+- A running CodeRecon daemon (for recon evaluation only)
 
 ### Running the Recon Benchmark
 
-Start a CodePlane daemon on the target repo, then:
+Start a CodeRecon daemon on the target repo, then:
 
 ```bash
 cd benchmarking
@@ -79,7 +79,7 @@ This calls `recon` for each of the 72 ground-truth queries and measures:
 
 ### Running the Agent A/B Benchmark
 
-1. **Collect traces** — Run the same issues with and without CodePlane, export chatreplay:
+1. **Collect traces** — Run the same issues with and without CodeRecon, export chatreplay:
 
    ```bash
    python -m benchmarking.preprocessing.chatreplay_to_traces \
@@ -99,13 +99,13 @@ This calls `recon` for each of the 72 ground-truth queries and measures:
    python run.py experiments/agent_ab.yaml
    ```
 
-   This compares CodePlane vs native sessions on:
+   This compares CodeRecon vs native sessions on:
 
    | Metric | Description |
    |--------|-------------|
    | Turns | Number of LLM round-trips |
    | Token usage | Prompt, completion, cached tokens |
-   | Tool calls | CodePlane, terminal, tool_search, other |
+   | Tool calls | CodeRecon, terminal, tool_search, other |
    | Cache hit ratio | Fraction of prompt tokens served from cache |
    | Outcome score | Composite quality score (0-17) from code review |
 
@@ -114,11 +114,11 @@ This calls `recon` for each of the 72 ground-truth queries and measures:
 ### Models
 
 - **`cpl-recon`** — Creates a fresh MCP session per query (avoids consecutive-recon
-  guards), sends the task to CodePlane's `recon` tool, and parses the response into
+  guards), sends the task to CodeRecon's `recon` tool, and parses the response into
   file lists with tier assignments.
 
 - **`cpl-agent-replay`** — Pass-through model for pre-collected traces. Classifies
-  tool calls (codeplane/terminal/tool_search/other), filters routing models from
+  tool calls (coderecon/terminal/tool_search/other), filters routing models from
   LLM events, and aggregates token counts.
 
 ### Datasets
@@ -139,10 +139,10 @@ This calls `recon` for each of the 72 ground-truth queries and measures:
   S (Supplementary) → `lite`.
 
 - **`cpl-efficiency`** — Aggregates efficiency stats grouped by variant with
-  head-to-head deltas (codeplane − native) for turns, tool calls, and tokens.
+  head-to-head deltas (coderecon − native) for turns, tool calls, and tokens.
 
 - **`cpl-outcome`** — Aggregates quality scores grouped by variant. Computes
-  `delta_score` (codeplane − native) when both variants are present.
+  `delta_score` (coderecon − native) when both variants are present.
 
 ## Ground Truth Format
 

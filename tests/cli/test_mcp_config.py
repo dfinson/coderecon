@@ -6,7 +6,7 @@ Covers _get_mcp_server_name, _ensure_vscode_mcp_config, and sync_vscode_mcp_port
 import json
 from pathlib import Path
 
-from codeplane.cli.init import (
+from coderecon.cli.init import (
     _ensure_vscode_mcp_config,
     _get_mcp_server_name,
     sync_vscode_mcp_port,
@@ -19,22 +19,22 @@ class TestGetMcpServerName:
     def test_simple_name(self, tmp_path: Path) -> None:
         repo = tmp_path / "myrepo"
         repo.mkdir()
-        assert _get_mcp_server_name(repo) == "codeplane-myrepo"
+        assert _get_mcp_server_name(repo) == "coderecon-myrepo"
 
     def test_hyphen_normalized(self, tmp_path: Path) -> None:
         repo = tmp_path / "my-repo"
         repo.mkdir()
-        assert _get_mcp_server_name(repo) == "codeplane-my_repo"
+        assert _get_mcp_server_name(repo) == "coderecon-my_repo"
 
     def test_dot_normalized(self, tmp_path: Path) -> None:
         repo = tmp_path / "my.repo"
         repo.mkdir()
-        assert _get_mcp_server_name(repo) == "codeplane-my_repo"
+        assert _get_mcp_server_name(repo) == "coderecon-my_repo"
 
     def test_uppercase_lowered(self, tmp_path: Path) -> None:
         repo = tmp_path / "MyRepo"
         repo.mkdir()
-        assert _get_mcp_server_name(repo) == "codeplane-myrepo"
+        assert _get_mcp_server_name(repo) == "coderecon-myrepo"
 
 
 # ── _ensure_vscode_mcp_config ────────────────────────────────────────────────
@@ -63,7 +63,7 @@ class TestEnsureVscodeMcpConfig:
         assert mcp["servers"][name]["url"] == "http://127.0.0.1:4200/mcp"
 
     def test_preserves_other_servers(self, tmp_path: Path) -> None:
-        """Adding CodePlane entry must NOT remove existing servers."""
+        """Adding CodeRecon entry must NOT remove existing servers."""
         vscode = tmp_path / ".vscode"
         vscode.mkdir(parents=True)
         existing = {
@@ -169,7 +169,7 @@ class TestEnsureVscodeMcpConfig:
 
 
 class TestSyncVscodeMcpPort:
-    """Port sync for 'cpl up'."""
+    """Port sync for 'recon up'."""
 
     def test_creates_file_when_missing(self, tmp_path: Path) -> None:
         assert sync_vscode_mcp_port(tmp_path, 3100) is True
@@ -187,7 +187,7 @@ class TestSyncVscodeMcpPort:
         assert mcp["servers"][name]["url"] == "http://127.0.0.1:5000/mcp"
 
     def test_adds_entry_when_missing_from_existing_file(self, tmp_path: Path) -> None:
-        """If mcp.json exists but has no CodePlane entry, adds it."""
+        """If mcp.json exists but has no CodeRecon entry, adds it."""
         vscode = tmp_path / ".vscode"
         vscode.mkdir(parents=True)
         existing = {"servers": {"other": {"command": "x"}}}

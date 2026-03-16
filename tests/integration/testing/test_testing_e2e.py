@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.testing.ops import detect_workspaces, get_python_executable
-from codeplane.testing.runner_pack import runner_registry
+from coderecon.testing.ops import detect_workspaces, get_python_executable
+from coderecon.testing.runner_pack import runner_registry
 
 pytestmark = pytest.mark.integration
 
@@ -68,7 +68,7 @@ class TestRunnerPackIntegration:
         pack = pack_class()
 
         # Create a target
-        from codeplane.testing.models import TestTarget
+        from coderecon.testing.models import TestTarget
 
         target = TestTarget(
             target_id="test::tests/test_main.py",

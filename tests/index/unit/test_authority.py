@@ -13,11 +13,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codeplane.index._internal.discovery import (
+from coderecon.index._internal.discovery import (
     AuthorityResult,
     Tier1AuthorityFilter,
 )
-from codeplane.index.models import CandidateContext, LanguageFamily, ProbeStatus
+from coderecon.index.models import CandidateContext, LanguageFamily, ProbeStatus
 
 
 def make_candidate(

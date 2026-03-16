@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.index.ops import (
+from coderecon.index.ops import (
     IndexCoordinatorEngine,
     IndexStats,
     InitResult,
@@ -353,14 +353,14 @@ class TestCoordinatorMonorepo:
 
 
 class TestCoordinatorCplignore:
-    """Tests for .cplignore enforcement during indexing."""
+    """Tests for .reconignore enforcement during indexing."""
 
     @pytest.mark.asyncio
-    async def test_cplignore_excludes_dependencies(self, tmp_path: Path) -> None:
+    async def test_reconignore_excludes_dependencies(self, tmp_path: Path) -> None:
         """Should not index files in dependency directories (node_modules, venv, etc)."""
         import pygit2
 
-        from codeplane.templates import get_cplignore_template
+        from coderecon.templates import get_reconignore_template
 
         # Create project with git repo
         repo_root = tmp_path / "repo"
@@ -368,10 +368,10 @@ class TestCoordinatorCplignore:
         pygit2.init_repository(str(repo_root))
         (repo_root / "pyproject.toml").write_text('[project]\nname = "test"')
 
-        # Create .codeplane/.cplignore (simulating cpl init)
-        codeplane_dir = repo_root / ".codeplane"
-        codeplane_dir.mkdir()
-        (codeplane_dir / ".cplignore").write_text(get_cplignore_template())
+        # Create .recon/.reconignore (simulating recon init)
+        coderecon_dir = repo_root / ".recon"
+        coderecon_dir.mkdir()
+        (coderecon_dir / ".reconignore").write_text(get_reconignore_template())
 
         # Create src directory with files
         src = repo_root / "src"
@@ -379,7 +379,7 @@ class TestCoordinatorCplignore:
         (src / "__init__.py").write_text("")
         (src / "main.py").write_text("def main(): pass")
 
-        # Create dependency directories that should be ignored per .cplignore
+        # Create dependency directories that should be ignored per .reconignore
         venv = repo_root / ".venv"
         venv.mkdir()
         (venv / "lib.py").write_text("VENV_CODE = True")
@@ -425,11 +425,11 @@ class TestCoordinatorCplignore:
             coordinator.close()
 
     @pytest.mark.asyncio
-    async def test_cplignore_excludes_build_outputs(self, tmp_path: Path) -> None:
+    async def test_reconignore_excludes_build_outputs(self, tmp_path: Path) -> None:
         """Should not index build output directories (dist, build, target)."""
         import pygit2
 
-        from codeplane.templates import get_cplignore_template
+        from coderecon.templates import get_reconignore_template
 
         # Create project with git repo
         repo_root = tmp_path / "repo"
@@ -437,10 +437,10 @@ class TestCoordinatorCplignore:
         pygit2.init_repository(str(repo_root))
         (repo_root / "pyproject.toml").write_text('[project]\nname = "test"')
 
-        # Create .codeplane/.cplignore (simulating cpl init)
-        codeplane_dir = repo_root / ".codeplane"
-        codeplane_dir.mkdir()
-        (codeplane_dir / ".cplignore").write_text(get_cplignore_template())
+        # Create .recon/.reconignore (simulating recon init)
+        coderecon_dir = repo_root / ".recon"
+        coderecon_dir.mkdir()
+        (coderecon_dir / ".reconignore").write_text(get_reconignore_template())
 
         # Create src directory
         src = repo_root / "src"
@@ -489,11 +489,11 @@ class TestCoordinatorCplignore:
             coordinator.close()
 
     @pytest.mark.asyncio
-    async def test_codeplane_directory_always_excluded(self, tmp_path: Path) -> None:
-        """Should never index .codeplane directory itself."""
+    async def test_coderecon_directory_always_excluded(self, tmp_path: Path) -> None:
+        """Should never index .recon directory itself."""
         import pygit2
 
-        from codeplane.templates import get_cplignore_template
+        from coderecon.templates import get_reconignore_template
 
         # Create project with git repo
         repo_root = tmp_path / "repo"
@@ -507,12 +507,12 @@ class TestCoordinatorCplignore:
         (src / "__init__.py").write_text("")
         (src / "main.py").write_text("def main(): pass")
 
-        # Create .codeplane with some files (simulating cpl init + artifacts)
-        codeplane = repo_root / ".codeplane"
-        codeplane.mkdir()
-        (codeplane / ".cplignore").write_text(get_cplignore_template())
-        (codeplane / "config.yaml").write_text("CODEPLANE_CONFIG = true")
-        (codeplane / "index.db").write_bytes(b"database")
+        # Create .recon with some files (simulating recon init + artifacts)
+        coderecon = repo_root / ".recon"
+        coderecon.mkdir()
+        (coderecon / ".reconignore").write_text(get_reconignore_template())
+        (coderecon / "config.yaml").write_text("CODEPLANE_CONFIG = true")
+        (coderecon / "index.db").write_bytes(b"database")
 
         # Create initial commit
         repo = pygit2.Repository(str(repo_root))
@@ -534,7 +534,7 @@ class TestCoordinatorCplignore:
 
             # Search for content that should NOT be indexed
             config_results = await coordinator.search("CODEPLANE_CONFIG")
-            assert len(config_results.results) == 0, ".codeplane/ should always be ignored"
+            assert len(config_results.results) == 0, ".recon/ should always be ignored"
 
             # But main.py should be indexed
             main_results = await coordinator.search("main")
@@ -544,22 +544,22 @@ class TestCoordinatorCplignore:
 
 
 class TestCplignoreChangeHandling:
-    """Tests for .cplignore change detection and index updates."""
+    """Tests for .reconignore change detection and index updates."""
 
     @pytest.mark.asyncio
-    async def test_cplignore_change_adds_previously_ignored_py_files(
+    async def test_reconignore_change_adds_previously_ignored_py_files(
         self, integration_repo: Path, tmp_path: Path
     ) -> None:
-        """When .cplignore removes a pattern, previously ignored .py files should be indexed."""
+        """When .reconignore removes a pattern, previously ignored .py files should be indexed."""
         # Create a Python file in src/ that will be ignored initially via pattern
         (integration_repo / "src" / "generated_code.py").write_text(
             "GENERATED_CONTENT = 'marker_for_test'\n"
         )
 
-        # Add *generated* pattern to .cplignore BEFORE initialization
-        cplignore_path = integration_repo / ".codeplane" / ".cplignore"
-        original_content = cplignore_path.read_text()
-        cplignore_path.write_text(original_content + "\n**/generated*.py\n")
+        # Add *generated* pattern to .reconignore BEFORE initialization
+        reconignore_path = integration_repo / ".recon" / ".reconignore"
+        original_content = reconignore_path.read_text()
+        reconignore_path.write_text(original_content + "\n**/generated*.py\n")
 
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
@@ -567,32 +567,32 @@ class TestCplignoreChangeHandling:
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
 
         try:
-            # Initialize - generated_code.py should be ignored per .cplignore
+            # Initialize - generated_code.py should be ignored per .reconignore
             await coordinator.initialize(on_index_progress=_noop_progress)
 
             # Verify generated file is NOT indexed
             gen_results = await coordinator.search("GENERATED_CONTENT")
             assert len(gen_results.results) == 0, "generated_code.py should be ignored initially"
 
-            # Modify .cplignore to remove the pattern (restore original)
-            cplignore_path.write_text(original_content)
+            # Modify .reconignore to remove the pattern (restore original)
+            reconignore_path.write_text(original_content)
 
-            # Trigger incremental reindex - this should detect .cplignore change
+            # Trigger incremental reindex - this should detect .reconignore change
             await coordinator.reindex_incremental([])
 
             # Now the generated file should be indexed
             gen_results = await coordinator.search("GENERATED_CONTENT")
             assert len(gen_results.results) >= 1, (
-                "generated_code.py should be indexed after .cplignore change"
+                "generated_code.py should be indexed after .reconignore change"
             )
         finally:
             coordinator.close()
 
     @pytest.mark.asyncio
-    async def test_cplignore_change_removes_newly_ignored_py_files(
+    async def test_reconignore_change_removes_newly_ignored_py_files(
         self, integration_repo: Path, tmp_path: Path
     ) -> None:
-        """When .cplignore adds a pattern, matching .py files should be removed from index."""
+        """When .reconignore adds a pattern, matching .py files should be removed from index."""
         # Create a Python file that will be indexed initially
         (integration_repo / "src" / "temporary.py").write_text("TEMP_CODE = True\n")
 
@@ -609,10 +609,10 @@ class TestCplignoreChangeHandling:
             temp_results = await coordinator.search("TEMP_CODE")
             assert len(temp_results.results) >= 1, "temporary.py should be indexed initially"
 
-            # Modify .cplignore to ignore temporary.py
-            cplignore_path = integration_repo / ".codeplane" / ".cplignore"
-            original_content = cplignore_path.read_text()
-            cplignore_path.write_text(original_content + "\n**/temporary.py\n")
+            # Modify .reconignore to ignore temporary.py
+            reconignore_path = integration_repo / ".recon" / ".reconignore"
+            original_content = reconignore_path.read_text()
+            reconignore_path.write_text(original_content + "\n**/temporary.py\n")
 
             # Trigger incremental reindex
             await coordinator.reindex_incremental([])
@@ -620,16 +620,16 @@ class TestCplignoreChangeHandling:
             # Now temporary.py should NOT be indexed
             temp_results = await coordinator.search("TEMP_CODE")
             assert len(temp_results.results) == 0, (
-                "temporary.py should be removed after .cplignore change"
+                "temporary.py should be removed after .reconignore change"
             )
         finally:
             coordinator.close()
 
     @pytest.mark.asyncio
-    async def test_cplignore_unchanged_no_reindex(
+    async def test_reconignore_unchanged_no_reindex(
         self, integration_repo: Path, tmp_path: Path
     ) -> None:
-        """When .cplignore hasn't changed, incremental reindex should be efficient."""
+        """When .reconignore hasn't changed, incremental reindex should be efficient."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
 
@@ -665,7 +665,7 @@ class TestCoordinatorSearchFilterLanguages:
         """Create a repository with multiple language files."""
         import pygit2
 
-        from codeplane.templates import get_cplignore_template
+        from coderecon.templates import get_reconignore_template
 
         repo_path = tmp_path / "multilang_repo"
         repo_path.mkdir()
@@ -675,10 +675,10 @@ class TestCoordinatorSearchFilterLanguages:
         repo.config["user.name"] = "Test"
         repo.config["user.email"] = "test@test.com"
 
-        # Create .codeplane/.cplignore
-        codeplane_dir = repo_path / ".codeplane"
-        codeplane_dir.mkdir()
-        (codeplane_dir / ".cplignore").write_text(get_cplignore_template())
+        # Create .recon/.reconignore
+        coderecon_dir = repo_path / ".recon"
+        coderecon_dir.mkdir()
+        (coderecon_dir / ".reconignore").write_text(get_reconignore_template())
 
         # Create Python files
         (repo_path / "src").mkdir()
@@ -948,7 +948,7 @@ class TestCoordinatorTestTargetIncremental:
     """Tests for _update_test_targets_incremental via reindex_incremental.
 
     Validates that incremental reindex correctly identifies test files using
-    the canonical is_test_file from codeplane.core.languages, and that it
+    the canonical is_test_file from coderecon.core.languages, and that it
     creates/removes TestTarget records accordingly.
     """
 
@@ -1087,7 +1087,7 @@ class TestCoordinatorStaleTantivyRemoval:
         """When extraction returns content_text=None, its Tantivy doc is removed."""
         from unittest.mock import patch
 
-        from codeplane.index._internal.indexing.structural import (
+        from coderecon.index._internal.indexing.structural import (
             ExtractionResult,
             _extract_file,
         )
@@ -1115,7 +1115,7 @@ class TestCoordinatorStaleTantivyRemoval:
                 return real_extract(file_path, repo_root, unit_id)
 
             with patch(
-                "codeplane.index._internal.indexing.structural._extract_file",
+                "coderecon.index._internal.indexing.structural._extract_file",
                 side_effect=_failing_extract,
             ):
                 stats = await coordinator.reindex_incremental([Path("src/utils.py")])
@@ -1132,8 +1132,8 @@ class TestCoordinatorStaleTantivyRemoval:
             with coordinator.db.session() as session:
                 from sqlmodel import select as sel
 
-                from codeplane.index.models import DefFact
-                from codeplane.index.models import File as FileModel
+                from coderecon.index.models import DefFact
+                from coderecon.index.models import File as FileModel
 
                 file_row = session.exec(
                     sel(FileModel).where(FileModel.path == "src/utils.py")

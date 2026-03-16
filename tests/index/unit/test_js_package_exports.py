@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 
-from codeplane.index._internal.indexing.config_resolver import (
+from coderecon.index._internal.indexing.config_resolver import (
     ImportPathResolver,
     _parse_export_target,
     _resolve_export_target,

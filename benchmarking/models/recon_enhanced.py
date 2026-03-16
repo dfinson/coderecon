@@ -20,10 +20,10 @@ from evee import model
 
 @model("cpl-recon-enhanced")
 class ReconEnhancedModel:
-    """Wraps CodePlane recon with per-issue seeds and pinned_paths.
+    """Wraps CodeRecon recon with per-issue seeds and pinned_paths.
 
     Config args (cartesian product):
-        daemon_port: CodePlane daemon port (default 7777)
+        daemon_port: CodeRecon daemon port (default 7777)
         timeout: MCP call timeout in seconds (default 120)
         seeds_path: Path to enhanced_seeds.json (default data/enhanced_seeds.json)
     """
@@ -178,11 +178,11 @@ class ReconEnhancedModel:
     def _read_cache(self, data: dict) -> dict | None:
         """Read recon result from cache file for resource delivery."""
         hint = data.get("agentic_hint", "")
-        match = re.search(r"\.codeplane/cache/recon_result/([a-f0-9]+)\.json", hint)
+        match = re.search(r"\.recon/cache/recon_result/([a-f0-9]+)\.json", hint)
         if not match:
             return None
 
-        cache_rel = f".codeplane/cache/recon_result/{match.group(1)}.json"
+        cache_rel = f".recon/cache/recon_result/{match.group(1)}.json"
         cache_path = os.path.join(self._target_repo, cache_rel)
         if os.path.exists(cache_path):
             with open(cache_path) as f:

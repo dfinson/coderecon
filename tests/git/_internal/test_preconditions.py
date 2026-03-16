@@ -14,14 +14,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from codeplane.git._internal.preconditions import (
+from coderecon.git._internal.preconditions import (
     check_nothing_to_commit,
     require_branch_exists,
     require_current_branch,
     require_not_current_branch,
     require_not_unborn,
 )
-from codeplane.git.errors import (
+from coderecon.git.errors import (
     BranchNotFoundError,
     DetachedHeadError,
     GitError,

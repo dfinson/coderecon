@@ -1,4 +1,4 @@
-﻿# CodePlane — Unified System Specification
+﻿# CodeRecon — Unified System Specification
 
 ## Table of Contents
 
@@ -64,7 +64,7 @@
   - [19.4 Future Direction](#194-future-direction-explicitly-future--probable)
 - [20. Risk Register](#20-risk-register-remaining-design-points)
 - [21. Readiness Note](#21-readiness-note-what-is-stable-enough-for-api-surfacing-next)
-- [22. What CodePlane Is](#22-what-codeplane-is-canonical-summary)
+- [22. What CodeRecon Is](#22-what-coderecon-is-canonical-summary)
 - [23. MCP API Specification](#23-mcp-api-specification)
   - [23.1 Design Principles](#231-design-principles)
   - [23.2 Protocol Architecture](#232-protocol-architecture)
@@ -115,7 +115,7 @@ Introduce a **local repository control plane** that sits beneath agents and turn
 Key reframing:
 
 - Agents plan and decide.
-- CodePlane executes deterministically.
+- CodeRecon executes deterministically.
 - Anything deterministic is computed once, not reasoned about repeatedly.
 - Every state mutation returns complete structured context in a single call.
 
@@ -131,7 +131,7 @@ with:
 
 ## 3. Explicit Non-Goals
 
-CodePlane is **not**:
+CodeRecon is **not**:
 
 - a chatbot
 - an agent
@@ -140,7 +140,7 @@ CodePlane is **not**:
 - a Git or IDE replacement
 - an orchestrator
 
-CodePlane does not plan, retry, or decide strategies. Its role is deterministic execution and deterministic context.
+CodeRecon does not plan, retry, or decide strategies. Its role is deterministic execution and deterministic context.
 
 ---
 
@@ -148,15 +148,15 @@ CodePlane does not plan, retry, or decide strategies. Its role is deterministic 
 
 ### 4.1 Components
 
-- **CodePlane server (Python)**
+- **CodeRecon server (Python)**
   - Maintains deterministic indexes.
   - Owns file, Git, test, and refactor operations.
   - Exposes endpoints.
 
 - **Agent client**
   - Copilot, Claude Code, Cursor, Continue, etc.
-  - For operations CodePlane covers, agents should prefer CodePlane tools over direct file edits or shell commands.
-  - Agents will still use terminals and other tools for tasks outside CodePlane's scope.
+  - For operations CodeRecon covers, agents should prefer CodeRecon tools over direct file edits or shell commands.
+  - Agents will still use terminals and other tools for tasks outside CodeRecon's scope.
 
 - **Git**
   - Authoritative history and audit layer.
@@ -168,16 +168,16 @@ Operational viewpoint:
 
 ### 4.2 CLI, Server Lifecycle, and Operability
 
-CodePlane uses a single operator CLI: `cpl`. It is explicitly **not agent-facing**.
+CodeRecon uses a single operator CLI: `recon`. It is explicitly **not agent-facing**.
 
 Core commands (idempotent; human output derivable from structured JSON via `--json`):
 
 | Command | Description |
 |---|---|
-| `cpl init` | One-time repo setup: write `.codeplane/`, generate `.cplignore`, bind repo ID, build first index (or schedule immediately). |
-| `cpl up` | Start the CodePlane server (foreground). Ctrl+C to stop. Idempotent check prevents duplicate instances. |
-| `cpl status` | Single human-readable view: server running, repo fingerprint, index version, last reconcile, last error. |
-| `cpl clear` | Remove CodePlane artifacts (`.codeplane/` directory) from this repository. Idempotent. |
+| `recon init` | One-time repo setup: write `.recon/`, generate `.cplignore`, bind repo ID, build first index (or schedule immediately). |
+| `recon up` | Start the CodeRecon server (foreground). Ctrl+C to stop. Idempotent check prevents duplicate instances. |
+| `recon status` | Single human-readable view: server running, repo fingerprint, index version, last reconcile, last error. |
+| `recon clear` | Remove CodeRecon artifacts (`.recon/` directory) from this repository. Idempotent. |
 
 Humans learn: `init` once, then `up/status/clear`.
 
@@ -187,22 +187,22 @@ The following capabilities are folded into core commands or removed to avoid sur
 
 | Capability | Disposition |
 |---|---|
-| Logs | Folded into `status --verbose` (last N log lines) and `doctor --logs` (bundled diag report). Optional alias `cpl logs` → `cpl status --follow` is acceptable but not a stable interface. |
+| Logs | Folded into `status --verbose` (last N log lines) and `doctor --logs` (bundled diag report). Optional alias `recon logs` → `recon status --follow` is acceptable but not a stable interface. |
 | Inspect | Folded into `status --json` for machine-readable introspection. |
-| Config CLI | Removed in v1. Use files: global config in user dir, repo config in `.codeplane/config`. One-off overrides via `cpl up --set key=value` if needed. |
+| Config CLI | Removed in v1. Use files: global config in user dir, repo config in `.recon/config`. One-off overrides via `recon up --set key=value` if needed. |
 | Rebuild index | Automatic when integrity checks fail; no manual trigger. |
 
 Server model:
 
-- **Foreground process** — `cpl up` runs in foreground, Ctrl+C to stop. No background daemonization.
+- **Foreground process** — `recon up` runs in foreground, Ctrl+C to stop. No background daemonization.
 - **Repo-scoped** — one server per repository; no multi-repo mode.
-- `cpl up` in a repo directory starts a server for that repo only.
+- `recon up` in a repo directory starts a server for that repo only.
 - Transport: **HTTP localhost** with ephemeral port.
   - Cross-platform with identical code (no socket vs named pipe divergence).
   - MCP clients can connect directly via HTTP/SSE transport (no stdio proxy needed).
 - Response header:
-  - All HTTP responses include `X-CodePlane-Repo: <absolute-path>` header.
-  - Clients can use this to detect wrong-server mistakes when multiple CodePlane instances run simultaneously.
+  - All HTTP responses include `X-CodeRecon-Repo: <absolute-path>` header.
+  - Clients can use this to detect wrong-server mistakes when multiple CodeRecon instances run simultaneously.
   - No request header required — clients don't need to send repo path on every request.
   - Rationale: Simpler client integration while still enabling cross-repo accident detection. No token management, no file permissions, no auth state.
 - Isolation rationale:
@@ -213,7 +213,7 @@ Server model:
 
 Repo activation:
 
-- `cpl up` initializes repo if needed (creates `.codeplane/`, repo UUID, config).
+- `recon up` initializes repo if needed (creates `.recon/`, repo UUID, config).
 - Index is eagerly built on startup and continuously maintained.
 
 Server startup includes:
@@ -258,7 +258,7 @@ Logging:
         destination: stderr
         level: INFO        # Show INFO+ on console
       - format: json
-        destination: /var/log/codeplane.jsonl
+        destination: /var/log/coderecon.jsonl
                             # Inherits DEBUG from parent
   ```
 - JSON output example:
@@ -268,36 +268,36 @@ Logging:
   {"ts":"2026-01-26T15:30:02.789Z","level":"error","op_id":"abc123","event":"indexer timeout","lang":"java","timeout_ms":30000}
   ```
 - Access via CLI:
-  - `cpl status --verbose`: last 50 lines
-  - `cpl status --follow`: tail -f equivalent
-  - `cpl doctor --logs`: full log bundle for diagnostics
+  - `recon status --verbose`: last 50 lines
+  - `recon status --follow`: tail -f equivalent
+  - `recon doctor --logs`: full log bundle for diagnostics
 
 Installation and upgrades:
 
 - Install modes (user-level only; no root/system install):
-  - `pipx install codeplane`
+  - `pipx install coderecon`
   - Static binary from GitHub Releases
 - Upgrades via package manager (pip/uv)
 
 Diagnostics and introspection:
 
-- `cpl doctor` checks:
+- `recon doctor` checks:
   - Server reachable
   - Index integrity
   - Commit hash matches Git HEAD
   - Config sanity
-- `cpl doctor --logs`: bundled diagnostic report including recent logs
+- `recon doctor --logs`: bundled diagnostic report including recent logs
 - Runtime introspection:
-  - `cpl status --verbose`: includes last N log lines and paths
-  - `cpl status --json`: machine-readable index metadata (paths, size, commit, overlay state)
-  - `cpl status --follow`: optional alias for tailing logs (not a stable interface)
+  - `recon status --verbose`: includes last N log lines and paths
+  - `recon status --json`: machine-readable index metadata (paths, size, commit, overlay state)
+  - `recon status --follow`: optional alias for tailing logs (not a stable interface)
   - Healthcheck endpoint exists (`/health`) returning JSON (interface details deferred)
 
 Config precedence:
 
-1. One-off overrides via `cpl up --set key=value` / env vars
-2. Per-repo: `.codeplane/config.yaml`
-3. Global: `~/.config/codeplane/config.yaml`
+1. One-off overrides via `recon up --set key=value` / env vars
+2. Per-repo: `.recon/config.yaml`
+3. Global: `~/.config/coderecon/config.yaml`
 4. Built-in defaults
 
 Environment variables use `CODEPLANE__` prefix with double underscore delimiter for nesting:
@@ -340,9 +340,9 @@ Failure recovery playbooks:
 
 | Failure | Detection | Recovery Command |
 |---|---|---|
-| Corrupt index | `cpl doctor` fails hash check | Automatic rebuild (or `cpl debug index-rebuild`) |
-| Schema mismatch | Startup error | Automatic rebuild on `cpl up` |
-| Stale revision | `cpl status` shows mismatch | Automatic re-fetch/rebuild on `cpl up` |
+| Corrupt index | `recon doctor` fails hash check | Automatic rebuild (or `recon debug index-rebuild`) |
+| Schema mismatch | Startup error | Automatic rebuild on `recon up` |
+| Stale revision | `recon status` shows mismatch | Automatic re-fetch/rebuild on `recon up` |
 
 Platform constraints:
 
@@ -365,8 +365,8 @@ One source uses “local, always-on control plane” as conceptual framing; the 
 
 Unified operational interpretation:
 
-- CodePlane is **conceptually** a “control plane beneath agents.”
-- It is **operationally** a repo-scoped foreground server started via `cpl up` (Ctrl+C to stop).
+- CodeRecon is **conceptually** a “control plane beneath agents.”
+- It is **operationally** a repo-scoped foreground server started via `recon up` (Ctrl+C to stop).
 
 ---
 
@@ -375,8 +375,8 @@ Unified operational interpretation:
 ### 5.1 Design Goals
 
 - Correctly reflect repository state on disk, even across external edits.
-- Never mutate Git state unless explicitly triggered by a CodePlane operation.
-- Cheap, deterministic reconciliation before/after every CodePlane operation.
+- Never mutate Git state unless explicitly triggered by a CodeRecon operation.
+- Cheap, deterministic reconciliation before/after every CodeRecon operation.
 - No reliance on OS watchers (watchers optional and narrow at most).
 - Works across:
   1. Git-tracked files
@@ -402,7 +402,7 @@ RepoVersion = (HEAD SHA, .git/index stat metadata, submodule SHAs)
 | 1. Indexable | All files not excluded by `.cplignore` or PRUNABLE_DIRS | Yes |
 | 2. Ignored | Excluded via `.cplignore` or PRUNABLE_DIRS | No |
 
-**Note:** Git-tracking is irrelevant for indexing. The index artifacts (`.codeplane/`) are gitignored by design, so it is safe to index sensitive files like `.env`. The only exclusion mechanism is `.cplignore` patterns and PRUNABLE_DIRS (e.g., `node_modules/`, `.git/`).
+**Note:** Git-tracking is irrelevant for indexing. The index artifacts (`.recon/`) are gitignored by design, so it is safe to index sensitive files like `.env`. The only exclusion mechanism is `.cplignore` patterns and PRUNABLE_DIRS (e.g., `node_modules/`, `.git/`).
 
 ### 5.4 Change Detection Strategy
 
@@ -439,7 +439,7 @@ Reconciliation occurs:
 
 ### 5.8 Corruption and Recovery
 
-- CodePlane never mutates `.git/index`, working tree, or HEAD.
+- CodeRecon never mutates `.git/index`, working tree, or HEAD.
 - On Git metadata corruption: fail with clear message; don’t auto-repair.
 - On CPL index corruption: wipe and reindex from Git + disk.
 
@@ -499,7 +499,7 @@ def reconcile(repo):
 
 ### 6.1 Security Guarantees
 
-- Index artifacts (`.codeplane/`) are gitignored by design, so sensitive files can be indexed safely.
+- Index artifacts (`.recon/`) are gitignored by design, so sensitive files can be indexed safely.
 - All indexing and mutation actions are scoped, audited, deterministic.
 
 ### 6.2 Threat Assumptions
@@ -509,7 +509,7 @@ def reconcile(repo):
 
 ### 6.3 `.cplignore` Role and Semantics
 
-`.cplignore` defines what CodePlane never indexes. Follows `.gitignore` syntax.
+`.cplignore` defines what CodeRecon never indexes. Follows `.gitignore` syntax.
 
 Security-focused posture defines `.cplignore` defaults that block noise. See defaults below.
 
@@ -557,7 +557,7 @@ pytest_cache/
 
 ### 7.1 Overview
 
-CodePlane builds a deterministic, incrementally updated **stacked index** with two tiers:
+CodeRecon builds a deterministic, incrementally updated **stacked index** with two tiers:
 
 **Tier 0 — Lexical Retrieval (Always-On):**
 - Tantivy full-text search for fast candidate discovery
@@ -594,7 +594,7 @@ Fast candidate discovery by text search. Tier 0 is NOT semantic authority — it
 #### Storage
 
 - Engine: Tantivy via PyO3 bindings
-- Location: `.codeplane/tantivy/`
+- Location: `.recon/tantivy/`
 - Update model: immutable segments + delete+add on change
 - Atomicity: build in temp dir and swap in (`os.replace()`)
 
@@ -638,7 +638,7 @@ Persist explicit syntactic facts extracted via Tree-sitter. These facts enable b
 #### Storage
 
 - Engine: SQLite, single-file, ACID, WAL mode
-- Location: `.codeplane/index.db`
+- Location: `.recon/index.db`
 - Concurrency: Readers non-blocking, single writer
 
 #### Fact Tables
@@ -930,7 +930,7 @@ For improved concurrency, queries should block only on affected files:
 - Other files remain queryable during partial reindex
 - Requires: per-file dirty tracking, dependency-aware blocking for cross-file queries
 
-See GitHub issue for design proposals and implementation timeline: https://github.com/dfinson/codeplane/issues/132
+See GitHub issue for design proposals and implementation timeline: https://github.com/dfinson/coderecon/issues/132
 
 ### 7.7 File Watcher Integration
 
@@ -942,7 +942,7 @@ Continuous background indexing decoupled from UX flow.
 
 - Watch all files NOT ignored by:
   - Repository `.gitignore`
-  - `.codeplane/.gitignore`
+  - `.recon/.gitignore`
   - CPL ignore rules
 - Debounce events (handle storms, mid-write saves)
 - Enqueue changed files for background indexing
@@ -950,11 +950,11 @@ Continuous background indexing decoupled from UX flow.
 
 #### Init Behavior
 
-When `cpl init` runs:
+When `recon init` runs:
 1. Start file watchers
 2. Trigger full initial index
 3. Begin epoch publication loop
-4. Create `.codeplane/.gitignore` to ignore artifacts
+4. Create `.recon/.gitignore` to ignore artifacts
 
 ### 7.8 Bounded Query APIs
 
@@ -1035,7 +1035,7 @@ This subsystem is narrowly scoped: a high-correctness refactor planner and execu
 
 - Structural index semantics: all refactor planning uses Tree-sitter-based DefFact/RefFact data from the structural index
 - Static configuration: languages, environments, roots known at startup
-- No speculative semantics: CodePlane never guesses bindings
+- No speculative semantics: CodeRecon never guesses bindings
 - No working tree mutation during planning
 - Single atomic apply to the real repo
 - Mutation gate: semantic writes require all affected files to be CLEAN
@@ -1058,19 +1058,19 @@ All operations:
 
 ### 8.3a Architecture Overview
 
-![CodePlane Semantic Refactor Architecture](docs/images/codeplane-semantic-refactor-architecture.png)
+![CodeRecon Semantic Refactor Architecture](docs/images/coderecon-semantic-refactor-architecture.png)
 
 #### Structural Index Execution
 
 - All refactor planning (rename, move, delete) uses the structural index (DefFact/RefFact data)
 - The structural index provides: symbol definitions, references, and cross-file resolution via Tree-sitter
 - No persistent language servers; structural data built by Tree-sitter parsers at index time
-- CodePlane maintains full control of edit application, version tracking, and reindexing
+- CodeRecon maintains full control of edit application, version tracking, and reindexing
 
 #### Semantic Data Flow
 
 1. User requests refactor (e.g., rename symbol)
-2. CodePlane checks mutation gate: all affected files must be CLEAN
+2. CodeRecon checks mutation gate: all affected files must be CLEAN
 3. Query structural index for all DefFact/RefFact occurrences of target symbol
 4. Generate structured edit plan from occurrence positions
 5. Preview edits to user
@@ -1324,7 +1324,7 @@ If files are CLEAN but AMBIGUOUS (semantic uncertainty):
 
 ### 8.5a Two-Phase Rename (Agent Decision Flow)
 
-Rename is the classic ambiguity case. When semantic identity is uncertain (dynamic dispatch, multiple definitions, reflection), CodePlane returns a decision problem instead of guessing.
+Rename is the classic ambiguity case. When semantic identity is uncertain (dynamic dispatch, multiple definitions, reflection), CodeRecon returns a decision problem instead of guessing.
 
 **Phase 1: Plan**
 
@@ -1464,7 +1464,7 @@ When multiple semantic contexts exist for a language (e.g., multiple Python venv
 - If divergent: fail and report conflicting contexts
 - If consistent: proceed with merged occurrence set
 
-CodePlane never silently guesses semantics.
+CodeRecon never silently guesses semantics.
 
 ### 8.7 Context Selection Rules
 
@@ -1500,7 +1500,7 @@ Classification:
 
 Persistence:
 
-- `.codeplane/contexts.yaml` (versioned schema)
+- `.recon/contexts.yaml` (versioned schema)
 
 ### 8.9 Configuration Model (Minimal)
 
@@ -1522,12 +1522,12 @@ defaults:
 ### 8.10 Git-Aware File Moves
 
 - If a file rename or move affects a Git-tracked file:
-  - CodePlane will perform a `git mv`-equivalent operation
+  - CodeRecon will perform a `git mv`-equivalent operation
   - This updates Git's index to reflect the move (preserving history)
   - Only performed if the file is clean and tracked
   - Fails safely if the working tree state is inconsistent (e.g. modified, unstaged)
 - If the file is untracked or ignored (e.g. overlay files):
-  - CodePlane performs a normal filesystem move only
+  - CodeRecon performs a normal filesystem move only
 - This ensures Git rename detection and downstream agent operations remain correct
 - Preserves history; never commits
 
@@ -1554,7 +1554,7 @@ Examples of unaffected references:
 
 #### Auto-Update with Warning
 
-CodePlane performs a **post-refactor documentation sweep** that:
+CodeRecon performs a **post-refactor documentation sweep** that:
 
 1. **Scans** for textual references to the renamed symbol:
    - Comments in source code (from structural index)
@@ -1643,7 +1643,7 @@ refactor:
 
 Or CLI:
 ```bash
-cpl up --no-refactor
+recon up --no-refactor
 ```
 
 When disabled:
@@ -1668,7 +1668,7 @@ Always:
 - **Isolated**: Edits are applied only to files with CLEAN semantic state
 - **Audit-safe**: Git-aware moves preserve index correctness
 - **Overlay-compatible**: Untracked files handled equally
-- **Agent-delegated commit control**: CodePlane never stages or commits
+- **Agent-delegated commit control**: CodeRecon never stages or commits
 - No working tree mutation during planning
 - Single atomic apply
 - Explicit divergence reporting
@@ -1833,12 +1833,12 @@ This exists to eliminate verification loops and follow-up probing.
 
 ### 11.1 Goal
 
-Fast deterministic test execution across large suites by parallelizing at test **target** level (files, packages, classes). Must support any language CodePlane indexes.
+Fast deterministic test execution across large suites by parallelizing at test **target** level (files, packages, classes). Must support any language CodeRecon indexes.
 
 ### 11.2 Definitions
 
-- Test Target: smallest runnable unit CodePlane manages (e.g., a test file or Go package).
-- Worker: CodePlane-managed subprocess executing one or more targets.
+- Test Target: smallest runnable unit CodeRecon manages (e.g., a test file or Go package).
+- Worker: CodeRecon-managed subprocess executing one or more targets.
 - Batch: set of targets assigned to worker.
 - Estimated Cost: scalar weight used to balance batches (default 1).
 
@@ -1875,11 +1875,11 @@ Fast deterministic test execution across large suites by parallelizing at test *
 
 ### 11.5 Test Runner Discovery
 
-CodePlane uses a three-tier resolution strategy: explicit config → marker detection → language defaults.
+CodeRecon uses a three-tier resolution strategy: explicit config → marker detection → language defaults.
 
 #### Resolution Order (First Match Wins)
 
-1. **Explicit config** in `.codeplane/config.yaml`
+1. **Explicit config** in `.recon/config.yaml`
 2. **Marker file detection** (see table below)
 3. **Language default** (fallback)
 
@@ -1959,9 +1959,9 @@ Example: repo with jest (unit) + playwright (e2e) + pytest (backend):
 #### Runner Not Found
 
 If a runner is configured but not available in PATH:
-- `cpl doctor` reports: `Test runner 'pytest' not found in PATH`
+- `recon doctor` reports: `Test runner 'pytest' not found in PATH`
 - Test operations return error `7001 TEST_RUNNER_NOT_FOUND`
-- CodePlane does not install test runners (user responsibility)
+- CodeRecon does not install test runners (user responsibility)
 
 ### 11.6 Language-Specific Targeting Rules
 
@@ -2003,7 +2003,7 @@ Target rules depend on language + available runner; supports any language with:
 
 ### 11.9 Impact-Aware Test Selection
 
-CodePlane uses the structural index's `ImportFact.source_literal` data to
+CodeRecon uses the structural index's `ImportFact.source_literal` data to
 build a reverse import graph: given changed source files, which test files
 transitively depend on them?
 
@@ -2013,7 +2013,7 @@ transitively depend on them?
   structural index. No AST re-parsing, no regex, no guessing.
 - **Confidence over coverage.** Every result carries a confidence tier
   (`complete` or `partial`) and per-match confidence (`high` or `low`).
-  The agent always decides — CodePlane never silently drops uncertain matches.
+  The agent always decides — CodeRecon never silently drops uncertain matches.
 - **SQL-side filtering.** Module matching and test-file scoping are pushed into
   SQL (`IN`, `LIKE`) so memory usage scales with matched rows, not total
   imports. This is mandatory for large-repo viability.
@@ -2056,7 +2056,7 @@ All non-Python files return `partial` with those files listed in `unresolved_fil
 
 #### 11.9.5 Coverage Auto-Scoping
 
-When running impact-selected tests, CodePlane derives `source_dirs` from
+When running impact-selected tests, CodeRecon derives `source_dirs` from
 the import graph and passes them to the coverage emitter as targeted
 `--cov=<dir>` arguments instead of `--cov=.`. This avoids measuring
 coverage for the entire repo when only a subset of sources is relevant.
@@ -2088,7 +2088,7 @@ confidence → optionally `inspect_affected_tests(...)` for uncertain matches
 - All queries operate on `ImportFact.source_literal` (module-level).
   Never `imported_name` (symbol-level, noisy).
 - No auto-broadening: if confidence is `partial`, the agent decides
-  whether to widen the test set. CodePlane does not silently include
+  whether to widen the test set. CodeRecon does not silently include
   "maybe affected" tests.
 - Module index and test file list are built lazily on first query
   and cached for the session.
@@ -2101,11 +2101,11 @@ confidence → optionally `inspect_affected_tests(...)` for uncertain matches
 
 ### 12.1 Scope and Principle
 
-CodePlane models tasks, enforces convergence bounds, and persists an operation ledger.
+CodeRecon models tasks, enforces convergence bounds, and persists an operation ledger.
 
 Core principle:
 
-CodePlane never relies on agent discipline; it enforces mechanical constraints making non-convergence visible, finite, and auditable.
+CodeRecon never relies on agent discipline; it enforces mechanical constraints making non-convergence visible, finite, and auditable.
 
 ### 12.2 Task Definition and Lifecycle
 
@@ -2181,7 +2181,7 @@ Not persisted:
      - normalized stack trace
      - exit code
    - Fingerprint returned in each failure response.
-   - If same fingerprint occurs after a mutation, CodePlane flags non-progress.
+   - If same fingerprint occurs after a mutation, CodeRecon flags non-progress.
 
 4. Mutation fingerprinting:
    - Each mutation returns fingerprint:
@@ -2192,7 +2192,7 @@ Not persisted:
      - mark as no-op
      - budget still increments
 
-CodePlane does not decide next step.
+CodeRecon does not decide next step.
 
 ### 12.4 Restart Semantics
 
@@ -2215,7 +2215,7 @@ Guarantees:
 
 #### v1 vs v1.5 Scope
 
-CodePlane deliberately distinguishes between **v1 (minimal, SQLite-only)** logging and **v1.5 (optional artifact expansion)**.
+CodeRecon deliberately distinguishes between **v1 (minimal, SQLite-only)** logging and **v1.5 (optional artifact expansion)**.
 
 - v1 focuses on *mechanical accountability* only.
 - v1.5 exists solely to improve developer ergonomics if real pain appears.
@@ -2233,7 +2233,7 @@ It exists to answer:
 Primary persistence:
 
 - Local append-only SQLite DB owned by server, stored in repo:
-  - `.codeplane/ledger.db`
+  - `.recon/ledger.db`
 
 v1 ledger schema (SQLite only):
 
@@ -2287,7 +2287,7 @@ Optional artifact store (v1.5, deferred):
 - Stored on filesystem; referenced by artifact_id + hash in SQLite.
 - Short-lived (hours/days).
 - Derived mirror (non-authoritative) may exist:
-  - `~/.codeplane/ledger/YYYY-MM-DD.ndjson`
+  - `~/.recon/ledger/YYYY-MM-DD.ndjson`
 - Ledger remains authoritative; artifacts disposable.
 
 Retention policy:
@@ -2319,7 +2319,7 @@ Explicitly does not do:
 
 ### 13.1 Why Observability
 
-CodePlane is infrastructure. Infrastructure requires visibility.
+CodeRecon is infrastructure. Infrastructure requires visibility.
 
 Operators need to answer:
 
@@ -2332,7 +2332,7 @@ Without observability, operators debug blind.
 
 ### 13.2 Scope and Principles
 
-Observability in CodePlane serves **operators and tool authors**, not surveillance or model training.
+Observability in CodeRecon serves **operators and tool authors**, not surveillance or model training.
 
 Principles:
 
@@ -2341,7 +2341,7 @@ Principles:
 3. **Bundled and self-contained**: No external dependencies required. Dashboard ships with server.
 4. **Standards-based**: OpenTelemetry for traces and metrics. Exportable but not required.
 
-### 13.3 What CodePlane Monitors
+### 13.3 What CodeRecon Monitors
 
 Observability covers three categories:
 
@@ -2382,7 +2382,7 @@ Observability surfaces agent progress signals:
 | Budget utilization | Percentage of task budget consumed |
 | Operation cadence | Operations per minute; pauses and bursts |
 
-Purpose: Detect spinning agents and non-convergent loops without CodePlane making decisions.
+Purpose: Detect spinning agents and non-convergent loops without CodeRecon making decisions.
 
 ### 13.4 How Operators Access Observability
 
@@ -2457,14 +2457,14 @@ Refactors described as tool operations:
 Implementation:
 
 - All structural refactors use the structural index (Tree-sitter-based DefFact/RefFact data) as the sole authority
-- CodePlane never guesses or speculatively resolves bindings
+- CodeRecon never guesses or speculatively resolves bindings
 - Non-semantic operations (exact-match comment/docstring sweeps, mechanical file renames) are handled separately and reported as optional, previewable patches
 
 All refactors:
 
 - Produce atomic edit batches
 - Provide previews
-- Apply via CodePlane patch system
+- Apply via CodeRecon patch system
 - Return full structured context
 
 ---
@@ -2559,7 +2559,7 @@ One embedding per file.
 deterministic head+tail truncation applies: 75% head + 25% tail.
 No language-dependent logic.
 
-**Storage**: `.codeplane/file_embedding/`
+**Storage**: `.recon/file_embedding/`
 - `file_embeddings.npz` — float16 matrix + path array
 - `file_meta.json` — model name, dim, count, version
 
@@ -2584,13 +2584,13 @@ the legacy def-centric pipeline (v5) is used as fallback.
 
 ## 17. Subsystem Ownership Boundaries (Who Owns What)
 
-### 15.1 CodePlane Owns
+### 15.1 CodeRecon Owns
 
 - Repo reconciliation (Git-centric, deterministic)
 - Indexing:
   - Tantivy lexical index
   - SQLite structural metadata
-### 17.1 CodePlane Owns
+### 17.1 CodeRecon Owns
   - Atomic index updates
 - Shared tracked index artifact production/consumption rules (CI build, checksum verify, cache, forward-compat limits)
 - Overlay index lifecycle (local-only, rebuildable)
@@ -2610,11 +2610,11 @@ the legacy def-centric pipeline (v5) is used as fallback.
 - Operation ledger persistence + retention + optional artifacts
 - Operator CLI + lifecycle + diagnostics + config layering
 
-### 17.2 CodePlane Does Not Own
+### 17.2 CodeRecon Does Not Own
 
 - Planning, strategy selection, retries, success inference
 - Editor buffer state; it reconciles from disk + Git
-- Git protocol itself (CodePlane exposes git operations as MCP tools but does not own git internals)
+- Git protocol itself (CodeRecon exposes git operations as MCP tools but does not own git internals)
 - Embeddings-first semantic retrieval
 - Remote execution / CI sharding
 
@@ -2626,17 +2626,17 @@ The following contradictions have been resolved:
 
 1. **`.env` overlay indexing**: Resolved. Default-blocked in `.cplignore`. Users can explicitly whitelist via `!.env` if needed. See section 6.10.
 
-2. **Refactor fallback semantics**: Resolved. Structural refactors use the structural index (DefFact/RefFact); CodePlane never guesses bindings. "Structured lexical edits" refers only to non-semantic operations (exact-match comment sweeps, mechanical file renames). These are explicitly not structural refactors.
+2. **Refactor fallback semantics**: Resolved. Structural refactors use the structural index (DefFact/RefFact); CodeRecon never guesses bindings. "Structured lexical edits" refers only to non-semantic operations (exact-match comment sweeps, mechanical file renames). These are explicitly not structural refactors.
 
 3. **Tree-sitter failure policy**: Resolved. On parse failure, skip file, log warning, continue indexing. Never abort the indexing pass for a single file failure. See section 7.4.
 
-4. **"Always-on" framing vs explicit lifecycle**: Resolved. CodePlane is conceptually a control plane, operationally a repo-scoped server managed via `cpl up` (Ctrl+C to stop). OS service integration is deferred.
+4. **"Always-on" framing vs explicit lifecycle**: Resolved. CodeRecon is conceptually a control plane, operationally a repo-scoped server managed via `recon up` (Ctrl+C to stop). OS service integration is deferred.
 
 ---
 
 ## 19. Semantic Support Exploration (Design Archaeology)
 
-This section documents the semantic indexing approaches explored during CodePlane development. The designs described here were investigated, partially implemented, and ultimately **reverted** in favor of a simpler planner-based architecture. This record is preserved to prevent future re-exploration of known dead-ends.
+This section documents the semantic indexing approaches explored during CodeRecon development. The designs described here were investigated, partially implemented, and ultimately **reverted** in favor of a simpler planner-based architecture. This record is preserved to prevent future re-exploration of known dead-ends.
 
 ### 19.1 Approaches Explored
 
@@ -2689,7 +2689,7 @@ This section documents the semantic indexing approaches explored during CodePlan
 - Memory overhead: 200MB–1GB+ per language server
 - Cold start latency: 5–30+ seconds per project
 - Multi-environment complexity: cannot easily run multiple interpreters/SDKs
-- Server resource constraints: CodePlane must remain lightweight
+- Server resource constraints: CodeRecon must remain lightweight
 - Multi-worktree hostility: LSP assumes single project root
 - Operational complexity outweighed benefits for refactor planning
 
@@ -2824,9 +2824,9 @@ All previously-open contradictions have been resolved. API surfacing can proceed
 
 ---
 
-## 22. What CodePlane Is (Canonical Summary)
+## 22. What CodeRecon Is (Canonical Summary)
 
-CodePlane is:
+CodeRecon is:
 
 - A repository control plane
 - A deterministic execution layer
@@ -2841,7 +2841,7 @@ It turns AI coding from slow and chaotic into fast, predictable, and auditable b
 
 ### 23.1 Design Principles
 
-The MCP API is the primary interface for AI agents to interact with CodePlane.
+The MCP API is the primary interface for AI agents to interact with CodeRecon.
 
 Core design choices:
 
@@ -2872,7 +2872,7 @@ Core design choices:
                       │ MCP/JSON-RPC 2.0 over HTTP/SSE
                       ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    CodePlane Server                              │
+│                    CodeRecon Server                              │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
 │  │  FastMCP Server │  │  REST Handler   │  │  SSE Handler    │  │
 │  │   (~35 tools)   │  │  (/health, etc) │  │  (streaming)    │  │
@@ -2937,10 +2937,10 @@ class ToolResponse(Generic[T]):
 
 **Implementation:**
 
-A `@codeplane_tool` decorator wraps FastMCP's `@mcp.tool()` to inject the envelope:
+A `@coderecon_tool` decorator wraps FastMCP's `@mcp.tool()` to inject the envelope:
 
 ```python
-def codeplane_tool(mcp: FastMCP):
+def coderecon_tool(mcp: FastMCP):
     def decorator(fn):
         @wraps(fn)
         async def wrapper(*args, ctx: Context, **kwargs):
@@ -3642,13 +3642,13 @@ Non-MCP endpoints for operators and monitoring.
 | `/metrics` | GET | Prometheus-format metrics (see section 13) | Planned |
 | `/dashboard` | GET | Observability dashboard (see section 13) | Planned |
 
-**Response header:** All responses include `X-CodePlane-Repo` header with the server's repository path.
+**Response header:** All responses include `X-CodeRecon-Repo` header with the server's repository path.
 
 **Example:**
 
 ```bash
-curl http://127.0.0.1:$(cat .codeplane/port)/health
-# Response includes: X-CodePlane-Repo: /path/to/repo
+curl http://127.0.0.1:$(cat .recon/port)/health
+# Response includes: X-CodeRecon-Repo: /path/to/repo
 ```
 
 ---
@@ -3665,7 +3665,7 @@ All MCP tools use the error schema defined in section 4.2.
   "id": 1,
   "error": {
     "code": -32000,
-    "message": "CodePlane error",
+    "message": "CodeRecon error",
     "data": {
       "code": 4001,
       "error": "REFACTOR_DIVERGENCE",
@@ -3703,14 +3703,14 @@ Client must close task and open new one, or configure additional budget.
 
 ### 23.10 MCP Server Configuration
 
-CodePlane registers as an MCP server. Client configuration example:
+CodeRecon registers as an MCP server. Client configuration example:
 
 **Claude Desktop / Cursor:**
 
 ```json
 {
   "mcpServers": {
-    "codeplane": {
+    "coderecon": {
       "transport": "http",
       "url": "http://127.0.0.1:${port}"
     }
@@ -3718,11 +3718,11 @@ CodePlane registers as an MCP server. Client configuration example:
 }
 ```
 
-**Response header:** All responses include `X-CodePlane-Repo` header with the server's repository path. Clients can use this to verify they're talking to the correct server.
+**Response header:** All responses include `X-CodeRecon-Repo` header with the server's repository path. Clients can use this to verify they're talking to the correct server.
 
 **Dynamic discovery:**
 
-Clients read `.codeplane/port` for the port number.
+Clients read `.recon/port` for the port number.
 
 ---
 

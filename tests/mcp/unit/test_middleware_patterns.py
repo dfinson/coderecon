@@ -18,7 +18,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastmcp.tools.tool import ToolResult
 
-from codeplane.mcp.gate import (
+from coderecon.mcp.gate import (
     CallPatternDetector,
     GateManager,
     GateSpec,
@@ -26,7 +26,7 @@ from codeplane.mcp.gate import (
     build_pattern_gate_spec,
     build_pattern_hint,
 )
-from codeplane.mcp.middleware import ToolMiddleware
+from coderecon.mcp.middleware import ToolMiddleware
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -167,12 +167,12 @@ class TestStripToolPrefix:
 
     def test_strips_prefix(self) -> None:
         """Strips MCP server prefix from known tool names."""
-        assert ToolMiddleware._strip_tool_prefix("codeplane-copy3_recon") == "recon"
+        assert ToolMiddleware._strip_tool_prefix("coderecon-copy3_recon") == "recon"
 
     def test_strips_long_prefix(self) -> None:
         """Strips long prefix for known tool."""
         assert (
-            ToolMiddleware._strip_tool_prefix("mcp_codeplane-my_repo_refactor_edit")
+            ToolMiddleware._strip_tool_prefix("mcp_coderecon-my_repo_refactor_edit")
             == "refactor_edit"
         )
 
@@ -186,10 +186,10 @@ class TestStripToolPrefix:
 
     def test_checkpoint_tool(self) -> None:
         """Checkpoint tool name is correctly stripped."""
-        assert ToolMiddleware._strip_tool_prefix("codeplane-cod_checkpoint") == "checkpoint"
+        assert ToolMiddleware._strip_tool_prefix("coderecon-cod_checkpoint") == "checkpoint"
 
     def test_write_source(self) -> None:
-        assert ToolMiddleware._strip_tool_prefix("codeplane-cod_refactor_edit") == "refactor_edit"
+        assert ToolMiddleware._strip_tool_prefix("coderecon-cod_refactor_edit") == "refactor_edit"
 
 
 # ---------------------------------------------------------------------------
@@ -443,7 +443,7 @@ class TestHintInjection:
         original = {
             "resource_kind": "log",
             "delivery": "resource",
-            "agentic_hint": "Full result cached at .codeplane/cache/log/abc.json\njq '.results' .codeplane/cache/log/abc.json",
+            "agentic_hint": "Full result cached at .recon/cache/log/abc.json\njq '.results' .recon/cache/log/abc.json",
         }
         hint_fields = build_pattern_hint(match)
         existing = original.get("agentic_hint")

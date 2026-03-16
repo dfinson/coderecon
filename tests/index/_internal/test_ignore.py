@@ -5,7 +5,7 @@ Verifies PRUNABLE_DIRS import, ignore file loading, and pattern matching.
 
 from pathlib import Path
 
-from codeplane.index._internal.ignore import (
+from coderecon.index._internal.ignore import (
     PRUNABLE_DIRS,
     IgnoreChecker,
     matches_glob,
@@ -69,26 +69,26 @@ class TestIgnoreChecker:
         assert not checker.should_ignore(tmp_path / "src" / "main.py")
         assert not checker.should_ignore(tmp_path / "tests" / "test_foo.py")
 
-    def test_load_cplignore(self, tmp_path: Path) -> None:
-        """Should load patterns from .cplignore."""
-        # Create .cplignore
-        (tmp_path / ".cplignore").write_text("*.log\nbuild/\n")
+    def test_load_reconignore(self, tmp_path: Path) -> None:
+        """Should load patterns from .reconignore."""
+        # Create .reconignore
+        (tmp_path / ".reconignore").write_text("*.log\nbuild/\n")
 
         checker = IgnoreChecker(tmp_path)
         assert checker.should_ignore(tmp_path / "debug.log")
         assert checker.should_ignore(tmp_path / "build" / "output.o")
         assert not checker.should_ignore(tmp_path / "main.py")
 
-    def test_cplignore_comments(self, tmp_path: Path) -> None:
-        """Should skip comments in .cplignore."""
-        (tmp_path / ".cplignore").write_text("# This is a comment\n*.log\n")
+    def test_reconignore_comments(self, tmp_path: Path) -> None:
+        """Should skip comments in .reconignore."""
+        (tmp_path / ".reconignore").write_text("# This is a comment\n*.log\n")
 
         checker = IgnoreChecker(tmp_path)
         assert checker.should_ignore(tmp_path / "debug.log")
 
-    def test_cplignore_empty_lines(self, tmp_path: Path) -> None:
-        """Should skip empty lines in .cplignore."""
-        (tmp_path / ".cplignore").write_text("*.log\n\n\n*.tmp\n")
+    def test_reconignore_empty_lines(self, tmp_path: Path) -> None:
+        """Should skip empty lines in .reconignore."""
+        (tmp_path / ".reconignore").write_text("*.log\n\n\n*.tmp\n")
 
         checker = IgnoreChecker(tmp_path)
         assert checker.should_ignore(tmp_path / "debug.log")
@@ -96,7 +96,7 @@ class TestIgnoreChecker:
 
     def test_negation_patterns(self, tmp_path: Path) -> None:
         """Should handle negation with ! prefix."""
-        (tmp_path / ".cplignore").write_text("*.log\n!important.log\n")
+        (tmp_path / ".reconignore").write_text("*.log\n!important.log\n")
 
         checker = IgnoreChecker(tmp_path)
         assert checker.should_ignore(tmp_path / "debug.log")
@@ -123,30 +123,30 @@ class TestIgnoreChecker:
         assert checker.should_ignore(tmp_path / "cache.pyc")
         assert checker.should_ignore(tmp_path / "dist" / "bundle.js")
 
-    def test_nested_cplignore(self, tmp_path: Path) -> None:
-        """Should handle nested .cplignore files."""
+    def test_nested_reconignore(self, tmp_path: Path) -> None:
+        """Should handle nested .reconignore files."""
         (tmp_path / "src").mkdir()
-        (tmp_path / "src" / ".cplignore").write_text("*.generated.py\n")
+        (tmp_path / "src" / ".reconignore").write_text("*.generated.py\n")
 
         checker = IgnoreChecker(tmp_path)
         # Nested patterns should be prefixed with directory
         assert checker.should_ignore(tmp_path / "src" / "model.generated.py")
 
-    def test_cplignore_paths_property(self, tmp_path: Path) -> None:
-        """Should track loaded .cplignore paths."""
-        (tmp_path / ".cplignore").write_text("*.log\n")
+    def test_reconignore_paths_property(self, tmp_path: Path) -> None:
+        """Should track loaded .reconignore paths."""
+        (tmp_path / ".reconignore").write_text("*.log\n")
         (tmp_path / "sub").mkdir()
-        (tmp_path / "sub" / ".cplignore").write_text("*.tmp\n")
+        (tmp_path / "sub" / ".reconignore").write_text("*.tmp\n")
 
         checker = IgnoreChecker(tmp_path)
-        paths = checker.cplignore_paths
+        paths = checker.reconignore_paths
         assert len(paths) == 2
-        assert tmp_path / ".cplignore" in paths
-        assert tmp_path / "sub" / ".cplignore" in paths
+        assert tmp_path / ".reconignore" in paths
+        assert tmp_path / "sub" / ".reconignore" in paths
 
     def test_compute_combined_hash(self, tmp_path: Path) -> None:
-        """Should compute hash of .cplignore contents."""
-        (tmp_path / ".cplignore").write_text("*.log\n")
+        """Should compute hash of .reconignore contents."""
+        (tmp_path / ".reconignore").write_text("*.log\n")
 
         checker = IgnoreChecker(tmp_path)
         hash1 = checker.compute_combined_hash()
@@ -154,17 +154,17 @@ class TestIgnoreChecker:
         assert len(hash1) == 64  # SHA-256 hex
 
     def test_compute_combined_hash_no_files(self, tmp_path: Path) -> None:
-        """Should return None when no .cplignore files."""
+        """Should return None when no .reconignore files."""
         checker = IgnoreChecker(tmp_path)
         assert checker.compute_combined_hash() is None
 
     def test_compute_combined_hash_changes_on_edit(self, tmp_path: Path) -> None:
-        """Hash should change when .cplignore changes."""
-        (tmp_path / ".cplignore").write_text("*.log\n")
+        """Hash should change when .reconignore changes."""
+        (tmp_path / ".reconignore").write_text("*.log\n")
         checker1 = IgnoreChecker(tmp_path)
         hash1 = checker1.compute_combined_hash()
 
-        (tmp_path / ".cplignore").write_text("*.log\n*.tmp\n")
+        (tmp_path / ".reconignore").write_text("*.log\n*.tmp\n")
         checker2 = IgnoreChecker(tmp_path)
         hash2 = checker2.compute_combined_hash()
 
@@ -182,15 +182,15 @@ class TestIgnoreCheckerEmpty:
 
     def test_empty_creates_instance_without_walk(self, tmp_path: Path) -> None:
         """empty() should create checker without walking filesystem."""
-        # Create nested .cplignore that would be found by normal constructor
-        (tmp_path / ".cplignore").write_text("*.log\n")
+        # Create nested .reconignore that would be found by normal constructor
+        (tmp_path / ".reconignore").write_text("*.log\n")
         sub = tmp_path / "sub"
         sub.mkdir()
-        (sub / ".cplignore").write_text("*.tmp\n")
+        (sub / ".reconignore").write_text("*.tmp\n")
 
         # empty() should NOT load these
         checker = IgnoreChecker.empty(tmp_path)
-        assert len(checker.cplignore_paths) == 0
+        assert len(checker.reconignore_paths) == 0
         # Should not ignore .log files since patterns weren't loaded
         assert not checker.should_ignore(tmp_path / "debug.log")
 
@@ -202,27 +202,27 @@ class TestIgnoreCheckerEmpty:
 
     def test_load_ignore_file(self, tmp_path: Path) -> None:
         """load_ignore_file() should incrementally add patterns."""
-        (tmp_path / ".cplignore").write_text("*.log\n")
+        (tmp_path / ".reconignore").write_text("*.log\n")
 
         checker = IgnoreChecker.empty(tmp_path)
         # Before loading: no patterns
         assert not checker.should_ignore(tmp_path / "debug.log")
 
         # Load the file
-        checker.load_ignore_file(tmp_path / ".cplignore")
+        checker.load_ignore_file(tmp_path / ".reconignore")
 
         # After loading: pattern now active
         assert checker.should_ignore(tmp_path / "debug.log")
-        assert tmp_path / ".cplignore" in checker.cplignore_paths
+        assert tmp_path / ".reconignore" in checker.reconignore_paths
 
     def test_load_ignore_file_with_prefix(self, tmp_path: Path) -> None:
         """load_ignore_file() should apply prefix for nested files."""
         sub = tmp_path / "src" / "utils"
         sub.mkdir(parents=True)
-        (sub / ".cplignore").write_text("*.generated.py\n")
+        (sub / ".reconignore").write_text("*.generated.py\n")
 
         checker = IgnoreChecker.empty(tmp_path)
-        checker.load_ignore_file(sub / ".cplignore", prefix="src/utils")
+        checker.load_ignore_file(sub / ".reconignore", prefix="src/utils")
 
         # Pattern applies only under src/utils/
         assert checker.should_ignore(tmp_path / "src" / "utils" / "model.generated.py")
@@ -231,23 +231,23 @@ class TestIgnoreCheckerEmpty:
 
     def test_load_ignore_file_multiple(self, tmp_path: Path) -> None:
         """load_ignore_file() can be called multiple times."""
-        (tmp_path / ".cplignore").write_text("*.log\n")
+        (tmp_path / ".reconignore").write_text("*.log\n")
         sub = tmp_path / "sub"
         sub.mkdir()
-        (sub / ".cplignore").write_text("*.tmp\n")
+        (sub / ".reconignore").write_text("*.tmp\n")
 
         checker = IgnoreChecker.empty(tmp_path)
-        checker.load_ignore_file(tmp_path / ".cplignore")
-        checker.load_ignore_file(sub / ".cplignore", prefix="sub")
+        checker.load_ignore_file(tmp_path / ".reconignore")
+        checker.load_ignore_file(sub / ".reconignore", prefix="sub")
 
         # Both patterns should be active
         assert checker.should_ignore(tmp_path / "debug.log")
         assert checker.should_ignore(tmp_path / "sub" / "cache.tmp")
-        assert len(checker.cplignore_paths) == 2
+        assert len(checker.reconignore_paths) == 2
 
     def test_load_ignore_file_nonexistent(self, tmp_path: Path) -> None:
         """load_ignore_file() should silently skip nonexistent files."""
         checker = IgnoreChecker.empty(tmp_path)
         # Should not raise
-        checker.load_ignore_file(tmp_path / "nonexistent" / ".cplignore")
-        assert len(checker.cplignore_paths) == 0
+        checker.load_ignore_file(tmp_path / "nonexistent" / ".reconignore")
+        assert len(checker.reconignore_paths) == 0

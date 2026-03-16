@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.index._internal.indexing import (
+from coderecon.index._internal.indexing import (
     LexicalIndex,
     SearchResult,
     SearchResults,

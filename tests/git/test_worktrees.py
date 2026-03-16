@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.git import GitOps, WorktreeError, WorktreeExistsError, WorktreeNotFoundError
+from coderecon.git import GitOps, WorktreeError, WorktreeExistsError, WorktreeNotFoundError
 
 
 class TestWorktreesList:
@@ -206,7 +206,7 @@ class TestWorktreeLockUnlock:
         ops.worktree_add(wt_path, "feature")
         ops.worktree_lock("feature-wt")
 
-        from codeplane.git import WorktreeLockedError
+        from coderecon.git import WorktreeLockedError
 
         with pytest.raises(WorktreeLockedError):
             ops.worktree_lock("feature-wt")
@@ -222,7 +222,7 @@ class TestWorktreeLockUnlock:
         ops.worktree_add(wt_path, "feature")
         ops.worktree_lock("feature-wt")
 
-        from codeplane.git import WorktreeLockedError
+        from coderecon.git import WorktreeLockedError
 
         with pytest.raises(WorktreeLockedError):
             ops.worktree_remove("feature-wt")
@@ -317,7 +317,7 @@ class TestWorktreeAddValidation:
         repo_path, ops = git_repo_with_commit
         wt_path = repo_path.parent / "feature-wt"
 
-        from codeplane.git import BranchNotFoundError
+        from coderecon.git import BranchNotFoundError
 
         with pytest.raises(BranchNotFoundError):
             ops.worktree_add(wt_path, "nonexistent-branch")
@@ -329,7 +329,7 @@ class TestWorktreeAddValidation:
         repo_path, ops = git_repo_with_commit
         wt_path = repo_path.parent / "feature-wt"
 
-        from codeplane.git import BranchNotFoundError
+        from coderecon.git import BranchNotFoundError
 
         # Remote branch notation should not be accepted
         with pytest.raises(BranchNotFoundError):
@@ -368,7 +368,7 @@ class TestWorktreeUnlockEdgeCases:
         """Unlocking nonexistent worktree should raise."""
         _, ops = git_repo_with_commit
 
-        from codeplane.git import WorktreeNotFoundError
+        from coderecon.git import WorktreeNotFoundError
 
         with pytest.raises(WorktreeNotFoundError):
             ops.worktree_unlock("nonexistent")

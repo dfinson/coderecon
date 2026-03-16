@@ -2,7 +2,7 @@
 
 import pytest
 
-from codeplane.testing.parsers import (
+from coderecon.testing.parsers import (
     auto_parse,
     parse_go_test_json,
     parse_junit_xml,
@@ -464,7 +464,7 @@ class TestPytestJsonParser:
     """Tests for pytest JSON output parser."""
 
     def test_parse_basic_success(self) -> None:
-        from codeplane.testing.parsers import parse_pytest_json
+        from coderecon.testing.parsers import parse_pytest_json
 
         content = """{
             "summary": {"total": 2, "passed": 2, "failed": 0, "skipped": 0, "error": 0},
@@ -483,7 +483,7 @@ class TestPytestJsonParser:
         assert len(result.tests) == 2
 
     def test_parse_with_failures(self) -> None:
-        from codeplane.testing.parsers import parse_pytest_json
+        from coderecon.testing.parsers import parse_pytest_json
 
         content = """{
             "summary": {"total": 3, "passed": 2, "failed": 1, "skipped": 0, "error": 0},
@@ -508,7 +508,7 @@ class TestPytestJsonParser:
         assert failed_test.traceback == "Traceback..."
 
     def test_parse_with_skipped(self) -> None:
-        from codeplane.testing.parsers import parse_pytest_json
+        from coderecon.testing.parsers import parse_pytest_json
 
         content = """{
             "summary": {"total": 2, "passed": 1, "failed": 0, "skipped": 1, "error": 0},
@@ -526,7 +526,7 @@ class TestPytestJsonParser:
         assert result.skipped == 1
 
     def test_parse_with_errors(self) -> None:
-        from codeplane.testing.parsers import parse_pytest_json
+        from coderecon.testing.parsers import parse_pytest_json
 
         content = """{
             "summary": {"total": 2, "passed": 1, "failed": 0, "skipped": 0, "error": 1},
@@ -544,7 +544,7 @@ class TestPytestJsonParser:
         assert result.errors == 1
 
     def test_parse_extracts_file_path(self) -> None:
-        from codeplane.testing.parsers import parse_pytest_json
+        from coderecon.testing.parsers import parse_pytest_json
 
         content = """{
             "summary": {"total": 1, "passed": 1},
@@ -564,7 +564,7 @@ class TestPytestJsonParser:
         assert test.classname == "tests/unit/test_module.py::TestClass"
 
     def test_parse_invalid_json(self) -> None:
-        from codeplane.testing.parsers import parse_pytest_json
+        from coderecon.testing.parsers import parse_pytest_json
 
         result = parse_pytest_json("not valid json")
 
@@ -574,7 +574,7 @@ class TestPytestJsonParser:
         assert result.tests[0].status == "error"
 
     def test_parse_empty_tests_array(self) -> None:
-        from codeplane.testing.parsers import parse_pytest_json
+        from coderecon.testing.parsers import parse_pytest_json
 
         content = """{
             "summary": {"total": 0, "passed": 0, "failed": 0, "skipped": 0, "error": 0},
@@ -588,7 +588,7 @@ class TestPytestJsonParser:
         assert len(result.tests) == 0
 
     def test_parse_without_summary(self) -> None:
-        from codeplane.testing.parsers import parse_pytest_json
+        from coderecon.testing.parsers import parse_pytest_json
 
         content = """{
             "tests": [
@@ -606,7 +606,7 @@ class TestPytestJsonParser:
         assert result.failed == 1
 
     def test_parse_simple_nodeid(self) -> None:
-        from codeplane.testing.parsers import parse_pytest_json
+        from coderecon.testing.parsers import parse_pytest_json
 
         content = """{
             "tests": [

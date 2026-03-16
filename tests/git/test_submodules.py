@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.git import GitOps, SubmoduleError, SubmoduleNotFoundError
+from coderecon.git import GitOps, SubmoduleError, SubmoduleNotFoundError
 
 
 class TestSubmodulesList:
@@ -235,7 +235,7 @@ class TestSubmoduleStatusDetailed:
         self, git_repo_pair: tuple[tuple[Path, GitOps], tuple[Path, GitOps]]
     ) -> None:
         """Staged change in submodule should show index_dirty."""
-        from codeplane.git import GitOps
+        from coderecon.git import GitOps
 
         (main_path, main_ops), (sub_path, _) = git_repo_pair
 
@@ -271,7 +271,7 @@ class TestSubmoduleStatusDetailed:
         self, git_repo_pair: tuple[tuple[Path, GitOps], tuple[Path, GitOps]]
     ) -> None:
         """Submodule at wrong commit should show outdated status."""
-        from codeplane.git import GitOps
+        from coderecon.git import GitOps
 
         (main_path, main_ops), (sub_path, sub_ops) = git_repo_pair
 

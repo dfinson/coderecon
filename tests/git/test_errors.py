@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from codeplane.git.errors import (
+from coderecon.git.errors import (
     AuthenticationError,
     ConflictError,
     DetachedHeadError,

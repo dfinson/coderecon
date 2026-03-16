@@ -12,7 +12,7 @@ from tempfile import NamedTemporaryFile
 
 import pytest
 
-from codeplane.testing.coverage import (
+from coderecon.testing.coverage import (
     CoverageParseError,
     CoverageReport,
     FileCoverage,
@@ -22,7 +22,7 @@ from codeplane.testing.coverage import (
     merge,
     parse_artifact,
 )
-from codeplane.testing.coverage.report import (
+from coderecon.testing.coverage.report import (
     _compress_ranges,
     _compress_ranges_tolerant,
     _path_matches,

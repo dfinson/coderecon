@@ -7,7 +7,7 @@ from pathlib import Path
 import pygit2
 import pytest
 
-from codeplane.git import (
+from coderecon.git import (
     BlameInfo,
     BranchExistsError,
     BranchInfo,
@@ -298,7 +298,7 @@ class TestPull:
 
     def test_pull_fastforward(self, repo_with_remote: pygit2.Repository) -> None:
         """Pull when remote is ahead should fast-forward."""
-        from codeplane.git import PullResult
+        from coderecon.git import PullResult
 
         assert repo_with_remote.workdir is not None
         workdir = Path(repo_with_remote.workdir)
@@ -334,7 +334,7 @@ class TestPull:
 
     def test_pull_up_to_date(self, repo_with_remote: pygit2.Repository) -> None:
         """Pull when already up-to-date should indicate so."""
-        from codeplane.git import PullResult
+        from coderecon.git import PullResult
 
         ops = GitOps(repo_with_remote.workdir)
         ops.push()
@@ -710,7 +710,7 @@ class TestTags:
 
     def test_delete_nonexistent_tag_raises(self, temp_repo: pygit2.Repository) -> None:
         """Deleting nonexistent tag should raise."""
-        from codeplane.git import RefNotFoundError
+        from coderecon.git import RefNotFoundError
 
         ops = GitOps(temp_repo.workdir)
 
@@ -745,7 +745,7 @@ class TestLogEdgeCases:
 
     def test_log_nonexistent_ref_raises_error(self, temp_repo: pygit2.Repository) -> None:
         """Log with nonexistent ref should raise RefNotFoundError."""
-        from codeplane.git.errors import RefNotFoundError
+        from coderecon.git.errors import RefNotFoundError
 
         ops = GitOps(temp_repo.workdir)
 
@@ -965,7 +965,7 @@ class TestBranchEdgeCases:
 
     def test_delete_current_branch_raises(self, temp_repo: pygit2.Repository) -> None:
         """Deleting current branch should raise."""
-        from codeplane.git import GitError
+        from coderecon.git import GitError
 
         ops = GitOps(temp_repo.workdir)
 
@@ -1094,7 +1094,7 @@ class TestDeleteBranchEdgeCases:
         ops.commit("Diverged commit")
         ops.checkout("main")
 
-        from codeplane.git import UnmergedBranchError
+        from coderecon.git import UnmergedBranchError
 
         with pytest.raises(UnmergedBranchError):
             ops.delete_branch("feature")
@@ -1109,7 +1109,7 @@ class TestRenameBranchEdgeCases:
 
         ops.create_branch("new-feature")
 
-        from codeplane.git import BranchExistsError
+        from coderecon.git import BranchExistsError
 
         with pytest.raises(BranchExistsError):
             ops.rename_branch("feature", "new-feature")
@@ -1233,7 +1233,7 @@ class TestExtractConflictPaths:
         self, git_repo_with_commit: tuple[Path, GitOps]
     ) -> None:
         """extract_conflict_paths should return empty tuple when no conflicts."""
-        from codeplane.git._internal import RepoAccess, WriteFlows
+        from coderecon.git._internal import RepoAccess, WriteFlows
 
         repo_path, _ = git_repo_with_commit
         access = RepoAccess(repo_path)

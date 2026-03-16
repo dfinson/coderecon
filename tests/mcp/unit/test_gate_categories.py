@@ -14,7 +14,7 @@ from collections import deque
 
 import pytest
 
-from codeplane.mcp.gate import (
+from coderecon.mcp.gate import (
     ACTION_CATEGORIES,
     TOOL_CATEGORIES,
     CallPatternDetector,

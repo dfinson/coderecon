@@ -1,4 +1,4 @@
-"""Tests for cpl status command."""
+"""Tests for recon status command."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import pygit2
 import pytest
 from click.testing import CliRunner
 
-from codeplane.cli.main import cli
+from coderecon.cli.main import cli
 
 runner = CliRunner()
 
@@ -48,23 +48,23 @@ def temp_non_git(tmp_path: Path) -> Generator[Path, None, None]:
 @pytest.fixture
 def initialized_repo(temp_git_repo: Path) -> Path:
     """Create an initialized but not running repo."""
-    codeplane_dir = temp_git_repo / ".codeplane"
-    codeplane_dir.mkdir()
-    (codeplane_dir / "config.yaml").write_text("logging:\n  level: INFO\n")
+    coderecon_dir = temp_git_repo / ".recon"
+    coderecon_dir.mkdir()
+    (coderecon_dir / "config.yaml").write_text("logging:\n  level: INFO\n")
     return temp_git_repo
 
 
 @pytest.fixture
 def running_repo(initialized_repo: Path) -> Path:
     """Create an initialized repo with running daemon files."""
-    codeplane_dir = initialized_repo / ".codeplane"
-    (codeplane_dir / "daemon.pid").write_text("12345")
-    (codeplane_dir / "daemon.port").write_text("8765")
+    coderecon_dir = initialized_repo / ".recon"
+    (coderecon_dir / "daemon.pid").write_text("12345")
+    (coderecon_dir / "daemon.port").write_text("8765")
     return initialized_repo
 
 
 class TestStatusCommand:
-    """cpl status command tests."""
+    """recon status command tests."""
 
     def test_given_non_git_dir_when_status_then_fails(self, temp_non_git: Path) -> None:
         """Status fails with error when run outside git repository."""
@@ -89,7 +89,7 @@ class TestStatusCommand:
         data = json.loads(result.output)
         assert data["initialized"] is False
 
-    @patch("codeplane.cli.status.is_server_running")
+    @patch("coderecon.cli.status.is_server_running")
     def test_given_initialized_repo_not_running_when_status_then_reports_not_running(
         self, mock_is_running: MagicMock, initialized_repo: Path
     ) -> None:
@@ -100,7 +100,7 @@ class TestStatusCommand:
         assert result.exit_code == 0
         assert "not running" in result.output.lower()
 
-    @patch("codeplane.cli.status.is_server_running")
+    @patch("coderecon.cli.status.is_server_running")
     def test_given_initialized_repo_not_running_when_status_json_then_returns_running_false(
         self, mock_is_running: MagicMock, initialized_repo: Path
     ) -> None:
@@ -113,9 +113,9 @@ class TestStatusCommand:
         assert data["initialized"] is True
         assert data["running"] is False
 
-    @patch("codeplane.cli.status.httpx.get")
-    @patch("codeplane.cli.status.read_server_info")
-    @patch("codeplane.cli.status.is_server_running")
+    @patch("coderecon.cli.status.httpx.get")
+    @patch("coderecon.cli.status.read_server_info")
+    @patch("coderecon.cli.status.is_server_running")
     def test_given_running_daemon_when_status_then_reports_running(
         self,
         mock_is_running: MagicMock,
@@ -136,9 +136,9 @@ class TestStatusCommand:
         assert "12345" in result.output
         assert "8765" in result.output
 
-    @patch("codeplane.cli.status.httpx.get")
-    @patch("codeplane.cli.status.read_server_info")
-    @patch("codeplane.cli.status.is_server_running")
+    @patch("coderecon.cli.status.httpx.get")
+    @patch("coderecon.cli.status.read_server_info")
+    @patch("coderecon.cli.status.is_server_running")
     def test_given_running_daemon_when_status_json_then_returns_full_status(
         self,
         mock_is_running: MagicMock,
@@ -163,8 +163,8 @@ class TestStatusCommand:
         assert "indexer" in data
         assert "watcher" in data
 
-    @patch("codeplane.cli.status.read_server_info")
-    @patch("codeplane.cli.status.is_server_running")
+    @patch("coderecon.cli.status.read_server_info")
+    @patch("coderecon.cli.status.is_server_running")
     def test_given_stale_pid_file_when_status_then_reports_stale(
         self,
         mock_is_running: MagicMock,
@@ -179,9 +179,9 @@ class TestStatusCommand:
         assert result.exit_code == 0
         assert "stale" in result.output.lower() or "not running" in result.output.lower()
 
-    @patch("codeplane.cli.status.httpx.get")
-    @patch("codeplane.cli.status.read_server_info")
-    @patch("codeplane.cli.status.is_server_running")
+    @patch("coderecon.cli.status.httpx.get")
+    @patch("coderecon.cli.status.read_server_info")
+    @patch("coderecon.cli.status.is_server_running")
     def test_given_daemon_http_error_when_status_then_reports_unavailable(
         self,
         mock_is_running: MagicMock,

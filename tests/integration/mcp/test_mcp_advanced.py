@@ -9,20 +9,20 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.files.ops import FileOps
-from codeplane.git.ops import GitOps
-from codeplane.index.ops import IndexCoordinatorEngine
-from codeplane.mutation.ops import Edit, MutationOps
+from coderecon.files.ops import FileOps
+from coderecon.git.ops import GitOps
+from coderecon.index.ops import IndexCoordinatorEngine
+from coderecon.mutation.ops import Edit, MutationOps
 
 pytestmark = pytest.mark.integration
 
 
 def _make_coordinator(repo_path: Path) -> IndexCoordinatorEngine:
     """Create an IndexCoordinatorEngine with proper paths."""
-    codeplane_dir = repo_path / ".codeplane"
-    codeplane_dir.mkdir(exist_ok=True)
-    db_path = codeplane_dir / "index.db"
-    tantivy_path = codeplane_dir / "tantivy"
+    coderecon_dir = repo_path / ".recon"
+    coderecon_dir.mkdir(exist_ok=True)
+    db_path = coderecon_dir / "index.db"
+    tantivy_path = coderecon_dir / "tantivy"
     return IndexCoordinatorEngine(repo_path, db_path, tantivy_path)
 
 

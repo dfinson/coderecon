@@ -2,8 +2,8 @@
 
 import pytest
 
-from codeplane.core.errors import (
-    CodePlaneError,
+from coderecon.core.errors import (
+    CodeReconError,
     ConfigError,
     InternalError,
     InternalErrorCode,
@@ -36,13 +36,13 @@ class TestInternalErrorCode:
         assert expected_range <= value < expected_range + 1000
 
 
-class TestCodePlaneError:
+class TestCodeReconError:
     """Base error behavior tests."""
 
     def test_given_error_when_to_dict_then_serializes_all_fields(self) -> None:
         """Error serializes to dict with all required fields."""
         # Given
-        error = CodePlaneError(
+        error = CodeReconError(
             code=InternalErrorCode.CONFIG_PARSE_ERROR,
             message="Test message",
             retryable=True,
@@ -64,7 +64,7 @@ class TestCodePlaneError:
     def test_given_error_when_str_then_human_readable(self) -> None:
         """Error string representation is human readable."""
         # Given
-        error = CodePlaneError(
+        error = CodeReconError(
             code=InternalErrorCode.INTERNAL_ERROR,
             message="Something broke",
         )

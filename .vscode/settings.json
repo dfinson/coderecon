@@ -1,7 +1,7 @@
 {
   "github.copilot.chat.virtualTools.threshold": 128,
   "chat.mcp.serverSampling": {
-    "codeplane/.vscode/mcp.json: codeplane": {
+    "coderecon/.vscode/mcp.json: coderecon": {
       "allowedModels": [
         "copilot/claude-opus-4.5"
       ]
@@ -14,7 +14,7 @@
     "**/.mypy_cache/**": true,
     "**/.pytest_cache/**": true,
     "**/.ruff_cache/**": true,
-    "**/.codeplane/**": true
+    "**/.recon/**": true
   },
   "search.exclude": {
     "**/.venv": true,
@@ -22,7 +22,7 @@
     "**/.mypy_cache": true,
     "**/.pytest_cache": true,
     "**/.ruff_cache": true,
-    "**/.codeplane": true
+    "**/.recon": true
   },
   "files.exclude": {
     "**/.venv": true,
@@ -30,7 +30,7 @@
     "**/.mypy_cache": true,
     "**/.pytest_cache": true,
     "**/.ruff_cache": true,
-    "**/.codeplane": true
+    "**/.recon": true
   },
   "python-envs.pythonProjects": [
     {

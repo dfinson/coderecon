@@ -14,11 +14,11 @@ from .expectations.schema import RepoExpectation
 
 @pytest.mark.e2e
 def test_git_status(
-    codeplane_server: tuple[str, int],
+    coderecon_server: tuple[str, int],
     expectation: RepoExpectation,
 ) -> None:
     """Verify git_status returns repository state."""
-    url, _port = codeplane_server
+    url, _port = coderecon_server
     timeout = TOOL_TIMEOUTS.get("git_status", 10.0)
 
     response = httpx.post(
@@ -41,11 +41,11 @@ def test_git_status(
 
 @pytest.mark.e2e
 def test_git_log(
-    codeplane_server: tuple[str, int],
+    coderecon_server: tuple[str, int],
     expectation: RepoExpectation,
 ) -> None:
     """Verify git_log returns commit history."""
-    url, _port = codeplane_server
+    url, _port = coderecon_server
     timeout = TOOL_TIMEOUTS.get("git_log", 10.0)
 
     response = httpx.post(

@@ -291,7 +291,7 @@ def _process_repo(
         _git(["remote", "remove", "origin"], cwd=dest)
 
     # Stage 4: cpl init
-    if (dest / ".codeplane").is_dir():
+    if (dest / ".recon").is_dir():
         if verbose:
             click.echo(f"  {name}: already indexed")
     else:
@@ -302,7 +302,7 @@ def _process_repo(
     result = _git(["status", "--porcelain"], cwd=dest)
     if result.stdout.strip():
         _git(["add", "-A"], cwd=dest)
-        _git(["commit", "-m", "cpl init: add codeplane config files", "--no-verify", "-q"], cwd=dest)
+        _git(["commit", "-m", "cpl init: add coderecon config files", "--no-verify", "-q"], cwd=dest)
 
     return "ok"
 

@@ -7,8 +7,8 @@ from pathlib import Path
 import pygit2
 import pytest
 
-from codeplane.git._internal.errors import ErrorMapper, git_operation
-from codeplane.git._internal.parsing import (
+from coderecon.git._internal.errors import ErrorMapper, git_operation
+from coderecon.git._internal.parsing import (
     extract_branch_name,
     extract_local_branch_from_remote,
     extract_tag_name,
@@ -16,14 +16,14 @@ from codeplane.git._internal.parsing import (
     make_branch_ref,
     make_tag_ref,
 )
-from codeplane.git._internal.preconditions import (
+from coderecon.git._internal.preconditions import (
     check_nothing_to_commit,
     require_branch_exists,
     require_current_branch,
     require_not_current_branch,
     require_not_unborn,
 )
-from codeplane.git.errors import (
+from coderecon.git.errors import (
     AuthenticationError,
     BranchNotFoundError,
     DetachedHeadError,
@@ -31,7 +31,7 @@ from codeplane.git.errors import (
     NothingToCommitError,
     RemoteError,
 )
-from codeplane.git.ops import GitOps
+from coderecon.git.ops import GitOps
 
 # =============================================================================
 # Parsing Tests

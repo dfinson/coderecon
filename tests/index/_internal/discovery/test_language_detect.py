@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.index._internal.discovery.language_detect import (
+from coderecon.index._internal.discovery.language_detect import (
     EXTENSION_TO_FAMILY,
     FILENAME_TO_FAMILY,
     detect_language_family,
     get_all_indexable_extensions,
     get_all_indexable_filenames,
 )
-from codeplane.index.models import LanguageFamily
+from coderecon.index.models import LanguageFamily
 
 
 class TestExtensionToFamily:
@@ -54,7 +54,7 @@ class TestFilenameToFamily:
     def test_common_filenames_present(self) -> None:
         """Common config filenames are mapped."""
         # Check that at least some special filenames are present
-        # The actual mapping depends on codeplane.core.languages
+        # The actual mapping depends on coderecon.core.languages
         assert len(FILENAME_TO_FAMILY) >= 0  # May be empty depending on config
 
 

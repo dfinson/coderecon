@@ -3,8 +3,8 @@
 import pytest
 from pydantic import Field
 
-from codeplane.mcp.registry import ToolRegistry, ToolSpec, registry
-from codeplane.mcp.tools.base import BaseParams
+from coderecon.mcp.registry import ToolRegistry, ToolSpec, registry
+from coderecon.mcp.tools.base import BaseParams
 
 
 class TestToolSpec:
@@ -164,7 +164,7 @@ class TestGlobalRegistry:
     def test_global_registry_has_tools(self) -> None:
         """Global registry has tools registered from imports."""
         # After importing tools module, registry should have tools
-        from codeplane.mcp import tools  # noqa: F401
+        from coderecon.mcp import tools  # noqa: F401
 
         all_tools = registry.get_all()
         # Should have at least some tools registered
@@ -173,7 +173,7 @@ class TestGlobalRegistry:
     @pytest.mark.skip(reason="Tools now registered via FastMCP, not at import time")
     def test_search_tool_registered(self) -> None:
         """Search tool is registered in global registry."""
-        from codeplane.mcp import tools  # noqa: F401
+        from coderecon.mcp import tools  # noqa: F401
 
         spec = registry.get("search")
         assert spec is not None
@@ -182,7 +182,7 @@ class TestGlobalRegistry:
     @pytest.mark.skip(reason="Tools now registered via FastMCP, not at import time")
     def test_read_source_tool_registered(self) -> None:
         """read_source tool is registered."""
-        from codeplane.mcp import tools  # noqa: F401
+        from coderecon.mcp import tools  # noqa: F401
 
         spec = registry.get("read_source")
         assert spec is not None
@@ -190,7 +190,7 @@ class TestGlobalRegistry:
     @pytest.mark.skip(reason="Tools now registered via FastMCP, not at import time")
     def test_git_status_tool_registered(self) -> None:
         """git_status tool is registered."""
-        from codeplane.mcp import tools  # noqa: F401
+        from coderecon.mcp import tools  # noqa: F401
 
         spec = registry.get("git_status")
         assert spec is not None

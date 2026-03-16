@@ -17,7 +17,7 @@ class RankingModel:
     """Wraps the ranking pipeline for EVEE benchmarking.
 
     Config args:
-        daemon_port: CodePlane daemon port (default 7777)
+        daemon_port: CodeRecon daemon port (default 7777)
         timeout: MCP call timeout in seconds (default 300)
     """
 

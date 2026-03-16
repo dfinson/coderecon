@@ -7,9 +7,9 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from codeplane.index._internal.db import Database, IndexRecovery, IntegrityChecker, IntegrityReport
-from codeplane.index._internal.indexing import LexicalIndex
-from codeplane.index.models import Context, DefFact, File, RefFact
+from coderecon.index._internal.db import Database, IndexRecovery, IntegrityChecker, IntegrityReport
+from coderecon.index._internal.indexing import LexicalIndex
+from coderecon.index.models import Context, DefFact, File, RefFact
 
 
 class TestIntegrityChecker:
@@ -270,7 +270,7 @@ class TestIntegrityReport:
     def test_add_issue_marks_failed(self) -> None:
         """Adding an issue marks report as failed."""
         report = IntegrityReport(passed=True)
-        from codeplane.index._internal.db import IntegrityIssue
+        from coderecon.index._internal.db import IntegrityIssue
 
         report.add_issue(
             IntegrityIssue(

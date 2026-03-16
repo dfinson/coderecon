@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.files.ops import validate_path_in_repo
-from codeplane.mcp.errors import MCPError, MCPErrorCode
+from coderecon.files.ops import validate_path_in_repo
+from coderecon.mcp.errors import MCPError, MCPErrorCode
 
 
 @pytest.fixture

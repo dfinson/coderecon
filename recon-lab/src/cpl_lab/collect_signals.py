@@ -165,10 +165,10 @@ def _worker_inner(args: tuple[str, str, str, str], queue: mp.Queue) -> None:  # 
     # Post initial progress
     queue.put(("progress", repo_id, 0, len(queries)))
 
-    from codeplane.mcp.context import AppContext
-    from codeplane.mcp.tools.recon.raw_signals import raw_signals_pipeline
+    from coderecon.mcp.context import AppContext
+    from coderecon.mcp.tools.recon.raw_signals import raw_signals_pipeline
 
-    cp = clone_dir / ".codeplane"
+    cp = clone_dir / ".recon"
     ctx = AppContext.create(repo_root=clone_dir, db_path=cp / "index.db",
                             tantivy_path=cp / "tantivy")
     loop = asyncio.new_event_loop()

@@ -1,4 +1,4 @@
-"""Recon model — calls CodePlane recon via MCP and returns file lists with tiers.
+"""Recon model — calls CodeRecon recon via MCP and returns file lists with tiers.
 
 Registered as ``@model("cpl-recon")`` for EVEE evaluation.
 """
@@ -15,10 +15,10 @@ from evee import model
 
 @model("cpl-recon")
 class ReconModel:
-    """Wraps the CodePlane recon MCP tool for EVEE benchmarking.
+    """Wraps the CodeRecon recon MCP tool for EVEE benchmarking.
 
     Config args (cartesian product):
-        daemon_port: CodePlane daemon port (default 7777)
+        daemon_port: CodeRecon daemon port (default 7777)
         timeout: MCP call timeout in seconds (default 120)
     """
 
@@ -138,11 +138,11 @@ class ReconModel:
     def _read_cache(self, data: dict) -> dict | None:
         """Read recon result from cache file for resource delivery."""
         hint = data.get("agentic_hint", "")
-        match = re.search(r"\.codeplane/cache/recon_result/([a-f0-9]+)\.json", hint)
+        match = re.search(r"\.recon/cache/recon_result/([a-f0-9]+)\.json", hint)
         if not match:
             return None
 
-        cache_rel = f".codeplane/cache/recon_result/{match.group(1)}.json"
+        cache_rel = f".recon/cache/recon_result/{match.group(1)}.json"
         cache_path = os.path.join(self._target_repo, cache_rel)
         if os.path.exists(cache_path):
             with open(cache_path) as f:

@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from codeplane.config import CodePlaneConfig, load_config
-from codeplane.config.models import LoggingConfig
-from codeplane.config.user_config import UserConfig, write_user_config
+from coderecon.config import CodeReconConfig, load_config
+from coderecon.config.models import LoggingConfig
+from coderecon.config.user_config import UserConfig, write_user_config
 
 
 @pytest.fixture
@@ -45,13 +45,13 @@ class TestConfigModels:
     )
     def test_given_log_level_when_validated_then_accepts_standard_levels(self, level: str) -> None:
         """Log level accepts standard Python logging levels."""
-        config = CodePlaneConfig(logging={"level": level})
+        config = CodeReconConfig(logging={"level": level})
         assert config.logging.level == level
 
     def test_given_invalid_log_level_when_validated_then_rejects(self) -> None:
         """Invalid log level is rejected."""
         with pytest.raises(ValidationError):
-            CodePlaneConfig(logging={"level": "INVALID"})
+            CodeReconConfig(logging={"level": "INVALID"})
 
     @pytest.mark.parametrize(
         ("port", "valid"),
@@ -72,11 +72,11 @@ class TestConfigModels:
 
         # When / Then
         if valid:
-            config = CodePlaneConfig(server=daemon_config)
+            config = CodeReconConfig(server=daemon_config)
             assert config.server.port == port
         else:
             with pytest.raises(ValidationError):
-                CodePlaneConfig(server=daemon_config)
+                CodeReconConfig(server=daemon_config)
 
 
 class TestConfigLoading:
@@ -85,7 +85,7 @@ class TestConfigLoading:
     def test_given_no_config_files_when_load_then_uses_defaults(self, temp_repo: Path) -> None:
         """Defaults are used when no config files exist."""
         # Given
-        repo = temp_repo  # no .codeplane/config.yaml
+        repo = temp_repo  # no .recon/config.yaml
 
         # When
         config = load_config(repo_root=repo)
@@ -97,7 +97,7 @@ class TestConfigLoading:
     def test_given_repo_config_when_load_then_overrides_defaults(self, temp_repo: Path) -> None:
         """Repo config file overrides defaults using new simplified format."""
         # Given - use new user config format
-        config_dir = temp_repo / ".codeplane"
+        config_dir = temp_repo / ".recon"
         config_dir.mkdir()
         write_user_config(config_dir / "config.yaml", UserConfig(log_level="DEBUG"))
 
@@ -110,7 +110,7 @@ class TestConfigLoading:
     def test_given_env_var_when_load_then_overrides_file(self, temp_repo: Path) -> None:
         """Environment variable overrides file config."""
         # Given - use new user config format
-        config_dir = temp_repo / ".codeplane"
+        config_dir = temp_repo / ".recon"
         config_dir.mkdir()
         write_user_config(config_dir / "config.yaml", UserConfig(log_level="DEBUG"))
         os.environ["CODEPLANE__LOGGING__LEVEL"] = "ERROR"
@@ -135,7 +135,7 @@ class TestConfigLoading:
     def test_given_invalid_yaml_when_load_then_uses_defaults(self, temp_repo: Path) -> None:
         """Invalid YAML in user config falls back to defaults gracefully."""
         # Given
-        config_dir = temp_repo / ".codeplane"
+        config_dir = temp_repo / ".recon"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text("invalid: yaml: content:")
 
@@ -149,7 +149,7 @@ class TestConfigLoading:
     def test_given_invalid_value_when_load_then_uses_defaults(self, temp_repo: Path) -> None:
         """Invalid config value falls back to defaults gracefully."""
         # Given - invalid port in user config format
-        config_dir = temp_repo / ".codeplane"
+        config_dir = temp_repo / ".recon"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text("port: invalid_string\n")
 
@@ -168,7 +168,7 @@ class TestUserConfig:
     ) -> None:
         """User config port maps to server.port in full config."""
         # Given
-        config_dir = temp_repo / ".codeplane"
+        config_dir = temp_repo / ".recon"
         config_dir.mkdir()
         write_user_config(config_dir / "config.yaml", UserConfig(port=9999))
 
@@ -183,7 +183,7 @@ class TestUserConfig:
     ) -> None:
         """User config max_file_size_mb maps to index.max_file_size_mb."""
         # Given
-        config_dir = temp_repo / ".codeplane"
+        config_dir = temp_repo / ".recon"
         config_dir.mkdir()
         write_user_config(config_dir / "config.yaml", UserConfig(max_file_size_mb=50))
 
@@ -196,7 +196,7 @@ class TestUserConfig:
     def test_given_raw_yaml_with_user_fields_when_load_then_works(self, temp_repo: Path) -> None:
         """Raw YAML with user config fields is loaded correctly."""
         # Given
-        config_dir = temp_repo / ".codeplane"
+        config_dir = temp_repo / ".recon"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text(
             "port: 8080\nlog_level: WARNING\nmax_file_size_mb: 25\n"

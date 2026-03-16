@@ -3,7 +3,7 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from codeplane.index._internal.grammars import (
+from coderecon.index._internal.grammars import (
     GRAMMAR_PACKAGES,
     GrammarInstallResult,
     get_needed_grammars,
@@ -11,7 +11,7 @@ from codeplane.index._internal.grammars import (
     is_grammar_installed,
     scan_repo_languages,
 )
-from codeplane.index.models import LanguageFamily
+from coderecon.index.models import LanguageFamily
 
 
 class TestIsGrammarInstalled:
@@ -41,14 +41,14 @@ class TestGetNeededGrammars:
         # MATLAB has no grammar in GRAMMAR_PACKAGES, should be skipped
         assert result == []
 
-    @patch("codeplane.index._internal.grammars.is_grammar_installed")
+    @patch("coderecon.index._internal.grammars.is_grammar_installed")
     def test_already_installed(self, mock_installed: MagicMock) -> None:
         """Returns empty if grammars already installed."""
         mock_installed.return_value = True
         result = get_needed_grammars({LanguageFamily.PYTHON})
         assert result == []
 
-    @patch("codeplane.index._internal.grammars.is_grammar_installed")
+    @patch("coderecon.index._internal.grammars.is_grammar_installed")
     def test_needs_installation(self, mock_installed: MagicMock) -> None:
         """Returns packages that need installation."""
         mock_installed.return_value = False
@@ -56,7 +56,7 @@ class TestGetNeededGrammars:
         pkg, version, _ = GRAMMAR_PACKAGES[LanguageFamily.PYTHON]
         assert (pkg, version) in result
 
-    @patch("codeplane.index._internal.grammars.is_grammar_installed")
+    @patch("coderecon.index._internal.grammars.is_grammar_installed")
     def test_includes_extra_packages(self, mock_installed: MagicMock) -> None:
         """Returns extra packages for language families that need them."""
         mock_installed.return_value = False
@@ -104,7 +104,7 @@ class TestInstallGrammars:
         assert result.failed_packages == []
         assert result.installed_packages == []
 
-    @patch("codeplane.index._internal.grammars.subprocess.run")
+    @patch("coderecon.index._internal.grammars.subprocess.run")
     def test_successful_install(self, mock_run: MagicMock) -> None:
         """Returns success GrammarInstallResult on successful pip install."""
         mock_run.return_value = MagicMock(returncode=0)
@@ -115,7 +115,7 @@ class TestInstallGrammars:
         assert "tree-sitter-python" in result.installed_packages
         mock_run.assert_called_once()
 
-    @patch("codeplane.index._internal.grammars.subprocess.run")
+    @patch("coderecon.index._internal.grammars.subprocess.run")
     def test_failed_install(self, mock_run: MagicMock) -> None:
         """Returns failure GrammarInstallResult with failed_packages on pip failure."""
         mock_run.return_value = MagicMock(returncode=1, stderr="error")
@@ -125,7 +125,7 @@ class TestInstallGrammars:
         assert "fake-package" in result.failed_packages
         assert result.installed_packages == []
 
-    @patch("codeplane.index._internal.grammars.subprocess.run")
+    @patch("coderecon.index._internal.grammars.subprocess.run")
     def test_partial_install_failure(self, mock_run: MagicMock) -> None:
         """Returns GrammarInstallResult with both installed and failed packages."""
         # First call succeeds, second fails
@@ -144,7 +144,7 @@ class TestInstallGrammars:
         assert "tree-sitter-python" in result.installed_packages
         assert "fake-package" in result.failed_packages
 
-    @patch("codeplane.index._internal.grammars.subprocess.run")
+    @patch("coderecon.index._internal.grammars.subprocess.run")
     def test_timeout(self, mock_run: MagicMock) -> None:
         """Returns failure GrammarInstallResult on timeout."""
         import subprocess
@@ -155,7 +155,7 @@ class TestInstallGrammars:
         assert result.success is False
         assert "tree-sitter-python" in result.failed_packages
 
-    @patch("codeplane.index._internal.grammars.subprocess.run")
+    @patch("coderecon.index._internal.grammars.subprocess.run")
     def test_multiple_packages_all_success(self, mock_run: MagicMock) -> None:
         """Returns success when all packages install successfully."""
         mock_run.return_value = MagicMock(returncode=0)
@@ -170,7 +170,7 @@ class TestInstallGrammars:
         assert len(result.installed_packages) == 3
         assert result.failed_packages == []
 
-    @patch("codeplane.index._internal.grammars.subprocess.run")
+    @patch("coderecon.index._internal.grammars.subprocess.run")
     def test_multiple_packages_all_fail(self, mock_run: MagicMock) -> None:
         """Returns failure with all packages in failed_packages."""
         mock_run.return_value = MagicMock(returncode=1)
@@ -184,7 +184,7 @@ class TestInstallGrammars:
         assert len(result.failed_packages) == 2
         assert result.installed_packages == []
 
-    @patch("codeplane.index._internal.grammars.subprocess.run")
+    @patch("coderecon.index._internal.grammars.subprocess.run")
     def test_status_callback_on_success(self, mock_run: MagicMock) -> None:
         """Calls status_fn with progress messages."""
         mock_run.return_value = MagicMock(returncode=0)
@@ -196,7 +196,7 @@ class TestInstallGrammars:
         install_grammars([("tree-sitter-python", "0.23.0")], status_fn=status_fn)
         assert any("Installing" in call for call in status_calls)
 
-    @patch("codeplane.index._internal.grammars.subprocess.run")
+    @patch("coderecon.index._internal.grammars.subprocess.run")
     def test_status_callback_on_failure(self, mock_run: MagicMock) -> None:
         """Calls status_fn with failure messages."""
         mock_run.return_value = MagicMock(returncode=1)
@@ -210,7 +210,7 @@ class TestInstallGrammars:
         assert any("Installing" in call for call in status_calls)
         assert any("Failed" in call for call in status_calls)
 
-    @patch("codeplane.index._internal.grammars.subprocess.run")
+    @patch("coderecon.index._internal.grammars.subprocess.run")
     def test_invalidates_caches(self, mock_run: MagicMock) -> None:
         """Invalidates import caches after installation."""
         mock_run.return_value = MagicMock(returncode=0)
@@ -228,7 +228,7 @@ class TestScanRepoLanguages:
         (tmp_path / "main.py").write_text("print('hello')")
         (tmp_path / ".git").mkdir()
 
-        with patch("codeplane.index._internal.grammars.subprocess.run") as mock_run:
+        with patch("coderecon.index._internal.grammars.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="main.py\n")
             languages = scan_repo_languages(tmp_path)
 
@@ -240,7 +240,7 @@ class TestScanRepoLanguages:
         (tmp_path / "app.js").write_text("")
         (tmp_path / ".git").mkdir()
 
-        with patch("codeplane.index._internal.grammars.subprocess.run") as mock_run:
+        with patch("coderecon.index._internal.grammars.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="main.py\napp.js\n")
             languages = scan_repo_languages(tmp_path)
 
@@ -251,7 +251,7 @@ class TestScanRepoLanguages:
         """Falls back to filesystem walk if git fails."""
         (tmp_path / "main.py").write_text("")
 
-        with patch("codeplane.index._internal.grammars.subprocess.run") as mock_run:
+        with patch("coderecon.index._internal.grammars.subprocess.run") as mock_run:
             mock_run.side_effect = FileNotFoundError("git not found")
             languages = scan_repo_languages(tmp_path)
 
@@ -262,7 +262,7 @@ class TestScanRepoLanguages:
         (tmp_path / ".hidden").mkdir()
         (tmp_path / ".hidden" / "secret.py").write_text("")
 
-        with patch("codeplane.index._internal.grammars.subprocess.run") as mock_run:
+        with patch("coderecon.index._internal.grammars.subprocess.run") as mock_run:
             mock_run.side_effect = FileNotFoundError("git not found")
             languages = scan_repo_languages(tmp_path)
 

@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from codeplane.mcp.tools.base import BaseParams
+from coderecon.mcp.tools.base import BaseParams
 
 
 class TestBaseParams:

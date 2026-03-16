@@ -6,14 +6,14 @@ Verifies grammar package detection and scanning functions.
 from pathlib import Path
 from unittest.mock import patch
 
-from codeplane.index._internal.grammars import (
+from coderecon.index._internal.grammars import (
     EXTRA_PACKAGES,
     GRAMMAR_PACKAGES,
     get_needed_grammars,
     is_grammar_installed,
     scan_repo_languages,
 )
-from codeplane.index.models import LanguageFamily
+from coderecon.index.models import LanguageFamily
 
 
 class TestGrammarPackages:
@@ -99,14 +99,14 @@ class TestGetNeededGrammars:
     def test_returns_uninstalled_only(self) -> None:
         """Should only return packages that aren't installed."""
         # Mock is_grammar_installed to control results
-        with patch("codeplane.index._internal.grammars.is_grammar_installed") as mock:
+        with patch("coderecon.index._internal.grammars.is_grammar_installed") as mock:
             mock.return_value = True  # All installed
             result = get_needed_grammars({LanguageFamily.PYTHON})
             assert result == []
 
     def test_returns_needed_packages(self) -> None:
         """Should return needed packages."""
-        with patch("codeplane.index._internal.grammars.is_grammar_installed") as mock:
+        with patch("coderecon.index._internal.grammars.is_grammar_installed") as mock:
             mock.return_value = False  # None installed
             result = get_needed_grammars({LanguageFamily.PYTHON})
             pkg_names = [p[0] for p in result]
@@ -114,7 +114,7 @@ class TestGetNeededGrammars:
 
     def test_includes_extra_packages(self) -> None:
         """Should include extra packages for language families."""
-        with patch("codeplane.index._internal.grammars.is_grammar_installed") as mock:
+        with patch("coderecon.index._internal.grammars.is_grammar_installed") as mock:
             mock.return_value = False
             result = get_needed_grammars({LanguageFamily.JAVASCRIPT})
             pkg_names = [p[0] for p in result]

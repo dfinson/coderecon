@@ -1,6 +1,6 @@
 """Tests for MCP errors module."""
 
-from codeplane.mcp.errors import (
+from coderecon.mcp.errors import (
     ERROR_CATALOG,
     BudgetExceededError,
     ConfirmationRequiredError,

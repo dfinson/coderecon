@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from codeplane.refactor.ops import (
+from coderecon.refactor.ops import (
     EditHunk,
     FileEdit,
     RefactorOps,
@@ -433,7 +433,7 @@ class TestRefactorMoveImportVariants:
         # Create mock File record
         mock_file = MagicMock()
         mock_file.id = 1
-        mock_file.path = "src/codeplane/index/resolver.py"
+        mock_file.path = "src/coderecon/index/resolver.py"
         mock_file.language_family = "python"
         mock_file.declared_module = None
 
@@ -444,7 +444,7 @@ class TestRefactorMoveImportVariants:
         mock_coordinator.db.session.return_value.__exit__ = MagicMock(return_value=False)
 
         result = await ops.move(
-            "src/codeplane/index/resolver.py", "src/codeplane/index/new_resolver.py"
+            "src/coderecon/index/resolver.py", "src/coderecon/index/new_resolver.py"
         )
 
         assert result.status == "previewed"

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from codeplane.mcp.gate import (
+from coderecon.mcp.gate import (
     ACTION_CATEGORIES,
     WINDOW_SIZE,
     CallPatternDetector,

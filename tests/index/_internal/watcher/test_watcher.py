@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from codeplane.index._internal.watcher.watcher import (
+from coderecon.index._internal.watcher.watcher import (
     BackgroundIndexer,
     FileChangeEvent,
     FileChangeKind,

@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from codeplane.mcp.tools.index import (
+from coderecon.mcp.tools.index import (
     _change_to_text,
     _map_repo_sections_to_text,
     _tree_to_hybrid_text,
@@ -205,10 +205,10 @@ class TestTreeToHybridText:
     """Tests for _tree_to_hybrid_text — indented directory tree with inline files."""
 
     _SAMPLE_PATHS: list[tuple[str, int | None]] = [
-        ("src/codeplane/cli/main.py", 100),
-        ("src/codeplane/cli/init.py", 50),
-        ("src/codeplane/core/errors.py", 80),
-        ("src/codeplane/core/logging.py", 60),
+        ("src/coderecon/cli/main.py", 100),
+        ("src/coderecon/cli/init.py", 50),
+        ("src/coderecon/core/errors.py", 80),
+        ("src/coderecon/core/logging.py", 60),
         ("tests/cli/test_main.py", 40),
         ("tests/core/test_errors.py", 30),
         ("pyproject.toml", 200),
@@ -240,8 +240,8 @@ class TestTreeToHybridText:
         """Subdirectories are indented under parents."""
         lines = _tree_to_hybrid_text(self._SAMPLE_PATHS)
         joined = "\n".join(lines)
-        # src/codeplane/ is a collapsed chain at indent 0
-        assert "src/codeplane/" in joined
+        # src/coderecon/ is a collapsed chain at indent 0
+        assert "src/coderecon/" in joined
         # cli/ and core/ are indented under it
         cli_lines = [ln for ln in lines if "cli/" in ln and "init.py:50" in ln]
         assert len(cli_lines) == 1

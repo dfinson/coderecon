@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastmcp import FastMCP
 
-from codeplane.mcp.tools import checkpoint as checkpoint_tools
+from coderecon.mcp.tools import checkpoint as checkpoint_tools
 
 # =============================================================================
 # Validation Helper Tests
@@ -31,13 +31,13 @@ class TestValidateCommitMessage:
         checkpoint_tools._validate_commit_message("fix: resolve issue")
 
     def test_empty_string_raises(self) -> None:
-        from codeplane.git.errors import EmptyCommitMessageError
+        from coderecon.git.errors import EmptyCommitMessageError
 
         with pytest.raises(EmptyCommitMessageError):
             checkpoint_tools._validate_commit_message("")
 
     def test_whitespace_only_raises(self) -> None:
-        from codeplane.git.errors import EmptyCommitMessageError
+        from coderecon.git.errors import EmptyCommitMessageError
 
         with pytest.raises(EmptyCommitMessageError):
             checkpoint_tools._validate_commit_message("   \n\t  ")
@@ -54,7 +54,7 @@ class TestValidatePathsExist:
         checkpoint_tools._validate_paths_exist(tmp_path, ["a.py"])
 
     def test_missing_paths_raises(self, tmp_path: Path) -> None:
-        from codeplane.git.errors import PathsNotFoundError
+        from coderecon.git.errors import PathsNotFoundError
 
         with pytest.raises(PathsNotFoundError):
             checkpoint_tools._validate_paths_exist(tmp_path, ["nonexistent.py"])
@@ -75,7 +75,7 @@ class TestRunHookWithRetry:
         mock_result = MagicMock()
         mock_result.success = True
 
-        with patch("codeplane.mcp.tools.checkpoint.run_hook", return_value=mock_result):
+        with patch("coderecon.mcp.tools.checkpoint.run_hook", return_value=mock_result):
             hook_result, failure = checkpoint_tools._run_hook_with_retry(
                 tmp_path, ["a.py"], MagicMock()
             )
@@ -94,7 +94,7 @@ class TestRunHookWithRetry:
         mock_result.stdout = "error output"
         mock_result.stderr = ""
 
-        with patch("codeplane.mcp.tools.checkpoint.run_hook", return_value=mock_result):
+        with patch("coderecon.mcp.tools.checkpoint.run_hook", return_value=mock_result):
             _, failure = checkpoint_tools._run_hook_with_retry(tmp_path, ["a.py"], MagicMock())
 
         assert failure is not None
@@ -117,7 +117,7 @@ class TestRunHookWithRetry:
         stage_fn = MagicMock()
 
         with patch(
-            "codeplane.mcp.tools.checkpoint.run_hook",
+            "coderecon.mcp.tools.checkpoint.run_hook",
             side_effect=[first_result, retry_result],
         ):
             hook_result, failure = checkpoint_tools._run_hook_with_retry(
@@ -146,7 +146,7 @@ class TestRunHookWithRetry:
         retry_result.modified_files = []
 
         with patch(
-            "codeplane.mcp.tools.checkpoint.run_hook",
+            "coderecon.mcp.tools.checkpoint.run_hook",
             side_effect=[first_result, retry_result],
         ):
             _, failure = checkpoint_tools._run_hook_with_retry(tmp_path, ["a.py"], MagicMock())
@@ -220,7 +220,7 @@ class TestCheckpointTool:
         mcp = FastMCP("test")
         checkpoint_tools.register_tools(mcp, mock_app_ctx)
 
-        from codeplane.mcp._compat import get_tools_sync
+        from coderecon.mcp._compat import get_tools_sync
 
         tool = get_tools_sync(mcp).get("checkpoint")
         assert tool is not None
@@ -230,7 +230,7 @@ class TestCheckpointTool:
         mcp = FastMCP("test")
         checkpoint_tools.register_tools(mcp, mock_app_ctx)
 
-        from codeplane.mcp._compat import get_tools_sync
+        from coderecon.mcp._compat import get_tools_sync
 
         tools = get_tools_sync(mcp)
         deleted = [
@@ -264,7 +264,7 @@ class TestCheckpointTool:
         mcp = FastMCP("test")
         checkpoint_tools.register_tools(mcp, mock_app_ctx)
 
-        from codeplane.mcp._compat import get_tools_sync
+        from coderecon.mcp._compat import get_tools_sync
 
         tool = get_tools_sync(mcp).get("checkpoint")
         assert tool is not None
@@ -278,7 +278,7 @@ class TestCheckpointTool:
         mcp = FastMCP("test")
         checkpoint_tools.register_tools(mcp, mock_app_ctx)
 
-        from codeplane.mcp._compat import get_tools_sync
+        from coderecon.mcp._compat import get_tools_sync
 
         tool = get_tools_sync(mcp).get("checkpoint")
         assert tool is not None

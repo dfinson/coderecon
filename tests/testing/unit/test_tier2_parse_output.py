@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.testing.packs.tier2 import (
+from coderecon.testing.packs.tier2 import (
     CabalTestPack,
     DuneTestPack,
     JuliaPkgTestPack,

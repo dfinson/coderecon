@@ -17,12 +17,12 @@ from tests.e2e.expectations.schema import RepoExpectation
 
 @pytest.mark.e2e
 def test_incremental_reindex(
-    codeplane_server: tuple[str, int],
+    coderecon_server: tuple[str, int],
     initialized_repo: Path,
     expectation: RepoExpectation,
 ) -> None:
     """Verify incremental indexing after file touch."""
-    url, _port = codeplane_server
+    url, _port = coderecon_server
     timeout = TOOL_TIMEOUTS.get("describe", 30.0)
 
     incremental = expectation.incremental

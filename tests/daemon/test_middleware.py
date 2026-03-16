@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from codeplane.daemon.middleware import REPO_HEADER, RepoHeaderMiddleware
+from coderecon.daemon.middleware import REPO_HEADER, RepoHeaderMiddleware
 
 
 class TestRepoHeader:
@@ -22,7 +22,7 @@ class TestRepoHeader:
 
     def test_header_name(self) -> None:
         """Header name is correct."""
-        assert REPO_HEADER == "X-CodePlane-Repo"
+        assert REPO_HEADER == "X-CodeRecon-Repo"
 
     def test_header_is_string(self) -> None:
         """Header is a string."""
@@ -72,7 +72,7 @@ class TestRepoHeaderMiddleware:
 
     @pytest.mark.asyncio
     async def test_adds_header_to_http_response(self, tmp_path: Path) -> None:
-        """Adds X-CodePlane-Repo header to HTTP responses."""
+        """Adds X-CodeRecon-Repo header to HTTP responses."""
         captured_message: MutableMapping[str, Any] = {}
 
         async def mock_send(message: MutableMapping[str, Any]) -> None:

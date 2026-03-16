@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.index._internal.indexing.import_graph import (
+from coderecon.index._internal.indexing.import_graph import (
     CoverageSourceResult,
     ImpactConfidence,
     ImpactMatch,
@@ -120,7 +120,7 @@ class TestAutoScopedCoverage:
     @pytest.mark.asyncio
     async def test_source_dirs_passed_to_modify_command(self) -> None:
         """When coverage is enabled, source_dirs from import graph are used."""
-        from codeplane.testing.emitters import PytestCovEmitter
+        from coderecon.testing.emitters import PytestCovEmitter
 
         emitter = PytestCovEmitter()
         cmd = ["pytest", "tests/test_core.py"]
@@ -137,7 +137,7 @@ class TestAutoScopedCoverage:
     @pytest.mark.asyncio
     async def test_no_source_dirs_falls_back(self) -> None:
         """When source_dirs is None, falls back to --cov=. ."""
-        from codeplane.testing.emitters import PytestCovEmitter
+        from coderecon.testing.emitters import PytestCovEmitter
 
         emitter = PytestCovEmitter()
         cmd = ["pytest", "tests/test_core.py"]
@@ -150,7 +150,7 @@ class TestAutoScopedCoverage:
     @pytest.mark.asyncio
     async def test_empty_source_dirs_falls_back(self) -> None:
         """When source_dirs is empty list, falls back to --cov=. ."""
-        from codeplane.testing.emitters import PytestCovEmitter
+        from coderecon.testing.emitters import PytestCovEmitter
 
         emitter = PytestCovEmitter()
         cmd = ["pytest", "tests/test_core.py"]
@@ -189,7 +189,7 @@ class TestCoverageEmitterSignatures:
         """Each emitter's modify_command accepts source_dirs kwarg."""
         import inspect
 
-        from codeplane.testing import emitters
+        from coderecon.testing import emitters
 
         cls = getattr(emitters, emitter_class)
         sig = inspect.signature(cls.modify_command)

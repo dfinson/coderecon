@@ -3,15 +3,15 @@
 Covers:
 - PRUNABLE_DIRS frozenset
 - UNIVERSAL_EXCLUDE_GLOBS tuple
-- generate_cplignore_template() function
+- generate_reconignore_template() function
 """
 
 from __future__ import annotations
 
-from codeplane.core.excludes import (
+from coderecon.core.excludes import (
     PRUNABLE_DIRS,
     UNIVERSAL_EXCLUDE_GLOBS,
-    generate_cplignore_template,
+    generate_reconignore_template,
 )
 
 
@@ -90,26 +90,26 @@ class TestUniversalExcludeGlobs:
 
 
 class TestGenerateCplignoreTemplate:
-    """Tests for generate_cplignore_template function."""
+    """Tests for generate_reconignore_template function."""
 
     def test_returns_string(self) -> None:
         """Returns a string."""
-        result = generate_cplignore_template()
+        result = generate_reconignore_template()
         assert isinstance(result, str)
 
     def test_not_empty(self) -> None:
         """Returns non-empty content."""
-        result = generate_cplignore_template()
+        result = generate_reconignore_template()
         assert len(result) > 0
 
     def test_starts_with_comment(self) -> None:
         """Template starts with a comment header."""
-        result = generate_cplignore_template()
+        result = generate_reconignore_template()
         assert result.startswith("#")
 
     def test_contains_prunable_dirs(self) -> None:
         """Template includes prunable directories."""
-        result = generate_cplignore_template()
+        result = generate_reconignore_template()
         # At least some prunable dirs should appear
         assert "node_modules" in result
         assert "__pycache__" in result
@@ -117,7 +117,7 @@ class TestGenerateCplignoreTemplate:
 
     def test_contains_section_headers(self) -> None:
         """Template contains section headers."""
-        result = generate_cplignore_template()
+        result = generate_reconignore_template()
         # Should have organized sections
         lines = result.split("\n")
         comment_lines = [line for line in lines if line.startswith("#")]
@@ -125,19 +125,19 @@ class TestGenerateCplignoreTemplate:
 
     def test_has_newline_ending(self) -> None:
         """Template ends with newline."""
-        result = generate_cplignore_template()
+        result = generate_reconignore_template()
         assert result.endswith("\n")
 
     def test_no_trailing_whitespace(self) -> None:
         """Lines don't have trailing whitespace."""
-        result = generate_cplignore_template()
+        result = generate_reconignore_template()
         for i, line in enumerate(result.split("\n"), 1):
             if line:  # Skip empty lines
                 assert line == line.rstrip(), f"Line {i} has trailing whitespace"
 
     def test_patterns_are_valid_gitignore_syntax(self) -> None:
         """All non-comment lines are valid gitignore patterns."""
-        result = generate_cplignore_template()
+        result = generate_reconignore_template()
         for line in result.split("\n"):
             if line and not line.startswith("#"):
                 # Valid gitignore patterns don't start with spaces
@@ -147,8 +147,8 @@ class TestGenerateCplignoreTemplate:
 
     def test_consistent_calls(self) -> None:
         """Multiple calls return the same result."""
-        result1 = generate_cplignore_template()
-        result2 = generate_cplignore_template()
+        result1 = generate_reconignore_template()
+        result2 = generate_reconignore_template()
         assert result1 == result2
 
 

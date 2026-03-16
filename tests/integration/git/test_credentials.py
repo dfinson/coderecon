@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.git import GitOps
-from codeplane.git.credentials import SystemCredentialCallback, get_default_callbacks
+from coderecon.git import GitOps
+from coderecon.git.credentials import SystemCredentialCallback, get_default_callbacks
 
 pytestmark = [pytest.mark.integration, pytest.mark.slow]
 

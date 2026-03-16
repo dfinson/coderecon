@@ -60,7 +60,7 @@ def run_collect(
             skipped += 1
             continue
         cd = _find_clone_dir(clones_dir, rid)
-        if cd and (cd / ".codeplane" / "index.db").exists():
+        if cd and (cd / ".recon" / "index.db").exists():
             jobs.append((rid, data_dir / rid, cd))
 
     if skipped:

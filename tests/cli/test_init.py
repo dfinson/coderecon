@@ -1,4 +1,4 @@
-"""Tests for cpl init command."""
+"""Tests for recon init command."""
 
 from collections.abc import Generator
 from pathlib import Path
@@ -8,7 +8,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from codeplane.cli.main import cli
+from coderecon.cli.main import cli
 
 runner = CliRunner()
 
@@ -45,10 +45,10 @@ def temp_non_git(tmp_path: Path) -> Generator[Path, None, None]:
 
 
 class TestInitCommand:
-    """cpl init command tests."""
+    """recon init command tests."""
 
-    def test_given_git_repo_when_init_then_creates_codeplane_dir(self, temp_git_repo: Path) -> None:
-        """Init creates .codeplane/ directory with config."""
+    def test_given_git_repo_when_init_then_creates_coderecon_dir(self, temp_git_repo: Path) -> None:
+        """Init creates .recon/ directory with config."""
         # Given
         repo = temp_git_repo
 
@@ -57,11 +57,11 @@ class TestInitCommand:
 
         # Then
         assert result.exit_code == 0
-        assert (repo / ".codeplane").is_dir()
-        assert (repo / ".codeplane" / "config.yaml").exists()
+        assert (repo / ".recon").is_dir()
+        assert (repo / ".recon" / "config.yaml").exists()
 
     def test_given_git_repo_when_init_then_creates_ignore_file(self, temp_git_repo: Path) -> None:
-        """Init creates .codeplane/.cplignore with default patterns."""
+        """Init creates .recon/.reconignore with default patterns."""
         # Given
         repo = temp_git_repo
 
@@ -69,9 +69,9 @@ class TestInitCommand:
         runner.invoke(cli, ["init", str(repo)])
 
         # Then
-        cplignore_path = repo / ".codeplane" / ".cplignore"
-        assert cplignore_path.exists()
-        content = cplignore_path.read_text()
+        reconignore_path = repo / ".recon" / ".reconignore"
+        assert reconignore_path.exists()
+        content = reconignore_path.read_text()
         assert "node_modules/" in content
         assert ".env" in content
 
@@ -84,7 +84,7 @@ class TestInitCommand:
         runner.invoke(cli, ["init", str(repo)])
 
         # Then - new simplified config format
-        config_path = repo / ".codeplane" / "config.yaml"
+        config_path = repo / ".recon" / "config.yaml"
         with config_path.open() as f:
             config = yaml.safe_load(f)
         # New format has root-level fields, not nested
@@ -99,7 +99,7 @@ class TestInitCommand:
         runner.invoke(cli, ["init", str(repo)])
 
         # Then - state.yaml should exist with index_path
-        state_path = repo / ".codeplane" / "state.yaml"
+        state_path = repo / ".recon" / "state.yaml"
         assert state_path.exists()
         with state_path.open() as f:
             state = yaml.safe_load(f)
@@ -116,7 +116,7 @@ class TestInitCommand:
         # Then
         assert result.exit_code == 1
         assert "Not inside a git repository" in result.output
-        assert "CodePlane commands must be run from within a git repository" in result.output
+        assert "CodeRecon commands must be run from within a git repository" in result.output
 
     def test_given_initialized_repo_when_init_again_then_idempotent(
         self, temp_git_repo: Path
@@ -140,7 +140,7 @@ class TestInitCommand:
         # Given
         repo = temp_git_repo
         runner.invoke(cli, ["init", str(repo)])
-        config_path = repo / ".codeplane" / "config.yaml"
+        config_path = repo / ".recon" / "config.yaml"
         config_path.write_text("custom: true")
 
         # When
@@ -148,7 +148,7 @@ class TestInitCommand:
 
         # Then
         assert result.exit_code == 0
-        assert "Initializing CodePlane" in result.output
+        assert "Initializing CodeRecon" in result.output
         with config_path.open() as f:
             config = yaml.safe_load(f)
         assert "custom" not in config

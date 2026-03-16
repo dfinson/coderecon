@@ -10,7 +10,7 @@ Covers:
 
 from __future__ import annotations
 
-from codeplane.lint.models import (
+from coderecon.lint.models import (
     Diagnostic,
     LintResult,
     Severity,

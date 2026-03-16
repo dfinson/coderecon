@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from codeplane.testing.runner_pack import runner_registry
+from coderecon.testing.runner_pack import runner_registry
 
 
 class TestRunnerRegistry:

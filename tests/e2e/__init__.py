@@ -1,1 +1,1 @@
-"""E2E test package for CodePlane."""
+"""E2E test package for CodeRecon."""

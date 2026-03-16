@@ -3,13 +3,13 @@
 Two phases:
   1. **Post-process**: For each repo with per-task JSONs but no JSONL
      tables, run ``collector.collect_ground_truth()`` to resolve defs
-     against the codeplane index and produce ``runs.jsonl``,
+     against the coderecon index and produce ``runs.jsonl``,
      ``touched_objects.jsonl``, ``queries.jsonl``.
   2. **Merge**: Concatenate across repos into ``data/merged/*.parquet``,
      adding a ``repo_set`` column from ``REPO_MANIFEST``.
 
 Reads: ``data/{repo_id}/ground_truth/{N1..W11}.json``
-       ``clones/{set}/{clone}/.codeplane/index.db``
+       ``clones/{set}/{clone}/.recon/index.db``
 Writes: ``data/merged/runs.parquet``
         ``data/merged/touched_objects.parquet``
         ``data/merged/queries.parquet``
@@ -65,7 +65,7 @@ def _postprocess_repos(
             failed += 1
             continue
 
-        index_db = clone / ".codeplane" / "index.db"
+        index_db = clone / ".recon" / "index.db"
         if not index_db.exists():
             click.echo(f"  {repo_id}: index.db missing at {index_db}", err=True)
             failed += 1
@@ -173,7 +173,7 @@ def _collect_repo_features(
         clone = clone_dir_for(repo_id, clones_dir)
         if clone is None:
             continue
-        index_db = clone / ".codeplane" / "index.db"
+        index_db = clone / ".recon" / "index.db"
         if not index_db.exists():
             continue
         con = sqlite3.connect(str(index_db))

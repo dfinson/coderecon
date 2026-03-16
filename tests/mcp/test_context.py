@@ -4,7 +4,7 @@ from dataclasses import fields
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from codeplane.mcp.context import AppContext
+from coderecon.mcp.context import AppContext
 
 
 class TestAppContext:

@@ -67,29 +67,29 @@ def _resolve_repo(repo_arg: str) -> Path:
 
 def _force_reindex(repo: Path, port: int) -> None:
     """Delete existing index data so the next `cpl init` + `cpl up` rebuilds from scratch."""
-    codeplane_dir = repo / ".codeplane"
+    codeplane_dir = repo / ".recon"
     if not codeplane_dir.is_dir():
-        _ok("No .codeplane/ dir — nothing to clean")
+        _ok("No .recon/ dir — nothing to clean")
         return
     # Kill daemon first if running on this port
     _kill_daemon(port)
-    _log("Removing .codeplane/ for full reindex ...")
+    _log("Removing .recon/ for full reindex ...")
     shutil.rmtree(codeplane_dir)
-    _ok("Removed .codeplane/ — will reinitialize")
+    _ok("Removed .recon/ — will reinitialize")
 
 
 def _ensure_init(repo: Path, port: int) -> None:
     """Run `cpl init` only on first use — skips if already initialized.
 
-    `cpl init` is idempotent: if .codeplane/ exists it prints "Already initialized"
+    `cpl init` is idempotent: if .recon/ exists it prints "Already initialized"
     and returns immediately (no reindex).  `cpl up` also only rebuilds the index
     if the DB is missing or corrupted.  So repeated runs are safe and fast.
     """
-    codeplane_dir = repo / ".codeplane"
+    codeplane_dir = repo / ".recon"
     if codeplane_dir.is_dir():
         _ok("Already initialized (skipping cpl init)")
         return
-    _log(f"Initializing CodePlane in {repo} ...")
+    _log(f"Initializing CodeRecon in {repo} ...")
     result = subprocess.run(
         ["cpl", "init", "--port", str(port), str(repo)],
         capture_output=True,
@@ -118,7 +118,7 @@ def _ensure_daemon(repo: Path, port: int) -> None:
     _log(f"Starting daemon on port {port} ...")
     # Start `cpl up` in background — it runs as a foreground server,
     # so we launch it as a detached subprocess.
-    log_path = repo / ".codeplane" / "bench_daemon.log"
+    log_path = repo / ".recon" / "bench_daemon.log"
     log_file = open(log_path, "w")  # noqa: SIM115
     subprocess.Popen(
         ["cpl", "up", "--port", str(port), str(repo)],
@@ -240,7 +240,7 @@ def main_cli() -> None:
         "--reindex",
         action="store_true",
         default=False,
-        help="Delete .codeplane/ and rebuild the index from scratch",
+        help="Delete .recon/ and rebuild the index from scratch",
     )
     args = parser.parse_args()
 

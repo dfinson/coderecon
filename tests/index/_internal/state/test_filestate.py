@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from codeplane.index._internal.state.filestate import (
+from coderecon.index._internal.state.filestate import (
     FileStateService,
     MutationGateResult,
 )
-from codeplane.index.models import Certainty, FileState, Freshness
+from coderecon.index.models import Certainty, FileState, Freshness
 
 
 class TestMutationGateResult:

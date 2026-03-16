@@ -10,7 +10,7 @@ Covers:
 - IndexerConfig model
 - LimitsConfig model
 - TestingConfig model
-- CodePlaneConfig root model
+- CodeReconConfig root model
 """
 
 from __future__ import annotations
@@ -18,8 +18,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from codeplane.config.models import (
-    CodePlaneConfig,
+from coderecon.config.models import (
+    CodeReconConfig,
     IndexConfig,
     IndexerConfig,
     LimitsConfig,
@@ -53,8 +53,8 @@ class TestLogOutputConfig:
 
     def test_absolute_path_destination(self) -> None:
         """Absolute path is valid destination."""
-        config = LogOutputConfig(destination="/var/log/codeplane.log")
-        assert config.destination == "/var/log/codeplane.log"
+        config = LogOutputConfig(destination="/var/log/coderecon.log")
+        assert config.destination == "/var/log/coderecon.log"
 
     def test_relative_path_fails(self) -> None:
         """Relative path is rejected."""
@@ -179,19 +179,19 @@ class TestTestingConfig:
         assert config.default_timeout_sec == 300
 
 
-class TestCodePlaneConfig:
-    """Tests for CodePlaneConfig root model."""
+class TestCodeReconConfig:
+    """Tests for CodeReconConfig root model."""
 
     def test_defaults(self) -> None:
         """Default values for all nested configs."""
-        config = CodePlaneConfig()
+        config = CodeReconConfig()
         assert config.logging.level == "INFO"
         assert config.server.port == 7654
         assert config.index.max_file_size_mb == 10
 
     def test_nested_override(self) -> None:
         """Can override nested config values."""
-        config = CodePlaneConfig(
+        config = CodeReconConfig(
             logging=LoggingConfig(level="DEBUG"),
             server=ServerConfig(port=8080),
         )
@@ -200,7 +200,7 @@ class TestCodePlaneConfig:
 
     def test_all_subconfigs_present(self) -> None:
         """All subconfigs are present."""
-        config = CodePlaneConfig()
+        config = CodeReconConfig()
         assert hasattr(config, "logging")
         assert hasattr(config, "server")
         assert hasattr(config, "index")

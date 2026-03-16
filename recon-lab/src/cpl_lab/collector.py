@@ -4,7 +4,7 @@ After the agent completes all tasks for a repo, this module reads the
 per-task JSON files from ``data/{repo_id}/ground_truth/`` and assembles
 ``runs.jsonl``, ``touched_objects.jsonl``, and ``queries.jsonl``.
 
-Each ``relevant_defs`` entry is optionally resolved against the codeplane
+Each ``relevant_defs`` entry is optionally resolved against the coderecon
 index to get ``end_line``.
 """
 
@@ -76,7 +76,7 @@ def collect_ground_truth(
         repo_id: Repository identifier.
         data_dir: Path to ``data/{repo_id}/`` directory containing
             ``ground_truth/*.json`` files from the agent.
-        index_db: Path to the repo's ``.codeplane/index.db``.
+        index_db: Path to the repo's ``.recon/index.db``.
 
     Returns:
         Summary dict with counts and unmatched defs.

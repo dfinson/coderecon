@@ -16,7 +16,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from codeplane.testing.ops import (
+from coderecon.testing.ops import (
     DetectedWorkspace,
     _default_parallelism,
     _is_prunable_path,
@@ -28,7 +28,7 @@ from codeplane.testing.ops import (
     detect_workspaces,
     get_python_executable,
 )
-from codeplane.testing.runner_pack import RunnerPack
+from coderecon.testing.runner_pack import RunnerPack
 
 
 class TestDetectPythonVenv:
@@ -448,30 +448,30 @@ class TestOsScriptPath:
 
     def test_unix_unchanged(self) -> None:
         """Unix paths remain unchanged on Unix."""
-        with patch("codeplane.testing.ops.sys.platform", "linux"):
+        with patch("coderecon.testing.ops.sys.platform", "linux"):
             assert _os_script_path("./gradlew") == "./gradlew"
             assert _os_script_path("./vendor/bin/phpunit") == "./vendor/bin/phpunit"
 
     def test_macos_unchanged(self) -> None:
         """Unix paths remain unchanged on macOS."""
-        with patch("codeplane.testing.ops.sys.platform", "darwin"):
+        with patch("coderecon.testing.ops.sys.platform", "darwin"):
             assert _os_script_path("./gradlew") == "./gradlew"
 
     def test_windows_wrapper_script(self) -> None:
         """On Windows, wrapper script paths are converted."""
-        with patch("codeplane.testing.ops.sys.platform", "win32"):
+        with patch("coderecon.testing.ops.sys.platform", "win32"):
             # ./gradlew -> gradlew (Windows finds .bat/.cmd automatically)
             assert _os_script_path("./gradlew") == "gradlew"
             assert _os_script_path("./mvnw") == "mvnw"
 
     def test_windows_subdir_path(self) -> None:
         """On Windows, subdir paths use backslashes."""
-        with patch("codeplane.testing.ops.sys.platform", "win32"):
+        with patch("coderecon.testing.ops.sys.platform", "win32"):
             # ./vendor/bin/phpunit -> vendor\bin\phpunit
             assert _os_script_path("./vendor/bin/phpunit") == "vendor\\bin\\phpunit"
 
     def test_non_dotslash_unchanged(self) -> None:
         """Paths without ./ prefix remain unchanged."""
-        with patch("codeplane.testing.ops.sys.platform", "win32"):
+        with patch("coderecon.testing.ops.sys.platform", "win32"):
             assert _os_script_path("phpunit") == "phpunit"
             assert _os_script_path("mvn") == "mvn"

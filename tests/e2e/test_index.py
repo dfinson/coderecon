@@ -14,11 +14,11 @@ from tests.e2e.expectations.schema import RepoExpectation
 
 @pytest.mark.e2e
 def test_describe_anchors(
-    codeplane_server: tuple[str, int],
+    coderecon_server: tuple[str, int],
     expectation: RepoExpectation,
 ) -> None:
     """Verify describe can locate expected symbol anchors."""
-    url, _port = codeplane_server
+    url, _port = coderecon_server
     timeout = TOOL_TIMEOUTS.get("describe", 30.0)
 
     anchors = expectation.anchors
@@ -59,11 +59,11 @@ def test_describe_anchors(
 
 @pytest.mark.e2e
 def test_references(
-    codeplane_server: tuple[str, int],
+    coderecon_server: tuple[str, int],
     expectation: RepoExpectation,
 ) -> None:
     """Verify we can find expected references."""
-    url, _port = codeplane_server
+    url, _port = coderecon_server
     timeout = TOOL_TIMEOUTS.get("describe", 30.0)
 
     refs = expectation.refs

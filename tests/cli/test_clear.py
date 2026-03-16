@@ -2,7 +2,7 @@
 
 Covers:
 - clear_repo() function
-- Removing .codeplane/ directory
+- Removing .recon/ directory
 - Removing XDG index directory
 - --yes flag behavior
 """
@@ -15,14 +15,14 @@ from unittest.mock import patch
 
 import pytest
 
-from codeplane.cli.clear import clear_repo
+from coderecon.cli.clear import clear_repo
 
 
 class TestClearRepoNothingToRemove:
     """Tests when there's nothing to clear."""
 
     def test_returns_false_when_nothing_to_clear(self, tmp_path: Path) -> None:
-        """Returns False when no CodePlane data exists."""
+        """Returns False when no CodeRecon data exists."""
         result = clear_repo(tmp_path, yes=True)
         assert result is False
 
@@ -39,31 +39,31 @@ class TestClearRepoNothingToRemove:
 
 
 class TestClearRepoCodeplaneDir:
-    """Tests for removing .codeplane/ directory."""
+    """Tests for removing .recon/ directory."""
 
-    def test_removes_codeplane_directory(self, tmp_path: Path) -> None:
-        """Removes .codeplane/ directory when yes=True."""
-        codeplane_dir = tmp_path / ".codeplane"
-        codeplane_dir.mkdir()
-        (codeplane_dir / "config.yaml").write_text("key: value")
-        (codeplane_dir / "index").mkdir()
+    def test_removes_coderecon_directory(self, tmp_path: Path) -> None:
+        """Removes .recon/ directory when yes=True."""
+        coderecon_dir = tmp_path / ".recon"
+        coderecon_dir.mkdir()
+        (coderecon_dir / "config.yaml").write_text("key: value")
+        (coderecon_dir / "index").mkdir()
 
         result = clear_repo(tmp_path, yes=True)
 
         assert result is True
-        assert not codeplane_dir.exists()
+        assert not coderecon_dir.exists()
 
     def test_removes_nested_contents(self, tmp_path: Path) -> None:
         """Removes nested directories and files."""
-        codeplane_dir = tmp_path / ".codeplane"
-        codeplane_dir.mkdir()
-        nested = codeplane_dir / "a" / "b" / "c"
+        coderecon_dir = tmp_path / ".recon"
+        coderecon_dir.mkdir()
+        nested = coderecon_dir / "a" / "b" / "c"
         nested.mkdir(parents=True)
         (nested / "file.txt").write_text("data")
 
         clear_repo(tmp_path, yes=True)
 
-        assert not codeplane_dir.exists()
+        assert not coderecon_dir.exists()
 
 
 class TestClearRepoXdgDir:
@@ -74,9 +74,9 @@ class TestClearRepoXdgDir:
         # Initialize git repo (needed for XDG path generation)
         subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
 
-        # Create .codeplane dir (needed for XDG path)
-        codeplane_dir = tmp_path / ".codeplane"
-        codeplane_dir.mkdir()
+        # Create .recon dir (needed for XDG path)
+        coderecon_dir = tmp_path / ".recon"
+        coderecon_dir.mkdir()
 
         # Mock the XDG path function to point to a test location
         xdg_dir = tmp_path / "xdg_index"
@@ -84,7 +84,7 @@ class TestClearRepoXdgDir:
         (xdg_dir / "tantivy").mkdir()
         (xdg_dir / "sqlite.db").write_text("database")
 
-        with patch("codeplane.cli.clear._get_xdg_index_dir", return_value=xdg_dir):
+        with patch("coderecon.cli.clear._get_xdg_index_dir", return_value=xdg_dir):
             result = clear_repo(tmp_path, yes=True)
 
         assert result is True
@@ -96,19 +96,19 @@ class TestClearRepoYesFlag:
 
     def test_yes_skips_confirmation(self, tmp_path: Path) -> None:
         """yes=True skips confirmation prompt."""
-        (tmp_path / ".codeplane").mkdir()
+        (tmp_path / ".recon").mkdir()
 
         # Should not prompt - yes=True
-        with patch("codeplane.cli.clear.questionary.select") as mock_select:
+        with patch("coderecon.cli.clear.questionary.select") as mock_select:
             clear_repo(tmp_path, yes=True)
             mock_select.assert_not_called()
 
     def test_without_yes_prompts_user(self, tmp_path: Path) -> None:
         """Without yes, prompts for confirmation."""
-        (tmp_path / ".codeplane").mkdir()
+        (tmp_path / ".recon").mkdir()
 
         # Mock questionary to simulate user cancelling
-        with patch("codeplane.cli.clear.questionary.select") as mock_select:
+        with patch("coderecon.cli.clear.questionary.select") as mock_select:
             mock_select.return_value.ask.return_value = False
             result = clear_repo(tmp_path, yes=False)
 
@@ -117,15 +117,15 @@ class TestClearRepoYesFlag:
 
     def test_without_yes_confirms_deletion(self, tmp_path: Path) -> None:
         """Without yes, deletes on confirmation."""
-        codeplane_dir = tmp_path / ".codeplane"
-        codeplane_dir.mkdir()
+        coderecon_dir = tmp_path / ".recon"
+        coderecon_dir.mkdir()
 
-        with patch("codeplane.cli.clear.questionary.select") as mock_select:
+        with patch("coderecon.cli.clear.questionary.select") as mock_select:
             mock_select.return_value.ask.return_value = True
             result = clear_repo(tmp_path, yes=False)
 
         assert result is True
-        assert not codeplane_dir.exists()
+        assert not coderecon_dir.exists()
 
 
 class TestClearRepoErrors:
@@ -133,18 +133,18 @@ class TestClearRepoErrors:
 
     def test_handles_permission_error(self, tmp_path: Path) -> None:
         """Handles permission errors gracefully."""
-        codeplane_dir = tmp_path / ".codeplane"
-        codeplane_dir.mkdir()
+        coderecon_dir = tmp_path / ".recon"
+        coderecon_dir.mkdir()
 
-        with patch("codeplane.cli.clear.shutil.rmtree", side_effect=OSError("Permission denied")):
+        with patch("coderecon.cli.clear.shutil.rmtree", side_effect=OSError("Permission denied")):
             result = clear_repo(tmp_path, yes=True)
 
         assert result is False
 
     def test_continues_on_partial_failure(self, tmp_path: Path) -> None:
         """Continues clearing other directories on partial failure."""
-        codeplane_dir = tmp_path / ".codeplane"
-        codeplane_dir.mkdir()
+        coderecon_dir = tmp_path / ".recon"
+        coderecon_dir.mkdir()
         xdg_dir = tmp_path / "xdg"
         xdg_dir.mkdir()
 
@@ -159,8 +159,8 @@ class TestClearRepoErrors:
             original_rmtree(path)
 
         with (
-            patch("codeplane.cli.clear._get_xdg_index_dir", return_value=xdg_dir),
-            patch("codeplane.cli.clear.shutil.rmtree", side_effect=mock_rmtree),
+            patch("coderecon.cli.clear._get_xdg_index_dir", return_value=xdg_dir),
+            patch("coderecon.cli.clear.shutil.rmtree", side_effect=mock_rmtree),
         ):
             result = clear_repo(tmp_path, yes=True)
 
@@ -172,15 +172,15 @@ class TestClearRepoBothDirs:
     """Tests for clearing both directories."""
 
     def test_removes_both_dirs(self, tmp_path: Path) -> None:
-        """Removes both .codeplane/ and XDG directories."""
-        codeplane_dir = tmp_path / ".codeplane"
-        codeplane_dir.mkdir()
+        """Removes both .recon/ and XDG directories."""
+        coderecon_dir = tmp_path / ".recon"
+        coderecon_dir.mkdir()
         xdg_dir = tmp_path / "xdg_index"
         xdg_dir.mkdir()
 
-        with patch("codeplane.cli.clear._get_xdg_index_dir", return_value=xdg_dir):
+        with patch("coderecon.cli.clear._get_xdg_index_dir", return_value=xdg_dir):
             result = clear_repo(tmp_path, yes=True)
 
         assert result is True
-        assert not codeplane_dir.exists()
+        assert not coderecon_dir.exists()
         assert not xdg_dir.exists()

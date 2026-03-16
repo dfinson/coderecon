@@ -7,7 +7,7 @@ task definitions (narrow/medium/wide) per §5.2.
 ## Selection Criteria
 
 1. **Scale diversity**: small (focused lib) / medium (multi-module) / large (multi-team)
-2. **Structural quality**: codeplane indexes successfully, well-structured code
+2. **Structural quality**: coderecon indexes successfully, well-structured code
 3. **History richness**: meaningful commit/PR history for realistic task generation
 4. **Permissive license**: MIT, Apache-2.0, or BSD — usable for training data
 
@@ -28,14 +28,14 @@ task definitions (narrow/medium/wide) per §5.2.
 
 ## Validation TODO (§5.1)
 
-After indexing all 30 repos via codeplane, confirm:
+After indexing all 30 repos via coderecon, confirm:
 - [ ] Semantic object count distribution spans a wide range (not clustered)
 - [ ] All repos parse and index successfully
 - [ ] If counts cluster, swap repos to increase diversity
 
 ## Known Risks
 
-- **java-okhttp**: Migrated from Java to Kotlin (OkHttp 4.x). If codeplane's
+- **java-okhttp**: Migrated from Java to Kotlin (OkHttp 4.x). If coderecon's
   Kotlin indexing is insufficient, substitute with `square/retrofit` (Java,
   Apache-2.0) or `apache/commons-lang` (Java, Apache-2.0).
 - **swift-package-manager**: Repo moved to `swiftlang/` org. Use current URL.

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from codeplane.git.credentials import SystemCredentialCallback, get_default_callbacks
+from coderecon.git.credentials import SystemCredentialCallback, get_default_callbacks
 
 
 class TestSystemCredentialCallback:

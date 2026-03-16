@@ -16,15 +16,15 @@ from pathlib import Path
 import pytest
 from sqlmodel import select
 
-from codeplane.index._internal.db import Database, create_additional_indexes
-from codeplane.index._internal.indexing.config_refs import (
+from coderecon.index._internal.db import Database, create_additional_indexes
+from coderecon.index._internal.indexing.config_refs import (
     _extract_makefile_tokens,
     _extract_strings,
     _is_config_file,
     _try_resolve,
     resolve_config_file_refs,
 )
-from codeplane.index.models import Context, DefFact, File, ImportFact
+from coderecon.index.models import Context, DefFact, File, ImportFact
 
 # ---------------------------------------------------------------------------
 # Fixtures

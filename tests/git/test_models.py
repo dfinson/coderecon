@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from codeplane.git.models import (
+from coderecon.git.models import (
     BlameHunk,
     BlameInfo,
     BranchInfo,

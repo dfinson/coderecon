@@ -17,8 +17,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from codeplane.mcp.tools.recon.expansion import _def_signature_text, _read_lines
-from codeplane.mcp.tools.recon.models import (
+from coderecon.mcp.tools.recon.expansion import _def_signature_text, _read_lines
+from coderecon.mcp.tools.recon.models import (
     ArtifactKind,
     EvidenceRecord,
     HarvestCandidate,
@@ -26,7 +26,7 @@ from codeplane.mcp.tools.recon.models import (
     _classify_artifact,
     _extract_intent,
 )
-from codeplane.mcp.tools.recon.parsing import (
+from coderecon.mcp.tools.recon.parsing import (
     _detect_stacktrace_driven,
     _detect_test_driven,
     _extract_negative_mentions,
@@ -227,7 +227,7 @@ class TestReconRegistration:
 
     def test_register_creates_tool(self) -> None:
         """recon tool registers with FastMCP."""
-        from codeplane.mcp.tools.recon import register_tools
+        from coderecon.mcp.tools.recon import register_tools
 
         mcp_mock = MagicMock()
         app_ctx = MagicMock()
@@ -245,7 +245,7 @@ class TestReconInGate:
     """Tests for recon in TOOL_CATEGORIES."""
 
     def test_recon_category(self) -> None:
-        from codeplane.mcp.gate import TOOL_CATEGORIES
+        from coderecon.mcp.gate import TOOL_CATEGORIES
 
         assert "recon" in TOOL_CATEGORIES
         assert TOOL_CATEGORIES["recon"] == "search"
@@ -255,7 +255,7 @@ class TestReconInToolsInit:
     """Tests for recon in tools __init__."""
 
     def test_recon_importable(self) -> None:
-        from codeplane.mcp.tools import recon
+        from coderecon.mcp.tools import recon
 
         assert hasattr(recon, "register_tools")
 

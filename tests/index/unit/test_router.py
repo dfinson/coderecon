@@ -9,13 +9,13 @@ Tests cover:
 
 from __future__ import annotations
 
-from codeplane.index._internal.discovery import (
+from coderecon.index._internal.discovery import (
     ContextRouter,
     FileRoute,
     RoutingResult,
     route_single_file,
 )
-from codeplane.index.models import CandidateContext, LanguageFamily, ProbeStatus
+from coderecon.index.models import CandidateContext, LanguageFamily, ProbeStatus
 
 
 def make_candidate(

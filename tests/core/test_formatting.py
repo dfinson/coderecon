@@ -5,7 +5,7 @@ Tests the summary formatting utilities used for consistent terminal output.
 
 from __future__ import annotations
 
-from codeplane.core.formatting import (
+from coderecon.core.formatting import (
     compress_path,
     format_duration,
     format_path_list,
@@ -29,7 +29,7 @@ class TestCompressPath:
 
     def test_long_path_compressed(self) -> None:
         """Long paths are compressed to first/last segments."""
-        result = compress_path("src/codeplane/mcp/tools/mutation.py", max_len=30)
+        result = compress_path("src/coderecon/mcp/tools/mutation.py", max_len=30)
         assert result == "src/.../mutation.py"
 
     def test_very_long_path_uses_filename_only(self) -> None:
@@ -115,7 +115,7 @@ class TestFormatPathList:
 
     def test_compress_false(self) -> None:
         """compress=False keeps paths unchanged."""
-        long_path = "src/codeplane/mcp/tools/mutation.py"
+        long_path = "src/coderecon/mcp/tools/mutation.py"
         result = format_path_list([long_path], compress=False)
         assert result == long_path
 

@@ -9,12 +9,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from codeplane.index._internal.db.reconcile import (
+from coderecon.index._internal.db.reconcile import (
     ChangedFile,
     Reconciler,
     ReconcileResult,
 )
-from codeplane.index.models import Freshness
+from coderecon.index.models import Freshness
 
 
 class TestChangedFile:
@@ -60,7 +60,7 @@ class TestReconcileResult:
         assert result.head_after is None
         assert result.duration_ms == 0.0
         assert result.errors == []
-        assert result.cplignore_changed is False
+        assert result.reconignore_changed is False
 
     def test_files_changed_property(self) -> None:
         """files_changed sums add/modify/remove."""
@@ -94,13 +94,13 @@ class TestReconciler:
         assert reconciler.db is mock_db
         assert reconciler.repo_root == repo_root
 
-    def test_cplignore_path_property(self) -> None:
-        """cplignore_path returns expected path."""
+    def test_reconignore_path_property(self) -> None:
+        """reconignore_path returns expected path."""
         mock_db = MagicMock()
         repo_root = Path("/test/repo")
         reconciler = Reconciler(mock_db, repo_root)
-        expected = repo_root / ".codeplane" / ".cplignore"
-        assert reconciler.cplignore_path == expected
+        expected = repo_root / ".recon" / ".reconignore"
+        assert reconciler.reconignore_path == expected
 
     def test_git_property_lazy_initialization(self) -> None:
         """git property lazily initializes GitOps."""
@@ -111,7 +111,7 @@ class TestReconciler:
             assert reconciler._git is None
 
             # Mock GitOps to avoid needing real git repo
-            with patch("codeplane.index._internal.db.reconcile.GitOps") as mock_git_class:
+            with patch("coderecon.index._internal.db.reconcile.GitOps") as mock_git_class:
                 mock_git_instance = MagicMock()
                 mock_git_class.return_value = mock_git_instance
 

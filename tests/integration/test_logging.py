@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 import structlog
 
-from codeplane.config.models import LoggingConfig, LogOutputConfig
-from codeplane.core.logging import (
+from coderecon.config.models import LoggingConfig, LogOutputConfig
+from coderecon.core.logging import (
     clear_request_id,
     configure_logging,
     get_logger,

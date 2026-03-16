@@ -14,16 +14,16 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from codeplane.index._internal.indexing.scope_resolver import (
+from coderecon.index._internal.indexing.scope_resolver import (
     ScopeRegion,
     find_enclosing_scope,
     resolve_scope_region,
     resolve_scope_region_for_path,
 )
-from codeplane.index.models import Context, File, ScopeFact, ScopeKind
+from coderecon.index.models import Context, File, ScopeFact, ScopeKind
 
 if TYPE_CHECKING:
-    from codeplane.index._internal.db import Database
+    from coderecon.index._internal.db import Database
 
 
 class TestScopeRegion:

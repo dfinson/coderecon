@@ -2,14 +2,14 @@
 
 from pathlib import Path
 
-from codeplane.index._internal.ignore import IgnoreChecker
+from coderecon.index._internal.ignore import IgnoreChecker
 
 
 class TestIgnoreChecker:
     """Tests for IgnoreChecker."""
 
-    def test_init_without_cplignore(self, tmp_path: Path) -> None:
-        """IgnoreChecker works when .cplignore doesn't exist."""
+    def test_init_without_reconignore(self, tmp_path: Path) -> None:
+        """IgnoreChecker works when .reconignore doesn't exist."""
         checker = IgnoreChecker(tmp_path)
         # Should not ignore anything by default
         assert not checker.should_ignore(tmp_path / "file.py")
@@ -21,11 +21,11 @@ class TestIgnoreChecker:
         assert checker.should_ignore(tmp_path / "temp" / "file.txt")
         assert not checker.should_ignore(tmp_path / "main.py")
 
-    def test_loads_cplignore_patterns(self, tmp_path: Path) -> None:
-        """IgnoreChecker loads patterns from .cplignore file."""
-        cplignore = tmp_path / ".codeplane" / ".cplignore"
-        cplignore.parent.mkdir(parents=True)
-        cplignore.write_text("*.pyc\n__pycache__/\n# comment\n\n")
+    def test_loads_reconignore_patterns(self, tmp_path: Path) -> None:
+        """IgnoreChecker loads patterns from .reconignore file."""
+        reconignore = tmp_path / ".recon" / ".reconignore"
+        reconignore.parent.mkdir(parents=True)
+        reconignore.write_text("*.pyc\n__pycache__/\n# comment\n\n")
 
         checker = IgnoreChecker(tmp_path)
         assert checker.should_ignore(tmp_path / "module.pyc")
@@ -33,9 +33,9 @@ class TestIgnoreChecker:
 
     def test_directory_patterns_match_contents(self, tmp_path: Path) -> None:
         """Directory patterns ending in / match contents."""
-        cplignore = tmp_path / ".codeplane" / ".cplignore"
-        cplignore.parent.mkdir(parents=True)
-        cplignore.write_text("build/\n")
+        reconignore = tmp_path / ".recon" / ".reconignore"
+        reconignore.parent.mkdir(parents=True)
+        reconignore.write_text("build/\n")
 
         checker = IgnoreChecker(tmp_path)
         assert checker.should_ignore(tmp_path / "build" / "output.js")
@@ -69,31 +69,31 @@ class TestIgnoreChecker:
 
     def test_is_excluded_rel_negation(self, tmp_path: Path) -> None:
         """is_excluded_rel handles negation patterns (return False early)."""
-        cplignore = tmp_path / ".codeplane" / ".cplignore"
-        cplignore.parent.mkdir(parents=True)
+        reconignore = tmp_path / ".recon" / ".reconignore"
+        reconignore.parent.mkdir(parents=True)
         # Negation must come BEFORE the pattern it negates to work
-        cplignore.write_text("!important.txt\n*.txt\n")
+        reconignore.write_text("!important.txt\n*.txt\n")
 
         checker = IgnoreChecker(tmp_path)
         assert checker.is_excluded_rel("notes.txt")
         # Negation returns False early for exact match
         assert not checker.is_excluded_rel("important.txt")
 
-    def test_cplignore_read_error_handled(self, tmp_path: Path) -> None:
-        """OSError reading .cplignore is handled gracefully."""
-        cplignore = tmp_path / ".codeplane" / ".cplignore"
-        cplignore.parent.mkdir(parents=True)
-        cplignore.mkdir()  # Make it a directory to cause OSError
+    def test_reconignore_read_error_handled(self, tmp_path: Path) -> None:
+        """OSError reading .reconignore is handled gracefully."""
+        reconignore = tmp_path / ".recon" / ".reconignore"
+        reconignore.parent.mkdir(parents=True)
+        reconignore.mkdir()  # Make it a directory to cause OSError
 
         # Should not raise, just skip loading
         checker = IgnoreChecker(tmp_path)
         assert not checker.should_ignore(tmp_path / "file.py")
 
     def test_comment_and_empty_lines_skipped(self, tmp_path: Path) -> None:
-        """Comments and empty lines in .cplignore are skipped."""
-        cplignore = tmp_path / ".codeplane" / ".cplignore"
-        cplignore.parent.mkdir(parents=True)
-        cplignore.write_text("# This is a comment\n\n  \n*.log\n")
+        """Comments and empty lines in .reconignore are skipped."""
+        reconignore = tmp_path / ".recon" / ".reconignore"
+        reconignore.parent.mkdir(parents=True)
+        reconignore.write_text("# This is a comment\n\n  \n*.log\n")
 
         checker = IgnoreChecker(tmp_path)
         # Only *.log should be active
@@ -103,24 +103,24 @@ class TestIgnoreChecker:
 
 
 class TestHierarchicalCplignore:
-    """Tests for hierarchical .cplignore support (files anywhere in repo)."""
+    """Tests for hierarchical .reconignore support (files anywhere in repo)."""
 
-    def test_loads_root_cplignore(self, tmp_path: Path) -> None:
-        """IgnoreChecker loads .cplignore from repo root."""
-        root_cplignore = tmp_path / ".cplignore"
-        root_cplignore.write_text("*.log\n")
+    def test_loads_root_reconignore(self, tmp_path: Path) -> None:
+        """IgnoreChecker loads .reconignore from repo root."""
+        root_reconignore = tmp_path / ".reconignore"
+        root_reconignore.write_text("*.log\n")
 
         checker = IgnoreChecker(tmp_path)
         assert checker.should_ignore(tmp_path / "debug.log")
-        assert root_cplignore in checker.cplignore_paths
+        assert root_reconignore in checker.reconignore_paths
 
-    def test_loads_nested_cplignore(self, tmp_path: Path) -> None:
-        """IgnoreChecker loads .cplignore from subdirectories."""
-        # Create nested .cplignore in subdir
+    def test_loads_nested_reconignore(self, tmp_path: Path) -> None:
+        """IgnoreChecker loads .reconignore from subdirectories."""
+        # Create nested .reconignore in subdir
         subdir = tmp_path / "src" / "lib"
         subdir.mkdir(parents=True)
-        nested_cplignore = subdir / ".cplignore"
-        nested_cplignore.write_text("*.tmp\n")
+        nested_reconignore = subdir / ".reconignore"
+        nested_reconignore.write_text("*.tmp\n")
 
         checker = IgnoreChecker(tmp_path)
 
@@ -129,17 +129,17 @@ class TestHierarchicalCplignore:
         assert checker.is_excluded_rel("src/lib/cache.tmp")
         # But not files outside that directory
         assert not checker.is_excluded_rel("other.tmp")
-        assert nested_cplignore in checker.cplignore_paths
+        assert nested_reconignore in checker.reconignore_paths
 
-    def test_loads_both_legacy_and_root_cplignore(self, tmp_path: Path) -> None:
-        """IgnoreChecker loads both .codeplane/.cplignore and root .cplignore."""
+    def test_loads_both_legacy_and_root_reconignore(self, tmp_path: Path) -> None:
+        """IgnoreChecker loads both .recon/.reconignore and root .reconignore."""
         # Legacy location
-        legacy = tmp_path / ".codeplane" / ".cplignore"
+        legacy = tmp_path / ".recon" / ".reconignore"
         legacy.parent.mkdir(parents=True)
         legacy.write_text("*.pyc\n")
 
         # Root location
-        root = tmp_path / ".cplignore"
+        root = tmp_path / ".reconignore"
         root.write_text("*.log\n")
 
         checker = IgnoreChecker(tmp_path)
@@ -147,29 +147,29 @@ class TestHierarchicalCplignore:
         # Both patterns should be active
         assert checker.is_excluded_rel("module.pyc")
         assert checker.is_excluded_rel("debug.log")
-        assert legacy in checker.cplignore_paths
-        assert root in checker.cplignore_paths
+        assert legacy in checker.reconignore_paths
+        assert root in checker.reconignore_paths
 
-    def test_cplignore_paths_property(self, tmp_path: Path) -> None:
-        """cplignore_paths returns all loaded .cplignore files."""
-        # Create multiple .cplignore files
-        (tmp_path / ".codeplane").mkdir()
-        (tmp_path / ".codeplane" / ".cplignore").write_text("*.a\n")
-        (tmp_path / ".cplignore").write_text("*.b\n")
+    def test_reconignore_paths_property(self, tmp_path: Path) -> None:
+        """reconignore_paths returns all loaded .reconignore files."""
+        # Create multiple .reconignore files
+        (tmp_path / ".recon").mkdir()
+        (tmp_path / ".recon" / ".reconignore").write_text("*.a\n")
+        (tmp_path / ".reconignore").write_text("*.b\n")
         (tmp_path / "sub").mkdir()
-        (tmp_path / "sub" / ".cplignore").write_text("*.c\n")
+        (tmp_path / "sub" / ".reconignore").write_text("*.c\n")
 
         checker = IgnoreChecker(tmp_path)
 
         # All three should be tracked
-        assert len(checker.cplignore_paths) == 3
-        assert tmp_path / ".codeplane" / ".cplignore" in checker.cplignore_paths
-        assert tmp_path / ".cplignore" in checker.cplignore_paths
-        assert tmp_path / "sub" / ".cplignore" in checker.cplignore_paths
+        assert len(checker.reconignore_paths) == 3
+        assert tmp_path / ".recon" / ".reconignore" in checker.reconignore_paths
+        assert tmp_path / ".reconignore" in checker.reconignore_paths
+        assert tmp_path / "sub" / ".reconignore" in checker.reconignore_paths
 
     def test_compute_combined_hash(self, tmp_path: Path) -> None:
-        """compute_combined_hash returns hash of all .cplignore contents."""
-        (tmp_path / ".cplignore").write_text("*.log\n")
+        """compute_combined_hash returns hash of all .reconignore contents."""
+        (tmp_path / ".reconignore").write_text("*.log\n")
 
         checker = IgnoreChecker(tmp_path)
         hash1 = checker.compute_combined_hash()
@@ -178,39 +178,39 @@ class TestHierarchicalCplignore:
         assert len(hash1) == 64  # SHA-256 hex digest
 
         # Changing content changes hash
-        (tmp_path / ".cplignore").write_text("*.log\n*.tmp\n")
+        (tmp_path / ".reconignore").write_text("*.log\n*.tmp\n")
         checker2 = IgnoreChecker(tmp_path)
         hash2 = checker2.compute_combined_hash()
 
         assert hash2 != hash1
 
     def test_compute_combined_hash_none_when_no_files(self, tmp_path: Path) -> None:
-        """compute_combined_hash returns None when no .cplignore files exist."""
+        """compute_combined_hash returns None when no .reconignore files exist."""
         checker = IgnoreChecker(tmp_path)
         assert checker.compute_combined_hash() is None
 
     def test_compute_combined_hash_includes_multiple_files(self, tmp_path: Path) -> None:
-        """compute_combined_hash includes all .cplignore files."""
-        (tmp_path / ".cplignore").write_text("*.log\n")
+        """compute_combined_hash includes all .reconignore files."""
+        (tmp_path / ".reconignore").write_text("*.log\n")
         (tmp_path / "sub").mkdir()
-        (tmp_path / "sub" / ".cplignore").write_text("*.tmp\n")
+        (tmp_path / "sub" / ".reconignore").write_text("*.tmp\n")
 
         checker = IgnoreChecker(tmp_path)
         hash1 = checker.compute_combined_hash()
 
         # Changing nested file changes overall hash
-        (tmp_path / "sub" / ".cplignore").write_text("*.bak\n")
+        (tmp_path / "sub" / ".reconignore").write_text("*.bak\n")
         checker2 = IgnoreChecker(tmp_path)
         hash2 = checker2.compute_combined_hash()
 
         assert hash2 != hash1
 
     def test_nested_pattern_prefix_is_correct(self, tmp_path: Path) -> None:
-        """Nested .cplignore patterns are prefixed with relative directory."""
-        # Create deeply nested .cplignore
+        """Nested .reconignore patterns are prefixed with relative directory."""
+        # Create deeply nested .reconignore
         deep = tmp_path / "a" / "b" / "c"
         deep.mkdir(parents=True)
-        (deep / ".cplignore").write_text("secret.txt\n")
+        (deep / ".reconignore").write_text("secret.txt\n")
 
         checker = IgnoreChecker(tmp_path)
 

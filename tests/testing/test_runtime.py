@@ -10,7 +10,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from codeplane.testing.runtime import (
+from coderecon.testing.runtime import (
     ContextRuntime,
     ExecutionContextBuilder,
     RuntimeExecutionContext,

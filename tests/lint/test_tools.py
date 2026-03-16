@@ -5,8 +5,8 @@ Verifies LintTool dataclass, ToolRegistry, and config detection.
 
 from pathlib import Path
 
-from codeplane.lint.models import Diagnostic, Severity, ToolCategory
-from codeplane.lint.tools import LintTool, ToolRegistry, _check_config_exists
+from coderecon.lint.models import Diagnostic, Severity, ToolCategory
+from coderecon.lint.tools import LintTool, ToolRegistry, _check_config_exists
 
 
 class TestLintTool:
@@ -58,7 +58,7 @@ class TestLintTool:
 
     def test_parse_output_with_parser(self) -> None:
         """Should use parser when set."""
-        from codeplane.lint.models import ParseResult
+        from coderecon.lint.models import ParseResult
 
         def mock_parser(stdout: str, _stderr: str) -> ParseResult:
             return ParseResult.ok(
@@ -163,7 +163,7 @@ class TestToolRegistry:
 
     def test_register_with_parser(self) -> None:
         """Should register tool with parser."""
-        from codeplane.lint.models import ParseResult
+        from coderecon.lint.models import ParseResult
 
         registry = ToolRegistry()
         tool = LintTool(

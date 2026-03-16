@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from codeplane.index._internal.indexing.shape_resolver import (
+from coderecon.index._internal.indexing.shape_resolver import (
     ShapeInferenceResolver,
     ShapeInferenceStats,
     TypeMatch,

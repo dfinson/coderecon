@@ -3,8 +3,8 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from codeplane.testing.models import ParsedTestSuite, TestTarget
-from codeplane.testing.runner_pack import (
+from coderecon.testing.models import ParsedTestSuite, TestTarget
+from coderecon.testing.runner_pack import (
     MarkerRule,
     OutputStrategy,
     RunnerCapabilities,
@@ -12,7 +12,7 @@ from codeplane.testing.runner_pack import (
     RunnerPackRegistry,
     runner_registry,
 )
-from codeplane.testing.runtime import RuntimeExecutionContext
+from coderecon.testing.runtime import RuntimeExecutionContext
 
 # =============================================================================
 # MarkerRule

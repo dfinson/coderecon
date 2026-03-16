@@ -1,7 +1,7 @@
 # recon-lab
 
-Training pipeline for CodePlane's recon models. Produces three LightGBM
-models that ship as package data in `src/codeplane/ranking/data/`:
+Training pipeline for CodeRecon's recon models. Produces three LightGBM
+models that ship as package data in `src/coderecon/ranking/data/`:
 
 | Model | File | Purpose |
 |-------|------|---------|
@@ -357,7 +357,7 @@ checklist are in `roles/executor.md` (the canonical reference).
 #### Data assembly
 
 1. For each def in `minimum_sufficient_defs` and `thrash_preventing_defs`:
-   look up `(path, name, kind)` in codeplane index → resolve `def_uid`.
+   look up `(path, name, kind)` in coderecon index → resolve `def_uid`.
 2. If no match: flag for review (should be <2%).
 3. Write `touched_objects.jsonl` with `tier` field (`minimum` or `thrash_preventing`).
    The ranker trains on the union (both tiers = relevant).
@@ -598,10 +598,10 @@ recon-lab/
 ├── infra/                     # Pipeline infrastructure
 │   ├── gt_orchestrator.py     #   Copilot SDK orchestrator (runs all GT generation)
 │   ├── merge_ground_truth.py  #   Merge per-task JSONs → single JSONL per repo
-│   ├── index_all.sh           #   Local cpl init for all clones
+│   ├── index_all.sh           #   Local recon init for all clones
 │   └── parse_traces.py        #   Benchmarking trace parser
 └── src/cpl_lab/               # Training code + unified CLI
-    ├── cli.py                 # Click CLI entry point (cpl-lab)
+    ├── cli.py                 # Click CLI entry point (recon-lab)
     ├── config.py              # Configuration resolution
     ├── schema.py              # §5 dataset table schemas
     ├── clone.py               # Repo cloning (Python port of clone_repos.sh)
@@ -623,10 +623,10 @@ recon-lab/
     └── status.py              # Pipeline status dashboard
 ```
 
-### Runtime inference (ships with codeplane)
+### Runtime inference (ships with coderecon)
 
 ```
-src/codeplane/ranking/          # Deployed models + inference
+src/coderecon/ranking/          # Deployed models + inference
 ├── ranker.py                   # §2.1 LambdaMART inference
 ├── cutoff.py                   # §2.2 cutoff inference
 ├── gate.py                     # §2.3 gate inference
@@ -648,8 +648,8 @@ benchmarking/
 ### External workspace (mutable data, outside repo)
 
 ```
-$CPL_LAB_WORKSPACE/              (default: ~/.codeplane/recon-lab)
-├── clones/                      # Cloned + codeplane-indexed repos
+$CPL_LAB_WORKSPACE/              (default: ~/.recon/recon-lab)
+├── clones/                      # Cloned + coderecon-indexed repos
 │   ├── ranker-gate/
 │   ├── cutoff/
 │   └── eval/
@@ -670,41 +670,41 @@ $CPL_LAB_WORKSPACE/              (default: ~/.codeplane/recon-lab)
 
 ## 10. CLI Reference
 
-All pipeline stages are orchestrated via the `cpl-lab` CLI:
+All pipeline stages are orchestrated via the `recon-lab` CLI:
 
 ```bash
 cd recon-lab && source .venv/bin/activate
 
 # Clone repos
-cpl-lab clone --set ranker-gate
-cpl-lab clone --set all
+recon-lab clone --set ranker-gate
+recon-lab clone --set all
 
 # Index cloned repos
-cpl-lab index
+recon-lab index
 
 # Generate ground truth (§4.3)
-cpl-lab generate run
-cpl-lab generate run --stage audit
-cpl-lab generate status
+recon-lab generate run
+recon-lab generate run --stage audit
+recon-lab generate status
 
 # Collect signals (§4.3 Phase 4)
-cpl-lab collect
+recon-lab collect
 
 # Merge data
-cpl-lab merge
+recon-lab merge
 
 # Train models (§6)
-cpl-lab train --model all
-cpl-lab train --model ranker
+recon-lab train --model all
+recon-lab train --model ranker
 
 # Evaluate with EVEE (§7)
-cpl-lab eval --experiment recon_ranking.yaml
+recon-lab eval --experiment recon_ranking.yaml
 
 # Validate ground truth
-cpl-lab validate
+recon-lab validate
 
 # Check pipeline status
-cpl-lab status
+recon-lab status
 ```
 
 ---
@@ -720,15 +720,15 @@ export CPL_LAB_WORKSPACE=/mnt/data/recon-lab
 bash recon-lab/setup_workspace.sh
 
 # Add to .bashrc to persist:
-echo 'export CPL_LAB_WORKSPACE=~/.codeplane/recon-lab' >> ~/.bashrc
+echo 'export CPL_LAB_WORKSPACE=~/.recon/recon-lab' >> ~/.bashrc
 ```
 
 ## Training workflow (end-to-end)
 
-1. **Clone + index** — `cpl-lab clone --set all && cpl-lab index`
-2. **Ground truth** — `cpl-lab generate run` (~24h for all 98 repos)
-3. **Signals** — `cpl-lab collect` calls `recon_raw_signals()` per query
-4. **Merge** — `cpl-lab merge` assembles training parquets
-5. **Train** — `cpl-lab train --model all` runs ranker → cutoff → gate (§6.4)
-6. **Eval** — `cpl-lab eval --experiment recon_ranking.yaml`
-7. **Deploy** — copy `*.lgbm` into `src/codeplane/ranking/data/`
+1. **Clone + index** — `recon-lab clone --set all && recon-lab index`
+2. **Ground truth** — `recon-lab generate run` (~24h for all 98 repos)
+3. **Signals** — `recon-lab collect` calls `recon_raw_signals()` per query
+4. **Merge** — `recon-lab merge` assembles training parquets
+5. **Train** — `recon-lab train --model all` runs ranker → cutoff → gate (§6.4)
+6. **Eval** — `recon-lab eval --experiment recon_ranking.yaml`
+7. **Deploy** — copy `*.lgbm` into `src/coderecon/ranking/data/`

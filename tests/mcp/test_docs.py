@@ -12,7 +12,7 @@ Covers:
 
 from __future__ import annotations
 
-from codeplane.mcp.docs import (
+from coderecon.mcp.docs import (
     TOOL_DOCS,
     BehaviorFlags,
     ToolCategory,

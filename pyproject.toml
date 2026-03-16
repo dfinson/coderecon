@@ -3,9 +3,9 @@ requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
-name = "codeplane"
+name = "coderecon"
 dynamic = ["version"]
-description = "Local repository control plane for AI coding agents"
+description = "Local repository recon tool for AI coding agents"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
@@ -91,20 +91,20 @@ dev = [
 ]
 
 [project.scripts]
-cpl = "codeplane.cli.main:cli"
+recon = "coderecon.cli.main:cli"
 
 [project.urls]
-Homepage = "https://github.com/davidfinson/codeplane"
-Repository = "https://github.com/davidfinson/codeplane"
+Homepage = "https://github.com/dfinson/coderecon"
+Repository = "https://github.com/dfinson/coderecon"
 
 [tool.hatch.version]
 source = "vcs"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/codeplane"]
+packages = ["src/coderecon"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"src/codeplane/ranking/data" = "codeplane/ranking/data"
+"src/coderecon/ranking/data" = "coderecon/ranking/data"
 
 [tool.ruff]
 target-version = "py312"
@@ -134,14 +134,14 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 # MCP tool files use Field() in defaults (FastMCP convention) and have placeholder args
-"src/codeplane/mcp/tools/*.py" = ["B008", "ARG001"]
+"src/coderecon/mcp/tools/*.py" = ["B008", "ARG001"]
 # E2E test fixtures require parameters for pytest dependency injection even if unused
 "tests/e2e/*.py" = ["ARG001"]
 # EVEE decorators pass extra kwargs to __init__; benchmarking scripts are not library code
 "benchmarking/**/*.py" = ["ARG002"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["codeplane"]
+known-first-party = ["coderecon"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -205,7 +205,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["src/codeplane"]
+source = ["src/coderecon"]
 branch = true
 parallel = true
 

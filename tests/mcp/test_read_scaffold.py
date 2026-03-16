@@ -55,7 +55,7 @@ class TestBuildSymbolTree:
     """Test the _build_symbol_tree helper from files.py."""
 
     def _import_tree_builder(self) -> Any:
-        from codeplane.mcp.tools.files import _build_symbol_tree
+        from coderecon.mcp.tools.files import _build_symbol_tree
 
         return _build_symbol_tree
 
@@ -249,7 +249,7 @@ class TestBuildUnindexedFallback:
     """Test the _build_unindexed_fallback helper."""
 
     def _import_fallback(self) -> Any:
-        from codeplane.mcp.tools.files import _build_unindexed_fallback
+        from coderecon.mcp.tools.files import _build_unindexed_fallback
 
         return _build_unindexed_fallback
 
@@ -391,7 +391,7 @@ class TestBuildLiteScaffold:
         """Helper to execute _build_lite_scaffold with patched deps."""
         from unittest.mock import patch
 
-        from codeplane.mcp.tools.files import _build_lite_scaffold
+        from coderecon.mcp.tools.files import _build_lite_scaffold
 
         fp = tmp_path / "mod.py"
         fp.write_text(content)
@@ -401,7 +401,7 @@ class TestBuildLiteScaffold:
         fq_instance.list_imports.return_value = imports or []
 
         with patch(
-            "codeplane.index._internal.indexing.graph.FactQueries",
+            "coderecon.index._internal.indexing.graph.FactQueries",
             return_value=fq_instance,
         ):
             return await _build_lite_scaffold(app_ctx, "src/mod.py", fp)
@@ -469,7 +469,7 @@ class TestBuildLiteScaffold:
         """When file is not in the index, returns empty symbols/imports."""
         from unittest.mock import MagicMock
 
-        from codeplane.mcp.tools.files import _build_lite_scaffold
+        from coderecon.mcp.tools.files import _build_lite_scaffold
 
         app_ctx = MagicMock()
         sess = MagicMock()
@@ -511,7 +511,7 @@ class TestDefFactNewFields:
     """Test that new DefFact fields are populated by the structural indexer."""
 
     def test_def_dict_has_scaffold_fields(self, tmp_path: Path) -> None:
-        from codeplane.index._internal.indexing.structural import _extract_file
+        from coderecon.index._internal.indexing.structural import _extract_file
 
         code = '''@staticmethod
 def helper(x: int) -> str:
@@ -540,7 +540,7 @@ def helper(x: int) -> str:
         assert "Convert" in helper_def["docstring"]
 
     def test_no_scaffold_fields_when_absent(self, tmp_path: Path) -> None:
-        from codeplane.index._internal.indexing.structural import _extract_file
+        from coderecon.index._internal.indexing.structural import _extract_file
 
         code = """def bare():
     return 1
@@ -564,7 +564,7 @@ class TestImportFactLineNumbers:
     """Test that import line numbers are persisted in the indexer."""
 
     def test_import_dict_has_line_numbers(self, tmp_path: Path) -> None:
-        from codeplane.index._internal.indexing.structural import _extract_file
+        from coderecon.index._internal.indexing.structural import _extract_file
 
         code = """import os
 from pathlib import Path
@@ -585,7 +585,7 @@ def main():
             assert imp_dict["start_line"] > 0
 
     def test_import_line_numbers_are_correct(self, tmp_path: Path) -> None:
-        from codeplane.index._internal.indexing.structural import _extract_file
+        from coderecon.index._internal.indexing.structural import _extract_file
 
         code = """import os
 from sys import argv

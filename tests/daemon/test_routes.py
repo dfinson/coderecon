@@ -15,7 +15,7 @@ import pytest
 from starlette.routing import Router
 from starlette.testclient import TestClient
 
-from codeplane.daemon.routes import create_routes
+from coderecon.daemon.routes import create_routes
 
 
 class TestCreateRoutes:

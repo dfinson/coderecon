@@ -1,6 +1,6 @@
-# CodePlane A/B Benchmark Design — Evee
+# CodeRecon A/B Benchmark Design — Evee
 
-> **Purpose:** Run the same issue-derived task with CodePlane enabled vs disabled,
+> **Purpose:** Run the same issue-derived task with CodeRecon enabled vs disabled,
 > then compare the agent debug logs to measure efficiency.
 >
 > **Target repo:** [microsoft/evee](https://github.com/microsoft/evee)
@@ -12,9 +12,9 @@
 
 ## Method
 
-| Step | With CodePlane | Without CodePlane |
+| Step | With CodeRecon | Without CodeRecon |
 |------|---------------|-------------------|
-| 1. Ensure `.vscode/mcp.json` | present (CodePlane entry) | renamed to `mcp.json.bak` |
+| 1. Ensure `.vscode/mcp.json` | present (CodeRecon entry) | renamed to `mcp.json.bak` |
 | 2. Reload Window (`Ctrl+Shift+P` → Reload) | clean session | clean session |
 | 3. Checkout `main`, ensure clean | `git checkout main && git clean -fd` | same |
 | 4. Open a **new** Copilot Agent chat | paste prompt verbatim (single convo only) | same |
@@ -45,7 +45,7 @@ python -m benchmarking.extract_trace <chatreplay.json> [--output-dir DIR]
 
 - Uses `START_BENCHMARKING_RUN` marker in the first prompt for metadata extraction
 - Auto-detects: issue number (from prompt text), model (from LLM request metadata),
-  codeplane vs native (from tool calls)
+  coderecon vs native (from tool calls)
 - Saves `{name}_raw.json` (full chatreplay) and `{name}_trace.json` (events)
 
 **Step 2 — Compute metrics** (`compute_metrics.py`)
@@ -60,7 +60,7 @@ python -m benchmarking.compute_metrics <trace.json> [--output-dir DIR]
 **Output naming convention:**
 
 ```
-{repo}_{issue}_{model}_{codeplane|native}_{suffix}.json
+{repo}_{issue}_{model}_{coderecon|native}_{suffix}.json
 ```
 
 Example: `evee_260_claude-opus-4-6-fast_codeplane_trace.json`
@@ -688,9 +688,9 @@ Start with #260 for a quick sanity check, then #233 for focused feature work.
 
 - [ ] **Reload Window** — clean session, single conversation only
 - [ ] On `main`, confirm clean: `git status && git clean -fd`
-- [ ] CodePlane on/off: `.vscode/mcp.json` present vs renamed to `mcp.json.bak`
+- [ ] CodeRecon on/off: `.vscode/mcp.json` present vs renamed to `mcp.json.bak`
 - [ ] Open **new** Agent chat, paste prompt verbatim
 - [ ] Let agent complete
 - [ ] Save debug logs from Copilot output channel to `results/`
 - [ ] Reset: `git checkout main && git clean -fd && git branch -D bench/<N>-*`
-- [ ] Repeat with CodePlane toggled
+- [ ] Repeat with CodeRecon toggled

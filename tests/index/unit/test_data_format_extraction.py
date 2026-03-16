@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.index._internal.parsing.treesitter import SyntacticSymbol, TreeSitterParser
+from coderecon.index._internal.parsing.treesitter import SyntacticSymbol, TreeSitterParser
 
 
 @pytest.fixture

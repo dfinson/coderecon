@@ -14,11 +14,11 @@ from tests.e2e.expectations.schema import RepoExpectation
 
 @pytest.mark.e2e
 def test_list_files(
-    codeplane_server: tuple[str, int],
+    coderecon_server: tuple[str, int],
     expectation: RepoExpectation,
 ) -> None:
     """Verify list_files returns expected files."""
-    url, _port = codeplane_server
+    url, _port = coderecon_server
     timeout = TOOL_TIMEOUTS.get("list_files", 30.0)
 
     # Call list_files MCP tool
@@ -68,11 +68,11 @@ def test_list_files(
 
 @pytest.mark.e2e
 def test_read_files(
-    codeplane_server: tuple[str, int],
+    coderecon_server: tuple[str, int],
     expectation: RepoExpectation,
 ) -> None:
     """Verify read_files can read expected files."""
-    url, _port = codeplane_server
+    url, _port = coderecon_server
     timeout = TOOL_TIMEOUTS.get("read_files", 30.0)
 
     files_section = expectation.files

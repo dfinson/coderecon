@@ -14,8 +14,8 @@ from pathlib import Path
 import pytest
 from sqlmodel import select
 
-from codeplane.index._internal.db import Database
-from codeplane.index.models import Context, DefFact, File, ProbeStatus
+from coderecon.index._internal.db import Database
+from coderecon.index.models import Context, DefFact, File, ProbeStatus
 
 
 class TestDatabaseEngine:
@@ -217,7 +217,7 @@ class TestAdditionalIndexes:
         """create_additional_indexes should create composite indexes."""
         from sqlalchemy import text
 
-        from codeplane.index._internal.db import create_additional_indexes
+        from coderecon.index._internal.db import create_additional_indexes
 
         db_path = temp_dir / "test.db"
         db = Database(db_path)
@@ -245,8 +245,8 @@ class TestAdditionalIndexes:
         """drop_additional_indexes should remove composite indexes."""
         from sqlalchemy import text
 
-        from codeplane.index._internal.db import create_additional_indexes
-        from codeplane.index._internal.db.indexes import drop_additional_indexes
+        from coderecon.index._internal.db import create_additional_indexes
+        from coderecon.index._internal.db.indexes import drop_additional_indexes
 
         db_path = temp_dir / "test.db"
         db = Database(db_path)
@@ -276,7 +276,7 @@ class TestAdditionalIndexes:
 
     def test_create_indexes_is_idempotent(self, temp_dir: Path) -> None:
         """create_additional_indexes can be called multiple times."""
-        from codeplane.index._internal.db import create_additional_indexes
+        from coderecon.index._internal.db import create_additional_indexes
 
         db_path = temp_dir / "test.db"
         db = Database(db_path)
@@ -288,7 +288,7 @@ class TestAdditionalIndexes:
 
     def test_drop_indexes_is_idempotent(self, temp_dir: Path) -> None:
         """drop_additional_indexes can be called when no indexes exist."""
-        from codeplane.index._internal.db.indexes import drop_additional_indexes
+        from coderecon.index._internal.db.indexes import drop_additional_indexes
 
         db_path = temp_dir / "test.db"
         db = Database(db_path)

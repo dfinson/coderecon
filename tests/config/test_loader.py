@@ -4,7 +4,7 @@ Covers:
 - _load_yaml() function
 - _deep_merge() function
 - _YamlSource settings source
-- CodePlaneSettings class
+- CodeReconSettings class
 - load_config() function
 - get_index_paths() function
 """
@@ -18,14 +18,14 @@ from unittest.mock import patch
 
 import pytest
 
-from codeplane.config.loader import (
+from coderecon.config.loader import (
     GLOBAL_CONFIG_PATH,
     _deep_merge,
     _load_yaml,
     get_index_paths,
     load_config,
 )
-from codeplane.core.errors import ConfigError
+from coderecon.core.errors import ConfigError
 
 
 class TestLoadYaml:
@@ -120,24 +120,24 @@ class TestLoadConfig:
             assert config.logging.level == "INFO"
 
     def test_loads_repo_config(self, tmp_path: Path) -> None:
-        """Loads config from repo .codeplane directory."""
-        codeplane_dir = tmp_path / ".codeplane"
-        codeplane_dir.mkdir()
+        """Loads config from repo .recon directory."""
+        coderecon_dir = tmp_path / ".recon"
+        coderecon_dir.mkdir()
         # User config uses flat fields: log_level, port, max_file_size_mb
-        (codeplane_dir / "config.yaml").write_text("log_level: DEBUG\n")
+        (coderecon_dir / "config.yaml").write_text("log_level: DEBUG\n")
 
-        with patch("codeplane.config.loader.GLOBAL_CONFIG_PATH", tmp_path / "none.yaml"):
+        with patch("coderecon.config.loader.GLOBAL_CONFIG_PATH", tmp_path / "none.yaml"):
             config = load_config(tmp_path)
             assert config.logging.level == "DEBUG"
 
     def test_env_vars_override_yaml(self, tmp_path: Path) -> None:
         """Environment variables override YAML config."""
-        codeplane_dir = tmp_path / ".codeplane"
-        codeplane_dir.mkdir()
-        (codeplane_dir / "config.yaml").write_text("log_level: INFO\n")
+        coderecon_dir = tmp_path / ".recon"
+        coderecon_dir.mkdir()
+        (coderecon_dir / "config.yaml").write_text("log_level: INFO\n")
 
         with (
-            patch("codeplane.config.loader.GLOBAL_CONFIG_PATH", tmp_path / "none.yaml"),
+            patch("coderecon.config.loader.GLOBAL_CONFIG_PATH", tmp_path / "none.yaml"),
             patch.dict(os.environ, {"CODEPLANE__LOGGING__LEVEL": "WARNING"}),
         ):
             config = load_config(tmp_path)
@@ -145,20 +145,20 @@ class TestLoadConfig:
 
     def test_kwargs_override_all(self, tmp_path: Path) -> None:
         """Keyword arguments override everything."""
-        from codeplane.config.models import LoggingConfig
+        from coderecon.config.models import LoggingConfig
 
-        with patch("codeplane.config.loader.GLOBAL_CONFIG_PATH", tmp_path / "none.yaml"):
+        with patch("coderecon.config.loader.GLOBAL_CONFIG_PATH", tmp_path / "none.yaml"):
             config = load_config(tmp_path, logging=LoggingConfig(level="ERROR"))
             assert config.logging.level == "ERROR"
 
     def test_raises_config_error_for_invalid_value(self, tmp_path: Path) -> None:
         """Raises ConfigError for invalid env var values via Pydantic validation."""
-        codeplane_dir = tmp_path / ".codeplane"
-        codeplane_dir.mkdir()
+        coderecon_dir = tmp_path / ".recon"
+        coderecon_dir.mkdir()
 
         # Use an invalid log level via env var - pydantic will reject it
         with (
-            patch("codeplane.config.loader.GLOBAL_CONFIG_PATH", tmp_path / "none.yaml"),
+            patch("coderecon.config.loader.GLOBAL_CONFIG_PATH", tmp_path / "none.yaml"),
             patch.dict(os.environ, {"CODEPLANE__LOGGING__LEVEL": "INVALID_LEVEL"}),
             pytest.raises(ConfigError),
         ):
@@ -169,21 +169,21 @@ class TestGetIndexPaths:
     """Tests for get_index_paths function."""
 
     def test_returns_default_paths(self, tmp_path: Path) -> None:
-        """Returns default paths under .codeplane."""
-        with patch("codeplane.config.loader.GLOBAL_CONFIG_PATH", tmp_path / "none.yaml"):
+        """Returns default paths under .recon."""
+        with patch("coderecon.config.loader.GLOBAL_CONFIG_PATH", tmp_path / "none.yaml"):
             db_path, tantivy_path = get_index_paths(tmp_path)
-            assert db_path == tmp_path / ".codeplane" / "index.db"
-            assert tantivy_path == tmp_path / ".codeplane" / "tantivy"
+            assert db_path == tmp_path / ".recon" / "index.db"
+            assert tantivy_path == tmp_path / ".recon" / "tantivy"
 
     def test_respects_custom_index_path(self, tmp_path: Path) -> None:
         """Respects index_path setting in state.yaml (runtime state)."""
-        codeplane_dir = tmp_path / ".codeplane"
-        codeplane_dir.mkdir()
+        coderecon_dir = tmp_path / ".recon"
+        coderecon_dir.mkdir()
         custom_path = tmp_path / "custom" / "index"
         # index_path is set in state.yaml, not config.yaml (it's runtime state)
-        (codeplane_dir / "state.yaml").write_text(f"index_path: {custom_path}\n")
+        (coderecon_dir / "state.yaml").write_text(f"index_path: {custom_path}\n")
 
-        with patch("codeplane.config.loader.GLOBAL_CONFIG_PATH", tmp_path / "none.yaml"):
+        with patch("coderecon.config.loader.GLOBAL_CONFIG_PATH", tmp_path / "none.yaml"):
             db_path, tantivy_path = get_index_paths(tmp_path)
             assert db_path == custom_path / "index.db"
             assert tantivy_path == custom_path / "tantivy"
@@ -198,5 +198,5 @@ class TestGlobalConfigPath:
 
     def test_is_in_user_config(self) -> None:
         """Path is in user config directory."""
-        # Should contain 'codeplane' somewhere in the path
-        assert "codeplane" in str(GLOBAL_CONFIG_PATH)
+        # Should contain 'coderecon' somewhere in the path
+        assert "coderecon" in str(GLOBAL_CONFIG_PATH)

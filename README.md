@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/images/logo.png" alt="CodePlane Logo" width="200">
+  <img src="docs/images/logo.png" alt="CodeRecon Logo" width="200">
 </p>
 
-<h1 align="center">CodePlane</h1>
+<h1 align="center">CodeRecon</h1>
 
 <p align="center">
   <strong>Local repository control plane for AI coding agents</strong>
@@ -11,8 +11,8 @@
 <p align="center">
   <img src="https://img.shields.io/badge/status-alpha-yellow" alt="Status: Alpha">
   <img src="https://img.shields.io/badge/python-≥3.12-blue" alt="Python ≥3.12">
-  <a href="https://codecov.io/gh/dfinson/codeplane"><img src="https://codecov.io/gh/dfinson/codeplane/branch/main/graph/badge.svg" alt="Coverage"></a>
-  <img src="https://img.shields.io/github/license/dfinson/codeplane" alt="License">
+  <a href="https://codecov.io/gh/dfinson/coderecon"><img src="https://codecov.io/gh/dfinson/coderecon/branch/main/graph/badge.svg" alt="Coverage"></a>
+  <img src="https://img.shields.io/github/license/dfinson/coderecon" alt="License">
 </p>
 
 ---
@@ -29,10 +29,10 @@ The bottleneck is I/O and orchestration, not model capability.
 
 ## The Solution
 
-CodePlane is an environment-agnostic code intelligence layer purpose-built for agents, not humans. It turns a repository into a **structured, queryable system** designed to reduce exploratory overhead for agents:
+CodeRecon is an environment-agnostic code intelligence layer purpose-built for agents, not humans. It turns a repository into a **structured, queryable system** designed to reduce exploratory overhead for agents:
 
 ```
-Agent plans and decides → CodePlane executes → Structured result → Next action
+Agent plans and decides → CodeRecon executes → Structured result → Next action
 ```
 
 Operations return structured results with the relevant context needed for the next step, minimizing repeated probing and guesswork.
@@ -41,50 +41,50 @@ Operations return structured results with the relevant context needed for the ne
 ## Quick Start
 
 ```bash
-pip install git+https://github.com/dfinson/codeplane.git
+pip install git+https://github.com/dfinson/coderecon.git
 ```
 
 ```bash
 cd /path/to/your-repo
-cpl up              # Start daemon on default port 7654 (foreground, Ctrl+C to stop)
-cpl up --port 7655  # Or specify a port
+recon up              # Start daemon on default port 7654 (foreground, Ctrl+C to stop)
+recon up --port 7655  # Or specify a port
 ```
 
-That's it. `cpl up` automatically:
+That's it. `recon up` automatically:
 - Creates `.vscode/mcp.json` with the MCP server config
 - Injects agent instructions into `.github/copilot-instructions.md`
-- Syncs the port if you change it later (`cpl up --port 8000`)
+- Syncs the port if you change it later (`recon up --port 8000`)
 
 ### CLI Reference
 
 | Command | Description |
 |---------|-------------|
-| `cpl up` | Start server (foreground) |
-| `cpl up --port N` | Start on specific port |
-| `cpl up --reindex` | Rebuild index from scratch |
-| `cpl init` | Initialize without starting |
-| `cpl status` | Check daemon status |
-| `cpl clear` | Clear index and cache |
+| `recon up` | Start server (foreground) |
+| `recon up --port N` | Start on specific port |
+| `recon up --reindex` | Rebuild index from scratch |
+| `recon init` | Initialize without starting |
+| `recon status` | Check daemon status |
+| `recon clear` | Clear index and cache |
 
 ---
 
 ## Architecture
 
-CodePlane provides a **full stacked index**:
+CodeRecon provides a **full stacked index**:
 
 - **Tier 0 — Tantivy Lexical Index**: Fast, deterministic lexical retrieval for candidate discovery
 - **Tier 1 — Tree-sitter/SQLite Structural Facts**: Definitions, references, scopes, imports, exports
 
 ## IDE & Agent Integration
 
-`cpl init` / `cpl up` automatically configures your IDE and agents:
+`recon init` / `recon up` automatically configures your IDE and agents:
 
 | File | Purpose |
 |------|---------|
 | `.vscode/mcp.json` | VS Code MCP server config (native HTTP transport) |
 | `.github/copilot-instructions.md` | Agent instructions (tool names, parameters, patterns) |
 
-The server name follows the pattern `codeplane-{repo_name}`, so tools appear as `mcp_codeplane-myrepo_recon`, etc.
+The server name follows the pattern `coderecon-{repo_name}`, so tools appear as `mcp_coderecon-myrepo_recon`, etc.
 
 ## MCP Tools
 
@@ -106,12 +106,12 @@ The server name follows the pattern `codeplane-{repo_name}`, so tools appear as 
 
 ```bash
 # Clone and install with dev dependencies
-git clone https://github.com/dfinson/codeplane.git
-cd codeplane
+git clone https://github.com/dfinson/coderecon.git
+cd coderecon
 pip install -e ".[dev]"
 
-# Start CodePlane on itself
-cpl up
+# Start CodeRecon on itself
+recon up
 ```
 
 Then point your AI agent at the running MCP server.

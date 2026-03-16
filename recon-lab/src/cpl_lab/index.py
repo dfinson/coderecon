@@ -11,7 +11,7 @@ import click
 
 
 def _find_cpl() -> str:
-    """Find the cpl binary, preferring the codeplane venv."""
+    """Find the cpl binary, preferring the coderecon venv."""
     from cpl_lab.collect import _find_cpl_bin
     return _find_cpl_bin()
 
@@ -51,7 +51,7 @@ def run_index(
     for repo_dir in repos:
         rel = f"{repo_dir.parent.name}/{repo_dir.name}"
 
-        if not reindex and (repo_dir / ".codeplane").is_dir():
+        if not reindex and (repo_dir / ".recon").is_dir():
             if verbose:
                 click.echo(f"SKIP {rel} (already indexed)")
             skipped += 1

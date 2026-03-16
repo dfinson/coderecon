@@ -5,7 +5,7 @@ Trace-based pipeline: one task per executor session, passive trace
 capture, deterministic candidate extraction, analyst-produced GT.
 
 Workspace layout (controlled by CPL_LAB_WORKSPACE env var,
-default: ~/.codeplane/recon-lab):
+default: ~/.recon/recon-lab):
 
     $CPL_LAB_WORKSPACE/
     ├── clones/{set}/{repo}/       # cloned repos
@@ -48,7 +48,7 @@ from pydantic import BaseModel, Field
 
 LAB_SRC = Path(__file__).resolve().parent.parent  # in-repo pipeline source
 WORKSPACE = Path(
-    os.environ.get("CPL_LAB_WORKSPACE", Path.home() / ".codeplane" / "recon-lab")
+    os.environ.get("CPL_LAB_WORKSPACE", Path.home() / ".recon" / "recon-lab")
 )
 
 REPOS_DIR = LAB_SRC / "repos"   # task definitions (versioned, in-repo)
@@ -846,7 +846,7 @@ class SessionRunner:
         """Run deterministic candidate extraction after an exec session."""
         from trace_to_candidates import trace_to_candidates, write_candidates
 
-        index_db = clone_dir / ".codeplane" / "index.db"
+        index_db = clone_dir / ".recon" / "index.db"
         if not index_db.exists():
             self.log(f"Index DB not found at {index_db} — skipping candidate extraction", "ERROR")
             return
@@ -912,7 +912,7 @@ def _run_repo_prework(repo_id: str) -> None:
         content = ci_path.read_text()
         import re as _re
         content = _re.sub(
-            r"<!-- codeplane-instructions -->.*?<!-- /codeplane-instructions -->",
+            r"<!-- coderecon-instructions -->.*?<!-- /coderecon-instructions -->",
             "", content, flags=_re.DOTALL,
         )
         content = enforcement + "\n" + content.strip() + "\n"

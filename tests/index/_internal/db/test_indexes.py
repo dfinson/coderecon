@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from codeplane.index._internal.db.indexes import (
+from coderecon.index._internal.db.indexes import (
     ADDITIONAL_INDEXES,
     create_additional_indexes,
     drop_additional_indexes,
@@ -83,7 +83,7 @@ class TestCreateAdditionalIndexes:
         mock_engine.connect.return_value.__enter__ = MagicMock(return_value=mock_conn)
         mock_engine.connect.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("codeplane.index._internal.db.indexes.text") as mock_text:
+        with patch("coderecon.index._internal.db.indexes.text") as mock_text:
             create_additional_indexes(mock_engine)
 
             # Should call text() for each SQL statement
@@ -114,7 +114,7 @@ class TestDropAdditionalIndexes:
         mock_engine.connect.return_value.__enter__ = MagicMock(return_value=mock_conn)
         mock_engine.connect.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("codeplane.index._internal.db.indexes.text") as mock_text:
+        with patch("coderecon.index._internal.db.indexes.text") as mock_text:
             drop_additional_indexes(mock_engine)
 
             # All calls should be DROP INDEX IF EXISTS
@@ -141,7 +141,7 @@ class TestDropAdditionalIndexes:
             "idx_anchor_groups_unit",
         }
 
-        with patch("codeplane.index._internal.db.indexes.text") as mock_text:
+        with patch("coderecon.index._internal.db.indexes.text") as mock_text:
             drop_additional_indexes(mock_engine)
 
             dropped_names = set()

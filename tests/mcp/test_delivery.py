@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from codeplane.mcp.delivery import wrap_response
+from coderecon.mcp.delivery import wrap_response
 
 
 class TestWrapResponse:

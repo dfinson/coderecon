@@ -1,4 +1,4 @@
-# CodePlane Benchmark Report: Evee
+# CodeRecon Benchmark Report: Evee
 
 **Version:** `0.1.dev120` (commit `8cdf362e`)
 **Date:** 2026-02-22
@@ -14,7 +14,7 @@ Each issue was implemented twice under identical conditions:
 
 - **Baseline (native):** Agent uses VS Code's built-in tools only (`read_file`,
   `replace_string_in_file`, `run_in_terminal`, `list_dir`, `grep_search`, etc.)
-- **CodePlane:** Agent uses CodePlane MCP tools (`read_source`, `write_source`,
+- **CodeRecon:** Agent uses CodeRecon MCP tools (`read_source`, `write_source`,
   `read_scaffold`, `search`, `lint_check`, `run_test_targets`, `semantic_diff`,
   `git_stage_and_commit`, etc.) with terminal fallback only when no CPL tool exists.
 
@@ -56,7 +56,7 @@ All outcomes were scored by Claude Opus 4.6 (fast mode).
 
 ## 3. Head-to-head comparison (means, n=5)
 
-| Metric                | Baseline      | CodePlane     | Delta       | Direction |
+| Metric                | Baseline      | CodeRecon     | Delta       | Direction |
 |-----------------------|---------------|---------------|-------------|-----------|
 | **Outcome score**     | 16.0 / 17     | 16.4 / 17     | +0.4 (+2.5%)| Better    |
 | Turns                 | 29.2          | 43.2          | +14.0 (+48%)| Worse     |
@@ -75,7 +75,7 @@ All outcomes were scored by Claude Opus 4.6 (fast mode).
 
 ### Issue #260 — Disable progress bars
 
-| Metric          | Baseline | CodePlane | Δ%      |
+| Metric          | Baseline | CodeRecon | Δ%      |
 |-----------------|----------|-----------|---------|
 | Turns           | 27       | 49        | +81.5%  |
 | Tool calls      | 46       | 49        | +6.5%   |
@@ -90,7 +90,7 @@ to achieve a slightly lower quality score.
 
 ### Issue #233 — Early-stop evaluator
 
-| Metric          | Baseline | CodePlane | Δ%      |
+| Metric          | Baseline | CodeRecon | Δ%      |
 |-----------------|----------|-----------|---------|
 | Turns           | 32       | 40        | +25.0%  |
 | Tool calls      | 41       | 46        | +12.2%  |
@@ -105,7 +105,7 @@ improved significantly. Quality was perfect for both.
 
 ### Issue #108 — Mocked E2E integration tests
 
-| Metric          | Baseline | CodePlane | Δ%      |
+| Metric          | Baseline | CodeRecon | Δ%      |
 |-----------------|----------|-----------|---------|
 | Turns           | 28       | 44        | +57.1%  |
 | Tool calls      | 51       | 49        | −3.9%   |
@@ -121,7 +121,7 @@ and hit 7 tool errors — the highest error count across all runs.
 
 ### Issue #4 — Cache model inference
 
-| Metric          | Baseline | CodePlane | Δ%      |
+| Metric          | Baseline | CodeRecon | Δ%      |
 |-----------------|----------|-----------|---------|
 | Turns           | 29       | 41        | +41.4%  |
 | Tool calls      | 48       | 44        | −8.3%   |
@@ -136,7 +136,7 @@ higher (better integration tests). Lowest error count for CPL (2 errors).
 
 ### Issue #262 — REST-based models
 
-| Metric          | Baseline | CodePlane | Δ%      |
+| Metric          | Baseline | CodeRecon | Δ%      |
 |-----------------|----------|-----------|---------|
 | Turns           | 30       | 42        | +40.0%  |
 | Tool calls      | 44       | 47        | +6.8%   |
@@ -146,7 +146,7 @@ higher (better integration tests). Lowest error count for CPL (2 errors).
 | TTFT            | 2,299ms  | 2,311ms   | +0.5%   |
 | **Score**       | **17**   | **17**    | 0%      |
 
-Clean run for both. CPL used 46 of 47 tool calls through CodePlane (highest
+Clean run for both. CPL used 46 of 47 tool calls through CodeRecon (highest
 CPL adoption rate), with only 1 terminal call.
 
 ---
@@ -200,9 +200,9 @@ CPL adoption rate), with only 1 terminal call.
 
 ## 6. Key observations
 
-### Quality: slight edge to CodePlane (+2.5%)
+### Quality: slight edge to CodeRecon (+2.5%)
 
-CodePlane scored higher on 2 of 5 issues (#108, #4), lower on 1 (#260), and
+CodeRecon scored higher on 2 of 5 issues (#108, #4), lower on 1 (#260), and
 tied on 2 (#233, #262). The mean difference (16.0 → 16.4) is within noise for
 n=5.
 
@@ -210,7 +210,7 @@ n=5.
 
 Every efficiency metric favors the baseline:
 
-- **+48% more turns** — CodePlane's multi-step tool protocol (describe →
+- **+48% more turns** — CodeRecon's multi-step tool protocol (describe →
   scaffold → search → read_source → write_source) requires more round trips
   than native tools (read_file → replace_string_in_file).
 - **+49% more tokens** — CPL tool responses are larger (structured JSON with
@@ -219,9 +219,9 @@ Every efficiency metric favors the baseline:
 - **+85% more completion tokens** — the agent generates more output per task
   with CPL, possibly due to longer tool invocation syntax.
 
-### Tool errors: 20× higher with CodePlane
+### Tool errors: 20× higher with CodeRecon
 
-Baseline averaged 0.2 errors/run; CodePlane averaged 4.0. Common error causes:
+Baseline averaged 0.2 errors/run; CodeRecon averaged 4.0. Common error causes:
 - Wrong parameter names for CPL tools (agent guessing instead of checking docs)
 - Hash mismatches on `write_source` (stale `expected_file_sha256`)
 - Validation errors from CPL's stricter input schemas
@@ -245,8 +245,8 @@ dominated by model load and prompt processing, not tool selection.
 - **Single model** (Claude Opus 4.6 fast mode). Results may differ with other
   models.
 - **Single repo** (Evee). Results may not generalize to larger or more complex
-  codebases where CodePlane's structural index could provide greater benefit.
-- **Cold CodePlane index.** The daemon indexed the repo on first use; subsequent
+  codebases where CodeRecon's structural index could provide greater benefit.
+- **Cold CodeRecon index.** The daemon indexed the repo on first use; subsequent
   runs may perform differently with a warm index.
 - **No multi-file refactoring tasks.** The selected issues are feature
   implementations, not cross-cutting refactors where `refactor_rename` and

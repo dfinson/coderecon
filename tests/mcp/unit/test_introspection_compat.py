@@ -13,8 +13,8 @@ from unittest.mock import MagicMock
 import pytest
 from fastmcp import FastMCP
 
-from codeplane.mcp._compat import get_tools_sync
-from codeplane.mcp.tools import introspection
+from coderecon.mcp._compat import get_tools_sync
+from coderecon.mcp.tools import introspection
 
 
 @pytest.fixture

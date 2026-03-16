@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.index._internal.parsing import TreeSitterParser
+from coderecon.index._internal.parsing import TreeSitterParser
 
 
 @pytest.fixture

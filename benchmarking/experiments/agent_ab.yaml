@@ -1,12 +1,12 @@
-# CodePlane Agent A/B Evaluation
+# CodeRecon Agent A/B Evaluation
 #
-# Compares agent efficiency and outcome quality between CodePlane-augmented
+# Compares agent efficiency and outcome quality between CodeRecon-augmented
 # sessions and native (terminal-only) sessions on the same issues.
 #
 # Prerequisites:
 #   1. Collect chatreplay exports from VS Code Copilot sessions:
-#      - Run each issue with CodePlane MCP enabled → export chatreplay
-#      - Run each issue without CodePlane (native) → export chatreplay
+#      - Run each issue with CodeRecon MCP enabled → export chatreplay
+#      - Run each issue without CodeRecon (native) → export chatreplay
 #   2. Convert to traces:
 #      python -m benchmarking.preprocessing.chatreplay_to_traces \
 #        benchmarking/results/*.json --repo evee
@@ -18,7 +18,7 @@
 experiment:
   name: cpl-agent-ab
   description: >-
-    Head-to-head comparison of CodePlane-augmented vs native agent sessions.
+    Head-to-head comparison of CodeRecon-augmented vs native agent sessions.
     Measures efficiency (turns, tokens, tool calls) and outcome quality
     (correctness, completeness, code quality) from pre-collected traces.
   version: "1.0"
@@ -42,7 +42,7 @@ experiment:
         variant: model.variant
         turns: model.turns
         total_tool_calls: model.total_tool_calls
-        codeplane_tool_calls: model.codeplane_tool_calls
+        codeplane_tool_calls: model.recon_tool_calls
         terminal_tool_calls: model.terminal_tool_calls
         tool_search_calls: model.tool_search_calls
         other_tool_calls: model.other_tool_calls

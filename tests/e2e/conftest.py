@@ -2,7 +2,7 @@
 
 Provides fixtures for:
 - Cloning real repositories
-- Initializing CodePlane
+- Initializing CodeRecon
 - Starting/stopping the daemon server
 - Making MCP tool calls via HTTP
 """
@@ -48,14 +48,14 @@ MCP_ACCEPT_HEADER = "application/json, text/event-stream"
 
 
 @dataclass
-class CodePlaneServer:
-    """Manages a CodePlane daemon process for E2E testing.
+class CodeReconServer:
+    """Manages a CodeRecon daemon process for E2E testing.
 
     Handles:
     - Starting the daemon as a foreground subprocess
     - Waiting for the server to become ready
     - MCP session initialization
-    - Reading the port from .codeplane/daemon.port
+    - Reading the port from .recon/daemon.port
     - Graceful shutdown with SIGTERM
     """
 
@@ -76,10 +76,10 @@ class CodePlaneServer:
             TimeoutError: If server doesn't become ready in time
             RuntimeError: If server fails to start
         """
-        # Start cpl up (runs in foreground by default) in its own process group
+        # Start recon up (runs in foreground by default) in its own process group
         # This allows us to kill the entire tree on cleanup
         self.process = subprocess.Popen(
-            ["cpl", "up", "--port", "17654"],
+            ["recon", "up", "--port", "17654"],
             cwd=self.repo_path,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -102,7 +102,7 @@ class CodePlaneServer:
 
     def _wait_for_server_ready(self) -> None:
         """Wait for server to be ready with exponential backoff."""
-        port_file = self.repo_path / ".codeplane" / "daemon.port"
+        port_file = self.repo_path / ".recon" / "daemon.port"
         timeout = self.timeout_config.server_ready_sec
         health_timeout = self.timeout_config.health_check_sec
 
@@ -338,33 +338,33 @@ def initialized_repo(
     cloned_repo: Path,
     expectation: RepoExpectation,
 ) -> Path:
-    """Initialize CodePlane in the cloned repository."""
+    """Initialize CodeRecon in the cloned repository."""
     timeout = expectation.timeout_config
 
     result = _run_with_cleanup(
-        ["cpl", "init"],
+        ["recon", "init"],
         cwd=cloned_repo,
         timeout=timeout.init_sec,
     )
 
     if result.returncode != 0:
         pytest.fail(
-            f"Failed to initialize CodePlane in {expectation.repo}: {result.stderr.decode()}"
+            f"Failed to initialize CodeRecon in {expectation.repo}: {result.stderr.decode()}"
         )
 
     return cloned_repo
 
 
 @pytest.fixture
-def codeplane_server(
+def coderecon_server(
     initialized_repo: Path,
     expectation: RepoExpectation,
 ) -> Generator[tuple[str, int], None, None]:
-    """Start CodePlane server and yield (url, port).
+    """Start CodeRecon server and yield (url, port).
 
     The server is stopped after the test completes.
     """
-    server = CodePlaneServer(
+    server = CodeReconServer(
         repo_path=initialized_repo,
         timeout_config=expectation.timeout_config,
     )
@@ -378,7 +378,7 @@ def codeplane_server(
 
 @pytest.fixture
 def mcp_session(
-    codeplane_server: tuple[str, int],
+    coderecon_server: tuple[str, int],
     initialized_repo: Path,
     expectation: RepoExpectation,
 ) -> Generator[tuple[str, str], None, None]:
@@ -387,7 +387,7 @@ def mcp_session(
     This fixture is useful for tests that need to make raw MCP calls
     instead of using the call_tool helper.
     """
-    url, _port = codeplane_server
+    url, _port = coderecon_server
 
     # Initialize a new session for tests that need direct access
     response = httpx.post(

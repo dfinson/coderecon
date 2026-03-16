@@ -14,11 +14,11 @@ from tests.e2e.expectations.schema import RepoExpectation
 
 @pytest.mark.e2e
 def test_discover_test_targets(
-    codeplane_server: tuple[str, int],
+    coderecon_server: tuple[str, int],
     expectation: RepoExpectation,
 ) -> None:
     """Verify test target discovery works."""
-    url, _port = codeplane_server
+    url, _port = coderecon_server
     timeout = TOOL_TIMEOUTS.get("discover_test_targets", 30.0)
 
     test_spec = expectation.test_targets

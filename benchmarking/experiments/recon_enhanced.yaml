@@ -1,10 +1,10 @@
-# CodePlane Recon Enhanced Evaluation
+# CodeRecon Recon Enhanced Evaluation
 #
 # Tests whether per-issue seeds + pinned_paths improve recon file retrieval
 # quality over the bare-task baseline.
 #
 # Prerequisites:
-#   1. Start CodePlane daemon on the target repo (port 7777)
+#   1. Start CodeRecon daemon on the target repo (port 7777)
 #   2. Set CPL_BENCH_TARGET_REPO env var (default: ~/wsl-repos/evees/evee_cpl/evee)
 #
 # Run:
@@ -13,7 +13,7 @@
 experiment:
   name: cpl-recon-enhanced
   description: >-
-    Evaluate CodePlane recon with per-issue seeds and pinned_paths.
+    Evaluate CodeRecon recon with per-issue seeds and pinned_paths.
     Compares against the bare-task baseline to measure the value of
     structural hints for retrieval quality.
   version: "1.0"

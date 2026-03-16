@@ -18,9 +18,9 @@ from pathlib import Path
 import pytest
 from sqlmodel import select
 
-from codeplane.index._internal.db import Database, create_additional_indexes
-from codeplane.index._internal.indexing.graph import FactQueries, SymbolGraph
-from codeplane.index.models import (
+from coderecon.index._internal.db import Database, create_additional_indexes
+from coderecon.index._internal.indexing.graph import FactQueries, SymbolGraph
+from coderecon.index.models import (
     AnchorGroup,
     Certainty,
     Context,

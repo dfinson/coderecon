@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from codeplane.index._internal.indexing.type_resolver import (
+from coderecon.index._internal.indexing.type_resolver import (
     TypeTracedResolver,
     TypeTracedStats,
     resolve_type_traced,

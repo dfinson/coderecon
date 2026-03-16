@@ -7,14 +7,14 @@ Tests cover:
 
 from __future__ import annotations
 
-from codeplane.index._internal.diff.models import (
+from coderecon.index._internal.diff.models import (
     AnalysisScope,
     FileChangeInfo,
     ImpactInfo,
     SemanticDiffResult,
     StructuralChange,
 )
-from codeplane.mcp.tools.diff import (
+from coderecon.mcp.tools.diff import (
     _build_agentic_hint,
     _classify_domains,
     _detect_cross_domain_edges,
@@ -602,7 +602,7 @@ class TestDomainKey:
     """Unit tests for _domain_key."""
 
     def test_deep_path(self) -> None:
-        assert _domain_key("src/codeplane/mcp/tools/diff.py") == "src/codeplane"
+        assert _domain_key("src/coderecon/mcp/tools/diff.py") == "src/coderecon"
 
     def test_two_segments(self) -> None:
         assert _domain_key("tests/mcp/test_foo.py") == "tests/mcp"
@@ -619,18 +619,18 @@ class TestClassifyDomains:
 
     def test_single_domain(self) -> None:
         changes = [
-            _change(change="added", name="foo", path="src/codeplane/a.py"),
-            _change(change="removed", name="bar", path="src/codeplane/b.py"),
+            _change(change="added", name="foo", path="src/coderecon/a.py"),
+            _change(change="removed", name="bar", path="src/coderecon/b.py"),
         ]
         domains = _classify_domains(changes)
         assert len(domains) == 1
-        assert domains[0]["name"] == "src/codeplane"
+        assert domains[0]["name"] == "src/coderecon"
         assert domains[0]["change_count"] == 2
         assert domains[0]["review_priority"] == 1
 
     def test_multi_domain_sorted_by_risk(self) -> None:
         changes = [
-            _change(change="added", name="foo", path="src/codeplane/a.py"),
+            _change(change="added", name="foo", path="src/coderecon/a.py"),
             _change(
                 change="removed",
                 name="bar",
@@ -651,7 +651,7 @@ class TestClassifyDomains:
             _change(
                 change="body_changed",
                 name="fn",
-                path="src/codeplane/x.py",
+                path="src/coderecon/x.py",
                 behavior_risk="high",
             ),
         ]
@@ -659,12 +659,12 @@ class TestClassifyDomains:
         assert domains[0]["high_risk_count"] == 1
 
     def test_non_structural_included_in_files(self) -> None:
-        changes = [_change(change="added", name="foo", path="src/codeplane/a.py")]
+        changes = [_change(change="added", name="foo", path="src/coderecon/a.py")]
         non_structural = [
-            FileChangeInfo(path="src/codeplane/b.py", status="modified", category="config")
+            FileChangeInfo(path="src/coderecon/b.py", status="modified", category="config")
         ]
         domains = _classify_domains(changes, non_structural)
-        assert "src/codeplane/b.py" in domains[0]["files"]
+        assert "src/coderecon/b.py" in domains[0]["files"]
 
 
 class TestDetectCrossDomainEdges:
@@ -672,8 +672,8 @@ class TestDetectCrossDomainEdges:
 
     def test_no_edges_single_domain(self) -> None:
         changes = [
-            _change(change="added", name="foo", path="src/codeplane/a.py"),
-            _change(change="added", name="bar", path="src/codeplane/b.py"),
+            _change(change="added", name="foo", path="src/coderecon/a.py"),
+            _change(change="added", name="bar", path="src/coderecon/b.py"),
         ]
         domains = _classify_domains(changes)
         edges = _detect_cross_domain_edges(changes, domains)
@@ -682,20 +682,20 @@ class TestDetectCrossDomainEdges:
     def test_cross_domain_edge_detected(self) -> None:
         imp = ImpactInfo(importing_files=["tests/mcp/test_a.py"])
         changes = [
-            _change(change="removed", name="foo", path="src/codeplane/a.py", impact=imp),
+            _change(change="removed", name="foo", path="src/coderecon/a.py", impact=imp),
             _change(change="added", name="bar", path="tests/mcp/test_a.py"),
         ]
         domains = _classify_domains(changes)
         edges = _detect_cross_domain_edges(changes, domains)
         assert len(edges) == 1
-        assert edges[0]["from_domain"] == "src/codeplane"
+        assert edges[0]["from_domain"] == "src/coderecon"
         assert edges[0]["to_domain"] == "tests/mcp"
 
     def test_no_edge_for_same_domain_imports(self) -> None:
-        imp = ImpactInfo(importing_files=["src/codeplane/b.py"])
+        imp = ImpactInfo(importing_files=["src/coderecon/b.py"])
         changes = [
-            _change(change="added", name="foo", path="src/codeplane/a.py", impact=imp),
-            _change(change="added", name="bar", path="src/codeplane/b.py"),
+            _change(change="added", name="foo", path="src/coderecon/a.py", impact=imp),
+            _change(change="added", name="bar", path="src/coderecon/b.py"),
         ]
         domains = _classify_domains(changes)
         edges = _detect_cross_domain_edges(changes, domains)
@@ -711,7 +711,7 @@ class TestMultiDomainHint:
                 change="removed",
                 structural_severity="breaking",
                 name="foo",
-                path="src/codeplane/a.py",
+                path="src/coderecon/a.py",
             ),
             _change(change="added", name="bar", path="tests/mcp/test_a.py"),
         ]
@@ -723,8 +723,8 @@ class TestMultiDomainHint:
 
     def test_single_domain_no_review_plan(self) -> None:
         changes = [
-            _change(change="added", name="foo", path="src/codeplane/a.py"),
-            _change(change="added", name="bar", path="src/codeplane/b.py"),
+            _change(change="added", name="foo", path="src/coderecon/a.py"),
+            _change(change="added", name="bar", path="src/coderecon/b.py"),
         ]
         domains = _classify_domains(changes)
         hint = _build_agentic_hint(_result(changes), domains)

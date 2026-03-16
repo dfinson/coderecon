@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from codeplane.index._internal.indexing.module_mapping import (
+from coderecon.index._internal.indexing.module_mapping import (
     build_module_index,
     file_to_import_candidates,
     file_to_import_sql_patterns,
@@ -31,10 +31,10 @@ class TestPathToModule:
     @pytest.mark.parametrize(
         ("path", "expected"),
         [
-            ("src/codeplane/refactor/ops.py", "src.codeplane.refactor.ops"),
-            ("codeplane/refactor/ops.py", "codeplane.refactor.ops"),
+            ("src/coderecon/refactor/ops.py", "src.coderecon.refactor.ops"),
+            ("coderecon/refactor/ops.py", "coderecon.refactor.ops"),
             ("foo.py", "foo"),
-            ("src/codeplane/__init__.py", "src.codeplane"),
+            ("src/coderecon/__init__.py", "src.coderecon"),
             ("a/b/__init__.py", "a.b"),
             # Non-Python files with known source extensions get module keys
             ("src/utils/helper.ts", "src.utils.helper"),
@@ -51,8 +51,8 @@ class TestPathToModule:
 
     def test_backslash_normalised(self) -> None:
         """Windows-style paths are normalised to dots."""
-        result = path_to_module("src\\codeplane\\ops.py")
-        assert result == "src.codeplane.ops"
+        result = path_to_module("src\\coderecon\\ops.py")
+        assert result == "src.coderecon.ops"
 
 
 # ---------------------------------------------------------------------------
@@ -64,12 +64,12 @@ class TestModuleToCandidatePaths:
     """Tests for module_to_candidate_paths."""
 
     def test_basic_candidates(self) -> None:
-        candidates = module_to_candidate_paths("codeplane.refactor.ops")
-        assert "codeplane.refactor.ops" in candidates
-        assert "src.codeplane.refactor.ops" in candidates
+        candidates = module_to_candidate_paths("coderecon.refactor.ops")
+        assert "coderecon.refactor.ops" in candidates
+        assert "src.coderecon.refactor.ops" in candidates
         # Slash-form candidates should NOT exist (path_to_module uses dots)
-        assert "codeplane/refactor/ops" not in candidates
-        assert "src/codeplane/refactor/ops" not in candidates
+        assert "coderecon/refactor/ops" not in candidates
+        assert "src/coderecon/refactor/ops" not in candidates
 
     def test_single_segment(self) -> None:
         candidates = module_to_candidate_paths("utils")
@@ -89,8 +89,8 @@ class TestBuildAndResolve:
     def sample_index(self) -> dict[str, str]:
         return build_module_index(
             [
-                "src/codeplane/refactor/ops.py",
-                "src/codeplane/__init__.py",
+                "src/coderecon/refactor/ops.py",
+                "src/coderecon/__init__.py",
                 "tests/test_ops.py",
                 "README.md",
             ]
@@ -98,25 +98,25 @@ class TestBuildAndResolve:
 
     def test_index_contains_python_files(self, sample_index: dict[str, str]) -> None:
         # Python files are indexed
-        assert "src.codeplane.refactor.ops" in sample_index
-        assert "src.codeplane" in sample_index
+        assert "src.coderecon.refactor.ops" in sample_index
+        assert "src.coderecon" in sample_index
         assert "tests.test_ops" in sample_index
         # Data/doc format files (e.g. .md) are NOT indexed
         assert "README" not in sample_index
 
     def test_resolve_direct(self, sample_index: dict[str, str]) -> None:
         """Resolve with exact module key match."""
-        result = resolve_module_to_path("src.codeplane.refactor.ops", sample_index)
-        assert result == "src/codeplane/refactor/ops.py"
+        result = resolve_module_to_path("src.coderecon.refactor.ops", sample_index)
+        assert result == "src/coderecon/refactor/ops.py"
 
     def test_resolve_without_src_prefix(self, sample_index: dict[str, str]) -> None:
         """Resolve via src. prefix candidate."""
-        result = resolve_module_to_path("codeplane.refactor.ops", sample_index)
-        assert result == "src/codeplane/refactor/ops.py"
+        result = resolve_module_to_path("coderecon.refactor.ops", sample_index)
+        assert result == "src/coderecon/refactor/ops.py"
 
     def test_resolve_package_init(self, sample_index: dict[str, str]) -> None:
-        result = resolve_module_to_path("codeplane", sample_index)
-        assert result == "src/codeplane/__init__.py"
+        result = resolve_module_to_path("coderecon", sample_index)
+        assert result == "src/coderecon/__init__.py"
 
     def test_resolve_not_found(self, sample_index: dict[str, str]) -> None:
         result = resolve_module_to_path("nonexistent.module", sample_index)
@@ -138,28 +138,28 @@ class TestFileToImportCandidates:
     def test_python_src_layout(self) -> None:
         """Python files in src/ layout should generate both variants."""
         candidates = file_to_import_candidates(
-            "src/codeplane/refactor/ops.py", language_family="python"
+            "src/coderecon/refactor/ops.py", language_family="python"
         )
         # Should include both with and without src. prefix
-        assert "src.codeplane.refactor.ops" in candidates
-        assert "codeplane.refactor.ops" in candidates
+        assert "src.coderecon.refactor.ops" in candidates
+        assert "coderecon.refactor.ops" in candidates
 
     def test_python_no_src_prefix(self) -> None:
         """Python files not in src/ should only have one variant."""
         candidates = file_to_import_candidates(
-            "codeplane/refactor/ops.py", language_family="python"
+            "coderecon/refactor/ops.py", language_family="python"
         )
-        assert "codeplane.refactor.ops" in candidates
+        assert "coderecon.refactor.ops" in candidates
         # Should NOT have src. prefix variant
-        assert "src.codeplane.refactor.ops" not in candidates
+        assert "src.coderecon.refactor.ops" not in candidates
 
     def test_python_init_file(self) -> None:
         """Python __init__.py should resolve to package."""
         candidates = file_to_import_candidates(
-            "src/codeplane/__init__.py", language_family="python"
+            "src/coderecon/__init__.py", language_family="python"
         )
-        assert "src.codeplane" in candidates
-        assert "codeplane" in candidates
+        assert "src.coderecon" in candidates
+        assert "coderecon" in candidates
 
     def test_lua_similar_to_python(self) -> None:
         """Lua uses same dotted path logic as Python."""
@@ -201,14 +201,14 @@ class TestFileToImportSqlPatterns:
     def test_python_generates_exact_and_prefix(self) -> None:
         """Python should generate exact matches and prefix patterns."""
         exact, prefixes = file_to_import_sql_patterns(
-            "src/codeplane/refactor/ops.py", language_family="python"
+            "src/coderecon/refactor/ops.py", language_family="python"
         )
         # Exact matches
-        assert "src.codeplane.refactor.ops" in exact
-        assert "codeplane.refactor.ops" in exact
+        assert "src.coderecon.refactor.ops" in exact
+        assert "coderecon.refactor.ops" in exact
         # Prefix patterns (for submodule imports)
-        assert "src.codeplane.refactor.ops." in prefixes
-        assert "codeplane.refactor.ops." in prefixes
+        assert "src.coderecon.refactor.ops." in prefixes
+        assert "coderecon.refactor.ops." in prefixes
 
     def test_rust_uses_double_colon_separator(self) -> None:
         """Rust should use :: as separator for prefix patterns."""

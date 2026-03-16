@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from codeplane.mcp.registry import ToolRegistry, registry
+from coderecon.mcp.registry import ToolRegistry, registry
 
 if TYPE_CHECKING:
     pass

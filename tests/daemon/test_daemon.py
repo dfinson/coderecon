@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from codeplane.config.models import IndexerConfig
-from codeplane.daemon.indexer import BackgroundIndexer, IndexerState
+from coderecon.config.models import IndexerConfig
+from coderecon.daemon.indexer import BackgroundIndexer, IndexerState
 
 
 class TestBackgroundIndexer:
@@ -142,7 +142,7 @@ class TestBackgroundIndexer:
         """Flushing with no actual changes should not print status."""
         from unittest.mock import AsyncMock
 
-        from codeplane.index.ops import IndexStats
+        from coderecon.index.ops import IndexStats
 
         coordinator = MagicMock()
         # Return stats with no changes
@@ -161,7 +161,7 @@ class TestBackgroundIndexer:
         indexer.queue_paths([Path("test.py")])
 
         # Flush and check no status output
-        with patch("codeplane.daemon.indexer.status") as mock_status:
+        with patch("coderecon.daemon.indexer.status") as mock_status:
             await indexer._flush()
             # status() should NOT be called when no changes
             mock_status.assert_not_called()
@@ -173,7 +173,7 @@ class TestBackgroundIndexer:
         """Flushing with actual changes should print status."""
         from unittest.mock import AsyncMock
 
-        from codeplane.index.ops import IndexStats
+        from coderecon.index.ops import IndexStats
 
         coordinator = MagicMock()
         # Return stats with changes
@@ -191,7 +191,7 @@ class TestBackgroundIndexer:
         indexer.start()
         indexer.queue_paths([Path("test.py")])
 
-        with patch("codeplane.daemon.indexer.status") as mock_status:
+        with patch("coderecon.daemon.indexer.status") as mock_status:
             await indexer._flush()
             # status() SHOULD be called when there are changes
             mock_status.assert_called_once()
@@ -203,7 +203,7 @@ class TestBackgroundIndexer:
     @pytest.mark.asyncio
     async def test_given_stopping_indexer_when_flush_then_noop(self) -> None:
         """Flushing during stop does nothing."""
-        from codeplane.daemon.indexer import IndexerState
+        from coderecon.daemon.indexer import IndexerState
 
         coordinator = MagicMock()
         indexer = BackgroundIndexer(coordinator=coordinator)
@@ -224,12 +224,12 @@ class TestFileWatcher:
     @pytest.mark.asyncio
     async def test_given_watcher_when_start_then_watch_task_created(self, tmp_path: Path) -> None:
         """Starting watcher creates watch task."""
-        from codeplane.daemon.watcher import FileWatcher
+        from coderecon.daemon.watcher import FileWatcher
 
-        # Given - create minimal .codeplane structure
-        cpl_dir = tmp_path / ".codeplane"
+        # Given - create minimal .recon structure
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        (cpl_dir / ".cplignore").write_text("*.pyc\n")
+        (cpl_dir / ".reconignore").write_text("*.pyc\n")
 
         callback = MagicMock()
         watcher = FileWatcher(repo_root=tmp_path, on_change=callback)
@@ -248,12 +248,12 @@ class TestFileWatcher:
         self, tmp_path: Path
     ) -> None:
         """Stopping watcher cancels watch task."""
-        from codeplane.daemon.watcher import FileWatcher
+        from coderecon.daemon.watcher import FileWatcher
 
         # Given
-        cpl_dir = tmp_path / ".codeplane"
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        (cpl_dir / ".cplignore").write_text("")
+        (cpl_dir / ".reconignore").write_text("")
 
         callback = MagicMock()
         watcher = FileWatcher(repo_root=tmp_path, on_change=callback)
@@ -268,11 +268,11 @@ class TestFileWatcher:
     @pytest.mark.asyncio
     async def test_given_watcher_when_start_twice_then_noop(self, tmp_path: Path) -> None:
         """Starting watcher twice is a no-op."""
-        from codeplane.daemon.watcher import FileWatcher
+        from coderecon.daemon.watcher import FileWatcher
 
-        cpl_dir = tmp_path / ".codeplane"
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        (cpl_dir / ".cplignore").write_text("")
+        (cpl_dir / ".reconignore").write_text("")
 
         callback = MagicMock()
         watcher = FileWatcher(repo_root=tmp_path, on_change=callback)
@@ -293,11 +293,11 @@ class TestFileWatcher:
         self, tmp_path: Path
     ) -> None:
         """File changes should trigger callback."""
-        from codeplane.daemon.watcher import FileWatcher
+        from coderecon.daemon.watcher import FileWatcher
 
-        cpl_dir = tmp_path / ".codeplane"
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        (cpl_dir / ".cplignore").write_text("")
+        (cpl_dir / ".reconignore").write_text("")
 
         callback = MagicMock()
         watcher = FileWatcher(repo_root=tmp_path, on_change=callback)
@@ -320,11 +320,11 @@ class TestFileWatcher:
     @pytest.mark.asyncio
     async def test_given_git_file_change_when_detected_then_ignored(self, tmp_path: Path) -> None:
         """Changes in .git directory should be ignored."""
-        from codeplane.daemon.watcher import FileWatcher
+        from coderecon.daemon.watcher import FileWatcher
 
-        cpl_dir = tmp_path / ".codeplane"
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        (cpl_dir / ".cplignore").write_text("")
+        (cpl_dir / ".reconignore").write_text("")
 
         git_dir = tmp_path / ".git"
         git_dir.mkdir()
@@ -349,14 +349,14 @@ class TestFileWatcher:
 
     @pytest.mark.asyncio
     async def test_handle_changes_filters_ignored_paths(self, tmp_path: Path) -> None:
-        """_handle_changes should filter paths through .cplignore."""
+        """_handle_changes should filter paths through .reconignore."""
         from watchfiles import Change
 
-        from codeplane.daemon.watcher import FileWatcher
+        from coderecon.daemon.watcher import FileWatcher
 
-        cpl_dir = tmp_path / ".codeplane"
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        (cpl_dir / ".cplignore").write_text("*.pyc\n__pycache__/\n")
+        (cpl_dir / ".reconignore").write_text("*.pyc\n__pycache__/\n")
 
         callback = MagicMock()
         watcher = FileWatcher(repo_root=tmp_path, on_change=callback)
@@ -383,11 +383,11 @@ class TestFileWatcher:
         """_handle_changes should filter .git directory paths."""
         from watchfiles import Change
 
-        from codeplane.daemon.watcher import FileWatcher
+        from coderecon.daemon.watcher import FileWatcher
 
-        cpl_dir = tmp_path / ".codeplane"
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        (cpl_dir / ".cplignore").write_text("")
+        (cpl_dir / ".reconignore").write_text("")
 
         callback = MagicMock()
         watcher = FileWatcher(repo_root=tmp_path, on_change=callback)
@@ -406,39 +406,39 @@ class TestFileWatcher:
         assert not any(".git" in p for p in path_strs)
 
     @pytest.mark.asyncio
-    async def test_handle_changes_includes_cplignore_changes(self, tmp_path: Path) -> None:
-        """_handle_changes should always include .cplignore changes."""
+    async def test_handle_changes_includes_reconignore_changes(self, tmp_path: Path) -> None:
+        """_handle_changes should always include .reconignore changes."""
         from watchfiles import Change
 
-        from codeplane.daemon.watcher import FileWatcher
+        from coderecon.daemon.watcher import FileWatcher
 
-        cpl_dir = tmp_path / ".codeplane"
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        (cpl_dir / ".cplignore").write_text("")
+        (cpl_dir / ".reconignore").write_text("")
 
         callback = MagicMock()
         watcher = FileWatcher(repo_root=tmp_path, on_change=callback)
 
         changes = {
-            (Change.modified, str(cpl_dir / ".cplignore")),
+            (Change.modified, str(cpl_dir / ".reconignore")),
         }
 
         await watcher._handle_changes(changes)
         watcher._flush_pending()  # Flush debounced changes
 
         call_paths = callback.call_args[0][0]
-        assert any(".cplignore" in str(p) for p in call_paths)
+        assert any(".reconignore" in str(p) for p in call_paths)
 
     @pytest.mark.asyncio
     async def test_handle_changes_no_callback_when_all_filtered(self, tmp_path: Path) -> None:
         """_handle_changes should not call callback when all paths filtered."""
         from watchfiles import Change
 
-        from codeplane.daemon.watcher import FileWatcher
+        from coderecon.daemon.watcher import FileWatcher
 
-        cpl_dir = tmp_path / ".codeplane"
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        (cpl_dir / ".cplignore").write_text("*.pyc\n")
+        (cpl_dir / ".reconignore").write_text("*.pyc\n")
 
         callback = MagicMock()
         watcher = FileWatcher(repo_root=tmp_path, on_change=callback)
@@ -457,11 +457,11 @@ class TestFileWatcher:
         """_handle_changes should ignore paths outside repo root."""
         from watchfiles import Change
 
-        from codeplane.daemon.watcher import FileWatcher
+        from coderecon.daemon.watcher import FileWatcher
 
-        cpl_dir = tmp_path / ".codeplane"
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        (cpl_dir / ".cplignore").write_text("")
+        (cpl_dir / ".reconignore").write_text("")
 
         callback = MagicMock()
         watcher = FileWatcher(repo_root=tmp_path, on_change=callback)
@@ -491,7 +491,7 @@ class TestSummarizeChangesByType:
 
     def test_single_python_file(self) -> None:
         """Single Python file uses singular form."""
-        from codeplane.daemon.watcher import _summarize_changes_by_type
+        from coderecon.daemon.watcher import _summarize_changes_by_type
 
         paths = [Path("test.py")]
         result = _summarize_changes_by_type(paths)
@@ -499,7 +499,7 @@ class TestSummarizeChangesByType:
 
     def test_multiple_python_files(self) -> None:
         """Multiple Python files use plural form."""
-        from codeplane.daemon.watcher import _summarize_changes_by_type
+        from coderecon.daemon.watcher import _summarize_changes_by_type
 
         paths = [Path("a.py"), Path("b.py"), Path("c.py")]
         result = _summarize_changes_by_type(paths)
@@ -507,7 +507,7 @@ class TestSummarizeChangesByType:
 
     def test_mixed_file_types(self) -> None:
         """Mixed file types are summarized separately."""
-        from codeplane.daemon.watcher import _summarize_changes_by_type
+        from coderecon.daemon.watcher import _summarize_changes_by_type
 
         paths = [Path("a.py"), Path("b.py"), Path("c.json")]
         result = _summarize_changes_by_type(paths)
@@ -516,7 +516,7 @@ class TestSummarizeChangesByType:
 
     def test_top_three_types_shown(self) -> None:
         """Only top 3 file types are shown with 'others' for remainder."""
-        from codeplane.daemon.watcher import _summarize_changes_by_type
+        from coderecon.daemon.watcher import _summarize_changes_by_type
 
         paths = [
             Path("a.py"),
@@ -533,7 +533,7 @@ class TestSummarizeChangesByType:
 
     def test_unknown_extension(self) -> None:
         """Unknown extensions show uppercased extension."""
-        from codeplane.daemon.watcher import _summarize_changes_by_type
+        from coderecon.daemon.watcher import _summarize_changes_by_type
 
         paths = [Path("file.xyz")]
         result = _summarize_changes_by_type(paths)
@@ -541,7 +541,7 @@ class TestSummarizeChangesByType:
 
     def test_no_extension(self) -> None:
         """Files without extension show 'other'."""
-        from codeplane.daemon.watcher import _summarize_changes_by_type
+        from coderecon.daemon.watcher import _summarize_changes_by_type
 
         paths = [Path("Makefile")]
         result = _summarize_changes_by_type(paths)
@@ -549,7 +549,7 @@ class TestSummarizeChangesByType:
 
     def test_yaml_yml_counted_separately(self) -> None:
         """Both .yaml and .yml are categorized as YAML but counted separately."""
-        from codeplane.daemon.watcher import _summarize_changes_by_type
+        from coderecon.daemon.watcher import _summarize_changes_by_type
 
         paths = [Path("a.yaml"), Path("b.yml")]
         result = _summarize_changes_by_type(paths)
@@ -560,7 +560,7 @@ class TestSummarizeChangesByType:
 
     def test_empty_list(self) -> None:
         """Empty list returns empty string."""
-        from codeplane.daemon.watcher import _summarize_changes_by_type
+        from coderecon.daemon.watcher import _summarize_changes_by_type
 
         paths: list[Path] = []
         result = _summarize_changes_by_type(paths)
@@ -568,51 +568,51 @@ class TestSummarizeChangesByType:
 
 
 class TestHandleCplignoreChange:
-    """Tests for _handle_cplignore_change function (Issue #6)."""
+    """Tests for _handle_reconignore_change function (Issue #6)."""
 
     @pytest.mark.asyncio
     async def test_logs_added_patterns(self, tmp_path: Path) -> None:
         """Logs newly added patterns."""
-        from codeplane.daemon.watcher import FileWatcher
+        from coderecon.daemon.watcher import FileWatcher
 
-        cpl_dir = tmp_path / ".codeplane"
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
         # Start with empty ignore file
-        cplignore = cpl_dir / ".cplignore"
-        cplignore.write_text("")
+        reconignore = cpl_dir / ".reconignore"
+        reconignore.write_text("")
 
         callback = MagicMock()
         watcher = FileWatcher(repo_root=tmp_path, on_change=callback)
 
         # Update with new patterns
-        cplignore.write_text("*.pyc\n__pycache__/\n")
+        reconignore.write_text("*.pyc\n__pycache__/\n")
 
         # Handle change
-        with patch("codeplane.daemon.watcher.logger") as mock_logger:
-            watcher._handle_cplignore_change(Path(".codeplane/.cplignore"))
+        with patch("coderecon.daemon.watcher.logger") as mock_logger:
+            watcher._handle_reconignore_change(Path(".recon/.reconignore"))
 
             # Check that added patterns were logged
             calls = mock_logger.info.call_args_list
-            assert any("cplignore_changed" in str(c) for c in calls)
+            assert any("reconignore_changed" in str(c) for c in calls)
 
     @pytest.mark.asyncio
     async def test_logs_removed_patterns(self, tmp_path: Path) -> None:
         """Logs removed patterns."""
-        from codeplane.daemon.watcher import FileWatcher
+        from coderecon.daemon.watcher import FileWatcher
 
-        cpl_dir = tmp_path / ".codeplane"
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        cplignore = cpl_dir / ".cplignore"
-        cplignore.write_text("*.pyc\n*.log\n")
+        reconignore = cpl_dir / ".reconignore"
+        reconignore.write_text("*.pyc\n*.log\n")
 
         callback = MagicMock()
         watcher = FileWatcher(repo_root=tmp_path, on_change=callback)
 
         # Remove a pattern
-        cplignore.write_text("*.pyc\n")
+        reconignore.write_text("*.pyc\n")
 
-        with patch("codeplane.daemon.watcher.logger") as mock_logger:
-            watcher._handle_cplignore_change(Path(".codeplane/.cplignore"))
+        with patch("coderecon.daemon.watcher.logger") as mock_logger:
+            watcher._handle_reconignore_change(Path(".recon/.reconignore"))
 
             # Check logging occurred
             assert mock_logger.info.called
@@ -620,50 +620,50 @@ class TestHandleCplignoreChange:
     @pytest.mark.asyncio
     async def test_tracks_pattern_diff(self, tmp_path: Path) -> None:
         """Correctly tracks added and removed patterns."""
-        from codeplane.daemon.watcher import FileWatcher
+        from coderecon.daemon.watcher import FileWatcher
 
-        cpl_dir = tmp_path / ".codeplane"
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        cplignore = cpl_dir / ".cplignore"
-        cplignore.write_text("*.pyc\n")
+        reconignore = cpl_dir / ".reconignore"
+        reconignore.write_text("*.pyc\n")
 
         callback = MagicMock()
         watcher = FileWatcher(repo_root=tmp_path, on_change=callback)
 
         # Verify initial state captured
-        assert watcher._last_cplignore_content == "*.pyc\n"
+        assert watcher._last_reconignore_content == "*.pyc\n"
 
         # Change patterns
-        cplignore.write_text("*.log\n")
-        watcher._handle_cplignore_change(Path(".codeplane/.cplignore"))
+        reconignore.write_text("*.log\n")
+        watcher._handle_reconignore_change(Path(".recon/.reconignore"))
 
         # Verify content updated
-        assert watcher._last_cplignore_content == "*.log\n"
+        assert watcher._last_reconignore_content == "*.log\n"
 
     @pytest.mark.asyncio
     async def test_ignores_comments(self, tmp_path: Path) -> None:
         """Comments are not treated as patterns."""
-        from codeplane.daemon.watcher import FileWatcher
+        from coderecon.daemon.watcher import FileWatcher
 
-        cpl_dir = tmp_path / ".codeplane"
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        cplignore = cpl_dir / ".cplignore"
-        cplignore.write_text("# comment\n*.pyc\n")
+        reconignore = cpl_dir / ".reconignore"
+        reconignore.write_text("# comment\n*.pyc\n")
 
         callback = MagicMock()
         watcher = FileWatcher(repo_root=tmp_path, on_change=callback)
 
         # Add another comment - should show no pattern changes
-        cplignore.write_text("# comment\n# another comment\n*.pyc\n")
+        reconignore.write_text("# comment\n# another comment\n*.pyc\n")
 
-        with patch("codeplane.daemon.watcher.logger") as mock_logger:
-            watcher._handle_cplignore_change(Path(".codeplane/.cplignore"))
+        with patch("coderecon.daemon.watcher.logger") as mock_logger:
+            watcher._handle_reconignore_change(Path(".recon/.reconignore"))
 
             # Should log with "no changes" or empty diff
             calls = mock_logger.info.call_args_list
-            # Find the cplignore_changed call
-            cplignore_call = next((c for c in calls if "cplignore_changed" in str(c)), None)
-            assert cplignore_call is not None
+            # Find the reconignore_changed call
+            reconignore_call = next((c for c in calls if "reconignore_changed" in str(c)), None)
+            assert reconignore_call is not None
 
 
 class TestDebouncing:
@@ -672,11 +672,11 @@ class TestDebouncing:
     @pytest.mark.asyncio
     async def test_queue_change_adds_to_pending(self, tmp_path: Path) -> None:
         """_queue_change adds paths to pending set."""
-        from codeplane.daemon.watcher import FileWatcher
+        from coderecon.daemon.watcher import FileWatcher
 
-        cpl_dir = tmp_path / ".codeplane"
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        (cpl_dir / ".cplignore").write_text("")
+        (cpl_dir / ".reconignore").write_text("")
 
         callback = MagicMock()
         watcher = FileWatcher(repo_root=tmp_path, on_change=callback)
@@ -688,11 +688,11 @@ class TestDebouncing:
     @pytest.mark.asyncio
     async def test_flush_pending_calls_callback(self, tmp_path: Path) -> None:
         """_flush_pending calls callback with pending paths."""
-        from codeplane.daemon.watcher import FileWatcher
+        from coderecon.daemon.watcher import FileWatcher
 
-        cpl_dir = tmp_path / ".codeplane"
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        (cpl_dir / ".cplignore").write_text("")
+        (cpl_dir / ".reconignore").write_text("")
 
         callback = MagicMock()
         watcher = FileWatcher(repo_root=tmp_path, on_change=callback)
@@ -707,11 +707,11 @@ class TestDebouncing:
     @pytest.mark.asyncio
     async def test_flush_clears_pending(self, tmp_path: Path) -> None:
         """_flush_pending clears the pending set."""
-        from codeplane.daemon.watcher import FileWatcher
+        from coderecon.daemon.watcher import FileWatcher
 
-        cpl_dir = tmp_path / ".codeplane"
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        (cpl_dir / ".cplignore").write_text("")
+        (cpl_dir / ".reconignore").write_text("")
 
         callback = MagicMock()
         watcher = FileWatcher(repo_root=tmp_path, on_change=callback)
@@ -724,11 +724,11 @@ class TestDebouncing:
     @pytest.mark.asyncio
     async def test_should_flush_false_when_empty(self, tmp_path: Path) -> None:
         """_should_flush returns False for empty pending set."""
-        from codeplane.daemon.watcher import FileWatcher
+        from coderecon.daemon.watcher import FileWatcher
 
-        cpl_dir = tmp_path / ".codeplane"
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        (cpl_dir / ".cplignore").write_text("")
+        (cpl_dir / ".reconignore").write_text("")
 
         callback = MagicMock()
         watcher = FileWatcher(repo_root=tmp_path, on_change=callback)
@@ -741,14 +741,14 @@ class TestDaemonLifecycle:
 
     def test_given_no_pid_file_when_is_running_then_false(self, tmp_path: Path) -> None:
         """No PID file means daemon is not running."""
-        from codeplane.daemon.lifecycle import is_server_running
+        from coderecon.daemon.lifecycle import is_server_running
 
         # Given
-        codeplane_dir = tmp_path / ".codeplane"
-        codeplane_dir.mkdir()
+        coderecon_dir = tmp_path / ".recon"
+        coderecon_dir.mkdir()
 
         # When
-        result = is_server_running(codeplane_dir)
+        result = is_server_running(coderecon_dir)
 
         # Then
         assert result is False
@@ -757,35 +757,35 @@ class TestDaemonLifecycle:
         self, tmp_path: Path
     ) -> None:
         """PID file with non-existent process means not running."""
-        from codeplane.daemon.lifecycle import is_server_running
+        from coderecon.daemon.lifecycle import is_server_running
 
         # Given
-        codeplane_dir = tmp_path / ".codeplane"
-        codeplane_dir.mkdir()
-        (codeplane_dir / "daemon.pid").write_text("999999")  # Non-existent PID
-        (codeplane_dir / "daemon.port").write_text("7654")
+        coderecon_dir = tmp_path / ".recon"
+        coderecon_dir.mkdir()
+        (coderecon_dir / "daemon.pid").write_text("999999")  # Non-existent PID
+        (coderecon_dir / "daemon.port").write_text("7654")
 
         # When
-        result = is_server_running(codeplane_dir)
+        result = is_server_running(coderecon_dir)
 
         # Then
         assert result is False
         # Stale files should be cleaned up
-        assert not (codeplane_dir / "daemon.pid").exists()
+        assert not (coderecon_dir / "daemon.pid").exists()
 
     def test_given_valid_info_when_write_pid_file_then_files_created(self, tmp_path: Path) -> None:
         """Writing PID file creates both pid and port files."""
-        from codeplane.daemon.lifecycle import read_server_info, write_pid_file
+        from coderecon.daemon.lifecycle import read_server_info, write_pid_file
 
         # Given
-        codeplane_dir = tmp_path / ".codeplane"
-        codeplane_dir.mkdir()
+        coderecon_dir = tmp_path / ".recon"
+        coderecon_dir.mkdir()
 
         # When
-        write_pid_file(codeplane_dir, port=8080)
+        write_pid_file(coderecon_dir, port=8080)
 
         # Then
-        info = read_server_info(codeplane_dir)
+        info = read_server_info(coderecon_dir)
         assert info is not None
         pid, port = info
         assert pid > 0  # Current process PID
@@ -793,28 +793,28 @@ class TestDaemonLifecycle:
 
     def test_given_pid_files_when_remove_then_files_deleted(self, tmp_path: Path) -> None:
         """Removing PID files deletes both files."""
-        from codeplane.daemon.lifecycle import remove_pid_file, write_pid_file
+        from coderecon.daemon.lifecycle import remove_pid_file, write_pid_file
 
         # Given
-        codeplane_dir = tmp_path / ".codeplane"
-        codeplane_dir.mkdir()
-        write_pid_file(codeplane_dir, port=8080)
+        coderecon_dir = tmp_path / ".recon"
+        coderecon_dir.mkdir()
+        write_pid_file(coderecon_dir, port=8080)
 
         # When
-        remove_pid_file(codeplane_dir)
+        remove_pid_file(coderecon_dir)
 
         # Then
-        assert not (codeplane_dir / "daemon.pid").exists()
-        assert not (codeplane_dir / "daemon.port").exists()
+        assert not (coderecon_dir / "daemon.pid").exists()
+        assert not (coderecon_dir / "daemon.port").exists()
 
     def test_given_no_files_when_read_server_info_then_none(self, tmp_path: Path) -> None:
         """Missing files return None for daemon info."""
-        from codeplane.daemon.lifecycle import read_server_info
+        from coderecon.daemon.lifecycle import read_server_info
 
-        codeplane_dir = tmp_path / ".codeplane"
-        codeplane_dir.mkdir()
+        coderecon_dir = tmp_path / ".recon"
+        coderecon_dir.mkdir()
 
-        result = read_server_info(codeplane_dir)
+        result = read_server_info(coderecon_dir)
 
         assert result is None
 
@@ -822,40 +822,40 @@ class TestDaemonLifecycle:
         self, tmp_path: Path
     ) -> None:
         """Invalid PID file content returns None."""
-        from codeplane.daemon.lifecycle import read_server_info
+        from coderecon.daemon.lifecycle import read_server_info
 
-        codeplane_dir = tmp_path / ".codeplane"
-        codeplane_dir.mkdir()
-        (codeplane_dir / "daemon.pid").write_text("not-a-number")
-        (codeplane_dir / "daemon.port").write_text("8080")
+        coderecon_dir = tmp_path / ".recon"
+        coderecon_dir.mkdir()
+        (coderecon_dir / "daemon.pid").write_text("not-a-number")
+        (coderecon_dir / "daemon.port").write_text("8080")
 
-        result = read_server_info(codeplane_dir)
+        result = read_server_info(coderecon_dir)
 
         assert result is None
 
     def test_given_dead_process_when_stop_daemon_then_false(self, tmp_path: Path) -> None:
         """Stopping dead process returns False."""
-        from codeplane.daemon.lifecycle import stop_daemon
+        from coderecon.daemon.lifecycle import stop_daemon
 
-        codeplane_dir = tmp_path / ".codeplane"
-        codeplane_dir.mkdir()
-        (codeplane_dir / "daemon.pid").write_text("999999")
-        (codeplane_dir / "daemon.port").write_text("8080")
+        coderecon_dir = tmp_path / ".recon"
+        coderecon_dir.mkdir()
+        (coderecon_dir / "daemon.pid").write_text("999999")
+        (coderecon_dir / "daemon.port").write_text("8080")
 
-        result = stop_daemon(codeplane_dir)
+        result = stop_daemon(coderecon_dir)
 
         # Dead process - returns False and cleans up
         assert result is False
-        assert not (codeplane_dir / "daemon.pid").exists()
+        assert not (coderecon_dir / "daemon.pid").exists()
 
     def test_given_no_daemon_when_stop_daemon_then_false(self, tmp_path: Path) -> None:
         """Stopping non-existent daemon returns False."""
-        from codeplane.daemon.lifecycle import stop_daemon
+        from coderecon.daemon.lifecycle import stop_daemon
 
-        codeplane_dir = tmp_path / ".codeplane"
-        codeplane_dir.mkdir()
+        coderecon_dir = tmp_path / ".recon"
+        coderecon_dir.mkdir()
 
-        result = stop_daemon(codeplane_dir)
+        result = stop_daemon(coderecon_dir)
 
         assert result is False
 
@@ -867,8 +867,8 @@ class TestServerController:
         self, tmp_path: Path
     ) -> None:
         """Controller initializes indexer and watcher."""
-        from codeplane.config.models import ServerConfig
-        from codeplane.daemon.lifecycle import ServerController
+        from coderecon.config.models import ServerConfig
+        from coderecon.daemon.lifecycle import ServerController
 
         coordinator = MagicMock()
         config = ServerConfig()
@@ -887,12 +887,12 @@ class TestServerController:
         self, tmp_path: Path
     ) -> None:
         """Starting controller starts indexer and watcher."""
-        from codeplane.config.models import ServerConfig
-        from codeplane.daemon.lifecycle import ServerController
+        from coderecon.config.models import ServerConfig
+        from coderecon.daemon.lifecycle import ServerController
 
-        cpl_dir = tmp_path / ".codeplane"
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        (cpl_dir / ".cplignore").write_text("")
+        (cpl_dir / ".reconignore").write_text("")
 
         coordinator = MagicMock()
         config = ServerConfig()
@@ -915,12 +915,12 @@ class TestServerController:
         self, tmp_path: Path
     ) -> None:
         """Stopping controller sets shutdown event."""
-        from codeplane.config.models import ServerConfig
-        from codeplane.daemon.lifecycle import ServerController
+        from coderecon.config.models import ServerConfig
+        from coderecon.daemon.lifecycle import ServerController
 
-        cpl_dir = tmp_path / ".codeplane"
+        cpl_dir = tmp_path / ".recon"
         cpl_dir.mkdir()
-        (cpl_dir / ".cplignore").write_text("")
+        (cpl_dir / ".reconignore").write_text("")
 
         coordinator = MagicMock()
         config = ServerConfig()
@@ -941,14 +941,14 @@ class TestRepoHeaderMiddleware:
     """Tests for RepoHeaderMiddleware."""
 
     def test_given_request_when_response_then_includes_repo_header(self, tmp_path: Path) -> None:
-        """All responses include X-CodePlane-Repo header."""
+        """All responses include X-CodeRecon-Repo header."""
         from starlette.applications import Starlette
         from starlette.middleware import Middleware
         from starlette.responses import JSONResponse
         from starlette.routing import Route
         from starlette.testclient import TestClient
 
-        from codeplane.daemon.middleware import REPO_HEADER, RepoHeaderMiddleware
+        from coderecon.daemon.middleware import REPO_HEADER, RepoHeaderMiddleware
 
         async def status(_request: object) -> JSONResponse:
             return JSONResponse({"status": "ok"})
@@ -973,7 +973,7 @@ class TestRepoHeaderMiddleware:
         from starlette.routing import Route
         from starlette.testclient import TestClient
 
-        from codeplane.daemon.middleware import REPO_HEADER, RepoHeaderMiddleware
+        from coderecon.daemon.middleware import REPO_HEADER, RepoHeaderMiddleware
 
         async def health(_request: object) -> JSONResponse:
             return JSONResponse({"status": "ok"})
@@ -994,7 +994,7 @@ class TestDaemonRoutes:
 
     def test_given_controller_when_create_routes_then_returns_routes(self, tmp_path: Path) -> None:
         """create_routes returns health and status routes."""
-        from codeplane.daemon.routes import create_routes
+        from coderecon.daemon.routes import create_routes
 
         controller = MagicMock()
         controller.repo_root = tmp_path
@@ -1011,7 +1011,7 @@ class TestDaemonRoutes:
         from starlette.applications import Starlette
         from starlette.testclient import TestClient
 
-        from codeplane.daemon.routes import create_routes
+        from coderecon.daemon.routes import create_routes
 
         controller = MagicMock()
         controller.repo_root = tmp_path
@@ -1035,8 +1035,8 @@ class TestDaemonRoutes:
         from starlette.applications import Starlette
         from starlette.testclient import TestClient
 
-        from codeplane.daemon.indexer import IndexerState
-        from codeplane.daemon.routes import create_routes
+        from coderecon.daemon.indexer import IndexerState
+        from coderecon.daemon.routes import create_routes
 
         # Mock indexer status
         indexer_status = MagicMock()
@@ -1076,11 +1076,11 @@ class TestDaemonApp:
 
         from starlette.applications import Starlette
 
-        from codeplane.daemon.app import create_app
+        from coderecon.daemon.app import create_app
 
         # Initialize git repo (required by MCP server)
         subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
-        (tmp_path / ".codeplane").mkdir()
+        (tmp_path / ".recon").mkdir()
 
         controller = MagicMock()
         controller.repo_root = tmp_path
@@ -1098,11 +1098,11 @@ class TestDaemonApp:
 
         from starlette.testclient import TestClient
 
-        from codeplane.daemon.app import create_app
+        from coderecon.daemon.app import create_app
 
         # Initialize git repo (required by MCP server)
         subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
-        (tmp_path / ".codeplane").mkdir()
+        (tmp_path / ".recon").mkdir()
 
         controller = MagicMock()
         controller.repo_root = tmp_path

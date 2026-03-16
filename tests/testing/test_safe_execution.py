@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from codeplane.testing.safe_execution import (
+from coderecon.testing.safe_execution import (
     LanguageFamily,
     SafeExecutionConfig,
     SafeExecutionContext,
@@ -163,8 +163,8 @@ class TestUniversalEnvironmentOverrides:
         env = safe_ctx.prepare_environment("python.pytest")
         assert env["BROWSER"] == "none"
 
-    def test_codeplane_markers_set(self, safe_ctx: SafeExecutionContext) -> None:
-        """Verify CodePlane execution markers are set."""
+    def test_coderecon_markers_set(self, safe_ctx: SafeExecutionContext) -> None:
+        """Verify CodeRecon execution markers are set."""
         env = safe_ctx.prepare_environment("python.pytest")
         assert env["CODEPLANE_EXECUTION"] == "1"
         assert env["CODEPLANE_RUN_ID"] == "test-run-12345"

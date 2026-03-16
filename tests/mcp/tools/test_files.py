@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from codeplane.mcp.tools.files import (
+from coderecon.mcp.tools.files import (
     SpanTarget,
     _summarize_list,
     _summarize_read,

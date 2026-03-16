@@ -1,10 +1,10 @@
-# CodePlane Ranking Pipeline Evaluation
+# CodeRecon Ranking Pipeline Evaluation
 #
 # Evaluates the full ranking pipeline (gate + ranker + cutoff) against
 # def-level ground truth.
 #
 # Prerequisites:
-#   1. Start CodePlane daemon on the target repo
+#   1. Start CodeRecon daemon on the target repo
 #   2. Generate ranking ground truth via recon-lab/src/cpl_lab/collector.py
 #
 # Run:

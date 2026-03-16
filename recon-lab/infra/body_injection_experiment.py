@@ -17,7 +17,7 @@ from pathlib import Path
 
 # Use production scaffold builder
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from codeplane.index._internal.indexing.def_embedding import (
+from coderecon.index._internal.indexing.def_embedding import (
     build_def_scaffold, _CODE_KINDS, _DEF_SCAFFOLD_CHAR_BUDGET,
 )
 
@@ -159,7 +159,7 @@ def main():
 
     for repo_id, short_name in REPOS:
         clone = CLONES / short_name
-        db_path = clone / '.codeplane' / 'index.db'
+        db_path = clone / '.recon' / 'index.db'
         pq_path = DATA / repo_id / 'signals' / 'candidates_rank.parquet'
         gt_dir = DATA / repo_id / 'ground_truth'
 

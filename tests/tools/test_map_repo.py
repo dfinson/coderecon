@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
 
-from codeplane.index.models import (
+from coderecon.index.models import (
     Context,
     DefFact,
     ExportEntry,
@@ -14,7 +14,7 @@ from codeplane.index.models import (
     ImportFact,
     ProbeStatus,
 )
-from codeplane.tools.map_repo import RepoMapper
+from coderecon.tools.map_repo import RepoMapper
 
 
 @pytest.fixture

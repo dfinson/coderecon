@@ -10,7 +10,7 @@ from collections import deque
 
 import pytest
 
-from codeplane.mcp.gate import (
+from coderecon.mcp.gate import (
     _PATTERN_CHECKS,
     CallRecord,
     PatternMatch,

@@ -12,14 +12,14 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.index._internal.db import Database
-from codeplane.index._internal.diff.sources import (
+from coderecon.index._internal.db import Database
+from coderecon.index._internal.diff.sources import (
     _compute_lexical_path,
     snapshots_from_epoch,
     snapshots_from_index,
 )
-from codeplane.index._internal.parsing.treesitter import SyntacticSymbol
-from codeplane.index.models import (
+from coderecon.index._internal.parsing.treesitter import SyntacticSymbol
+from coderecon.index.models import (
     Context,
     DefFact,
     DefSnapshotRecord,

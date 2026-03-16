@@ -67,7 +67,7 @@ def f1(sel, gt, n):
 for repo_id, clone_name in REPOS:
     t0 = time.time()
     clone = CLONES / clone_name
-    conn = sqlite3.connect(str(clone / ".codeplane" / "index.db"))
+    conn = sqlite3.connect(str(clone / ".recon" / "index.db"))
 
     # Scaffold sizes
     file_ids = {}; scaff = {}

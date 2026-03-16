@@ -38,7 +38,7 @@ def log(msg):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 def scaffold_sizes(clone_path):
-    conn = sqlite3.connect(str(clone_path / '.codeplane' / 'index.db'))
+    conn = sqlite3.connect(str(clone_path / '.recon' / 'index.db'))
     scaff = {}
     for fid, fpath in conn.execute("SELECT id, path FROM files").fetchall():
         defs = conn.execute("SELECT kind,name,signature_text,return_type FROM def_facts WHERE file_id=?", (fid,)).fetchall()
@@ -49,7 +49,7 @@ def scaffold_sizes(clone_path):
 
 def build_scaffold_text(clone_path, fpath):
     """Build actual scaffold text for cross-encoder input."""
-    conn = sqlite3.connect(str(clone_path / '.codeplane' / 'index.db'))
+    conn = sqlite3.connect(str(clone_path / '.recon' / 'index.db'))
     row = conn.execute("SELECT id, language_family, line_count FROM files WHERE path=?", (fpath,)).fetchone()
     if not row:
         conn.close()

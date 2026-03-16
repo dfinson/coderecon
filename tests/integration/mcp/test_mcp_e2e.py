@@ -11,9 +11,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from codeplane.files.ops import FileOps
-from codeplane.git.ops import GitOps
-from codeplane.mutation.ops import Edit, MutationOps
+from coderecon.files.ops import FileOps
+from coderecon.git.ops import GitOps
+from coderecon.mutation.ops import Edit, MutationOps
 
 if TYPE_CHECKING:
     pass

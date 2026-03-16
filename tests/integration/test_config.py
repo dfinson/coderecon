@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from codeplane.config import load_config
-from codeplane.config.user_config import UserConfig, write_user_config
+from coderecon.config import load_config
+from coderecon.config.user_config import UserConfig, write_user_config
 
 pytestmark = pytest.mark.integration
 
@@ -38,10 +38,10 @@ def temp_repo(tmp_path: Path) -> Path:
 @pytest.fixture
 def global_config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Create and patch global config directory."""
-    global_dir = tmp_path / "global_config" / "codeplane"
+    global_dir = tmp_path / "global_config" / "coderecon"
     global_dir.mkdir(parents=True)
     monkeypatch.setattr(
-        "codeplane.config.loader.GLOBAL_CONFIG_PATH",
+        "coderecon.config.loader.GLOBAL_CONFIG_PATH",
         global_dir / "config.yaml",
     )
     return global_dir
@@ -65,7 +65,7 @@ class TestConfigCascade:
             )
 
         # Given - repo config uses new simplified format
-        config_dir = temp_repo / ".codeplane"
+        config_dir = temp_repo / ".recon"
         config_dir.mkdir()
         write_user_config(config_dir / "config.yaml", UserConfig(log_level="DEBUG"))
 
@@ -97,7 +97,7 @@ class TestConfigCascade:
             )
 
         # Given - repo changes level using new simplified format
-        config_dir = temp_repo / ".codeplane"
+        config_dir = temp_repo / ".recon"
         config_dir.mkdir()
         write_user_config(config_dir / "config.yaml", UserConfig(log_level="DEBUG"))
 

@@ -20,12 +20,12 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.index._internal.db import Database, create_additional_indexes
-from codeplane.index._internal.indexing import LexicalIndex, StructuralIndexer
-from codeplane.index.models import Context
-from codeplane.index.ops import IndexCoordinatorEngine
-from codeplane.mutation.ops import MutationOps
-from codeplane.refactor.ops import RefactorOps
+from coderecon.index._internal.db import Database, create_additional_indexes
+from coderecon.index._internal.indexing import LexicalIndex, StructuralIndexer
+from coderecon.index.models import Context
+from coderecon.index.ops import IndexCoordinatorEngine
+from coderecon.mutation.ops import MutationOps
+from coderecon.refactor.ops import RefactorOps
 
 
 def rel(path: Path, root: Path) -> str:
@@ -37,9 +37,9 @@ def rel(path: Path, root: Path) -> str:
 def test_db(tmp_path: Path) -> Generator[Database, None, None]:
     """Create a test database with schema and context."""
     # Use a consistent path that IndexCoordinatorEngine will use
-    codeplane_dir = tmp_path / ".codeplane"
-    codeplane_dir.mkdir(exist_ok=True)
-    db = Database(codeplane_dir / "index.db")
+    coderecon_dir = tmp_path / ".recon"
+    coderecon_dir.mkdir(exist_ok=True)
+    db = Database(coderecon_dir / "index.db")
     db.create_all()
     create_additional_indexes(db.engine)
 
@@ -128,10 +128,10 @@ def indexed_project(
     test_db: Database,
 ) -> tuple[Path, Database, LexicalIndex]:
     """Index the refactor project."""
-    # Create lexical index in the same .codeplane directory
-    codeplane_dir = refactor_project / ".codeplane"
-    codeplane_dir.mkdir(exist_ok=True)
-    lexical_index = LexicalIndex(codeplane_dir / "lexical.tantivy")
+    # Create lexical index in the same .recon directory
+    coderecon_dir = refactor_project / ".recon"
+    coderecon_dir.mkdir(exist_ok=True)
+    lexical_index = LexicalIndex(coderecon_dir / "lexical.tantivy")
 
     # Index with structural indexer
     indexer = StructuralIndexer(test_db, refactor_project)
@@ -142,7 +142,7 @@ def indexed_project(
     # Create File records first (required for FK constraints)
     import hashlib
 
-    from codeplane.index.models import File
+    from coderecon.index.models import File
 
     file_id_map: dict[str, int] = {}
     with test_db.session() as session:
@@ -197,9 +197,9 @@ async def refactor_ops(
     repo_root, db, lexical_index = indexed_project
 
     # Use the same paths as indexed_project
-    codeplane_dir = repo_root / ".codeplane"
-    db_path = codeplane_dir / "index.db"
-    tantivy_path = codeplane_dir / "lexical.tantivy"
+    coderecon_dir = repo_root / ".recon"
+    db_path = coderecon_dir / "index.db"
+    tantivy_path = coderecon_dir / "lexical.tantivy"
 
     # Create coordinator pointing at existing index
     coordinator = IndexCoordinatorEngine(

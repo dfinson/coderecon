@@ -4,7 +4,7 @@
 [workspace]
 # Base directory for mutable data (clones, ground truth, signals, models).
 # Override: --workspace CLI flag.
-path = "~/.cpl-lab"
+path = "~/.recon-lab"
 
 [clone]
 jobs = 4

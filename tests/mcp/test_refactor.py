@@ -9,7 +9,7 @@ Handler tests use conftest.py fixtures for integration testing.
 
 from unittest.mock import MagicMock
 
-from codeplane.mcp.tools.refactor import (
+from coderecon.mcp.tools.refactor import (
     _display_refactor,
     _summarize_refactor,
 )

@@ -33,7 +33,7 @@ class AgentReplayModel:
         llm_events = [e for e in events if e.get("type") == "llm_request"]
 
         # Classify tool calls
-        codeplane_calls = [e for e in tool_events if "codeplane" in (e.get("tool") or "").lower()]
+        codeplane_calls = [e for e in tool_events if "coderecon" in (e.get("tool") or "").lower()]
         terminal_calls = [e for e in tool_events if "run_in_terminal" in (e.get("tool") or "")]
         tool_search_calls = [
             e for e in tool_events if "tool_search" in (e.get("tool") or "").lower()

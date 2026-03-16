@@ -5,7 +5,7 @@ Usage:
 
 Reads a *_trace.json produced by extract_trace and computes per-session
 metrics.  Output is saved alongside the trace as
-  {repo}_{issue}_{model}_{codeplane|native}_result_metrics.json
+  {repo}_{issue}_{model}_{coderecon|native}_result_metrics.json
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ def compute_metrics(trace: dict[str, Any]) -> dict[str, Any]:
     tool_names = [e.get("tool", "") for e in tool_events]
     tool_counts = Counter(tool_names)
 
-    codeplane_calls = [e for e in tool_events if "codeplane" in (e.get("tool") or "").lower()]
+    codeplane_calls = [e for e in tool_events if "coderecon" in (e.get("tool") or "").lower()]
     tool_search_calls = [e for e in tool_events if "tool_search" in (e.get("tool") or "").lower()]
     terminal_calls = [e for e in tool_events if "run_in_terminal" in (e.get("tool") or "")]
     other_tool_calls = [
@@ -102,7 +102,7 @@ def compute_metrics(trace: dict[str, Any]) -> dict[str, Any]:
         "repo": trace.get("repo"),
         "issue": trace.get("issue"),
         "model": trace.get("model"),
-        "codeplane": trace.get("codeplane"),
+        "coderecon": trace.get("coderecon"),
         "wall_clock": {
             "start": wall_clock_start,
             "end": wall_clock_end,
@@ -110,7 +110,7 @@ def compute_metrics(trace: dict[str, Any]) -> dict[str, Any]:
         "turns": turn_count,
         "tool_calls": {
             "total": len(tool_events),
-            "codeplane": len(codeplane_calls),
+            "coderecon": len(codeplane_calls),
             "terminal": len(terminal_calls),
             "tool_search": len(tool_search_calls),
             "other": len(other_tool_calls),
@@ -186,7 +186,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  Turns: {metrics['turns']}")
     print(
         f"  Tool calls: {metrics['tool_calls']['total']} "
-        f"(codeplane={metrics['tool_calls']['codeplane']}, "
+        f"(coderecon={metrics['tool_calls']['coderecon']}, "
         f"terminal={metrics['tool_calls']['terminal']}, "
         f"errors={metrics['tool_calls']['errors']})"
     )

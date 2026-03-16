@@ -21,8 +21,8 @@ from fastmcp.server.middleware import MiddlewareContext
 from fastmcp.tools.tool import ToolResult
 from pydantic import ValidationError
 
-from codeplane.mcp.errors import MCPError, MCPErrorCode
-from codeplane.mcp.middleware import ToolMiddleware, _timestamp
+from coderecon.mcp.errors import MCPError, MCPErrorCode
+from coderecon.mcp.middleware import ToolMiddleware, _timestamp
 
 
 class TestTimestamp:
@@ -76,7 +76,7 @@ class TestToolMiddleware:
         async def call_next(_ctx):  # noqa: ARG001
             return expected_result
 
-        with patch("codeplane.core.progress.get_console", return_value=mock_console):
+        with patch("coderecon.core.progress.get_console", return_value=mock_console):
             result = await middleware.on_call_tool(mock_context, call_next)
 
         assert result == expected_result
@@ -93,7 +93,7 @@ class TestToolMiddleware:
         async def call_next(_ctx):  # noqa: ARG001
             return expected_result
 
-        with patch("codeplane.core.progress.get_console", return_value=mock_console):
+        with patch("coderecon.core.progress.get_console", return_value=mock_console):
             result = await middleware.on_call_tool(mock_context, call_next)
 
         assert result == expected_result
@@ -107,8 +107,8 @@ class TestToolMiddleware:
             return {"result": "ok"}
 
         with (
-            patch("codeplane.core.progress.get_console", return_value=mock_console),
-            patch("codeplane.mcp.middleware.log") as mock_log,
+            patch("coderecon.core.progress.get_console", return_value=mock_console),
+            patch("coderecon.mcp.middleware.log") as mock_log,
         ):
             await middleware.on_call_tool(mock_context, call_next)
             # Verify session_id in log calls is truncated
@@ -123,7 +123,7 @@ class TestToolMiddleware:
         async def call_next(_ctx):  # noqa: ARG001
             return {"result": "ok"}
 
-        with patch("codeplane.core.progress.get_console", return_value=mock_console):
+        with patch("coderecon.core.progress.get_console", return_value=mock_console):
             result = await middleware.on_call_tool(mock_context, call_next)
 
         assert result == {"result": "ok"}
@@ -139,7 +139,7 @@ class TestToolMiddleware:
         async def call_next(_ctx):  # noqa: ARG001
             raise asyncio.CancelledError()
 
-        with patch("codeplane.core.progress.get_console", return_value=mock_console):
+        with patch("coderecon.core.progress.get_console", return_value=mock_console):
             result = await middleware.on_call_tool(mock_context, call_next)
 
         assert isinstance(result, ToolResult)
@@ -172,7 +172,7 @@ class TestToolMiddleware:
         async def call_next(_ctx):  # noqa: ARG001
             raise validation_error
 
-        with patch("codeplane.core.progress.get_console", return_value=mock_console):
+        with patch("coderecon.core.progress.get_console", return_value=mock_console):
             result = await middleware.on_call_tool(mock_context, call_next)
 
         assert isinstance(result, ToolResult)
@@ -201,7 +201,7 @@ class TestToolMiddleware:
         async def call_next(_ctx):  # noqa: ARG001
             raise validation_error
 
-        with patch("codeplane.core.progress.get_console", return_value=mock_console):
+        with patch("coderecon.core.progress.get_console", return_value=mock_console):
             result = await middleware.on_call_tool(mock_context, call_next)
 
         content = result.structured_content
@@ -228,7 +228,7 @@ class TestToolMiddleware:
                 remediation="Check the file path and try again.",
             )
 
-        with patch("codeplane.core.progress.get_console", return_value=mock_console):
+        with patch("coderecon.core.progress.get_console", return_value=mock_console):
             result = await middleware.on_call_tool(mock_context, call_next)
 
         assert isinstance(result, ToolResult)
@@ -249,7 +249,7 @@ class TestToolMiddleware:
                 remediation="Check the line range is within file bounds.",
             )
 
-        with patch("codeplane.core.progress.get_console", return_value=mock_console):
+        with patch("coderecon.core.progress.get_console", return_value=mock_console):
             result = await middleware.on_call_tool(mock_context, call_next)
 
         content = result.structured_content
@@ -267,7 +267,7 @@ class TestToolMiddleware:
         async def call_next(_ctx):  # noqa: ARG001
             raise RuntimeError("Unexpected failure")
 
-        with patch("codeplane.core.progress.get_console", return_value=mock_console):
+        with patch("coderecon.core.progress.get_console", return_value=mock_console):
             result = await middleware.on_call_tool(mock_context, call_next)
 
         assert isinstance(result, ToolResult)
@@ -286,8 +286,8 @@ class TestToolMiddleware:
             raise ValueError("Test error")
 
         with (
-            patch("codeplane.core.progress.get_console", return_value=mock_console),
-            patch("codeplane.mcp.middleware.log"),
+            patch("coderecon.core.progress.get_console", return_value=mock_console),
+            patch("coderecon.mcp.middleware.log"),
         ):
             await middleware.on_call_tool(mock_context, call_next)
 
@@ -448,7 +448,7 @@ class TestToolMiddleware:
         mock_console = MagicMock()
 
         with patch(
-            "codeplane.core.logging.get_log_file_path", return_value="/var/log/codeplane.log"
+            "coderecon.core.logging.get_log_file_path", return_value="/var/log/coderecon.log"
         ):
             middleware._print_error_with_log_pointer(
                 mock_console, "test_tool", "ValueError", "test error message"
@@ -458,13 +458,13 @@ class TestToolMiddleware:
         call_args = str(mock_console.print.call_args)
         assert "test_tool" in call_args
         assert "ValueError" in call_args
-        assert "/var/log/codeplane.log" in call_args
+        assert "/var/log/coderecon.log" in call_args
 
     def test_print_error_without_log_file(self, middleware):
         """Test error printing when no log file configured."""
         mock_console = MagicMock()
 
-        with patch("codeplane.core.logging.get_log_file_path", return_value=None):
+        with patch("coderecon.core.logging.get_log_file_path", return_value=None):
             middleware._print_error_with_log_pointer(
                 mock_console, "test_tool", "ValueError", "test error"
             )
@@ -479,7 +479,7 @@ class TestToolMiddleware:
         mock_console = MagicMock()
         long_msg = "x" * 100
 
-        with patch("codeplane.core.logging.get_log_file_path", return_value=None):
+        with patch("coderecon.core.logging.get_log_file_path", return_value=None):
             middleware._print_error_with_log_pointer(mock_console, "test_tool", "Error", long_msg)
 
         call_args = str(mock_console.print.call_args)
@@ -511,7 +511,7 @@ class TestToolMiddleware:
 
         # Patch get_tools_sync to raise, exercising the except Exception branch
         with patch(
-            "codeplane.mcp._compat.get_tools_sync",
+            "coderecon.mcp._compat.get_tools_sync",
             side_effect=RuntimeError("boom"),
         ):
             schema = middleware._get_tool_schema(mock_context, "test_tool")
@@ -652,7 +652,7 @@ class TestPatternViolationGate:
 
     @pytest.fixture
     def session_manager(self):
-        from codeplane.mcp.session import SessionManager
+        from coderecon.mcp.session import SessionManager
 
         return SessionManager()
 
@@ -690,7 +690,7 @@ class TestPatternViolationGate:
         async def call_next(_ctx):
             raise AssertionError("Tool should NOT be called")
 
-        with patch("codeplane.core.progress.get_console", return_value=MagicMock()):
+        with patch("coderecon.core.progress.get_console", return_value=MagicMock()):
             result = await middleware.on_call_tool(mock_context, call_next)
 
         # Should return error, not call the tool
@@ -717,7 +717,7 @@ class TestPatternViolationGate:
             called = True
             return ToolResult(structured_content={"ok": True})
 
-        with patch("codeplane.core.progress.get_console", return_value=MagicMock()):
+        with patch("coderecon.core.progress.get_console", return_value=MagicMock()):
             await middleware.on_call_tool(mock_context, call_next)
 
         assert called, "Tool should have been called when pattern count < 3"

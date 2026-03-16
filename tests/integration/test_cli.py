@@ -11,10 +11,10 @@ import pytest
 import structlog
 from click.testing import CliRunner
 
-from codeplane.cli.main import cli
-from codeplane.config import load_config
-from codeplane.config.models import LoggingConfig, LogOutputConfig
-from codeplane.core.logging import (
+from coderecon.cli.main import cli
+from coderecon.config import load_config
+from coderecon.config.models import LoggingConfig, LogOutputConfig
+from coderecon.core.logging import (
     clear_request_id,
     configure_logging,
     get_logger,
@@ -77,7 +77,7 @@ class TestErrorPropagation:
         runner.invoke(cli, ["init", str(temp_repo)])
 
         # Given - corrupt the config
-        config_path = temp_repo / ".codeplane" / "config.yaml"
+        config_path = temp_repo / ".recon" / "config.yaml"
         config_path.write_text("invalid: yaml: [unterminated")
 
         # When - load config (should not raise, falls back to defaults)

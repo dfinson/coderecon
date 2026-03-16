@@ -44,7 +44,7 @@ REPOS = [
 
 
 # ═══════════════════════════════════════════════════════════
-# SCAFFOLD BUILDING (adapted from codeplane source)
+# SCAFFOLD BUILDING (adapted from coderecon source)
 # ═══════════════════════════════════════════════════════════
 
 _CAMEL_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
@@ -223,7 +223,7 @@ def main():
     for repo_id, clone_name in REPOS:
         print(f"\n{'='*60}\n{repo_id}\n{'='*60}", flush=True)
         clone = CLONES / clone_name
-        conn = sqlite3.connect(str(clone / ".codeplane" / "index.db"))
+        conn = sqlite3.connect(str(clone / ".recon" / "index.db"))
 
         # ── Gather file data from DB ──
         indexed_files = set()

@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from codeplane.core.telemetry import (
+from coderecon.core.telemetry import (
     _get_otlp_endpoint,
     _get_service_name,
     _is_telemetry_enabled,
@@ -42,7 +42,7 @@ class MockTelemetryConfig:
         self,
         enabled: bool = False,
         otlp_endpoint: str | None = None,
-        service_name: str = "codeplane",
+        service_name: str = "coderecon",
     ):
         self.enabled = enabled
         self.otlp_endpoint = otlp_endpoint
@@ -147,10 +147,10 @@ class TestGetServiceName:
             assert _get_service_name(config) == "config-service"  # type: ignore[arg-type]
 
     def test_default_service_name(self) -> None:
-        """Returns 'codeplane' as default when nothing set."""
+        """Returns 'coderecon' as default when nothing set."""
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("OTEL_SERVICE_NAME", None)
-            assert _get_service_name(None) == "codeplane"
+            assert _get_service_name(None) == "coderecon"
 
 
 # =============================================================================
@@ -291,7 +291,7 @@ class TestGetTracer:
     def test_returns_noop_tracer_when_not_initialized(self) -> None:
         """Returns NoOpTracer when telemetry not initialized."""
         # Reset global state
-        import codeplane.core.telemetry as tel
+        import coderecon.core.telemetry as tel
 
         original_tracer = tel._tracer
         try:
@@ -307,7 +307,7 @@ class TestGetMeter:
 
     def test_returns_noop_meter_when_not_initialized(self) -> None:
         """Returns NoOpMeter when telemetry not initialized."""
-        import codeplane.core.telemetry as tel
+        import coderecon.core.telemetry as tel
 
         original_meter = tel._meter
         try:
@@ -400,7 +400,7 @@ class TestSpanContext:
 
     def test_yields_noop_span_when_not_initialized(self) -> None:
         """Yields NoOpSpan when telemetry not initialized."""
-        import codeplane.core.telemetry as tel
+        import coderecon.core.telemetry as tel
 
         original_tracer = tel._tracer
         try:
@@ -432,7 +432,7 @@ class TestTelemetryStatusFunctions:
 
     def test_is_telemetry_enabled_when_not_initialized(self) -> None:
         """is_telemetry_enabled returns False when not initialized."""
-        import codeplane.core.telemetry as tel
+        import coderecon.core.telemetry as tel
 
         original_tracer = tel._tracer
         try:
@@ -458,7 +458,7 @@ class TestShutdownTelemetry:
 
     def test_shutdown_when_not_initialized_no_error(self) -> None:
         """Shutdown doesn't raise when not initialized."""
-        import codeplane.core.telemetry as tel
+        import coderecon.core.telemetry as tel
 
         original_initialized = tel._initialized
         try:
@@ -469,7 +469,7 @@ class TestShutdownTelemetry:
 
     def test_shutdown_clears_globals(self) -> None:
         """Shutdown clears global state."""
-        import codeplane.core.telemetry as tel
+        import coderecon.core.telemetry as tel
 
         # Set up mock state
         original_state = (

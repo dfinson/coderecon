@@ -1,6 +1,6 @@
 # Testing Subsystem
 
-CodePlane's testing subsystem provides unified test discovery, execution, and result parsing across multiple languages and frameworks.
+CodeRecon's testing subsystem provides unified test discovery, execution, and result parsing across multiple languages and frameworks.
 
 ## Overview
 
@@ -72,7 +72,7 @@ phpunit.xml → php.phpunit
 
 ## Configuration Overrides
 
-You can override detected runners in `.codeplane/config.yaml`:
+You can override detected runners in `.recon/config.yaml`:
 
 ```yaml
 tests:
@@ -94,10 +94,10 @@ Each discovered target includes a `workspace_root` field indicating where to run
 
 ## Output Artifacts
 
-Test results are written to `.codeplane/artifacts/tests/<run_id>/`:
+Test results are written to `.recon/artifacts/tests/<run_id>/`:
 
 ```
-.codeplane/artifacts/tests/abc12345/
+.recon/artifacts/tests/abc12345/
 ├── test_tests_test_example.py.xml    # JUnit XML output
 ├── test_tests_test_example.py.stdout.txt  # Raw stdout
 └── ...
@@ -152,7 +152,7 @@ Run tests.
       "targets": { "total": 10, "completed": 3, "running": 2, "failed": 0 },
       "cases": { "total": 50, "passed": 30, "failed": 0, "skipped": 2, "errors": 0 }
     },
-    "artifact_dir": ".codeplane/artifacts/tests/abc12345"
+    "artifact_dir": ".recon/artifacts/tests/abc12345"
   }
 }
 ```

@@ -1,7 +1,7 @@
 """Generate v3 enhanced seeds by filtering v2 candidates with embedding similarity.
 
 v2 was mined programmatically from the repo structure — high recall but too many
-candidates (avg 22 pinned_paths vs v1's 3). This script uses CodePlane's file
+candidates (avg 22 pinned_paths vs v1's 3). This script uses CodeRecon's file
 embedding index to cosine-rank v2 candidates against each issue's task description,
 keeping only the top-K most semantically relevant.
 
@@ -10,7 +10,7 @@ Usage:
     python generate_seeds_v3.py
 
 Requires:
-    - CodePlane index built on the evee repo (`.codeplane/file_embedding/`)
+    - CodeRecon index built on the evee repo (`.recon/file_embedding/`)
     - ground_truth.json (for task texts)
     - enhanced_seeds_v2.json (candidate pool)
 """
@@ -38,14 +38,14 @@ OUT_PATH = Path(__file__).parent / "data" / "enhanced_seeds_v3.json"
 
 
 def _load_embedding_index(index_path: Path) -> object:
-    """Load FileEmbeddingIndex without importing full codeplane (avoids sqlmodel dep)."""
+    """Load FileEmbeddingIndex without importing full coderecon (avoids sqlmodel dep)."""
     import importlib.util
 
     # Direct module load to skip __init__.py import chains
     fe_path = (
         Path(__file__).resolve().parents[2]
         / "src"
-        / "codeplane"
+        / "coderecon"
         / "index"
         / "_internal"
         / "indexing"
@@ -67,7 +67,7 @@ def _load_embedding_index(index_path: Path) -> object:
 
 def main() -> None:
     # ── 1. Load file embedding index ──────────────────────────────
-    index_path = Path(EVEE_REPO) / ".codeplane"
+    index_path = Path(EVEE_REPO) / ".recon"
     idx = _load_embedding_index(index_path)
 
     file_count = len(idx._path_to_idx)

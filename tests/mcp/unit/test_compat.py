@@ -2,7 +2,7 @@
 
 from fastmcp import FastMCP
 
-from codeplane.mcp._compat import get_tools_sync
+from coderecon.mcp._compat import get_tools_sync
 
 
 class TestGetToolsSync:

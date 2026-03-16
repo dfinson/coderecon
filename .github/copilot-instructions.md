@@ -51,18 +51,18 @@ If you believe a hard reset is needed:
 
 Violating this rule destroys work irreversibly and may affect parallel agent workflows.
 
-<!-- codeplane-instructions -->
-## CodePlane MCP: Mandatory Tool Selection
+<!-- coderecon-instructions -->
+## CodeRecon MCP: Mandatory Tool Selection
 
-This repository uses CodePlane MCP.
+This repository uses CodeRecon MCP.
 
-### ⛔ NEVER Use Terminal to Bypass CodePlane ⛔
+### ⛔ NEVER Use Terminal to Bypass CodeRecon ⛔
 
 **Every file read, search, edit, delete, git operation, lint, and test run MUST go through
-CodePlane tools — NEVER through terminal commands.** Violations break the mutation ledger
+CodeRecon tools — NEVER through terminal commands.** Violations break the mutation ledger
 and corrupt the index.
 
-**Explicitly banned** (non-exhaustive — if a CodePlane tool can do it, the terminal MUST NOT):
+**Explicitly banned** (non-exhaustive — if a CodeRecon tool can do it, the terminal MUST NOT):
 - `cat`, `head`, `tail`, `less`, `sed -n`, `bat` → allowed for reading files after `recon`
 - `grep`, `rg`, `find`, `ag`, `wc`, `ls` → use `recon`
 - `sed -i`, `awk`, `echo >>`, `tee`, `perl -i` → use `refactor_edit`
@@ -73,7 +73,7 @@ and corrupt the index.
 
 **Allowed terminal use (exhaustive):** `jq` for sidecar cache reads per `agentic_hint`,
 package installation, running the user's application, and operations with genuinely no
-CodePlane equivalent (`docker`, `curl` to external services, etc.).
+CodeRecon equivalent (`docker`, `curl` to external services, etc.).
 
 ### Start Every Task With `recon`
 
@@ -110,18 +110,18 @@ pre-minted edit tickets returned inline — call `refactor_edit` directly (no ne
 
 | Operation | REQUIRED Tool | FORBIDDEN Alternative |
 |-----------|---------------|----------------------|
-| Task-aware discovery | `mcp_codeplane-codeplane_recon` | Manual search + read loops |
+| Task-aware discovery | `mcp_coderecon-coderecon_recon` | Manual search + read loops |
 | Read file content | `cat`, `head`, `sed -n` (terminal) | N/A — terminal reads are allowed |
-| Edit files | `mcp_codeplane-codeplane_refactor_edit` | `sed`, `echo >>`, `awk`, `tee` |
-| Delete file | `mcp_codeplane-codeplane_refactor_edit(delete=True)` | `git rm`, `rm` |
-| Rename symbol | `mcp_codeplane-codeplane_refactor_rename` | Find-and-replace, `sed` |
-| Move file | `mcp_codeplane-codeplane_refactor_move` | `mv` + manual import fixup |
-| Find all references | `mcp_codeplane-codeplane_recon_impact` | `grep`, `rg`, scaffold iteration |
-| Apply/inspect refactor | `mcp_codeplane-codeplane_refactor_commit` | Manual verification |
-| Cancel refactor | `mcp_codeplane-codeplane_refactor_cancel` | — |
-| Lint + test + commit | `mcp_codeplane-codeplane_checkpoint` | Running linters/test runners/git directly |
-| Structural diff | `mcp_codeplane-codeplane_semantic_diff` | `git diff` for change review |
-| Tool/error docs | `mcp_codeplane-codeplane_describe` | Guessing parameter names |
+| Edit files | `mcp_coderecon-coderecon_refactor_edit` | `sed`, `echo >>`, `awk`, `tee` |
+| Delete file | `mcp_coderecon-coderecon_refactor_edit(delete=True)` | `git rm`, `rm` |
+| Rename symbol | `mcp_coderecon-coderecon_refactor_rename` | Find-and-replace, `sed` |
+| Move file | `mcp_coderecon-coderecon_refactor_move` | `mv` + manual import fixup |
+| Find all references | `mcp_coderecon-coderecon_recon_impact` | `grep`, `rg`, scaffold iteration |
+| Apply/inspect refactor | `mcp_coderecon-coderecon_refactor_commit` | Manual verification |
+| Cancel refactor | `mcp_coderecon-coderecon_refactor_cancel` | — |
+| Lint + test + commit | `mcp_coderecon-coderecon_checkpoint` | Running linters/test runners/git directly |
+| Structural diff | `mcp_coderecon-coderecon_semantic_diff` | `git diff` for change review |
+| Tool/error docs | `mcp_coderecon-coderecon_describe` | Guessing parameter names |
 
 ### Before You Edit: Decision Gate
 
@@ -219,4 +219,4 @@ Budget resets on failure. `fix_plan` is always in the checkpoint response — no
   not a search index. Use `recon_impact` to find all usages of a symbol
 - **DON'T** skip `checkpoint(changed_files=[])` after read-only flows — session state
   (recon gate, mutation budget) carries over and blocks the next task
-<!-- /codeplane-instructions -->
+<!-- /coderecon-instructions -->

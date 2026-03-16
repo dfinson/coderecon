@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from codeplane.index._internal.indexing.resolver import (
+from coderecon.index._internal.indexing.resolver import (
     ReferenceResolver,
     ResolutionStats,
     resolve_references,

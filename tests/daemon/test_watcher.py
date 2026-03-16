@@ -4,7 +4,7 @@ Tests cover:
 - HARDCODED_DIRS constant
 - _collect_watch_dirs() function (replaces _get_watchable_paths)
 - FileWatcher debouncing behavior
-- cplignore change detection
+- reconignore change detection
 - Cross-filesystem detection
 - Integration with IgnoreChecker
 """
@@ -18,8 +18,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from codeplane.core.excludes import PRUNABLE_DIRS
-from codeplane.daemon.watcher import (
+from coderecon.core.excludes import PRUNABLE_DIRS
+from coderecon.daemon.watcher import (
     DEBOUNCE_WINDOW_SEC,
     HARDCODED_DIRS,
     MAX_DEBOUNCE_WAIT_SEC,
@@ -28,7 +28,7 @@ from codeplane.daemon.watcher import (
     _is_cross_filesystem,
     _summarize_changes_by_type,
 )
-from codeplane.index._internal.ignore import IgnoreChecker
+from coderecon.index._internal.ignore import IgnoreChecker
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -37,9 +37,9 @@ if TYPE_CHECKING:
 class TestHardcodedDirs:
     """Tests for HARDCODED_DIRS constant."""
 
-    def test_contains_codeplane(self) -> None:
-        """HARDCODED_DIRS must contain .codeplane to prevent inotify feedback."""
-        assert ".codeplane" in HARDCODED_DIRS
+    def test_contains_coderecon(self) -> None:
+        """HARDCODED_DIRS must contain .recon to prevent inotify feedback."""
+        assert ".recon" in HARDCODED_DIRS
 
     def test_contains_git(self) -> None:
         """HARDCODED_DIRS must contain .git."""
@@ -75,7 +75,7 @@ class TestCollectWatchDirs:
     def test_excludes_hardcoded_dirs(self, tmp_path: Path, ignore_checker: IgnoreChecker) -> None:
         """Directories in HARDCODED_DIRS are excluded from watch list."""
         (tmp_path / ".git").mkdir()
-        (tmp_path / ".codeplane").mkdir()
+        (tmp_path / ".recon").mkdir()
         (tmp_path / "src").mkdir()
         (tmp_path / "tests").mkdir()
 
@@ -83,7 +83,7 @@ class TestCollectWatchDirs:
         dir_names = {d.name for d in dirs}
 
         assert ".git" not in dir_names
-        assert ".codeplane" not in dir_names
+        assert ".recon" not in dir_names
         assert "src" in dir_names
         assert "tests" in dir_names
 
@@ -140,21 +140,21 @@ class TestCollectWatchDirs:
     def test_only_hardcoded_dirs(self, tmp_path: Path, ignore_checker: IgnoreChecker) -> None:
         """Directory with only hardcoded dirs returns only the root."""
         (tmp_path / ".git").mkdir()
-        (tmp_path / ".codeplane").mkdir()
+        (tmp_path / ".recon").mkdir()
 
         dirs = _collect_watch_dirs(tmp_path, ignore_checker)
         assert dirs == [tmp_path]
 
-    def test_prunes_cplignore_path_patterns(self, tmp_path: Path) -> None:
-        """Path patterns in .cplignore prune entire subtrees from watch list."""
+    def test_prunes_reconignore_path_patterns(self, tmp_path: Path) -> None:
+        """Path patterns in .reconignore prune entire subtrees from watch list."""
         # Create a deep directory tree that should be excluded by path pattern
         (tmp_path / "ranking" / "clones" / "repo-a" / "src").mkdir(parents=True)
         (tmp_path / "ranking" / "clones" / "repo-b").mkdir(parents=True)
         (tmp_path / "ranking" / "src").mkdir(parents=True)
         (tmp_path / "src").mkdir()
 
-        # Write .cplignore with a path pattern
-        (tmp_path / ".cplignore").write_text("ranking/clones/\n")
+        # Write .reconignore with a path pattern
+        (tmp_path / ".reconignore").write_text("ranking/clones/\n")
 
         checker = IgnoreChecker(tmp_path, respect_gitignore=False)
         dirs = _collect_watch_dirs(tmp_path, checker)
@@ -245,7 +245,7 @@ class TestFileWatcherDebouncing:
     @pytest.fixture
     def watcher(self, tmp_path: Path) -> Generator[FileWatcher, None, None]:
         """Create a FileWatcher for testing."""
-        (tmp_path / ".codeplane").mkdir(exist_ok=True)
+        (tmp_path / ".recon").mkdir(exist_ok=True)
         watcher = FileWatcher(
             repo_root=tmp_path,
             on_change=lambda _: None,
@@ -313,7 +313,7 @@ class TestFileWatcherPollingMode:
     @pytest.fixture
     def polling_watcher(self, tmp_path: Path) -> Generator[FileWatcher, None, None]:
         """Create a FileWatcher forced into polling mode."""
-        (tmp_path / ".codeplane").mkdir(exist_ok=True)
+        (tmp_path / ".recon").mkdir(exist_ok=True)
         watcher = FileWatcher(
             repo_root=tmp_path,
             on_change=lambda _: None,
@@ -375,7 +375,7 @@ class TestFileWatcherNativeMode:
     @pytest.fixture
     def native_watcher(self, tmp_path: Path) -> Generator[FileWatcher, None, None]:
         """Create a FileWatcher in native mode with fast settings."""
-        (tmp_path / ".codeplane").mkdir(exist_ok=True)
+        (tmp_path / ".recon").mkdir(exist_ok=True)
         watcher = FileWatcher(
             repo_root=tmp_path,
             on_change=lambda _: None,
@@ -437,14 +437,14 @@ class TestFileWatcherNativeMode:
 
 
 class TestFileWatcherCplignore:
-    """Tests for cplignore change handling."""
+    """Tests for reconignore change handling."""
 
     @pytest.fixture
-    def watcher_with_cplignore(self, tmp_path: Path) -> Generator[FileWatcher, None, None]:
-        """Create a watcher with .cplignore file."""
-        cplignore_dir = tmp_path / ".codeplane"
-        cplignore_dir.mkdir()
-        (cplignore_dir / ".cplignore").write_text("*.log\n")
+    def watcher_with_reconignore(self, tmp_path: Path) -> Generator[FileWatcher, None, None]:
+        """Create a watcher with .reconignore file."""
+        reconignore_dir = tmp_path / ".recon"
+        reconignore_dir.mkdir()
+        (reconignore_dir / ".reconignore").write_text("*.log\n")
 
         watcher = FileWatcher(
             repo_root=tmp_path,
@@ -452,18 +452,18 @@ class TestFileWatcherCplignore:
         )
         yield watcher
 
-    def test_initial_cplignore_content_captured(self, watcher_with_cplignore: FileWatcher) -> None:
-        """Initial .cplignore content is captured for diff."""
-        assert watcher_with_cplignore._last_cplignore_content == "*.log\n"
+    def test_initial_reconignore_content_captured(self, watcher_with_reconignore: FileWatcher) -> None:
+        """Initial .reconignore content is captured for diff."""
+        assert watcher_with_reconignore._last_reconignore_content == "*.log\n"
 
-    def test_handle_cplignore_change_updates_cache(
-        self, watcher_with_cplignore: FileWatcher, tmp_path: Path
+    def test_handle_reconignore_change_updates_cache(
+        self, watcher_with_reconignore: FileWatcher, tmp_path: Path
     ) -> None:
-        """_handle_cplignore_change updates cached content."""
-        cplignore = tmp_path / ".codeplane" / ".cplignore"
-        cplignore.write_text("*.log\n*.tmp\n")
+        """_handle_reconignore_change updates cached content."""
+        reconignore = tmp_path / ".recon" / ".reconignore"
+        reconignore.write_text("*.log\n*.tmp\n")
 
-        rel_path = Path(".codeplane") / ".cplignore"
-        watcher_with_cplignore._handle_cplignore_change(rel_path)
+        rel_path = Path(".recon") / ".reconignore"
+        watcher_with_reconignore._handle_reconignore_change(rel_path)
 
-        assert watcher_with_cplignore._last_cplignore_content == "*.log\n*.tmp\n"
+        assert watcher_with_reconignore._last_reconignore_content == "*.log\n*.tmp\n"

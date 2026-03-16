@@ -54,12 +54,12 @@ version = "0.1.0"
 testpaths = ["tests"]
 """)
 
-    # Create .codeplane/.cplignore (simulating cpl init)
-    codeplane_dir = repo_path / ".codeplane"
-    codeplane_dir.mkdir()
-    from codeplane.templates import get_cplignore_template
+    # Create .recon/.reconignore (simulating recon init)
+    coderecon_dir = repo_path / ".recon"
+    coderecon_dir.mkdir()
+    from coderecon.templates import get_reconignore_template
 
-    (codeplane_dir / ".cplignore").write_text(get_cplignore_template())
+    (coderecon_dir / ".reconignore").write_text(get_reconignore_template())
 
     # Create tests directory
     (repo_path / "tests").mkdir()
@@ -100,12 +100,12 @@ def integration_monorepo(tmp_path: Path) -> Generator[Path, None, None]:
   - 'pkgs/*'
 """)
 
-    # Create .codeplane/.cplignore (simulating cpl init)
-    codeplane_dir = repo_path / ".codeplane"
-    codeplane_dir.mkdir()
-    from codeplane.templates import get_cplignore_template
+    # Create .recon/.reconignore (simulating recon init)
+    coderecon_dir = repo_path / ".recon"
+    coderecon_dir.mkdir()
+    from coderecon.templates import get_reconignore_template
 
-    (codeplane_dir / ".cplignore").write_text(get_cplignore_template())
+    (coderecon_dir / ".reconignore").write_text(get_reconignore_template())
 
     # Create root package.json
     (repo_path / "package.json").write_text("""{

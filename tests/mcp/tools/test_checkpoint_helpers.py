@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from codeplane.mcp.tools.checkpoint import (
+from coderecon.mcp.tools.checkpoint import (
     _build_failure_snippets,
     _extract_traceback_locations,
 )

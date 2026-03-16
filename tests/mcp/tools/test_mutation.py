@@ -6,7 +6,7 @@ Verifies EditParam validation logic.
 import pytest
 from pydantic import ValidationError
 
-from codeplane.mcp.tools.mutation import EditParam
+from coderecon.mcp.tools.mutation import EditParam
 
 
 class TestEditParam:

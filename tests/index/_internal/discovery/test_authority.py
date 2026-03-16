@@ -6,11 +6,11 @@ import json
 import tempfile
 from pathlib import Path
 
-from codeplane.index._internal.discovery.authority import (
+from coderecon.index._internal.discovery.authority import (
     AuthorityResult,
     Tier1AuthorityFilter,
 )
-from codeplane.index.models import CandidateContext, LanguageFamily, ProbeStatus
+from coderecon.index.models import CandidateContext, LanguageFamily, ProbeStatus
 
 
 def make_candidate(

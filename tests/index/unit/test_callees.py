@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.index._internal.db import Database, create_additional_indexes
-from codeplane.index._internal.indexing.graph import FactQueries
-from codeplane.index.models import (
+from coderecon.index._internal.db import Database, create_additional_indexes
+from coderecon.index._internal.indexing.graph import FactQueries
+from coderecon.index.models import (
     Certainty,
     Context,
     DefFact,

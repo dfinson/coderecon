@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import time
 
-from codeplane.mcp.ledger import (
+from coderecon.mcp.ledger import (
     DryRunRecord,
     OperationLedger,
     OperationRecord,
@@ -450,7 +450,7 @@ class TestGetLedger:
 
     def test_get_ledger_creates_if_none(self) -> None:
         """get_ledger creates instance if None."""
-        import codeplane.mcp.ledger as ledger_module
+        import coderecon.mcp.ledger as ledger_module
 
         original = ledger_module._ledger
         try:

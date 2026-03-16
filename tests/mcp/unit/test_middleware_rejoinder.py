@@ -6,8 +6,8 @@ from unittest.mock import MagicMock
 
 from fastmcp.tools.tool import ToolResult
 
-from codeplane.mcp.gate import PatternMatch, build_pattern_hint
-from codeplane.mcp.middleware import (
+from coderecon.mcp.gate import PatternMatch, build_pattern_hint
+from coderecon.mcp.middleware import (
     _REJOINDER_INTERVAL,
     _REJOINDER_ROTATION,
     _REJOINDERS,
@@ -110,7 +110,7 @@ class TestRejoinerMerging:
 
     def test_append_to_existing_agentic_hint(self) -> None:
         """Rejoinder appends to (not overwrites) existing agentic_hint."""
-        existing_hint = "Full result cached at .codeplane/cache/foo.json"
+        existing_hint = "Full result cached at .recon/cache/foo.json"
         result_dict: dict[str, object] = {
             "summary": "ok",
             "agentic_hint": existing_hint,

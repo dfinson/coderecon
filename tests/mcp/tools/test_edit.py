@@ -20,9 +20,9 @@ from unittest.mock import MagicMock
 import pytest
 from fastmcp import FastMCP
 
-from codeplane.mcp._compat import get_tools_sync
-from codeplane.mcp.errors import MCPError, MCPErrorCode
-from codeplane.mcp.tools.edit import (
+from coderecon.mcp._compat import get_tools_sync
+from coderecon.mcp.errors import MCPError, MCPErrorCode
+from coderecon.mcp.tools.edit import (
     FindReplaceEdit,
     _find_all_occurrences,
     _fuzzy_find,
@@ -336,7 +336,7 @@ class TestRefactorEditHandler:
         session.edits_since_checkpoint = 0
         session.read_only = False
 
-        from codeplane.mcp.session import MutationContext, RefactorPlan
+        from coderecon.mcp.session import MutationContext, RefactorPlan
 
         mutation_ctx = MutationContext()
         mutation_ctx.plan = RefactorPlan(
@@ -373,7 +373,7 @@ class TestRefactorEditHandler:
         session = app_ctx.session_manager.get_or_create.return_value
         # sha256 now computed from disk by refactor_plan
 
-        from codeplane.mcp.session import EditTicket
+        from coderecon.mcp.session import EditTicket
 
         ticket_id = "recon1:0:" + sha[:8]
         session.mutation_ctx.edit_tickets[ticket_id] = EditTicket(
@@ -420,7 +420,7 @@ class TestRefactorEditHandler:
         self._write_file(tmp_path, "stale.py", "old content\n")
         session = app_ctx.session_manager.get_or_create.return_value
 
-        from codeplane.mcp.session import EditTicket
+        from coderecon.mcp.session import EditTicket
 
         # Ticket with wrong sha256
         ticket_id = "r:0:deadbeef"
@@ -436,7 +436,7 @@ class TestRefactorEditHandler:
         tools = get_tools_sync(mcp_app)
         edit_fn = tools["refactor_edit"].fn
 
-        from codeplane.mcp.errors import FileHashMismatchError
+        from coderecon.mcp.errors import FileHashMismatchError
 
         with pytest.raises(FileHashMismatchError):
             await edit_fn(
@@ -599,7 +599,7 @@ class TestRefactorEditHandler:
         session = app_ctx.session_manager.get_or_create.return_value
         session.counters = {"recon_called": 1}
 
-        from codeplane.mcp.session import EditTicket
+        from coderecon.mcp.session import EditTicket
 
         ticket_id = f"r:0:{sha[:8]}"
         session.mutation_ctx.edit_tickets[ticket_id] = EditTicket(
@@ -655,7 +655,7 @@ class TestRefactorEditHandler:
         sha = self._write_file(tmp_path, "used.py", "old\n")
         session = app_ctx.session_manager.get_or_create.return_value
 
-        from codeplane.mcp.session import EditTicket
+        from coderecon.mcp.session import EditTicket
 
         ticket_id = f"r:0:{sha[:8]}"
         session.mutation_ctx.edit_tickets[ticket_id] = EditTicket(

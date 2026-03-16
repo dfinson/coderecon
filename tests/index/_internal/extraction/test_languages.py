@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from codeplane.index._internal.parsing.packs import (
+from coderecon.index._internal.parsing.packs import (
     PACKS,
     TypeExtractionConfig,
     get_pack,

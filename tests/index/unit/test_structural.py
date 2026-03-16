@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.index._internal.db import Database
-from codeplane.index._internal.indexing.structural import (
+from coderecon.index._internal.db import Database
+from coderecon.index._internal.indexing.structural import (
     BatchResult,
     ExtractionResult,
     StructuralIndexer,
@@ -21,14 +21,14 @@ from codeplane.index._internal.indexing.structural import (
     _extract_file,
     _find_containing_scope,
 )
-from codeplane.index._internal.parsing import SyntacticScope
-from codeplane.index.models import Context, DefFact, RefFact, RefTier, Role
+from coderecon.index._internal.parsing import SyntacticScope
+from coderecon.index.models import Context, DefFact, RefFact, RefTier, Role
 
 
 @pytest.fixture
 def db(temp_dir: Path) -> Database:
     """Create a test database with schema."""
-    from codeplane.index._internal.db import create_additional_indexes
+    from coderecon.index._internal.db import create_additional_indexes
 
     db_path = temp_dir / "test_structural.db"
     db = Database(db_path)
@@ -569,7 +569,7 @@ namespace App {
         with db.session() as session:
             from sqlmodel import select
 
-            from codeplane.index.models import File
+            from coderecon.index.models import File
 
             client_file = session.exec(select(File).where(File.path == "Client.cs")).first()
             assert client_file is not None
@@ -584,7 +584,7 @@ namespace App {
             assert all(r.ref_tier == RefTier.UNKNOWN.value for r in dcr_refs)
 
         # Run DB-backed resolution (Pass 1.5)
-        from codeplane.index._internal.indexing.resolver import resolve_namespace_refs
+        from coderecon.index._internal.indexing.resolver import resolve_namespace_refs
 
         stats = resolve_namespace_refs(db, context_id)
         assert stats.refs_upgraded >= 1
@@ -632,7 +632,7 @@ namespace App {
         indexer = StructuralIndexer(db, temp_dir)
         indexer.index_files(["Client.cs"], context_id=context_id or 1)
 
-        from codeplane.index._internal.indexing.resolver import resolve_namespace_refs
+        from coderecon.index._internal.indexing.resolver import resolve_namespace_refs
 
         resolve_namespace_refs(db, context_id)
 
@@ -640,7 +640,7 @@ namespace App {
         with db.session() as session:
             from sqlmodel import select
 
-            from codeplane.index.models import File
+            from coderecon.index.models import File
 
             client_file = session.exec(select(File).where(File.path == "Client.cs")).first()
             assert client_file is not None
@@ -688,7 +688,7 @@ y = Utility()
         with db.session() as session:
             from sqlmodel import select
 
-            from codeplane.index.models import File
+            from coderecon.index.models import File
 
             main_file = session.exec(select(File).where(File.path == "main.py")).first()
             assert main_file is not None
@@ -703,7 +703,7 @@ y = Utility()
             assert all(r.ref_tier == RefTier.UNKNOWN.value for r in helper_refs)
 
         # Run DB-backed resolution (Pass 1.5)
-        from codeplane.index._internal.indexing.resolver import resolve_star_import_refs
+        from coderecon.index._internal.indexing.resolver import resolve_star_import_refs
 
         stats = resolve_star_import_refs(db, context_id)
         assert stats.refs_upgraded >= 1
@@ -760,7 +760,7 @@ x = exists("/tmp")
         indexer = StructuralIndexer(db, temp_dir)
         indexer.index_files(["main.py"], context_id=context_id or 1)
 
-        from codeplane.index._internal.indexing.resolver import resolve_star_import_refs
+        from coderecon.index._internal.indexing.resolver import resolve_star_import_refs
 
         resolve_star_import_refs(db, context_id)
 
@@ -768,7 +768,7 @@ x = exists("/tmp")
         with db.session() as session:
             from sqlmodel import select
 
-            from codeplane.index.models import File
+            from coderecon.index.models import File
 
             main_file = session.exec(select(File).where(File.path == "main.py")).first()
             assert main_file is not None
@@ -821,14 +821,14 @@ namespace App {
         indexer.index_files(["B.cs"], context_id=context_id or 1)
         indexer.index_files(["Consumer.cs"], context_id=context_id or 1)
 
-        from codeplane.index._internal.indexing.resolver import resolve_namespace_refs
+        from coderecon.index._internal.indexing.resolver import resolve_namespace_refs
 
         stats = resolve_namespace_refs(db, context_id)
         assert stats.refs_upgraded >= 1
         with db.session() as session:
             from sqlmodel import select
 
-            from codeplane.index.models import File
+            from coderecon.index.models import File
 
             consumer_file = session.exec(select(File).where(File.path == "Consumer.cs")).first()
             assert consumer_file is not None
@@ -909,7 +909,7 @@ namespace App {
         with db.session() as session:
             from sqlmodel import select
 
-            from codeplane.index.models import File
+            from coderecon.index.models import File
 
             convert_file = session.exec(select(File).where(File.path == "JsonConvert.cs")).first()
             assert convert_file is not None
@@ -924,7 +924,7 @@ namespace App {
             assert all(r.ref_tier == RefTier.UNKNOWN.value for r in js_refs)
 
         # namespace-using resolution should NOT match (no using directive)
-        from codeplane.index._internal.indexing.resolver import (
+        from coderecon.index._internal.indexing.resolver import (
             resolve_namespace_refs,
             resolve_same_namespace_refs,
         )
@@ -988,7 +988,7 @@ namespace App {
         with db.session() as session:
             from sqlmodel import select
 
-            from codeplane.index.models import File
+            from coderecon.index.models import File
 
             converter_file = session.exec(
                 select(File).where(File.path == "RegexConverter.cs")
@@ -1004,7 +1004,7 @@ namespace App {
             assert len(js_refs) >= 1
             assert all(r.ref_tier == RefTier.UNKNOWN.value for r in js_refs)
 
-        from codeplane.index._internal.indexing.resolver import resolve_same_namespace_refs
+        from coderecon.index._internal.indexing.resolver import resolve_same_namespace_refs
 
         stats = resolve_same_namespace_refs(db, context_id)
         assert stats.refs_upgraded >= 1
@@ -1057,7 +1057,7 @@ namespace App {
         indexer = StructuralIndexer(db, temp_dir)
         indexer.index_files(["A.cs", "B.cs"], context_id=context_id or 1)
 
-        from codeplane.index._internal.indexing.resolver import resolve_same_namespace_refs
+        from coderecon.index._internal.indexing.resolver import resolve_same_namespace_refs
 
         resolve_same_namespace_refs(db, context_id)
 
@@ -1065,7 +1065,7 @@ namespace App {
         with db.session() as session:
             from sqlmodel import select
 
-            from codeplane.index.models import File
+            from coderecon.index.models import File
 
             b_file = session.exec(select(File).where(File.path == "B.cs")).first()
             assert b_file is not None

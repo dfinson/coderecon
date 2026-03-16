@@ -6,8 +6,8 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from codeplane.index._internal.db.epoch import EpochManager, EpochStats
-from codeplane.index.models import Epoch, RepoState
+from coderecon.index._internal.db.epoch import EpochManager, EpochStats
+from coderecon.index.models import Epoch, RepoState
 
 
 class TestEpochStats:

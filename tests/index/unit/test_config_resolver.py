@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from codeplane.index._internal.indexing.config_resolver import (
+from coderecon.index._internal.indexing.config_resolver import (
     ConfigResolver,
     ImportPathResolver,
     build_js_package_exports,

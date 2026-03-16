@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 import pygit2
 import pytest
 
-from codeplane.git import GitOps
+from coderecon.git import GitOps
 
 if TYPE_CHECKING:
     from collections.abc import Generator

@@ -8,7 +8,7 @@ Covers:
 
 from __future__ import annotations
 
-from codeplane.config.constants import (
+from coderecon.config.constants import (
     EPOCH_POLL_MS,
     FILES_LIST_MAX,
     INSPECT_CONTEXT_LINES_DEFAULT,

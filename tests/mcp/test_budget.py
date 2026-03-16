@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from codeplane.mcp.budget import measure_bytes
+from coderecon.mcp.budget import measure_bytes
 
 # =============================================================================
 # Tests for measure_bytes

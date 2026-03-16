@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.mcp.tools.files import (
+from coderecon.mcp.tools.files import (
     SpanTarget,
     StructuralTarget,
     _compute_file_sha256,

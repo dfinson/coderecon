@@ -2,17 +2,17 @@
 
 Reads a trace JSONL file (produced by ``trace_collector.py``), extracts
 every file-read range, merges overlapping/adjacent ranges per file,
-then cross-references against the static ``.codeplane/index.db`` SQLite
+then cross-references against the static ``.recon/index.db`` SQLite
 database to find which ``def_facts`` rows overlap with traced ranges.
 
-No codeplane library dependency — uses stdlib ``sqlite3`` directly
+No coderecon library dependency — uses stdlib ``sqlite3`` directly
 against the pre-built index DB.
 
 Usage::
 
     candidates = trace_to_candidates(
         trace_path=Path("data/python-fastapi/traces/N1.jsonl"),
-        index_db_path=Path("clones/ranker-gate/fastapi/.codeplane/index.db"),
+        index_db_path=Path("clones/ranker-gate/fastapi/.recon/index.db"),
         clone_root=Path("clones/ranker-gate/fastapi"),
     )
 """
@@ -162,7 +162,7 @@ def _query_overlapping_defs(
 ) -> list[CandidateDef]:
     """Find all def_facts that overlap with any of the given ranges for a file.
 
-    Uses the pre-built index DB (read-only, no codeplane dependency).
+    Uses the pre-built index DB (read-only, no coderecon dependency).
     """
     # First, find the file_id for this path
     row = db.execute(
@@ -212,7 +212,7 @@ def trace_to_candidates(
 
     Args:
         trace_path: Path to the JSONL trace file for one task.
-        index_db_path: Path to the .codeplane/index.db SQLite file.
+        index_db_path: Path to the .recon/index.db SQLite file.
         clone_root: Absolute path to the clone directory (for path normalization).
 
     Returns:

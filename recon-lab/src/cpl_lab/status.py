@@ -79,7 +79,7 @@ def _pipeline_position(
     for set_name in REPO_SETS:
         sd = clones_dir / set_name
         if sd.is_dir():
-            total_indexed += sum(1 for d in sd.iterdir() if (d / ".codeplane").is_dir())
+            total_indexed += sum(1 for d in sd.iterdir() if (d / ".recon").is_dir())
     if total_indexed < total_expected:
         return "index", f"{total_indexed}/{total_expected} repos indexed"
 
@@ -171,7 +171,7 @@ def run_status(config: dict[str, Any], verbose: bool = False) -> None:
         set_dir = clones_dir / set_name
         expected = len(manifest)
         cloned = sum(1 for d in set_dir.iterdir() if (d / ".git").is_dir()) if set_dir.is_dir() else 0
-        indexed = sum(1 for d in set_dir.iterdir() if (d / ".codeplane").is_dir()) if set_dir.is_dir() else 0
+        indexed = sum(1 for d in set_dir.iterdir() if (d / ".recon").is_dir()) if set_dir.is_dir() else 0
         click.echo(f"  {set_name:14s}  cloned: {cloned:2d}/{expected:2d}  indexed: {indexed:2d}/{expected:2d}")
 
     # ── Ground Truth ─────────────────────────────────────────────

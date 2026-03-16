@@ -8,7 +8,7 @@ from pathlib import Path
 import pygit2
 import pytest
 
-from codeplane.git import DiffInfo, GitOps, RefNotFoundError
+from coderecon.git import DiffInfo, GitOps, RefNotFoundError
 
 
 class TestDiffPlanner:

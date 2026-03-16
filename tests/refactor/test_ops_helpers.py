@@ -10,7 +10,7 @@ Covers:
 
 from unittest.mock import MagicMock
 
-from codeplane.refactor.ops import (
+from coderecon.refactor.ops import (
     EditHunk,
     FileEdit,
     InspectResult,

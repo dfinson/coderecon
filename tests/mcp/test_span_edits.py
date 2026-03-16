@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from codeplane.mcp.tools.mutation import EditParam
+from coderecon.mcp.tools.mutation import EditParam
 
 
 class TestEditParamValidation:
@@ -201,7 +201,7 @@ class TestFuzzySpanMatching:
 
     def test_exact_match_no_correction(self) -> None:
         """When content matches at given position, no correction."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span
 
         lines = ["line 1\n", "line 2\n", "line 3\n", "line 4\n", "line 5\n"]
         start, end, corrected = _fuzzy_match_span(lines, 1, 3, "line 2\nline 3\n")
@@ -211,7 +211,7 @@ class TestFuzzySpanMatching:
 
     def test_off_by_one_forward(self) -> None:
         """Content shifted forward by 1 line is auto-corrected."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span
 
         lines = ["a\n", "b\n", "TARGET\n", "d\n", "e\n"]
         # Agent thinks TARGET is at line index 1, but it's at 2
@@ -222,7 +222,7 @@ class TestFuzzySpanMatching:
 
     def test_off_by_one_backward(self) -> None:
         """Content shifted backward by 1 line is auto-corrected."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span
 
         lines = ["a\n", "TARGET\n", "c\n", "d\n", "e\n"]
         # Agent thinks TARGET is at line index 2, but it's at 1
@@ -233,7 +233,7 @@ class TestFuzzySpanMatching:
 
     def test_off_by_three(self) -> None:
         """Content shifted by 3 lines is still found within window."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span
 
         lines = [f"line{i}\n" for i in range(10)]
         # Agent thinks "line7" is at index 4, but it's at 7
@@ -244,7 +244,7 @@ class TestFuzzySpanMatching:
 
     def test_beyond_window_no_correction(self) -> None:
         """Content shifted beyond window returns original (no match)."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span
 
         lines = [f"line{i}\n" for i in range(20)]
         # Agent thinks "line15" is at index 2, but it's 13 away (> window)
@@ -255,7 +255,7 @@ class TestFuzzySpanMatching:
 
     def test_whitespace_normalized(self) -> None:
         """Trailing whitespace differences don't block matching."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span
 
         lines = ["a\n", "target  \n", "c\n"]
         start, end, corrected = _fuzzy_match_span(lines, 0, 1, "target\n")
@@ -265,7 +265,7 @@ class TestFuzzySpanMatching:
 
     def test_multi_line_span(self) -> None:
         """Multi-line expected_content matches correctly."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span
 
         lines = ["a\n", "b\n", "foo\n", "bar\n", "baz\n", "e\n"]
         # Agent thinks foo/bar/baz is at index 1-3, but it's at 2-4
@@ -301,7 +301,7 @@ class TestFuzzySpanMatching:
 
     def test_width_correction_same_position(self) -> None:
         """Agent has correct start but wrong end_line (off-by-one width)."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span
 
         lines = ["a\n", "b\n", "c\n", "d\n", "e\n"]
         # Agent says span [0:3] (3 lines) but expected_content is only 2 lines
@@ -312,7 +312,7 @@ class TestFuzzySpanMatching:
 
     def test_width_correction_end_extending_past(self) -> None:
         """Agent end_line is 1 too many — width correction shrinks span."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span
 
         lines = ["x\n", "target1\n", "target2\n", "target3\n", "y\n"]
         # Agent says start=1, end=5 (4 lines) but content is 3 lines
@@ -323,7 +323,7 @@ class TestFuzzySpanMatching:
 
     def test_width_correction_not_triggered_when_exact(self) -> None:
         """Width correction skipped when span width matches expected_content lines."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span
 
         lines = ["a\n", "b\n", "c\n"]
         start, end, corrected = _fuzzy_match_span(lines, 0, 2, "a\nb\n")
@@ -333,7 +333,7 @@ class TestFuzzySpanMatching:
 
     def test_content_mismatch_no_match_returns_original(self) -> None:
         """When expected_content doesn't match anywhere, original span returned."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span
 
         lines = ["a\n", "b\n", "c\n", "d\n", "e\n"]
         start, end, corrected = _fuzzy_match_span(lines, 1, 2, "NONEXISTENT\n")
@@ -347,7 +347,7 @@ class TestContentVerification:
 
     def test_content_mismatch_raises_error(self) -> None:
         """Mismatched expected_content raises MCPError with line counts."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span, _lines_match
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span, _lines_match
 
         lines = ["a\n", "b\n", "c\n", "d\n", "e\n"]
         expected_content = "WRONG\nCONTENT\n"
@@ -364,7 +364,7 @@ class TestContentVerification:
 
     def test_line_count_reported_in_mismatch(self) -> None:
         """Error message includes both expected and actual line counts."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span, _lines_match
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span, _lines_match
 
         lines = [f"line{i}\n" for i in range(10)]
         # 5-line expected_content vs 3-line span — no match anywhere
@@ -384,8 +384,8 @@ class TestContentVerification:
 
     def test_mismatch_raises_mcp_error_with_content_mismatch_code(self) -> None:
         """Full error path: MCPError raised with CONTENT_MISMATCH code and message."""
-        from codeplane.mcp.errors import MCPError, MCPErrorCode
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span, _lines_match
+        from coderecon.mcp.errors import MCPError, MCPErrorCode
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span, _lines_match
 
         lines = ["a\n", "b\n", "c\n", "d\n", "e\n"]
         expected_content = "WRONG\nCONTENT\n"
@@ -434,39 +434,39 @@ class TestLinesMatch:
     """Direct tests for _lines_match whitespace-normalized comparison."""
 
     def test_empty_lists_match(self) -> None:
-        from codeplane.mcp.tools.mutation import _lines_match
+        from coderecon.mcp.tools.mutation import _lines_match
 
         assert _lines_match([], []) is True
 
     def test_single_line_match(self) -> None:
-        from codeplane.mcp.tools.mutation import _lines_match
+        from coderecon.mcp.tools.mutation import _lines_match
 
         assert _lines_match(["hello\n"], ["hello\n"]) is True
 
     def test_trailing_whitespace_ignored(self) -> None:
-        from codeplane.mcp.tools.mutation import _lines_match
+        from coderecon.mcp.tools.mutation import _lines_match
 
         assert _lines_match(["hello  \n"], ["hello\n"]) is True
         assert _lines_match(["hello\n"], ["hello   \n"]) is True
 
     def test_leading_whitespace_matters(self) -> None:
-        from codeplane.mcp.tools.mutation import _lines_match
+        from coderecon.mcp.tools.mutation import _lines_match
 
         assert _lines_match(["  hello\n"], ["hello\n"]) is False
 
     def test_length_mismatch(self) -> None:
-        from codeplane.mcp.tools.mutation import _lines_match
+        from coderecon.mcp.tools.mutation import _lines_match
 
         assert _lines_match(["a\n", "b\n"], ["a\n"]) is False
         assert _lines_match(["a\n"], ["a\n", "b\n"]) is False
 
     def test_content_mismatch(self) -> None:
-        from codeplane.mcp.tools.mutation import _lines_match
+        from coderecon.mcp.tools.mutation import _lines_match
 
         assert _lines_match(["foo\n"], ["bar\n"]) is False
 
     def test_multi_line_all_match(self) -> None:
-        from codeplane.mcp.tools.mutation import _lines_match
+        from coderecon.mcp.tools.mutation import _lines_match
 
         actual = ["def foo():\n", "    pass\n", "\n"]
         expected = ["def foo():\n", "    pass\n", "\n"]
@@ -474,7 +474,7 @@ class TestLinesMatch:
 
     def test_tabs_vs_spaces_not_normalized(self) -> None:
         """Leading whitespace differences (tabs vs spaces) are not normalized."""
-        from codeplane.mcp.tools.mutation import _lines_match
+        from coderecon.mcp.tools.mutation import _lines_match
 
         assert _lines_match(["\tfoo\n"], ["    foo\n"]) is False
 
@@ -489,7 +489,7 @@ class TestFuzzyMatchEdgeCases:
 
     def test_exact_at_window_boundary(self) -> None:
         """Content offset by exactly _FUZZY_SEARCH_WINDOW (5) is found."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span
 
         lines = [f"line{i}\n" for i in range(15)]
         # Target at index 8, agent says 3 -> offset = 5 (exactly at window)
@@ -500,7 +500,7 @@ class TestFuzzyMatchEdgeCases:
 
     def test_one_past_window_boundary_not_found(self) -> None:
         """Content offset by _FUZZY_SEARCH_WINDOW + 1 is NOT found."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span
 
         lines = [f"line{i}\n" for i in range(15)]
         # Target at index 9, agent says 3 -> offset = 6 (beyond window)
@@ -511,7 +511,7 @@ class TestFuzzyMatchEdgeCases:
 
     def test_expected_content_no_trailing_newline(self) -> None:
         """Expected content without trailing newline is normalized."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span
 
         lines = ["a\n", "target\n", "c\n"]
         # No trailing newline in expected — should still match
@@ -522,7 +522,7 @@ class TestFuzzyMatchEdgeCases:
 
     def test_start_at_zero_with_negative_search(self) -> None:
         """Fuzzy search near start=0 doesn't go negative."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span
 
         lines = ["a\n", "b\n", "c\n"]
         # Content not found, but search shouldn't crash at boundary
@@ -533,7 +533,7 @@ class TestFuzzyMatchEdgeCases:
 
     def test_end_at_file_boundary(self) -> None:
         """Fuzzy search near end of file doesn't exceed bounds."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span
 
         lines = ["a\n", "b\n", "c\n"]
         # Agent says last line, content not found
@@ -544,7 +544,7 @@ class TestFuzzyMatchEdgeCases:
 
     def test_width_correction_exceeding_file_length(self) -> None:
         """Width correction skipped when corrected end would exceed file."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span
 
         lines = ["a\n", "b\n"]  # 2 lines
         # Expected content is 3 lines, start=0, corrected end=3 > len(lines)=2
@@ -553,7 +553,7 @@ class TestFuzzyMatchEdgeCases:
 
     def test_empty_expected_content(self) -> None:
         """Empty expected_content produces no match (empty splitlines)."""
-        from codeplane.mcp.tools.mutation import _fuzzy_match_span
+        from coderecon.mcp.tools.mutation import _fuzzy_match_span
 
         lines = ["a\n", "b\n", "c\n"]
         # Empty string splits to [] which has len 0
@@ -574,24 +574,24 @@ class TestContentMismatchCatalog:
     """Verify CONTENT_MISMATCH is properly documented in ERROR_CATALOG."""
 
     def test_content_mismatch_in_catalog(self) -> None:
-        from codeplane.mcp.errors import ERROR_CATALOG, MCPErrorCode
+        from coderecon.mcp.errors import ERROR_CATALOG, MCPErrorCode
 
         assert MCPErrorCode.CONTENT_MISMATCH.value in ERROR_CATALOG
 
     def test_catalog_entry_has_state_category(self) -> None:
-        from codeplane.mcp.errors import ERROR_CATALOG, MCPErrorCode
+        from coderecon.mcp.errors import ERROR_CATALOG, MCPErrorCode
 
         entry = ERROR_CATALOG[MCPErrorCode.CONTENT_MISMATCH.value]
         assert entry.category == "state"
 
     def test_catalog_entry_has_causes(self) -> None:
-        from codeplane.mcp.errors import ERROR_CATALOG, MCPErrorCode
+        from coderecon.mcp.errors import ERROR_CATALOG, MCPErrorCode
 
         entry = ERROR_CATALOG[MCPErrorCode.CONTENT_MISMATCH.value]
         assert len(entry.causes) > 0
 
     def test_catalog_entry_has_remediation(self) -> None:
-        from codeplane.mcp.errors import ERROR_CATALOG, MCPErrorCode
+        from coderecon.mcp.errors import ERROR_CATALOG, MCPErrorCode
 
         entry = ERROR_CATALOG[MCPErrorCode.CONTENT_MISMATCH.value]
         assert len(entry.remediation) > 0
@@ -599,7 +599,7 @@ class TestContentMismatchCatalog:
         assert any("re-read" in r.lower() for r in entry.remediation)
 
     def test_catalog_entry_description_mentions_expected_content(self) -> None:
-        from codeplane.mcp.errors import ERROR_CATALOG, MCPErrorCode
+        from coderecon.mcp.errors import ERROR_CATALOG, MCPErrorCode
 
         entry = ERROR_CATALOG[MCPErrorCode.CONTENT_MISMATCH.value]
         assert "expected_content" in entry.description
@@ -619,8 +619,8 @@ class TestUpdateNonexistentFile:
         When a file doesn't exist but is within repo root, read_text raises
         FileNotFoundError which must be caught as MCPError(FILE_NOT_FOUND).
         """
-        from codeplane.files.ops import validate_path_in_repo
-        from codeplane.mcp.errors import MCPError, MCPErrorCode
+        from coderecon.files.ops import validate_path_in_repo
+        from coderecon.mcp.errors import MCPError, MCPErrorCode
 
         # File doesn't exist but path is valid within repo
         nonexistent = "does_not_exist_12345.py"
@@ -644,8 +644,8 @@ class TestUpdateNonexistentFile:
     def test_path_traversal_still_raises_file_not_found(self, tmp_path: Path) -> None:
         """Path traversal is caught by validate_path_in_repo as PERMISSION_DENIED,
         but the combined except catches it as FILE_NOT_FOUND in mutation handler."""
-        from codeplane.files.ops import validate_path_in_repo
-        from codeplane.mcp.errors import MCPError, MCPErrorCode
+        from coderecon.files.ops import validate_path_in_repo
+        from coderecon.mcp.errors import MCPError, MCPErrorCode
 
         with pytest.raises(MCPError, match="File not found") as exc_info:
             try:

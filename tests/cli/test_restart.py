@@ -1,4 +1,4 @@
-"""Tests for cpl restart command."""
+"""Tests for recon restart command."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pygit2
 import pytest
 from click.testing import CliRunner
 
-from codeplane.cli.main import cli
+from coderecon.cli.main import cli
 
 runner = CliRunner()
 
@@ -39,17 +39,17 @@ def temp_git_repo(tmp_path: Path) -> Generator[Path, None, None]:
 @pytest.fixture
 def initialized_repo(temp_git_repo: Path) -> Path:
     """Create an initialized repo."""
-    codeplane_dir = temp_git_repo / ".codeplane"
-    codeplane_dir.mkdir()
-    (codeplane_dir / "config.yaml").write_text(
+    coderecon_dir = temp_git_repo / ".recon"
+    coderecon_dir.mkdir()
+    (coderecon_dir / "config.yaml").write_text(
         "logging:\n  level: INFO\nserver:\n  host: 127.0.0.1\n  port: 0\n"
     )
-    (codeplane_dir / ".cplignore").write_text("# Test\n")
+    (coderecon_dir / ".reconignore").write_text("# Test\n")
     return temp_git_repo
 
 
 class TestRestartCommand:
-    """cpl restart command tests."""
+    """recon restart command tests."""
 
     def test_given_non_git_dir_when_restart_then_fails(self, tmp_path: Path) -> None:
         """Restart fails with error when run outside git repository."""
@@ -59,9 +59,9 @@ class TestRestartCommand:
         assert result.exit_code != 0
         assert "Not inside a git repository" in result.output
 
-    @patch("codeplane.daemon.lifecycle.run_server")
-    @patch("codeplane.cli.up.IndexCoordinatorEngine")
-    @patch("codeplane.cli.restart.is_server_running")
+    @patch("coderecon.daemon.lifecycle.run_server")
+    @patch("coderecon.cli.up.IndexCoordinatorEngine")
+    @patch("coderecon.cli.restart.is_server_running")
     def test_given_not_running_when_restart_then_starts_fresh(
         self,
         mock_is_running: MagicMock,
@@ -80,16 +80,16 @@ class TestRestartCommand:
         mock_run_server.side_effect = KeyboardInterrupt()
 
         # Also mock is_server_running in up.py (different import)
-        with patch("codeplane.daemon.lifecycle.is_server_running", return_value=False):
+        with patch("coderecon.daemon.lifecycle.is_server_running", return_value=False):
             result = runner.invoke(cli, ["restart", str(initialized_repo)])
 
         assert "starting fresh" in result.output.lower()
 
-    @patch("codeplane.daemon.lifecycle.run_server")
-    @patch("codeplane.cli.up.IndexCoordinatorEngine")
-    @patch("codeplane.cli.restart.stop_daemon")
-    @patch("codeplane.cli.restart.read_server_info")
-    @patch("codeplane.cli.restart.is_server_running")
+    @patch("coderecon.daemon.lifecycle.run_server")
+    @patch("coderecon.cli.up.IndexCoordinatorEngine")
+    @patch("coderecon.cli.restart.stop_daemon")
+    @patch("coderecon.cli.restart.read_server_info")
+    @patch("coderecon.cli.restart.is_server_running")
     def test_given_running_when_restart_then_stops_then_starts(
         self,
         mock_is_running: MagicMock,
@@ -112,16 +112,16 @@ class TestRestartCommand:
 
         mock_run_server.side_effect = KeyboardInterrupt()
 
-        with patch("codeplane.daemon.lifecycle.is_server_running", return_value=False):
+        with patch("coderecon.daemon.lifecycle.is_server_running", return_value=False):
             result = runner.invoke(cli, ["restart", str(initialized_repo)])
 
         assert "stopping" in result.output.lower()
         assert "12345" in result.output
         mock_stop.assert_called_once()
 
-    @patch("codeplane.cli.restart.stop_daemon")
-    @patch("codeplane.cli.restart.read_server_info")
-    @patch("codeplane.cli.restart.is_server_running")
+    @patch("coderecon.cli.restart.stop_daemon")
+    @patch("coderecon.cli.restart.read_server_info")
+    @patch("coderecon.cli.restart.is_server_running")
     def test_given_running_when_stop_fails_then_exits(
         self,
         mock_is_running: MagicMock,
@@ -137,9 +137,9 @@ class TestRestartCommand:
         result = runner.invoke(cli, ["restart", str(initialized_repo)])
         assert result.exit_code != 0
 
-    @patch("codeplane.cli.restart.stop_daemon")
-    @patch("codeplane.cli.restart.read_server_info")
-    @patch("codeplane.cli.restart.is_server_running")
+    @patch("coderecon.cli.restart.stop_daemon")
+    @patch("coderecon.cli.restart.read_server_info")
+    @patch("coderecon.cli.restart.is_server_running")
     def test_given_running_when_stop_timeout_then_exits(
         self,
         mock_is_running: MagicMock,
@@ -153,7 +153,7 @@ class TestRestartCommand:
         mock_read_info.return_value = (12345, 7654)
         mock_stop.return_value = True
 
-        with patch("codeplane.cli.restart.time.sleep"):
+        with patch("coderecon.cli.restart.time.sleep"):
             result = runner.invoke(cli, ["restart", str(initialized_repo)])
 
         assert result.exit_code != 0

@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.index._internal.parsing import (
+from coderecon.index._internal.parsing import (
     IdentifierOccurrence,
     ParseResult,
     ProbeValidation,

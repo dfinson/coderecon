@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codeplane.mcp.tools.checkpoint import _detect_test_debt
+from coderecon.mcp.tools.checkpoint import _detect_test_debt
 
 
 class TestDetectTestDebt:
@@ -20,7 +20,7 @@ class TestDetectTestDebt:
     def test_no_debt_when_tests_included(self, tmp_path: Path) -> None:
         """No debt when test counterpart is in changed_files."""
         # Create source and test files on disk
-        src = tmp_path / "src" / "codeplane" / "foo"
+        src = tmp_path / "src" / "coderecon" / "foo"
         src.mkdir(parents=True)
         (src / "bar.py").write_text("# source")
         tests = tmp_path / "tests" / "foo"
@@ -29,7 +29,7 @@ class TestDetectTestDebt:
 
         result = _detect_test_debt(
             changed_files=[
-                "src/codeplane/foo/bar.py",
+                "src/coderecon/foo/bar.py",
                 "tests/foo/test_bar.py",
             ],
             repo_root=tmp_path,
@@ -38,7 +38,7 @@ class TestDetectTestDebt:
 
     def test_debt_when_test_missing_from_changed(self, tmp_path: Path) -> None:
         """Debt when source changed but existing test not in changed_files."""
-        src = tmp_path / "src" / "codeplane" / "foo"
+        src = tmp_path / "src" / "coderecon" / "foo"
         src.mkdir(parents=True)
         (src / "bar.py").write_text("# source")
         tests = tmp_path / "tests" / "foo"
@@ -46,25 +46,25 @@ class TestDetectTestDebt:
         (tests / "test_bar.py").write_text("# test")
 
         result = _detect_test_debt(
-            changed_files=["src/codeplane/foo/bar.py"],
+            changed_files=["src/coderecon/foo/bar.py"],
             repo_root=tmp_path,
         )
         assert result is not None
         assert result["source_files_changed"] == 1
         assert result["test_files_changed"] == 0
         assert len(result["missing_test_updates"]) == 1
-        assert result["missing_test_updates"][0]["source"] == "src/codeplane/foo/bar.py"
+        assert result["missing_test_updates"][0]["source"] == "src/coderecon/foo/bar.py"
         assert "test_bar.py" in result["missing_test_updates"][0]["test_file"]
 
     def test_no_debt_when_test_not_on_disk(self, tmp_path: Path) -> None:
         """No debt if test counterpart doesn't exist on disk."""
-        src = tmp_path / "src" / "codeplane" / "foo"
+        src = tmp_path / "src" / "coderecon" / "foo"
         src.mkdir(parents=True)
         (src / "bar.py").write_text("# source")
         # No test file created on disk
 
         result = _detect_test_debt(
-            changed_files=["src/codeplane/foo/bar.py"],
+            changed_files=["src/coderecon/foo/bar.py"],
             repo_root=tmp_path,
         )
         assert result is None
@@ -83,7 +83,7 @@ class TestDetectTestDebt:
 
     def test_debt_hint_text(self, tmp_path: Path) -> None:
         """Hint text mentions TEST DEBT and file names."""
-        src = tmp_path / "src" / "codeplane" / "foo"
+        src = tmp_path / "src" / "coderecon" / "foo"
         src.mkdir(parents=True)
         (src / "bar.py").write_text("# source")
         tests = tmp_path / "tests" / "foo"
@@ -91,7 +91,7 @@ class TestDetectTestDebt:
         (tests / "test_bar.py").write_text("# test")
 
         result = _detect_test_debt(
-            changed_files=["src/codeplane/foo/bar.py"],
+            changed_files=["src/coderecon/foo/bar.py"],
             repo_root=tmp_path,
         )
         assert result is not None
@@ -100,7 +100,7 @@ class TestDetectTestDebt:
 
     def test_multiple_sources_partial_debt(self, tmp_path: Path) -> None:
         """Only sources with existing but unchanged tests generate debt."""
-        src = tmp_path / "src" / "codeplane" / "foo"
+        src = tmp_path / "src" / "coderecon" / "foo"
         src.mkdir(parents=True)
         (src / "bar.py").write_text("# source")
         (src / "baz.py").write_text("# source 2")
@@ -111,15 +111,15 @@ class TestDetectTestDebt:
 
         result = _detect_test_debt(
             changed_files=[
-                "src/codeplane/foo/bar.py",
-                "src/codeplane/foo/baz.py",
+                "src/coderecon/foo/bar.py",
+                "src/coderecon/foo/baz.py",
             ],
             repo_root=tmp_path,
         )
         assert result is not None
         # Only bar.py should show debt (baz.py test doesn't exist)
         assert len(result["missing_test_updates"]) == 1
-        assert result["missing_test_updates"][0]["source"] == "src/codeplane/foo/bar.py"
+        assert result["missing_test_updates"][0]["source"] == "src/coderecon/foo/bar.py"
 
     def test_empty_changed_files(self, tmp_path: Path) -> None:
         """Empty changed_files returns None."""

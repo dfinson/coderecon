@@ -8,7 +8,7 @@ Covers:
 - ReceiverShapeData
 """
 
-from codeplane.index._internal.extraction import (
+from coderecon.index._internal.extraction import (
     InterfaceImplData,
     MemberAccessData,
     ReceiverShapeData,

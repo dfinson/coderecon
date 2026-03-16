@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from codeplane.index._internal.indexing.file_embedding import (
+from coderecon.index._internal.indexing.file_embedding import (
     _build_config_defines,
     _build_embed_text,
     _build_enriched_chunks,
@@ -403,7 +403,7 @@ class TestBuildEmbedText:
         """Very large scaffolds should be capped at FILE_EMBED_MAX_CHARS."""
         scaffold = "module test\n" + "defines function x\n" * 500
         result = _build_embed_text(scaffold, "")
-        from codeplane.index._internal.indexing.file_embedding import FILE_EMBED_MAX_CHARS
+        from coderecon.index._internal.indexing.file_embedding import FILE_EMBED_MAX_CHARS
 
         assert len(result) <= FILE_EMBED_MAX_CHARS
 
@@ -417,7 +417,7 @@ class TestDetectBatchSize:
     """Tests for dynamic batch size detection."""
 
     def test_returns_positive_int(self) -> None:
-        from codeplane.index._internal.indexing.file_embedding import _detect_batch_size
+        from coderecon.index._internal.indexing.file_embedding import _detect_batch_size
 
         result = _detect_batch_size()
         assert isinstance(result, int)
@@ -623,7 +623,7 @@ class TestBuildEnrichedChunks:
 
     def test_chunk_respects_max_chars(self) -> None:
         """Chunks should not exceed FILE_EMBED_MAX_CHARS."""
-        from codeplane.index._internal.indexing.file_embedding import FILE_EMBED_MAX_CHARS
+        from coderecon.index._internal.indexing.file_embedding import FILE_EMBED_MAX_CHARS
 
         scaffold = "module test\n" + "defines function x\n" * 500
         enrichment = {"S": "mentions " + "x" * 500}

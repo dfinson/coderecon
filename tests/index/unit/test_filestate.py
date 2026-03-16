@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from codeplane.index._internal.db import Database
-from codeplane.index._internal.state.filestate import FileStateService, MutationGateResult
-from codeplane.index.models import Certainty, File, FileState, Freshness
+from coderecon.index._internal.db import Database
+from coderecon.index._internal.state.filestate import FileStateService, MutationGateResult
+from coderecon.index.models import Certainty, File, FileState, Freshness
 
 
 @pytest.fixture

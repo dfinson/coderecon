@@ -16,17 +16,17 @@ from typing import Any
 
 import pytest
 
-from codeplane.index._internal.extraction import (
+from coderecon.index._internal.extraction import (
     InterfaceImplData,
     MemberAccessData,
     TypeAnnotationData,
     TypeMemberData,
     get_registry,
 )
-from codeplane.index._internal.extraction.query_based import (
+from coderecon.index._internal.extraction.query_based import (
     QueryBasedExtractor,
 )
-from codeplane.index._internal.parsing.packs import (
+from coderecon.index._internal.parsing.packs import (
     PACKS,
     TypeExtractionConfig,
     get_pack,
@@ -466,7 +466,7 @@ GENERIC_TYPE_SAMPLES: list[tuple[TypeExtractionConfig, str, str]] = [
 
 def make_tree(code: str, language: str) -> Any:
     """Parse code into a tree-sitter tree."""
-    from codeplane.index._internal.parsing.treesitter import TreeSitterParser
+    from coderecon.index._internal.parsing.treesitter import TreeSitterParser
 
     parser = TreeSitterParser()
     # Create a simple mock path to get language detection

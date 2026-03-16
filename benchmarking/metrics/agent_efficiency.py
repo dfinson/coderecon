@@ -86,9 +86,9 @@ class AgentEfficiencyMetric:
                     result[f"{prefix}avg_{key}"] = round(statistics.mean(values), 2)
                     result[f"{prefix}median_{key}"] = round(statistics.median(values), 2)
 
-        # Head-to-head deltas (codeplane vs native)
-        if "codeplane" in by_variant and "native" in by_variant:
-            cp = by_variant["codeplane"]
+        # Head-to-head deltas (coderecon vs native)
+        if "coderecon" in by_variant and "native" in by_variant:
+            cp = by_variant["coderecon"]
             nat = by_variant["native"]
             for key in ("turns", "total_tool_calls", "total_tokens"):
                 cp_mean = statistics.mean(s[key] for s in cp if s.get(key) is not None)

@@ -22,7 +22,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from codeplane.core.progress import (
+from coderecon.core.progress import (
     _PROGRESS_THRESHOLD,
     _STYLES,
     ConsoleSuppressingFilter,
@@ -81,27 +81,27 @@ class TestStatus:
         """Prints a message to console."""
         # This test verifies the function doesn't raise
         # We mock the console to avoid actual output
-        with patch("codeplane.core.progress._console") as mock_console:
+        with patch("coderecon.core.progress._console") as mock_console:
             status("Test message")
             mock_console.print.assert_called_once()
 
     def test_success_style(self) -> None:
         """Applies success style."""
-        with patch("codeplane.core.progress._console") as mock_console:
+        with patch("coderecon.core.progress._console") as mock_console:
             status("Done", style="success")
             call_args = mock_console.print.call_args[0][0]
             assert "✓" in call_args
 
     def test_error_style(self) -> None:
         """Applies error style."""
-        with patch("codeplane.core.progress._console") as mock_console:
+        with patch("coderecon.core.progress._console") as mock_console:
             status("Failed", style="error")
             call_args = mock_console.print.call_args[0][0]
             assert "✗" in call_args
 
     def test_with_indent(self) -> None:
         """Applies indentation."""
-        with patch("codeplane.core.progress._console") as mock_console:
+        with patch("coderecon.core.progress._console") as mock_console:
             status("Indented", indent=4)
             call_args = mock_console.print.call_args[0][0]
             # Padding appears before message, but timestamp comes first
@@ -159,7 +159,7 @@ class TestTask:
 
     def test_completes_successfully(self) -> None:
         """Task completes and prints success."""
-        with patch("codeplane.core.progress.status") as mock_status:
+        with patch("coderecon.core.progress.status") as mock_status:
             with task("Test task"):
                 pass  # Do nothing
 
@@ -169,7 +169,7 @@ class TestTask:
 
     def test_prints_error_on_failure(self) -> None:
         """Task prints error on exception."""
-        with patch("codeplane.core.progress.status") as mock_status:
+        with patch("coderecon.core.progress.status") as mock_status:
             with pytest.raises(ValueError), task("Failing task"):
                 raise ValueError("test error")
 
@@ -181,7 +181,7 @@ class TestTask:
         """Task reports elapsed time."""
         import time
 
-        with patch("codeplane.core.progress.status") as mock_status:
+        with patch("coderecon.core.progress.status") as mock_status:
             with task("Timed task"):
                 time.sleep(0.1)  # Brief delay
 
@@ -236,7 +236,7 @@ class TestSpinner:
     def test_completes_without_error(self) -> None:
         """Spinner completes without raising."""
         with (
-            patch("codeplane.core.progress._is_tty", return_value=False),
+            patch("coderecon.core.progress._is_tty", return_value=False),
             spinner("Test spinner"),
         ):
             pass  # Do nothing
@@ -244,8 +244,8 @@ class TestSpinner:
     def test_non_tty_prints_message(self) -> None:
         """Non-TTY mode prints message."""
         with (
-            patch("codeplane.core.progress._is_tty", return_value=False),
-            patch("codeplane.core.progress._console") as mock_console,
+            patch("coderecon.core.progress._is_tty", return_value=False),
+            patch("coderecon.core.progress._console") as mock_console,
         ):
             with spinner("Loading"):
                 pass
@@ -260,8 +260,8 @@ class TestSpinner:
         mock_status.__exit__ = MagicMock(return_value=None)
 
         with (
-            patch("codeplane.core.progress._is_tty", return_value=True),
-            patch("codeplane.core.progress._console") as mock_console,
+            patch("coderecon.core.progress._is_tty", return_value=True),
+            patch("coderecon.core.progress._console") as mock_console,
         ):
             mock_console.status.return_value = mock_status
             with spinner("Processing"):
@@ -271,8 +271,8 @@ class TestSpinner:
     def test_with_indent(self) -> None:
         """Applies indentation."""
         with (
-            patch("codeplane.core.progress._is_tty", return_value=False),
-            patch("codeplane.core.progress._console") as mock_console,
+            patch("coderecon.core.progress._is_tty", return_value=False),
+            patch("coderecon.core.progress._console") as mock_console,
         ):
             with spinner("Indented", indent=4):
                 pass
@@ -375,29 +375,29 @@ class TestAnimateText:
 
     def test_prints_all_lines(self) -> None:
         """Prints all lines of input text."""
-        with patch("codeplane.core.progress._console") as mock_console:
+        with patch("coderecon.core.progress._console") as mock_console:
             animate_text("Line 1\nLine 2\nLine 3", delay=0)
             assert mock_console.print.call_count == 3
 
     def test_empty_text_prints_empty_line(self) -> None:
         """Empty text results in single empty line iteration."""
         # Empty string.splitlines() returns [], so no prints
-        with patch("codeplane.core.progress._console") as mock_console:
+        with patch("coderecon.core.progress._console") as mock_console:
             animate_text("", delay=0)
             # Empty string has no lines
             assert mock_console.print.call_count == 0
 
     def test_single_line(self) -> None:
         """Works with single line."""
-        with patch("codeplane.core.progress._console") as mock_console:
+        with patch("coderecon.core.progress._console") as mock_console:
             animate_text("Single line", delay=0)
             mock_console.print.assert_called_once_with("Single line", highlight=False)
 
     def test_respects_delay_in_tty(self) -> None:
         """Delay is applied in TTY mode."""
         with (
-            patch("codeplane.core.progress._is_tty", return_value=True),
-            patch("codeplane.core.progress._console"),
+            patch("coderecon.core.progress._is_tty", return_value=True),
+            patch("coderecon.core.progress._console"),
             patch("time.sleep") as mock_sleep,
         ):
             animate_text("Line 1\nLine 2", delay=0.05)
@@ -408,8 +408,8 @@ class TestAnimateText:
     def test_no_delay_in_non_tty(self) -> None:
         """No delay in non-TTY mode."""
         with (
-            patch("codeplane.core.progress._is_tty", return_value=False),
-            patch("codeplane.core.progress._console"),
+            patch("coderecon.core.progress._is_tty", return_value=False),
+            patch("coderecon.core.progress._console"),
             patch("time.sleep") as mock_sleep,
         ):
             animate_text("Line 1\nLine 2", delay=0.05)
@@ -418,8 +418,8 @@ class TestAnimateText:
     def test_zero_delay_skips_sleep(self) -> None:
         """Zero delay skips time.sleep entirely."""
         with (
-            patch("codeplane.core.progress._is_tty", return_value=True),
-            patch("codeplane.core.progress._console"),
+            patch("coderecon.core.progress._is_tty", return_value=True),
+            patch("coderecon.core.progress._console"),
             patch("time.sleep") as mock_sleep,
         ):
             animate_text("Line 1\nLine 2", delay=0)
