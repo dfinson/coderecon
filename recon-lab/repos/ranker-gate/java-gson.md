@@ -62,9 +62,9 @@ gson/src/main/java/com/google/gson/
 
 ## Narrow
 
-### N1: Fix `RecordReflectionData.finalize()` swallowing constructor exceptions as `RuntimeException`
+### N1: Fix `RecordAdapter.finalize()` swallowing constructor exceptions as `RuntimeException`
 
-When Gson deserializes a Java record and the canonical constructor throws (for example, because a required component fails validation with `Objects.requireNonNull()`), `RecordReflectionData.finalize()` in `ReflectiveTypeAdapterFactory` catches the `InvocationTargetException` and rethrows it as a generic `RuntimeException`. A `// TODO: JsonParseException ?` comment in the same catch block acknowledges this is wrong. Fix `finalize()` to rethrow the cause as a `JsonSyntaxException` (with a message that identifies the record class and the argument array), preserving the original exception as the cause so callers receive a Gson-typed exception with useful context instead of an opaque `RuntimeException`.
+When Gson deserializes a Java record and the canonical constructor throws (for example, because a required component fails validation with `Objects.requireNonNull()`), `RecordAdapter.finalize()` in `ReflectiveTypeAdapterFactory` catches the `InvocationTargetException` and rethrows it as a generic `RuntimeException`. A `// TODO: JsonParseException ?` comment in the same catch block acknowledges this is wrong. Fix `finalize()` to rethrow the cause as a `JsonSyntaxException` (with a message that identifies the record class and the argument array), preserving the original exception as the cause so callers receive a Gson-typed exception with useful context instead of an opaque `RuntimeException`.
 
 ### N2: Add `@JsonAdapter` support for enum constants
 
@@ -85,9 +85,9 @@ the wrong line number. The `lineStart` cursor is not updated when
 track newlines so that `locationString()` always reports accurate
 line and column information after a skip. Also add an entry to `CHANGELOG.md` under "Unreleased" documenting the line-number tracking fix in `skipValue()`.
 
-### N4: Fix `TypeToken` failing for intersection types in generic bounds
+### N4: Fix `GsonTypes.getRawType()` ignoring `TypeVariable` bounds for adapter resolution
 
-When a class declares a field with a type like `<T extends Serializable & Comparable<T>>`, `TypeToken.get()` throws an `IllegalArgumentException` because it does not handle `java.lang.reflect.WildcardType` instances whose upper bounds are intersection types. Fix `TypeToken` to decompose intersection bounds and use the first bound for adapter resolution.
+In `GsonTypes.getRawType(Type)`, the `TypeVariable` branch always returns `Object.class` regardless of the variable's declared bounds (the comment reads "we could use the variable's bounds, but that won't work if there are multiple"). This causes Gson to resolve type adapters against `Object` even when the variable has an explicit upper bound, such as `T extends Serializable`. Fix the `TypeVariable` branch in `GsonTypes.getRawType()` to call `getRawType(bounds[0])` on the variable's first declared bound (which is always at least `Object` per the JLS) instead of returning `Object.class` unconditionally.
 
 ### N5: Fix `JsonWriter` omitting trailing newline in pretty-print mode
 
@@ -115,14 +115,19 @@ When `Gson.fromJson(Reader, Type)` encounters a `JsonSyntaxException` partway th
 
 ## Medium
 
-### M1: Implement JSON streaming with back-pressure
+### M1: Implement JSON streaming with callback-based token consumption
 
-Add a `JsonStreamer` class that reads from an `InputStream` and emits
-parsed JSON tokens incrementally without buffering the entire document.
-Support configurable buffer sizes. When the consumer pauses, the reader
-should stop consuming from the stream (back-pressure). Support streaming
-serialization as well — writing large collections element by element
-without holding the full list in memory.
+Add a `JsonStreamer` class in `com.google.gson.stream` that wraps
+`JsonReader` and `JsonWriter` to provide a higher-level streaming API.
+On the read side, accept a `Reader` (matching `JsonReader`'s constructor)
+and a configurable buffer size (currently hardcoded at 1024 in
+`JsonReader`), and expose a `stream(Consumer<JsonToken>)` method that
+drives the pull loop internally, calling the consumer for each token;
+the consumer may throw a checked exception or return early to interrupt
+processing. On the write side, add a `streamArray(JsonWriter,
+Iterable<T>, TypeAdapter<T>)` utility method that writes each element
+one at a time using `beginArray`/`endArray` so callers can serialize
+large collections without holding the full list in memory.
 
 ### M2: Add null-safety annotations throughout the API
 
@@ -131,15 +136,21 @@ Annotate all public API methods with `@Nullable` and `@NonNull`
 `JsonElement`, `JsonObject`, `JsonArray`, `TypeAdapter`, `TypeToken`,
 and all public interfaces. This requires auditing each method's actual
 null behavior and fixing any methods whose behavior contradicts the
-annotation. Also update the "Requirements" section in `README.md` to document the new `org.jspecify:jspecify` compile-time dependency and add the corresponding `<dependency>` entry to the `gson/pom.xml` `<dependencyManagement>` block.
+annotation. Also update the "Requirements" section in `README.md` to document the new `org.jspecify:jspecify` compile-time dependency, add the versioned `<dependency>` entry for `org.jspecify:jspecify` to the root `pom.xml` `<dependencyManagement>` block, and add a `<dependency>` entry (without version) to the `gson/pom.xml` `<dependencies>` block.
 
 ### M3: Implement custom `TypeAdapter` composition
 
-Add a `TypeAdapters.compose()` method that chains multiple TypeAdapters
-together: the first adapter serializes/deserializes, then the result
-is passed to the next adapter. This enables reusable transformations
-(e.g., trim strings, clamp numbers) that compose with any base type
-adapter without subclassing.
+Add a `compose(TypeAdapter<T> next)` instance method to the public
+`TypeAdapter<T>` class (in `com.google.gson.TypeAdapter`) following the
+same pattern as the existing `nullSafe()` method. The method returns a new
+`TypeAdapter<T>` that, on write, converts the value to a `JsonElement` via
+`this` adapter and then passes that element as input to `next`; on read, it
+delegates to `next` first and feeds its `JsonElement` output to `this`. This
+enables reusable transformations (e.g., trim strings, clamp numbers) that
+compose with any base type adapter without subclassing. Add corresponding
+tests in `gson/src/test/java/com/google/gson/TypeAdapterTest.java` covering
+string-trim and numeric-clamp examples, and verify null-safety interaction
+with `nullSafe()`.
 
 ### M4: Add hierarchical `TypeAdapterFactory` registration with priority
 
@@ -151,7 +162,7 @@ Add a `GsonBuilder.setLenientDeserialization()` mode where type mismatches durin
 
 ### M6: Add `TypeAdapter` caching diagnostics and statistics
 
-Add the ability to retrieve cache-hit statistics from Gson's internal `TypeAdapter` resolution. Expose a `Gson.getAdapterCacheStats()` method returning hit count, miss count, and the set of types currently cached. This requires modifying the thread-local adapter cache in `Gson`, introducing a `CacheStats` value object, and ensuring the bookkeeping is thread-safe without impacting serialization throughput.
+Add the ability to retrieve cache-hit statistics from Gson's internal `TypeAdapter` resolution. Expose a `Gson.getAdapterCacheStats()` method returning hit count, miss count, and the set of types currently cached. This requires instrumenting the `typeTokenCache` (`ConcurrentHashMap`) in `Gson` with atomic hit/miss counters, introducing a `CacheStats` value object, and ensuring the bookkeeping is thread-safe without impacting serialization throughput.
 
 ### M7: Implement configurable field naming strategies per class
 
@@ -167,18 +178,25 @@ Add a `JsonPath` class that evaluates JSONPath expressions (dot notation, bracke
 
 ### M10: Add `GsonBuilder` validation for conflicting configuration
 
-`GsonBuilder` silently accepts contradictory settings — for example, enabling `serializeNulls()` and then registering a custom serializer that skips nulls, or setting two different date formats without the second overriding the first clearly. Add a `GsonBuilder.validate()` method that detects common conflicts and ambiguities, returning a list of warnings. Call this automatically during `create()` when a new `strictMode()` builder option is enabled.
+`GsonBuilder` silently accepts contradictory settings — for example, enabling `serializeNulls()` and then registering a custom serializer that skips nulls, or calling `setDateFormat(String)` and then `setDateFormat(int, int)` (silently discarding the first format). Add a `GsonBuilder.validate()` method that detects common conflicts and ambiguities, returning a list of warnings. Call this automatically during `create()` when `setStrictness(Strictness.STRICT)` has been set on the builder.
 
 ## Wide
 
-### W1: Add JSON Schema validation during deserialization
+### W1: Add constraint-based validation during deserialization
 
-Implement JSON Schema (draft-2020-12) validation that can be applied
-during deserialization. Add a `@JsonSchema` annotation that references
-a schema resource, and a `GsonBuilder.setSchemaValidation()` option.
-Schema violations should be collected as a list (not fail-fast) and
-reported through a new `SchemaViolationException`. Support `$ref`,
-`oneOf`, `allOf`, `anyOf`, and format validation.
+Implement a validation framework that runs during deserialization. Add
+a `@JsonSchema` annotation that references a JSON schema resource on
+the classpath; the schema supports a subset of JSON Schema keywords:
+`type`, `required`, `properties`, `minLength`, `maxLength`, `minimum`,
+`maximum`, `pattern`, and `enum`. Add a
+`GsonBuilder.setSchemaValidation()` option that registers a
+`SchemaValidationTypeAdapterFactory`; when enabled, the factory wraps
+each adapter and validates the deserialized `JsonElement` against the
+schema before returning the result. Schema violations are collected
+(not fail-fast) and reported through a new
+`SchemaViolationException` that exposes the full list of violation
+messages. The schema is parsed from JSON using Gson itself into a
+`SchemaNode` model class.
 
 ### W2: Implement Gson 3.0 API with sealed interfaces and pattern matching
 

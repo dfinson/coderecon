@@ -148,12 +148,16 @@ formatting to display each error's location path (e.g., `query -> name`),
 message, and error type in a human-readable layout, similar to Pydantic's
 own `ValidationError.__str__`.
 
-### N10: Fix duplicate `422` response in OpenAPI when custom error handler is set
+### N10: Suppress default `422` response in OpenAPI when custom `RequestValidationError` handler is set
 
 When a custom exception handler is registered for `RequestValidationError`,
-the OpenAPI schema still includes the default 422 response schema
-alongside any custom error schema. Fix the OpenAPI generator to use the
-custom handler's response schema when one is registered.
+the OpenAPI schema still unconditionally adds the default 422
+`HTTPValidationError` response schema even though the actual response format
+may differ. Add an `exception_handlers` parameter to `get_openapi()` in
+`fastapi/openapi/utils.py`, pass `self.exception_handlers` from
+`FastAPI.openapi()` in `fastapi/applications.py`, and update
+`get_openapi_path()` to skip auto-adding the 422 response when the
+`RequestValidationError` key maps to a non-default handler.
 
 ## Medium
 
@@ -217,12 +221,22 @@ in the OpenAPI schema. Add a middleware that logs warnings for requests
 to endpoints past their sunset date. Support gradual deprecation with
 warning periods.
 
-### M7: Add OpenAPI schema customization hooks
+### M7: Add app-level OpenAPI schema transformation hooks
 
-Add hooks that allow modifying the generated OpenAPI schema before it's
-served. Support `schema_extra` at the app level (modify the root schema),
-route level (modify operation schemas), and parameter level. Add a
-`SchemaTransformer` protocol for reusable schema modifications.
+FastAPI already supports per-route schema customization via `openapi_extra`
+on route decorators and per-parameter customization via `json_schema_extra`
+on `Query`, `Path`, `Body`, etc. What is missing is an app-level hook to
+modify the root OpenAPI schema before it is served and a reusable protocol
+for composable transformers.
+
+Add a `schema_transformers` parameter to `FastAPI.__init__` (in
+`applications.py`) that accepts a list of callables conforming to a new
+`SchemaTransformer` protocol. The protocol should define a single
+`__call__(self, schema: dict[str, Any]) -> dict[str, Any]` method.
+In `FastAPI.openapi()`, after `get_openapi()` produces the schema, apply
+each transformer in order before caching and returning the result. Define
+`SchemaTransformer` in `openapi/utils.py` or a new `openapi/transformers.py`
+module and re-export it from the top-level `fastapi` package.
 
 ### M8: Implement circuit breaker pattern for dependencies
 
@@ -233,11 +247,17 @@ configurable fallback responses when the circuit is open.
 
 ### M9: Add request body size limiting with streaming support
 
-Implement configurable request body size limits. Reject oversized
-requests with 413 before fully reading the body (use Content-Length
-for pre-check, enforce during streaming). Support per-route limits
-via route decorator parameters. Add rate limiting for request body
-throughput.
+Implement a configurable request body size limiting middleware in
+`fastapi/middleware/`. Reject oversized requests with 413 before
+fully reading the body: perform a Content-Length pre-check on the
+incoming headers and enforce the limit during streaming by tracking
+bytes consumed in the ASGI receive channel. Provide a
+`RequestSizeLimitMiddleware` class with a configurable global
+`max_body_size` (in bytes). For per-route limits, expose a reusable
+FastAPI dependency factory (e.g., `limit_body_size(max_bytes)`) using
+`Depends()` so individual routes can impose tighter limits without
+modifying the route decorator API. Re-export the new middleware from
+`fastapi/middleware/__init__.py`.
 
 ### M10: Implement structured audit logging
 
@@ -271,11 +291,13 @@ documentation generation. Provide migration helpers for existing
 ### W3: Add GraphQL support alongside REST
 
 Implement a `FastAPI` extension that adds GraphQL endpoints using the
-Strawberry library. Auto-generate GraphQL types from Pydantic models,
-support queries/mutations/subscriptions, integrate with FastAPI's
-dependency injection for resolvers, and share authentication/permission
-logic between REST and GraphQL endpoints. Includes schema stitching
-for combining multiple GraphQL schemas.
+Strawberry library. Auto-generate GraphQL types from Pydantic models
+using `strawberry.experimental.pydantic`, support
+queries/mutations/subscriptions, integrate with FastAPI's dependency
+injection for resolvers via Strawberry's `context_getter`, and share
+authentication/permission logic between REST and GraphQL endpoints.
+Includes schema merging for combining multiple Strawberry type modules
+into a single unified schema.
 
 ### W4: Implement multi-tenancy support
 
@@ -310,12 +332,13 @@ envelope wrapping, and field-level encryption.
 
 ### W7: Add comprehensive health check framework
 
-Implement a health check system with dependency health probes (database
-connectivity, Redis availability, external API health), aggregated
-health status, startup/liveness/readiness probe separation for
-Kubernetes, health history tracking, and a health dashboard endpoint.
-Support async health checks with configurable timeouts and caching.
-Changes span middleware, routing, and a new health module.
+Implement a health check system with pluggable dependency health probes
+(abstract probe interface with concrete examples for external HTTP
+services and user-supplied async callables), aggregated health status,
+startup/liveness/readiness probe separation for Kubernetes, health
+history tracking, and a health dashboard endpoint. Support async health
+checks with configurable timeouts and caching. Changes span middleware,
+routing, and a new health module.
 
 ### W8: Implement API analytics and usage tracking
 
@@ -354,11 +377,12 @@ new plugin registry module.
 
 `CITATION.cff` declares an empty `identifiers:` key with no entries
 and omits the `date-released` field. The CFF 1.2.0 specification
-requires `date-released` for valid software citations, and an empty
-`identifiers` list is a schema violation that causes `cffconvert
---validate` to fail. Add the missing `date-released`, populate or
-remove the `identifiers` key, and consider adding `version` so
-citation tooling can generate correct references.
+strongly recommends `date-released` for complete software citations,
+and an empty (null) `identifiers` key is a schema violation that
+causes `cffconvert --validate` to fail because the schema expects a
+non-empty sequence. Add a `date-released` value, populate or remove
+the `identifiers` key, and consider adding `version` so citation
+tooling can generate correct references.
 
 **Gold files:** `CITATION.cff`
 

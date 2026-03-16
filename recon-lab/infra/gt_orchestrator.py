@@ -243,8 +243,22 @@ def pipeline_done(state: dict) -> bool:
     return True
 
 
+# Aliases for clone dirs whose name differs from the stripped repo_id.
+_CLONE_ALIASES: dict[str, str] = {
+    "cpp-abseil": "abseil-cpp",
+    "cpp-nlohmann-json": "json",
+    "csharp-newtonsoft-json": "Newtonsoft.Json",
+    "java-jackson": "jackson-databind",
+    "php-laravel": "framework",
+    "swift-lottie": "lottie-ios",
+    "typescript-commander": "commander.js",
+    "typescript-nestjs": "nest",
+}
+
+
 def find_clone(repo_id: str) -> Path | None:
     """Find the clone directory for a repo_id."""
+    # 1. Explicit .gt-pipeline.json tag
     for set_dir in CLONES_DIR.iterdir():
         if not set_dir.is_dir():
             continue
@@ -259,7 +273,7 @@ def find_clone(repo_id: str) -> Path | None:
                         return d
                 except Exception:
                     pass
-    # Fallback: match by repo name from state
+    # 2. Fork name from state
     state = load_state()
     rd = state.get("repos", {}).get(repo_id, {})
     fork = rd.get("fork", "")
@@ -271,15 +285,36 @@ def find_clone(repo_id: str) -> Path | None:
             candidate = set_dir / repo_name
             if candidate.is_dir():
                 return candidate
-    # Fallback: strip language prefix from repo_id (e.g. "python-fastapi" → "fastapi")
+    # 3. Explicit alias
+    if repo_id in _CLONE_ALIASES:
+        alias = _CLONE_ALIASES[repo_id]
+        for set_dir in CLONES_DIR.iterdir():
+            if not set_dir.is_dir():
+                continue
+            candidate = set_dir / alias
+            if candidate.is_dir():
+                return candidate
+    # 4. Exact repo_id as dir name (e.g. swift-composable-architecture)
+    for set_dir in CLONES_DIR.iterdir():
+        if not set_dir.is_dir():
+            continue
+        candidate = set_dir / repo_id
+        if candidate.is_dir():
+            return candidate
+    # 5. Strip language prefix and match (case-insensitive)
     if "-" in repo_id:
         short_name = repo_id.split("-", 1)[1]
         for set_dir in CLONES_DIR.iterdir():
             if not set_dir.is_dir():
                 continue
+            # Exact first
             candidate = set_dir / short_name
             if candidate.is_dir():
                 return candidate
+            # Case-insensitive
+            for d in set_dir.iterdir():
+                if d.is_dir() and d.name.lower() == short_name.lower():
+                    return d
     return None
 
 
@@ -291,6 +326,27 @@ def find_task_file(repo_id: str) -> Path | None:
         if p.exists():
             return p
     return None
+
+
+def _discover_repos(state: dict, repo_filter: str | None = None) -> int:
+    """Scan task files and seed any repos with matching clones into state."""
+    added = 0
+    for set_dir in REPOS_DIR.iterdir():
+        if not set_dir.is_dir():
+            continue
+        for task_file in sorted(set_dir.glob("*.md")):
+            repo_id = task_file.stem
+            if repo_filter and repo_id != repo_filter:
+                continue
+            if repo_id in state.get("repos", {}):
+                continue
+            if find_clone(repo_id) is None:
+                continue
+            state.setdefault("repos", {})[repo_id] = {}
+            added += 1
+    if added:
+        save_state(state)
+    return added
 
 
 def _parse_task_headings(task_file: Path) -> dict[str, str]:
@@ -778,7 +834,7 @@ class SessionRunner:
 
     async def _run_session(self, clone_dir: Path) -> None:
         from copilot import CopilotClient, PermissionHandler
-        from trace_collector import TraceCollector
+        from infra.trace_collector import TraceCollector
 
         client = CopilotClient({
             "cwd": str(clone_dir),
@@ -844,7 +900,7 @@ class SessionRunner:
 
     def _run_candidate_extraction(self, clone_dir: Path, trace_path: Path) -> None:
         """Run deterministic candidate extraction after an exec session."""
-        from trace_to_candidates import trace_to_candidates, write_candidates
+        from infra.trace_to_candidates import trace_to_candidates, write_candidates
 
         index_db = clone_dir / ".recon" / "index.db"
         if not index_db.exists():
@@ -885,6 +941,23 @@ def _run_repo_prework(repo_id: str) -> None:
     # Create output directories
     for subdir in ("ground_truth", "traces", "candidates", "audit", "review"):
         (DATA_DIR / repo_id / subdir).mkdir(parents=True, exist_ok=True)
+
+    # Index the repo (creates .recon/index.db needed for candidate extraction)
+    index_db = clone_dir / ".recon" / "index.db"
+    if not index_db.exists():
+        import sys
+        recon_bin = Path(sys.executable).parent / "recon"
+        if not recon_bin.exists():
+            raise FileNotFoundError(f"'recon' CLI not found at {recon_bin}")
+        result = subprocess.run(
+            [str(recon_bin), "init", str(clone_dir)],
+            capture_output=True, text=True, check=False, timeout=600,
+        )
+        if result.returncode != 0 or not index_db.exists():
+            raise RuntimeError(
+                f"recon init failed for {repo_id} (rc={result.returncode}): "
+                f"{result.stderr[:300]}"
+            )
 
     # Remove all git remotes
     result = subprocess.run(
@@ -1205,6 +1278,12 @@ async def cmd_run(
             f"[yellow]Recovered {n_recovered} orphaned 'active' session(s)[/yellow]"
         )
         state = load_state()
+
+    # Auto-discover repos only when state is empty (no manual seed)
+    if not state.get("repos"):
+        n_discovered = _discover_repos(state, repo_filter)
+        if n_discovered:
+            console.print(f"[green]Discovered {n_discovered} new repo(s)[/green]")
 
     targets = all_eligible_tasks(state, stage_filter, repo_filter)
     if not targets:

@@ -126,18 +126,23 @@ its formatted representation in the match explanation.
 
 ### N7: Fix `TEST_P` parameter values truncated in test listing output
 
-When listing parameterized tests (`TEST_P`) with `--gtest_list_tests`
-or printing test names at runtime, the parameter value is truncated at
-a fixed limit of 250 characters (`kMaxParamLength`) by `PrintOnOneLine` in `gtest.cc`,
-with no indication that the value was cut short. Increase the
-truncation threshold for test parameter printing in `gtest.cc` and add
-an ellipsis indicator when values are truncated.
+When listing parameterized tests (`TEST_P`) with `--gtest_list_tests`,
+the parameter value is truncated at a fixed limit of 250 characters
+(`kMaxParamLength`) by `PrintOnOneLine` in `gtest.cc`, replacing the
+remaining content with `"..."`. For parameters with long but meaningful
+values (e.g., complex JSON or path strings), 250 characters is often
+insufficient. Increase the `kMaxParamLength` constant in
+`UnitTestImpl::ListTestsMatchingFilter` in `gtest.cc` to a larger
+value (e.g., 1024) to reduce spurious truncation.
 
-### N8: Add `SCOPED_TRACE` with automatic variable capture
+### N8: Add `SCOPED_TRACE_AUTO` macro using current function name
 
-`SCOPED_TRACE(message)` requires a manual message string. Add
-`SCOPED_TRACE_AUTO()` that automatically captures the current source
-location and local variable values in the trace output.
+`SCOPED_TRACE(message)` requires a manual message string. Add a
+`SCOPED_TRACE_AUTO()` zero-argument macro in
+`googletest/include/gtest/gtest.h` that automatically uses
+`__func__` (or `__PRETTY_FUNCTION__` where available) as the trace
+message, so callers get a source-location-annotated trace entry
+without having to supply a string.
 
 ### N9: Fix `TYPED_TEST` not including type name in assertion failure messages
 
@@ -266,12 +271,15 @@ existing `EXPECT_*` and `ASSERT_*` macros.
 
 ### W3: Implement mutation testing framework
 
-Add `--gtest_mutate` that instruments the code under test with
-mutations (arithmetic operator swaps, condition negation, return value
-changes) and runs the test suite against each mutation. Report on
-surviving mutations (tests didn't catch the change). Requires source
-instrumentation, mutation generation, result collection, and a
-reporting system.
+Add `--gtest_mutate` that enables a macro-based mutation testing API.
+Provide `GTEST_MUTATION_POINT(id, expr, variants...)` macros that register
+named runtime-swappable mutation sites (e.g., alternative return values,
+negated boolean expressions, swapped operands via lambdas). When
+`--gtest_mutate` is active, the framework iterates over each registered
+mutation, activates it, re-runs the full test suite, and records whether
+any test failed. Report surviving mutations (those where all tests still
+passed). Requires a mutation registry, per-mutation test execution loop,
+result collection, and a summary reporting system.
 
 ### W4: Add fuzzing integration framework
 
@@ -284,12 +292,16 @@ generation.
 
 ### W5: Implement code coverage visualization
 
-Add `--gtest_coverage` that instruments test execution for per-test
-coverage tracking. After all tests run, generate a report showing
-which tests cover which lines. Identify untested code, redundant tests
-(fully subsumed by other tests), and test-to-code mapping. Requires
-compiler coverage instrumentation, per-test data collection, report
-generation, and HTML output.
+Add `--gtest_coverage` that collects per-test coverage data when the
+binary is compiled with gcov instrumentation (`-fprofile-arcs
+-ftest-coverage`). Use `TestEventListener` hooks (`OnTestStart`,
+`OnTestEnd`) to reset gcov counters before each test via `__gcov_reset`
+and flush coverage data after each test via `__gcov_dump`. After all
+tests run, generate a report showing which tests cover which lines.
+Identify untested code, redundant tests (fully subsumed by other
+tests), and test-to-code mapping. Requires gcov runtime API
+integration, per-test data collection, report generation, and HTML
+output.
 
 ### W6: Add benchmark framework integrated with tests
 
@@ -304,10 +316,14 @@ statistical analysis, comparison storage, and output formatting.
 
 Add test dependency declarations: `TEST_DEPENDS(test, "other_test")`
 meaning this test should only run if the dependency passes. Build a
-DAG of test dependencies. Support `--gtest_minimal` that runs only
-tests affected by code changes (requires coverage data from W5).
-Adds dependency tracking, DAG resolution, skip propagation, and
-integration with coverage data.
+DAG of test dependencies at registration time; detect cycles and report
+them as fatal errors. Support `--gtest_minimal=test1:test2:...` that
+accepts a colon-separated list of seed test names and runs only those
+tests plus all tests that transitively depend on them (as declared via
+`TEST_DEPENDS`). When a dependency fails, propagate skip status to all
+dependent tests rather than running them. Adds dependency tracking,
+DAG construction and cycle detection, topological ordering of execution,
+and skip propagation through the dependency graph.
 
 ### W8: Add remote test execution support
 
@@ -330,22 +346,26 @@ filesystem virtualization, and a reporting system.
 ### W10: Add visual test failure diagnostics
 
 Implement rich failure diagnostics with: visual diffs for string
-comparisons (inline highlighting of differences), tree diffs for
-container comparisons (show added/removed elements), screenshot
-capture for UI tests, and HTML failure reports with expandable
-details. Requires diff algorithms, HTML generation, screenshot
-infrastructure, and integration with the test runner output system.
+comparisons (inline highlighting of differences using a diff algorithm
+applied in `gtest-printers.cc` / `gtest.cc`), tree diffs for container
+comparisons showing added/removed elements, and HTML failure reports
+with expandable details generated alongside the existing XML output
+path in `gtest.cc`. Requires diff algorithms, HTML generation, and
+integration with the test runner output system in `gtest.cc` and the
+printer infrastructure in `gtest-printers.cc` / `gtest-printers.h`.
 
-### N11: Fix `docs/primer.md` and `docs/advanced.md` not documenting the full matcher list
+### N11: Improve cross-references to the matcher documentation in `docs/gmock_cheat_sheet.md` and `docs/advanced.md`
 
-The `docs/primer.md` introduction references matchers but does not link
-to a complete list. The `docs/advanced.md` matchers section omits
-several matchers added in recent releases (e.g., `WhenSorted`,
-`IsSupersetOf`, `WhenDynamicCastTo`). Update `docs/advanced.md` to
-include all matchers from `gmock-matchers.h` with usage examples.
-Update `docs/primer.md` to add a cross-reference link to the matchers
-section. Update `docs/gmock_cheat_sheet.md` to include the missing
-matchers in its quick-reference table.
+The `docs/gmock_cheat_sheet.md` matchers section (under `## Matchers`)
+currently contains only a single link to `reference/matchers.md` with
+no inline content. Add a short quick-reference table of commonly used
+matchers drawn from `docs/reference/matchers.md`, covering representative
+entries from each category (e.g. `Eq`, `Ne`, `IsNull`, `HasSubstr`,
+`ElementsAre`, `UnorderedElementsAre`, `WhenSorted`, `IsSupersetOf`,
+`WhenDynamicCastTo`). The `docs/advanced.md` "Asserting Using gMock
+Matchers" section is a two-line stub that does not link to
+`docs/reference/matchers.md`; add a direct link to that reference so
+readers can find the full matcher list.
 
 ### M11: Modernize build system configuration across CMake and Bazel
 

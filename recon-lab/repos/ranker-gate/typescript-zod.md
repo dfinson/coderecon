@@ -84,9 +84,9 @@ When validation fails inside a nested object within a discriminated union,
 the error path does not include the discriminator key's value. The error
 message says "Invalid input" without indicating which branch of the union
 failed. Include the matched discriminator value in the error path so
-users can identify which variant had the validation failure. Also update
-the "Error handling" section in `packages/docs/content/error-customization.mdx`
-to document the new discriminator path behavior with a before/after
+users can identify which variant had the validation failure. Also add a
+new section to `packages/docs/content/error-customization.mdx`
+documenting the discriminator path behavior with a before/after
 example showing the improved error path output for discriminated unions.
 
 ### N4: Fix `ZodCatch.create()` not accepting error-context callback
@@ -109,9 +109,9 @@ discards the description. The `ZodArray.create(this)` call inside the
 `processCreateParams` never sees the description. By contrast,
 `.optional()`, `.nullable()`, and `.default()` all pass `this._def` and
 correctly preserve the description. Fix `.array()` — and similarly
-`.set()`, `.map()`, and `.record()` wrapper methods on `ZodType` — to
-forward `this._def` so that descriptions propagate through these
-wrappers consistently.
+`.readonly()`, the only other `ZodType` instance wrapper method that
+omits `this._def` (`ZodReadonly.create(this)`) — to forward `this._def`
+so that descriptions propagate through these wrappers consistently.
 
 ### N6: Fix `ZodObject.merge()` silently discarding `description` and `errorMap`
 
@@ -158,13 +158,20 @@ matches the schema intent. Fix the comparison in `ZodLiteral._parse()`
 in `types.ts` to use `Object.is()` so that `NaN` literal schemas
 correctly accept `NaN` inputs.
 
-### N10: Fix `.pipe()` producing incorrect inferred output type with transforms
+### N10: Fix `.pipe()` in v3 accepting incompatible schemas without a type error
 
-When using `.pipe()` to chain two schemas where both apply transforms,
-`z.infer<>` resolves to the input type of the second schema rather than
-its output type. The `ZodPipeline` generic parameters do not propagate
-the second schema's output correctly. Fix the type-level plumbing so
-the inferred type matches the final transform output.
+In v3, the `.pipe()` method on `ZodType` is declared as
+`pipe<T extends ZodTypeAny>(target: T): ZodPipeline<this, T>`. The
+constraint `ZodTypeAny` (i.e. `ZodType<any, any, any>`) places no
+restriction on `T`'s input type, so expressions like
+`z.string().pipe(z.number())` compile without error even though the
+output of `z.string()` (`string`) is incompatible with the input of
+`z.number()` (`number`). Tighten the constraint in
+`packages/zod/src/v3/types.ts` so that `T` must be a
+`ZodType<any, any, Output>` where `Output` is the current schema's
+output type (i.e. `this["_output"]`), and update the `ZodPipeline.create`
+overload accordingly. Add a compile-time test in the v3 pipeline test
+file asserting that chaining incompatible schemas is a TypeScript error.
 
 ## Medium
 
@@ -192,7 +199,7 @@ constraints at all. Add `minSize` and `maxSize` optional fields to
 existing `too_small`/`too_big` issue codes, and add chainable `.min()`,
 `.max()`, `.size()`, and `.nonempty()` methods mirroring the `ZodSet`
 API. Update the `map` type in the size-related issue type unions in
-`ZodError.ts` and add default error messages in `errors.ts`.
+`ZodError.ts` and add default error messages in `locales/en.ts`.
 
 ### M3: Add multi-key discriminator support to `ZodDiscriminatedUnion`
 
@@ -203,7 +210,7 @@ and `version`). Update the `getDiscriminator()` helper to resolve
 compound keys, modify the discriminator map construction in
 `ZodDiscriminatedUnion.create()` to build a nested lookup, and adjust
 `_parse()` to match on all keys. Add an error for partial discriminator
-matches in `ZodError.ts` and a default message in `errors.ts`.
+matches in `ZodError.ts` and a default message in `locales/en.ts`.
 
 ### M4: Implement conditional schema selection with `z.switch()`
 
@@ -225,15 +232,20 @@ paths using the existing issue context. Support both synchronous and
 async validators, and compose with per-field refinements already on the
 schema.
 
-### M6: Implement recursive schema type inference without manual annotation
+### M6: Implement a z.recursive() builder for self-referential schemas
 
-`z.lazy()` requires a manual type annotation because TypeScript cannot
-infer recursive types from callbacks. Implement a `z.recursive()`
-builder that uses a proxy-based pattern to achieve automatic type
-inference for self-referential schemas. The builder should accept a
-function receiving a reference to the schema being defined and return a
-fully typed schema without requiring an explicit interface declaration
-or a type parameter.
+`z.lazy()` requires an awkward double annotation for recursive schemas:
+a separate interface declaration and an explicit `z.ZodType<T>` variable
+annotation. Implement a `z.recursive<T>()` builder that uses the
+existing `createTransparentProxy` infrastructure to pass a typed
+self-reference into the callback, so callers only need a single type
+parameter. The builder signature should be
+`z.recursive<T>(fn: (self: ZodType<T>) => ZodType<T>): ZodType<T>`,
+accepting a function that receives a proxy to the schema being defined.
+Add the implementation to `packages/zod/src/v4/classic/schemas.ts`
+following the pattern of existing builders, export it from
+`external.ts`, and add tests in the `classic/tests/` directory covering
+simple self-reference and mutually-recursive patterns.
 
 ### M7: Add per-schema custom error maps
 
@@ -264,23 +276,25 @@ that validates the input equals `Symbol.for(key)`. Update the
 `ZodSymbolDef` interface in `types.ts` with a checks array, add parse
 logic mirroring the check-iteration pattern used by `ZodString`, and
 add a new `invalid_symbol` issue code in `ZodError.ts` with a default
-message in `errors.ts`.
+message in `locales/en.ts`.
 
 ### M10: Add coercion failure detail tracking to `ZodError`
 
 When a coerced schema like `z.coerce.number()` receives a non-numeric
-string, the error says "Expected number, received string" — the original
+string, the error says "Expected number, received NaN" — the original
 pre-coercion value is lost. Add an `invalid_coercion` variant to
-`ZodIssueCode` in `ZodError.ts` that carries the original raw value and
-the target coercion type. Update the coercion branches in `ZodString`,
-`ZodNumber`, `ZodBigInt`, `ZodBoolean`, and `ZodDate` in `types.ts` to
-emit this issue code instead of `invalid_type` when coercion fails. Add
-a default message in `errors.ts` and update `helpers/parseUtil.ts` to
-include the raw value in the issue context. Also update the "Coercion"
-subsection of `packages/docs/content/api.mdx` to document the new
-`invalid_coercion` error code, explain when it is emitted instead of
-`invalid_type`, and add a code example showing how to access the
-original raw value from the issue context.
+`$ZodIssueCode` in `packages/zod/src/v4/core/errors.ts` that carries
+the original raw value and the target coercion type. Update the coercion
+branches in `$ZodString`, `$ZodNumber`, `$ZodBigInt`, `$ZodBoolean`, and
+`$ZodDate` in `packages/zod/src/v4/core/schemas.ts` to emit this issue
+code instead of `invalid_type` when coercion fails. Add a default
+message in `packages/zod/src/v4/core/errors.ts` and update
+`packages/zod/src/v4/core/parse.ts` to include the raw value in the
+issue context. Also update the "Coercion" subsection of
+`packages/docs/content/api.mdx` to document the new `invalid_coercion`
+error code, explain when it is emitted instead of `invalid_type`, and
+add a code example showing how to access the original raw value from the
+issue context.
 
 ## Wide
 
@@ -324,16 +338,26 @@ handling, and progress callbacks. Introduce a `ZodStream` class that
 integrates with the existing parse pipeline. Output a typed async
 iterable of validated items alongside an accumulated error report.
 
-### W5: Add comprehensive internationalization for error messages
+### W5: Extend the locale system with fallback chains, pluralization helpers, and per-schema i18n keys
 
-Replace the single-locale error map with a full internationalization
-system. Support pluralization rules, message templates with
-interpolation placeholders like `{minimum}` and `{type}`, per-schema
-message overrides via i18n keys, and locale fallback chains. Bundle
-translations for major locales including English, Spanish, French,
-German, Chinese, Japanese, Korean, and Portuguese. Changes span error
-creation in the parse utilities, the error map system, `ZodError`
-formatting, and the locales module.
+The existing locale system in `packages/zod/src/v4/locales/` provides
+51 language files and a `$ZodErrorMap` interface, but lacks several
+advanced i18n capabilities. Extend it as follows. Add locale fallback
+chains to `packages/zod/src/v4/core/config.ts` so that `config()` can
+accept an ordered array of `$ZodErrorMap` functions and the
+`finalizeIssue` helper in `packages/zod/src/v4/core/util.ts` walks
+the chain until a non-null message is produced. Add a shared
+pluralization utility (e.g. `plural(n, one, other)`) exported from
+`packages/zod/src/v4/locales/index.ts` and adopt it in at least the
+`en.ts`, `de.ts`, `fr.ts`, `es.ts`, `pt.ts`, `zh-CN.ts`, `ja.ts`,
+and `ko.ts` locale files where count-sensitive phrasing such as "1
+character" vs "2 characters" currently uses ad-hoc ternaries. Add an
+optional `i18nKey` field to the `$ZodRawIssue` base type in
+`packages/zod/src/v4/core/errors.ts` so that schema definitions can
+attach a stable lookup key; update the `finalizeIssue` flow to pass
+this key to locale map functions, and update the `$ZodErrorMap`
+signature to receive it. Add tests covering fallback-chain resolution,
+pluralization edge cases (n=0, n=1, n=2), and i18n key propagation.
 
 ### W6: Implement OpenAPI 3.1 bidirectional conversion
 
@@ -364,8 +388,8 @@ inferred types. Support round-tripping so that generated code imports
 and produces a schema structurally equivalent to the original. Handle
 recursive types via `z.lazy()`, discriminated unions, refinements
 emitted as comments preserving the original function source, transforms,
-defaults, and branded types. Requires schema introspection, TypeScript
-AST construction, and import resolution.
+defaults, and branded types. Requires schema introspection, source
+string construction, and import resolution.
 
 ### W9: Implement end-to-end API contract testing framework
 
@@ -391,39 +415,38 @@ introduces new utility functions in the helpers module.
 
 ## Non-code focused
 
-### N11: Fix `vitest.config.ts` not enabling coverage reporting and extend `biome.jsonc` file inclusion to cover JSON files
+### N11: Improve `vitest.config.ts` coverage configuration and extend `biome.jsonc` file inclusion to cover JSON files
 
-The root `vitest.config.ts` configures test execution but does not enable
-coverage collection — there is no `coverage` property in the `test` block.
-When contributors run `pnpm test`, no coverage report is generated, making
-it difficult to assess untested code paths. Add a `coverage` configuration
-to `vitest.config.ts` that uses the `v8` provider with `text` and `lcov`
-reporters, excludes `packages/docs/` and `packages/bench/`, and sets a
-minimum threshold of 80% for branches. Additionally, the `biome.jsonc`
-file configures a `json.formatter` block (setting `trailingCommas: "none"`)
-but the `files.include` array only specifies TypeScript patterns
+The root `vitest.config.ts` already has a `coverage` block with the `v8`
+provider and reporters `["text", "json", "html"]`, but it is missing two
+improvements: the `lcov` reporter (required for tools that consume LCOV
+format, such as Codecov) is not included in the `reporter` array, and there
+is no `thresholds` configuration so contributors receive no feedback when
+coverage drops below an acceptable level. Update the `coverage` block to add
+`"lcov"` to the `reporter` array and add a `thresholds` block setting a
+minimum of 80% for `branches`. Additionally, the `biome.jsonc` file
+configures a `json.formatter` block (setting `trailingCommas: "none"`) but
+the `files.include` array only specifies TypeScript patterns
 (`**/*.ts`, `**/*.mts`, `**/*.cts`), so JSON and JSONC files are never
 processed by biome and the JSON formatter settings are dead configuration.
 Extend `files.include` to add `"**/*.json"` and `"**/*.jsonc"` entries so
 that biome actually formats JSON files in the project according to the
 configured settings.
 
-### M11: Add TypeScript minimum version declaration and circular dependency check to the CI workflow
+### M11: Add TypeScript minimum version declaration and CI drift guard to the CI workflow
 
 The `.github/workflows/test.yml` CI workflow tests against TypeScript
 `"5.5"` and `"latest"` in its matrix, but `packages/zod/package.json`
 has no `peerDependencies` entry declaring the minimum supported TypeScript
 version. Add a `peerDependencies` field to `packages/zod/package.json`
 declaring `"typescript": ">=5.5"` so the minimum version is explicit
-and machine-readable. Then add a job step in the CI matrix that reads
-this minimum version from `packages/zod/package.json` using `jq` and
-asserts that the matrix always includes it, failing the build if the
-declared minimum drifts from the tested versions. Also, the `check-circular`
-job in the same workflow installs dependencies with `pnpm install` but
-does not run `pnpm build` before checking circular dependencies, so the
-check runs against stale build artifacts. Add a `pnpm build` step before
-`pnpm check:circular`. Finally, update the workflow `name` fields to
-include the pnpm version for traceability.
+and machine-readable. Then add a new job to `.github/workflows/test.yml`
+that reads the declared minimum TypeScript version from
+`packages/zod/package.json` using `jq` and asserts that the `test-node`
+matrix always includes that version as one of its tested values, failing
+the build if the declared minimum ever drifts from the tested versions.
+The new job should depend on `test-node` completing successfully before
+it runs its assertion.
 
 ### W11: Overhaul project documentation to accurately reflect the v3/v4 dual-version architecture
 
@@ -431,9 +454,9 @@ The `README.md` at the repository root directs users to `zod.dev/api`
 for documentation but does not mention the v3/v4 split, the monorepo
 structure under `packages/`, or the different import paths (`zod` vs
 `zod/v4` vs `zod/mini`). Update `README.md` to add a "Packages" section
-explaining the monorepo layout, a version migration callout, and badges
-for the `check-circular` and `lint` CI jobs (currently only the `test`
-badge is shown). Update `CONTRIBUTING.md` to document the pnpm workspace
+explaining the monorepo layout, and a version migration callout. Note
+that `check-circular` and `lint` are jobs within the single `test.yml`
+workflow, not separate workflows, so no additional CI badges are needed. Update `CONTRIBUTING.md` to document the pnpm workspace
 setup, the `vitest` test runner (replacing references to older tooling),
 and add a "Docs development" section explaining the `packages/docs/`
 Next.js site. Review and update the `packages/docs/content/api.mdx` and
