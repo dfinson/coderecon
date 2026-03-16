@@ -17,7 +17,7 @@ from codeplane.daemon.indexer import BackgroundIndexer
 from codeplane.daemon.watcher import FileWatcher
 
 if TYPE_CHECKING:
-    from codeplane.index.ops import IndexCoordinator
+    from codeplane.index.ops import IndexCoordinatorEngine
 
 logger = structlog.get_logger()
 
@@ -32,13 +32,13 @@ class ServerController:
     Orchestrates daemon components.
 
     Components:
-    - IndexCoordinator: Database and search operations
+    - IndexCoordinatorEngine: Database and search operations
     - BackgroundIndexer: Thread pool for CPU-bound indexing
     - FileWatcher: Async filesystem monitoring
     """
 
     repo_root: Path
-    coordinator: IndexCoordinator
+    coordinator: IndexCoordinatorEngine
     server_config: ServerConfig
     timeouts_config: TimeoutsConfig = field(default_factory=TimeoutsConfig)
     indexer_config: IndexerConfig = field(default_factory=IndexerConfig)
@@ -164,8 +164,10 @@ def is_server_running(codeplane_dir: Path) -> bool:
 
 async def run_server(
     repo_root: Path,
-    coordinator: IndexCoordinator,
+    coordinator: IndexCoordinatorEngine,
     config: CodePlaneConfig,
+    *,
+    dev_mode: bool = False,
 ) -> None:
     """Run the daemon until shutdown signal."""
     from codeplane.daemon.app import create_app
@@ -178,11 +180,6 @@ async def run_server(
 
     _print_banner(config.server.host, config.server.port, repo_root)
 
-    # Set port and cache dir for resource delivery envelopes
-    from codeplane.mcp.delivery import set_cache_dir, set_server_port
-
-    set_server_port(config.server.port)
-    set_cache_dir(repo_root)
     controller = ServerController(
         repo_root=repo_root,
         coordinator=coordinator,
@@ -191,7 +188,7 @@ async def run_server(
         indexer_config=config.indexer,
     )
 
-    app = create_app(controller, repo_root, coordinator)
+    app = create_app(controller, repo_root, coordinator, dev_mode=dev_mode)
 
     # Configure uvicorn with graceful shutdown
     uvicorn_config = uvicorn.Config(

@@ -35,8 +35,7 @@ _AGENT_TAG = "\\[agent] "
 # Weighted rotation: A appears twice, B once per cycle.
 _REJOINDER_INTERVAL = 5
 _REJOINDERS = (
-    "REJOINDER: search(), read_source, and read_scaffold"
-    " replace grep/rg/find/cat/head/tail/sed/wc.",
+    "REJOINDER: recon replaces grep/rg/find/ag/wc/ls. Read files via terminal (cat/head).",
     "REJOINDER: checkpoint replaces direct test runner and linter invocation.",
 )
 _REJOINDER_ROTATION = (0, 1, 0)
@@ -82,12 +81,15 @@ class ToolMiddleware(Middleware):
 
         # Get MCP session ID from the FastMCP context (agent's session)
         session_id = "unknown"
+        session = None
         if context.fastmcp_context:
             full_session_id = context.fastmcp_context.session_id or "unknown"
             session_id = full_session_id[:8]  # Truncate for display
 
-            # Resolve client profile from session and set for envelope builders
-            self._resolve_and_set_profile(context.fastmcp_context)
+            # Get session for exclusive lock enforcement
+            if self._session_manager:
+                session = self._session_manager.get_or_create(full_session_id)
+
         # Extract key params for logging (avoid logging huge content)
         log_params = self._extract_log_params(tool_name, arguments)
 
@@ -95,6 +97,93 @@ class ToolMiddleware(Middleware):
         log.info("tool_start", tool=tool_name, session_id=session_id, **log_params)
 
         console = get_console()
+
+        # --- Exclusive tool enforcement ---
+        # All tools acquire the session's exclusive lock. For exclusive tools
+        # (checkpoint, semantic_diff) this blocks any concurrent
+        # tool call on the same session until the exclusive tool completes.
+        # For regular tools, the lock is acquired and released quickly.
+
+        short = self._strip_tool_prefix(tool_name)
+
+        if session:
+            async with session.exclusive(short):
+                return await self._run_tool(
+                    context,
+                    call_next,
+                    tool_name,
+                    arguments,
+                    session_id,
+                    start_time,
+                    console,
+                )
+        else:
+            return await self._run_tool(
+                context,
+                call_next,
+                tool_name,
+                arguments,
+                session_id,
+                start_time,
+                console,
+            )
+
+    async def _run_tool(
+        self,
+        context: MiddlewareContext[mt.CallToolRequest],
+        call_next: CallNext[mt.CallToolRequest, Any],
+        tool_name: str,
+        arguments: dict[str, Any],
+        session_id: str,
+        start_time: float,
+        console: Any,
+    ) -> Any:
+        """Execute a tool call with structured error handling and UX."""
+
+        # ── Gap 2: Pre-call pattern violation gate ──
+        # If any pattern has been detected 3+ times, block the tool
+        # call entirely (short-circuit — tool never executes).
+        if context.fastmcp_context and self._session_manager:
+            session = self._session_manager.get_or_create(
+                context.fastmcp_context.session_id,
+            )
+            short = self._strip_tool_prefix(tool_name)
+            # Check if calling this tool would trigger a 3rd+ pattern detection
+            pre_match = session.pattern_detector.evaluate(current_tool=short)
+            if pre_match and pre_match.severity == "warn":
+                pk = f"pattern_{pre_match.pattern_name}_count"
+                count = session.counters.get(pk, 0)
+                if count >= 3:
+                    from codeplane.mcp.gate import build_pattern_hint
+
+                    hard_hint = build_pattern_hint(pre_match)
+                    duration_ms = (time.perf_counter() - start_time) * 1000
+                    log.warning(
+                        "tool_blocked_pattern",
+                        tool=tool_name,
+                        pattern=pre_match.pattern_name,
+                        count=count,
+                        duration_ms=round(duration_ms, 1),
+                    )
+                    return ToolResult(
+                        structured_content={
+                            "error": {
+                                "code": "PATTERN_VIOLATION",
+                                "message": (
+                                    f"Repeated pattern "
+                                    f"'{pre_match.pattern_name}' "
+                                    f"detected {count} times. "
+                                    "Tool execution blocked."
+                                ),
+                            },
+                            "agentic_hint": hard_hint.get(
+                                "agentic_hint",
+                                "Follow the suggested workflow.",
+                            ),
+                            "suggested_workflow": hard_hint.get("suggested_workflow"),
+                            "summary": (f"error: pattern violation ({pre_match.pattern_name})"),
+                        }
+                    )
 
         try:
             result = await call_next(context)
@@ -136,22 +225,34 @@ class ToolMiddleware(Middleware):
                     from codeplane.mcp.gate import build_pattern_hint
 
                     hint_fields = build_pattern_hint(bypass_match)
+
+                    # Track per-pattern count and escalate severity
+                    pattern_count = 1
+                    if context.fastmcp_context and self._session_manager:
+                        session = self._session_manager.get_or_create(
+                            context.fastmcp_context.session_id,
+                        )
+                        pk = f"pattern_{bypass_match.pattern_name}_count"
+                        pattern_count = session.counters.get(pk, 0) + 1
+                        session.counters[pk] = pattern_count
+
+                        n = session.counters.get("pattern_detections", 0) + 1
+                        session.counters["pattern_detections"] = n
+                        if n > 1 and n % _WORKFLOW_HINT_INTERVAL != 1:
+                            hint_fields.pop("suggested_workflow", None)
+
+                    # Escalation tiers by per-pattern repeat count
+                    # Tier 3+ is now a pre-call hard block (see _run_tool).
+                    # Tier 2: warn in response hint.
+                    base_hint = hint_fields["agentic_hint"]
+                    if pattern_count >= 2:
+                        hint_fields["agentic_hint"] = "⚠️ REPEATED WARNING: " + base_hint
+
                     existing_hint = result_dict.get("agentic_hint")
                     if existing_hint:
                         hint_fields["agentic_hint"] = (
                             existing_hint + "\n\n" + hint_fields["agentic_hint"]
                         )
-
-                    # Throttle suggested_workflow: include on first detection
-                    # and every _WORKFLOW_HINT_INTERVAL-th detection after.
-                    if context.fastmcp_context and self._session_manager:
-                        session = self._session_manager.get_or_create(
-                            context.fastmcp_context.session_id,
-                        )
-                        n = session.counters.get("pattern_detections", 0) + 1
-                        session.counters["pattern_detections"] = n
-                        if n > 1 and n % _WORKFLOW_HINT_INTERVAL != 1:
-                            hint_fields.pop("suggested_workflow", None)
 
                     result_dict.update(hint_fields)
                     needs_repack = True
@@ -398,9 +499,6 @@ class ToolMiddleware(Middleware):
 
         session = self._session_manager.get_or_create(context.fastmcp_context.session_id)
 
-        # 1. Tick gate expiry (decrement pending gate counters)
-        session.gate_manager.tick()
-
         # 2. Record call in pattern detector
         #    Strip MCP prefix (e.g. "codeplane-copy3_search" -> "search")
         short_name = self._strip_tool_prefix(tool_name)
@@ -481,43 +579,6 @@ class ToolMiddleware(Middleware):
             if tool_name.endswith(known):
                 return known
         return tool_name
-
-    def _resolve_and_set_profile(self, fastmcp_ctx: Any) -> None:
-        """Resolve client profile from session and set on context var.
-
-        Extracts clientInfo from the MCP session's initialization params
-        and resolves the appropriate delivery profile.
-        """
-        from codeplane.mcp.delivery import resolve_profile, set_current_profile
-
-        try:
-            session = fastmcp_ctx.session
-            client_params = getattr(session, "client_params", None)
-            if client_params is None:
-                return
-
-            client_info = getattr(client_params, "clientInfo", None)
-            client_info_dict = None
-            if client_info is not None:
-                client_info_dict = {
-                    "name": getattr(client_info, "name", ""),
-                    "version": getattr(client_info, "version", ""),
-                }
-
-            capabilities = getattr(client_params, "capabilities", None)
-            caps_dict = None
-            if capabilities is not None:
-                caps_dict = (
-                    capabilities.model_dump(exclude_none=True)
-                    if hasattr(capabilities, "model_dump")
-                    else {}
-                )
-
-            profile = resolve_profile(client_info=client_info_dict, capabilities=caps_dict)
-            set_current_profile(profile)
-        except Exception:
-            # Profile resolution is best-effort; don't break tool calls
-            log.debug("profile_resolution_failed", exc_info=True)
 
     def _extract_log_params(self, _tool_name: str, kwargs: dict[str, Any]) -> dict[str, Any]:
         """Extract relevant parameters for logging.
@@ -628,20 +689,18 @@ class ToolMiddleware(Middleware):
             summary["entries"] = len(result["entries"])
 
         # Tool-specific summaries
-        if tool_name == "search" and "results" in result:
-            summary["matches"] = len(result.get("results", []))
-        elif tool_name == "write_source" and "delta" in result:
-            delta = result["delta"]
-            summary["files_changed"] = delta.get("files_changed", 0)
-        elif tool_name == "checkpoint" and "run_status" in result:
-            run_status = result.get("run_status", {})
-            if isinstance(run_status, dict):
-                progress = run_status.get("progress", {})
-                if isinstance(progress, dict):
-                    cases = progress.get("cases", {})
-                    if isinstance(cases, dict):
-                        summary["passed"] = cases.get("passed", 0)
-                        summary["failed"] = cases.get("failed", 0)
+        if tool_name == "recon" and "files" in result:
+            summary["files_returned"] = len(result.get("files", []))
+        elif tool_name == "refactor_edit" and "edits" in result:
+            edits = result.get("edits", [])
+            summary["edits_applied"] = len(
+                [e for e in edits if isinstance(e, dict) and e.get("status") == "ok"]
+            )
+        elif tool_name == "checkpoint" and "tests" in result:
+            tests = result.get("tests", {})
+            if isinstance(tests, dict):
+                summary["passed"] = tests.get("passed", 0)
+                summary["failed"] = tests.get("failed", 0)
 
         return summary
 
@@ -675,39 +734,28 @@ class ToolMiddleware(Middleware):
             return str(data["display_to_user"])
 
         # Tool-specific formatting based on result structure
-        if tool_name == "search":
-            results = data.get("results", [])
-            return f"{len(results)} results"
-
-        if tool_name == "write_source":
-            delta = data.get("delta", {})
-            files_changed = delta.get("files_changed", 0)
-            return f"{files_changed} files updated"
-
-        if tool_name in ("read_source", "read_file_full"):
+        if tool_name == "recon":
             files = data.get("files", [])
-            return f"{len(files)} files read"
+            return f"{len(files)} files returned"
 
-        if tool_name == "list_files":
-            entries = data.get("entries", [])
-            return f"{len(entries)} entries"
+        if tool_name == "refactor_edit":
+            edits = data.get("edits", [])
+            ok = len([e for e in edits if isinstance(e, dict) and e.get("status") == "ok"])
+            return f"{ok}/{len(edits)} edits applied"
 
-        if tool_name in ("checkpoint",):
+        if tool_name == "checkpoint":
             if "summary" in data:
                 return str(data["summary"])
-            run_status = data.get("run_status", {})
-            if isinstance(run_status, dict):
-                progress = run_status.get("progress", {})
-                if isinstance(progress, dict):
-                    passed = progress.get("passed", 0)
-                    failed = progress.get("failed", 0)
-                    return f"{passed} passed, {failed} failed"
-            return f"{tool_name} complete"
+            tests = data.get("tests", {})
+            if isinstance(tests, dict):
+                passed = tests.get("passed", 0)
+                failed = tests.get("failed", 0)
+                return f"{passed} passed, {failed} failed"
+            return "checkpoint complete"
 
-        if tool_name == "map_repo":
-            entry_points = data.get("entry_points", [])
-            languages = data.get("languages", [])
-            return f"{len(languages)} languages, {len(entry_points)} entry points"
+        if tool_name == "semantic_diff":
+            changes = data.get("changes", [])
+            return f"{len(changes)} structural changes"
 
         # Default: return empty string (no summary shown)
         return ""

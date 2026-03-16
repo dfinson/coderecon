@@ -6,6 +6,7 @@ __pycache__/
 # C extensions
 *.so
 
+
 # Distribution / packaging
 .Python
 build/
@@ -209,3 +210,19 @@ __marimo__/
 
 # Benchmark raw chatreplay exports (large)
 benchmarking/**/results/*_raw.json
+
+# Recon-lab pipeline — mutable data lives outside repo at $CPL_LAB_WORKSPACE
+recon-lab/clones/
+recon-lab/data/
+recon-lab/.venv/
+recon-lab/infra/terraform.tfvars
+recon-lab/infra/.terraform/
+recon-lab/infra/terraform.tfstate*
+recon-lab/infra/codeplane_wheel/
+recon-lab/infra/.terraform.lock.hcl
+.tower-worktrees/
+output/
+recon-lab/src/cpl_lab/eval/output/
+
+recon-lab/.venv2/
+recon-lab/models/

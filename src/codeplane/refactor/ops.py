@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
-    from codeplane.index.ops import IndexCoordinator
+    from codeplane.index.ops import IndexCoordinatorEngine
     from codeplane.mutation.ops import Edit, MutationDelta, MutationOps
 
 RefactorAction = Literal["rename", "move", "delete", "preview", "apply", "cancel"]
@@ -214,13 +214,13 @@ class RefactorOps:
     def __init__(
         self,
         repo_root: Path,
-        coordinator: IndexCoordinator,
+        coordinator: IndexCoordinatorEngine,
     ) -> None:
         """Initialize refactor ops.
 
         Args:
             repo_root: Repository root path
-            coordinator: IndexCoordinator for symbol lookup
+            coordinator: IndexCoordinatorEngine for symbol lookup
         """
         self._repo_root = repo_root
         self._coordinator = coordinator
@@ -411,9 +411,9 @@ class RefactorOps:
                 f"{low_count} low-certainty lexical matches may include false positives "
                 f"(e.g., English word vs symbol name).\n\n"
                 f"Files: {files_summary}\n\n"
-                f"BEFORE calling refactor_apply:\n"
-                f"  1. Use refactor_inspect(refactor_id, path) to review matches with context\n"
-                f"  2. Or use read_files / search to verify manually\n"
+                f"BEFORE calling refactor_commit:\n"
+                f"  1. Use refactor_commit(refactor_id, inspect_path=path) to review matches with context\n"
+                f"  2. Or read files to verify manually\n"
                 f"  3. If false positives exist, use refactor_cancel and handle manually"
             )
 
@@ -890,7 +890,7 @@ class RefactorOps:
             verification_guidance = (
                 f"{low_count} low-certainty matches found.\n\n"
                 f"Files: {files_summary}\n\n"
-                f"Use refactor_inspect to review before applying."
+                f"Use refactor_commit(refactor_id, inspect_path=path) to review before applying."
             )
 
         return RefactorPreview(
@@ -1178,9 +1178,9 @@ class RefactorOps:
         preview.verification_guidance = (
             f"Found {total_refs} references to '{target}' that need cleanup.\n\n"
             f"Impact does NOT auto-remove references. You must:\n"
-            f"  1. Review each reference with refactor_inspect\n"
+            f"  1. Review each reference with refactor_commit(refactor_id, inspect_path=...)\n"
             f"  2. Decide how to handle: remove import, replace with alternative, etc.\n"
-            f"  3. Use write_source to make changes manually\n"
+            f"  3. Use refactor_edit to make changes manually\n"
             f"  4. Call refactor_cancel to clear this preview\n\n"
             f"High certainty: {preview.high_certainty_count} (index-backed)\n"
             f"Low certainty: {preview.low_certainty_count} (lexical matches)"
@@ -1299,3 +1299,11 @@ class RefactorOps:
             refactor_id=refactor_id,
             status="cancelled",
         )
+
+    def clear_pending(self) -> None:
+        """Discard all pending refactor previews.
+
+        Called by checkpoint to prevent stale previews from
+        accumulating across edit cycles.
+        """
+        self._pending.clear()

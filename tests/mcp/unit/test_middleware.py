@@ -369,28 +369,24 @@ class TestToolMiddleware:
         assert summary["results"] == 3
         assert summary["files"] == 2
 
-    def test_extract_result_summary_search_tool(self, middleware):
-        """Test search-specific summary extraction."""
-        result = {"results": [{"path": "a.py"}, {"path": "b.py"}]}
-        summary = middleware._extract_result_summary("search", result)
-        assert summary["matches"] == 2
+    def test_extract_result_summary_recon_tool(self, middleware):
+        """Test recon-specific summary extraction."""
+        result = {"files": [{"path": "a.py"}, {"path": "b.py"}]}
+        summary = middleware._extract_result_summary("recon", result)
+        assert summary["files_returned"] == 2
 
-    def test_extract_result_summary_write_files(self, middleware):
-        """Test write_source-specific summary extraction."""
-        result = {"delta": {"files_changed": 3}}
-        summary = middleware._extract_result_summary("write_source", result)
-        assert summary["files_changed"] == 3
+    def test_extract_result_summary_refactor_edit(self, middleware):
+        """Test refactor_edit-specific summary extraction."""
+        result = {"edits": [{"status": "ok"}, {"status": "ok"}, {"status": "error"}]}
+        summary = middleware._extract_result_summary("refactor_edit", result)
+        assert summary["edits_applied"] == 2
 
     def test_extract_result_summary_test_run(self, middleware):
         """Test test run summary extraction."""
         result = {
-            "run_status": {
-                "progress": {
-                    "cases": {
-                        "passed": 10,
-                        "failed": 2,
-                    }
-                }
+            "tests": {
+                "passed": 10,
+                "failed": 2,
             }
         }
         summary = middleware._extract_result_summary("checkpoint", result)
@@ -407,45 +403,30 @@ class TestToolMiddleware:
         formatted = middleware._format_tool_summary("test_tool", result)
         assert formatted == "custom summary"
 
-    def test_format_tool_summary_search(self, middleware):
-        """Test search-specific formatting."""
-        result = {"results": [1, 2, 3]}
-        formatted = middleware._format_tool_summary("search", result)
-        assert formatted == "3 results"
+    def test_format_tool_summary_recon(self, middleware):
+        """Test recon-specific formatting."""
+        result = {"files": [1, 2, 3]}
+        formatted = middleware._format_tool_summary("recon", result)
+        assert formatted == "3 files returned"
 
-    def test_format_tool_summary_write_files(self, middleware):
-        """Test write_source-specific formatting."""
-        result = {"delta": {"files_changed": 5}}
-        formatted = middleware._format_tool_summary("write_source", result)
-        assert formatted == "5 files updated"
+    def test_format_tool_summary_refactor_edit(self, middleware):
+        """Test refactor_edit-specific formatting."""
+        result = {"edits": [{"status": "ok"}, {"status": "ok"}, {"status": "error"}]}
+        formatted = middleware._format_tool_summary("refactor_edit", result)
+        assert formatted == "2/3 edits applied"
 
-    def test_format_tool_summary_read_source(self, middleware):
-        """Test read_source-specific formatting."""
-        result = {"files": [{"path": "a.py"}, {"path": "b.py"}]}
-        formatted = middleware._format_tool_summary("read_source", result)
-        assert formatted == "2 files read"
-
-    def test_format_tool_summary_list_files(self, middleware):
-        """Test list_files-specific formatting."""
-        result = {"entries": [1, 2, 3, 4, 5]}
-        formatted = middleware._format_tool_summary("list_files", result)
-        assert formatted == "5 entries"
-
-    def test_format_tool_summary_map_repo(self, middleware):
-        """Test map_repo-specific formatting."""
-        result = {"entry_points": [1, 2], "languages": ["python", "javascript"]}
-        formatted = middleware._format_tool_summary("map_repo", result)
-        assert "2 languages" in formatted
-        assert "2 entry points" in formatted
+    def test_format_tool_summary_checkpoint(self, middleware):
+        """Test checkpoint-specific formatting."""
+        result = {"tests": {"passed": 10, "failed": 2}}
+        formatted = middleware._format_tool_summary("checkpoint", result)
+        assert formatted == "10 passed, 2 failed"
 
     def test_format_tool_summary_test_run_completed(self, middleware):
         """Test test run completion formatting."""
         result = {
-            "run_status": {
-                "progress": {
-                    "passed": 10,
-                    "failed": 2,
-                }
+            "tests": {
+                "passed": 10,
+                "failed": 2,
             }
         }
         formatted = middleware._format_tool_summary("checkpoint", result)
@@ -664,3 +645,79 @@ class TestCallToolResultParsing:
 
         formatted = middleware._format_tool_summary("tool", mock_result)
         assert formatted == "formatted result"
+
+
+class TestPatternViolationGate:
+    """Gap 2: Pattern escalation tier 3+ hard error (pre-call block)."""
+
+    @pytest.fixture
+    def session_manager(self):
+        from codeplane.mcp.session import SessionManager
+
+        return SessionManager()
+
+    @pytest.fixture
+    def middleware(self, session_manager):
+        return ToolMiddleware(session_manager=session_manager)
+
+    @pytest.fixture
+    def mock_context(self, session_manager):  # noqa: ARG002
+        ctx = MagicMock(spec=MiddlewareContext)
+        ctx.message = MagicMock()
+        ctx.message.name = "search"
+        ctx.message.arguments = {}
+        ctx.fastmcp_context = MagicMock()
+        ctx.fastmcp_context.session_id = "pattern-test-session"
+        return ctx
+
+    @pytest.mark.asyncio
+    async def test_pattern_violation_blocks_tool(self, middleware, mock_context, session_manager):
+        """Tier 3+ pattern detection blocks tool execution entirely."""
+        session = session_manager.get_or_create("pattern-test-session")
+
+        # Simulate a pattern that has been detected 3 times
+        session.counters["pattern_search_loop_count"] = 3
+
+        # Mock the pattern detector to return a match
+        mock_match = MagicMock()
+        mock_match.pattern_name = "search_loop"
+        mock_match.severity = "warn"
+        mock_match.message = "Repeated search pattern"
+        mock_match.suggested_tool = "recon"
+        mock_match.tool_params = {}
+        session.pattern_detector.evaluate = MagicMock(return_value=mock_match)
+
+        async def call_next(_ctx):
+            raise AssertionError("Tool should NOT be called")
+
+        with patch("codeplane.core.progress.get_console", return_value=MagicMock()):
+            result = await middleware.on_call_tool(mock_context, call_next)
+
+        # Should return error, not call the tool
+        assert result.structured_content["error"]["code"] == "PATTERN_VIOLATION"
+        assert "search_loop" in result.structured_content["error"]["message"]
+
+    @pytest.mark.asyncio
+    async def test_pattern_count_below_3_allows_tool(
+        self, middleware, mock_context, session_manager
+    ):
+        """Pattern count < 3 allows tool to execute normally."""
+        session = session_manager.get_or_create("pattern-test-session")
+        session.counters["pattern_search_loop_count"] = 2
+
+        mock_match = MagicMock()
+        mock_match.pattern_name = "search_loop"
+        mock_match.severity = "warn"
+        session.pattern_detector.evaluate = MagicMock(return_value=mock_match)
+
+        called = False
+
+        async def call_next(_ctx):
+            nonlocal called
+            called = True
+            return ToolResult(structured_content={"ok": True})
+
+        with patch("codeplane.core.progress.get_console", return_value=MagicMock()):
+            await middleware.on_call_tool(mock_context, call_next)
+
+        assert called, "Tool should have been called when pattern count < 3"

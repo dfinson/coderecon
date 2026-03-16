@@ -1,0 +1,497 @@
+# abseil/abseil-cpp
+
+| Field | Value |
+|-------|-------|
+| **URL** | https://github.com/abseil/abseil-cpp |
+| **License** | Apache-2.0 |
+| **Language** | C++ |
+| **Scale** | Very Large |
+| **Category** | C++ standard library extensions |
+| **Set** | Cutoff |
+| **Commit** | `e72b94a2f257ba069ec0b99e557e9f1f6b9c1a3e` |
+
+## Why this repo
+
+- **Well-structured**: Modular library organised into independent
+  components under `absl/`: strings (Cord, StrCat, StrFormat),
+  containers (flat_hash_map, btree, inlined_vector), synchronisation
+  (Mutex, Notification, CondVar), time (Duration, Time, TimeZone),
+  status (Status, StatusOr), hash, logging, flags, random, CRC, and
+  debugging. Each module has public headers, internal implementation,
+  and separated tests.
+- **Rich history**: 6K+ commits, 15K+ stars. Google's foundational
+  C++ library, widely adopted. Issues span performance, portability,
+  correctness, and standards-track evolution.
+- **Permissive**: Apache-2.0 license.
+
+## Structure overview
+
+```
+absl/
+├── strings/
+│   ├── str_cat.h / str_cat.cc         # StrCat(), StrAppend() — efficient concatenation
+│   ├── str_format.h                   # StrFormat() — type-safe printf
+│   ├── str_split.h                    # StrSplit() — string splitting
+│   ├── str_join.h                     # StrJoin() — string joining
+│   ├── substitute.h                   # Substitute() — positional formatting
+│   ├── ascii.h                        # ASCII character classification
+│   ├── escaping.h                     # CEscape, CUnescape, Base64
+│   ├── match.h                        # EqualsIgnoreCase, StartsWith, EndsWith
+│   ├── numbers.h                      # SimpleAtoi, SimpleAtof — parsing
+│   ├── charconv.h                     # from_chars — float/double parsing
+│   ├── cord.h                         # Cord — heavy-duty immutable string
+│   ├── cord_buffer.h                  # CordBuffer — mutable cord building
+│   ├── string_view.h                  # string_view implementation
+│   └── internal/                      # Cord B-tree, char conversion, etc.
+├── container/
+│   ├── flat_hash_map.h                # Swiss Table hash map
+│   ├── flat_hash_set.h                # Swiss Table hash set
+│   ├── node_hash_map.h                # Node-based hash map (pointer stability)
+│   ├── node_hash_set.h                # Node-based hash set
+│   ├── btree_map.h                    # B-tree ordered map
+│   ├── btree_set.h                    # B-tree ordered set
+│   ├── inlined_vector.h               # Small-buffer-optimised vector
+│   ├── fixed_array.h                  # Stack-allocated array
+│   └── internal/raw_hash_set.h        # Core Swiss Table implementation
+├── synchronization/
+│   ├── mutex.h / mutex.cc             # Mutex with conditional critical sections
+│   ├── notification.h                 # One-shot notification
+│   ├── blocking_counter.h             # Countdown barrier
+│   └── internal/                      # Waiter, GraphCycles (deadlock detection)
+├── time/
+│   ├── time.h / time.cc               # Time, Duration — arithmetic, formatting
+│   ├── civil_time.h                   # CivilDay, CivilMonth — calendaric time
+│   ├── clock.h                        # Now(), SleepFor() — system clock
+│   └── internal/cctz/                 # CCTZ timezone library
+├── status/
+│   ├── status.h / status.cc           # Status — error code + message + payload
+│   ├── statusor.h                     # StatusOr<T> — value-or-error
+│   └── status_matchers.h              # GoogleTest matchers
+├── hash/
+│   ├── hash.h                         # absl::Hash — extensible hashing framework
+│   └── internal/                      # City hash, low-level hash combine
+├── log/
+│   ├── log.h                          # LOG() macro — structured logging
+│   ├── check.h                        # CHECK(), DCHECK() macros
+│   ├── die_if_null.h                  # Pointer null-check with fatal
+│   ├── log_sink.h                     # LogSink interface for custom sinks
+│   └── internal/                      # Log message formatting, sink registry
+├── flags/
+│   ├── flag.h                         # ABSL_FLAG() — command-line flags
+│   ├── parse.h                        # absl::ParseCommandLine()
+│   ├── usage.h                        # Usage/help generation
+│   └── internal/                      # Flag registry, marshalling
+├── random/
+│   ├── random.h                       # absl::BitGen — random bit generator
+│   ├── distributions.h                # Uniform, Gaussian, Bernoulli
+│   └── internal/                      # PCG, randen engine
+├── debugging/
+│   ├── stacktrace.h                   # GetStackTrace()
+│   ├── symbolize.h                    # Symbolize() — address-to-symbol
+│   ├── failure_signal_handler.h       # SIGSEGV/SIGABRT handler
+│   └── internal/                      # Unwinder, ELF reader
+├── crc/
+│   ├── crc32c.h                       # CRC32C computation
+│   └── internal/                      # Hardware-accelerated CRC
+├── base/
+│   ├── config.h                       # Platform/compiler detection macros
+│   ├── optimization.h                 # ABSL_PREDICT_TRUE/FALSE
+│   ├── thread_annotations.h           # Thread-safety annotations
+│   ├── log_severity.h                 # LogSeverity enum
+│   └── internal/                      # Spinlock, sysinfo, malloc hooks
+├── numeric/
+│   ├── int128.h                       # int128, uint128 types
+│   └── bits.h                         # Bit manipulation utilities
+├── functional/
+│   ├── any_invocable.h                # Move-only std::function replacement
+│   ├── function_ref.h                 # Non-owning function reference
+│   └── overload.h                     # Overload set for visitors
+├── types/
+│   ├── optional.h                     # absl::optional (pre-C++17 backport)
+│   ├── variant.h                      # absl::variant (pre-C++17 backport)
+│   ├── any.h                          # absl::any (pre-C++17 backport)
+│   └── span.h                         # absl::Span — non-owning array view
+├── cleanup/
+│   └── cleanup.h                      # absl::Cleanup — scope guard
+├── algorithm/
+│   └── container.h                    # Container algorithm wrappers
+├── memory/
+│   └── memory.h                       # WrapUnique, make_unique (backport)
+├── meta/
+│   └── type_traits.h                  # Type traits extensions
+├── utility/
+│   └── utility.h                      # absl::exchange, in_place_t
+└── profiling/
+    └── internal/                      # PeriodicSampler, ExponentialBiased
+```
+
+## Scale indicators
+
+- ~522 non-test source files (.h + .cc)
+- ~143K lines of code
+- Deep structure (3–4 levels: `absl/strings/internal/`)
+- Zero external dependencies (self-contained)
+
+---
+
+## Tasks
+
+30 tasks (10 narrow, 10 medium, 10 wide).
+
+## Narrow
+
+### N1: Add StrFindIgnoreCase to strings/match.h
+
+The `absl/strings/match.h` header provides `StrContainsIgnoreCase()`,
+`StartsWithIgnoreCase()`, `EndsWithIgnoreCase()`, and other case-insensitive
+matchers, but there is no position-returning case-insensitive substring
+search. Add `StrFindIgnoreCase(absl::string_view haystack, absl::string_view
+needle) -> size_t` that returns the byte offset of the first case-insensitive
+match using `absl::ascii_tolower` for character comparison without allocating
+a copy, or `absl::string_view::npos` if not found. Add the declaration to
+`match.h` and the implementation to `match.cc`.
+
+### N2: Fix Cord::Compare(string_view) missing inline fast path for non-tree cords
+
+The `Cord::Compare(const Cord&)` in `strings/cord.h` has an inline fast
+path that directly calls `contents_.data_.Compare()` when both cords are
+non-tree (inline) cords. The `Cord::Compare(absl::string_view)` overload
+declared in `cord.h` and implemented in `cord.cc` lacks this fast path and
+always dispatches through `SharedCompareImpl`, which traverses the full
+chunk iterator even for short inline cords. Add an inline non-tree fast
+path to `Cord::Compare(absl::string_view)` in `cord.h` mirroring the
+existing `Cord::Compare(const Cord&)` optimization.
+
+### N3: Add Duration::ToTimeval and Duration::ToTimespec symmetry checks
+
+The `absl/time/time.h` header provides `ToTimeval()` and `ToTimespec()`
+for converting `Duration` to POSIX time structures, but there are no
+`constexpr` compile-time assertions verifying the round-trip correctness
+of `FromTimeval(ToTimeval(d)) == d` for representable durations. Add
+static assertions in `time.cc` that validate round-trip behaviour for
+edge-case durations (zero, max, negative).
+
+### N4: Add flat_hash_map::clear_and_reserve to avoid redundant rehash
+
+Calling `clear()` followed by `reserve(n)` on a `flat_hash_map` triggers
+two separate internal rehash operations: one to clear tombstones during
+`clear()`, and another to grow the table in `reserve(n)`. Add
+`clear_and_reserve(size_t n)` to `container/internal/raw_hash_set.h` that
+performs both operations in a single pass—resetting the control bytes to
+empty and immediately sizing the table to hold at least `n` elements without
+the intermediate rehash. Expose the method via `using Base::clear_and_reserve`
+in `flat_hash_map.h`, `flat_hash_set.h`, `node_hash_map.h`, and
+`node_hash_set.h`.
+
+### N5: Add AsciiStrToTitle to strings/ascii.h
+
+The `absl/strings/ascii.h` header provides `AsciiStrToLower()` and
+`AsciiStrToUpper()` in both in-place (`std::string*`) and copy-returning
+(`string_view`) overloads, but has no title-case function. Add
+`AsciiStrToTitle(std::string* s)` (in-place) and
+`[[nodiscard]] std::string AsciiStrToTitle(absl::string_view s)`
+(copy-returning) that capitalize the first character of each
+whitespace-delimited word using `ascii_toupper` and lowercase the rest
+using `ascii_tolower`. Also update `FAQ.md` to include a usage example
+for the new title-case function alongside the existing case-conversion
+examples.
+
+### N6: Add StatusOr<T>::or_else() monadic error-handling operation
+
+The `StatusOr<T>` class in `status/statusor.h` supports `value()`,
+`value_or()`, `ok()`, and `status()`, but lacks monadic operations for
+chaining fallible computations. Add `StatusOr<T>::or_else(callable)`
+that invokes the callable with the held `absl::Status` when the
+`StatusOr` holds an error, returning a new `StatusOr<T>` produced by
+the callable. The callable signature should be `StatusOr<T>(absl::Status)`.
+This enables error-handling chains such as
+`auto r = Compute().or_else([](Status s) { return Fallback(); });`
+without nested if-statements.
+
+### N7: Add BlockingCounter::WaitWithTimeout
+
+The `BlockingCounter` class in `synchronization/blocking_counter.h`
+provides `Wait()` for an indefinite block until the counter reaches zero,
+but has no timeout variant. Add
+`bool WaitWithTimeout(absl::Duration timeout)` that returns `true` if
+the counter reached zero within the timeout, or `false` if the timeout
+expired. Implement in `blocking_counter.h` (declaration) and
+`blocking_counter.cc` (implementation) using the existing `Mutex`
+infrastructure, mirroring the pattern used by
+`Notification::WaitForNotificationWithTimeout()`.
+
+### N8: Add ByPredicate delimiter to strings/str_split.h
+
+The `StrSplit()` function in `strings/str_split.h` provides delimiters
+`ByChar`, `ByAnyChar`, `ByString`, `ByAsciiWhitespace`, and `ByLength`,
+but has no predicate-based delimiter. Add `ByPredicate<Callable>`
+that splits on any character satisfying a callable predicate
+`bool(char)`, for example `StrSplit(s, ByPredicate(absl::ascii_ispunct))`
+to split on punctuation. Implement the `Find(absl::string_view text,
+size_t pos)` method in `str_split.h` that scans for the first character
+satisfying the predicate and returns the matching single-character
+`absl::string_view`.
+
+### N9: Fix CRC32C::Extend not handling zero-length input without branch
+
+The `crc32c::ExtendCrc32c()` in `crc/crc32c.h` handles zero-length
+input correctly but incurs an unnecessary branch in the hot path. When
+hardware CRC is available, the empty-input branch is never taken by the
+CPU branch predictor but still impacts code layout. Move the
+zero-length check to a cold path with `ABSL_PREDICT_FALSE`.
+
+### N10: Add uint128 literal operator for compile-time construction
+
+The `absl::uint128` type in `numeric/int128.h` requires runtime
+construction via `absl::MakeUint128(high, low)`. Add a user-defined
+literal operator `_u128` that enables compile-time construction:
+`auto x = 123456789012345678901234567890_u128`. Implement the literal
+parser as a `constexpr` function template that processes the digit
+string at compile time.
+
+## Medium
+
+### M1: Implement StrFormat compile-time format string validation
+
+The `StrFormat()` function in `strings/str_format.h` validates format
+strings at runtime. Add `consteval` format string parsing (C++20) that
+catches mismatched format specifiers and argument types at compile time.
+Requires a `consteval` format parser, integration with the existing
+`FormatSpec` machinery, compile-time type checking against the format
+argument pack, and backward-compatible runtime fallback for C++17.
+
+### M2: Add compute_if_absent and compute_if_present to hash map containers
+
+The `flat_hash_map` in `container/flat_hash_map.h` requires two separate
+operations to perform a conditional insert-or-update: `find()` followed
+by `insert_or_assign()` or `try_emplace()`, which involves two hash
+computations. Implement `compute_if_absent(key, factory)` that inserts
+a value only if the key is absent (calling the factory to produce it,
+avoiding construction if the key exists) and `compute_if_present(key,
+updater)` that calls the updater with a reference to the existing value
+only if the key is already present. Add both methods to
+`container/internal/raw_hash_map.h` and expose them via `using`
+declarations in `flat_hash_map.h`, `node_hash_map.h`. Each method
+should perform a single hash lookup and accept any callable with
+compatible signature.
+
+### M3: Implement Cord::FindAll for multi-match substring search
+
+The `Cord` type in `strings/cord.h` provides `Cord::Find()` for
+single-occurrence substring search. Add `Cord::FindAll(string_view
+pattern)` returning a vector of offsets, using an Aho-Corasick or
+Boyer-Moore-Horspool algorithm adapted for the Cord's chunked
+representation. Requires traversal via `CordRepBtreeNavigator`,
+cross-chunk boundary matching, and efficient result accumulation.
+
+### M4: Add structured data payloads to absl::Status
+
+The `Status` class in `status/status.h` supports string payloads but
+not typed structured data. Add `Status::SetPayload<T>(key, value)` and
+`Status::GetPayload<T>(key)` using type-erased storage with
+`absl::any`. Requires serialisation hooks for cross-process transport,
+payload forwarding in `StatusOr`, and integration with the existing
+`Cord`-based payload mechanism.
+
+### M5: Implement a thread-safe bounded MPMC queue in synchronization/
+
+Add `absl::BoundedQueue<T>` — a fixed-capacity multi-producer
+multi-consumer queue using the Abseil `Mutex` and `CondVar`. Support
+blocking `Push`/`Pop`, try variants with timeout, `Close()` for
+graceful shutdown, and `Drain()`. Requires a ring buffer implementation,
+`Mutex` condition-based waiting, proper move semantics, and integration
+with Abseil's thread-safety annotations.
+
+### M6: Add log structured fields for machine-parseable log output
+
+The `LOG()` macro in `log/log.h` emits unstructured text. Add
+`LOG(INFO).Field("user_id", 42).Field("action", "login")` for
+structured key-value logging. Requires a `StructuredLogMessage` builder,
+integration with `LogSink` for sinks that understand structured data
+(JSON output), backward-compatible text rendering for traditional sinks,
+and `log_entry.h` updates for structure field access.
+
+### M7: Implement flag validation with custom validators
+
+The `ABSL_FLAG()` system in `flags/flag.h` supports type-based parsing
+but not custom value validation (e.g., `--port` must be 1–65535). Add
+`absl::RegisterFlagValidator<T>(flag, validator)` that runs after
+parsing and `absl::ParseFlagValidator` for compile-time registration.
+Requires validator storage in the flag registry, validation callback
+invocation in `ParseCommandLine()`, and error reporting integration.
+Also update `CONTRIBUTING.md` with guidelines for writing and
+registering custom flag validators, and add a validator example to
+the `CMake/README.md` build instructions.
+
+### M8: Add absl::Hash support for heterogeneous lookup keys
+
+The `absl::Hash` framework in `hash/hash.h` requires hashing the exact
+key type. Add transparent hashing support for heterogeneous lookup:
+`flat_hash_map<std::string, V, absl::Hash<void>>` should support
+`find(string_view)` without constructing a `std::string`. Requires
+`AbslHashValue` specialisation for transparent comparison, `is_transparent`
+trait integration in `raw_hash_set`, and compatibility with existing
+hash customisation points.
+
+### M9: Implement Duration formatting with custom patterns
+
+The `absl::FormatDuration()` in `time/time.h` outputs a fixed format.
+Add `absl::FormatDuration(Duration d, string_view pattern)` supporting
+patterns like `"%H:%M:%S.%f"` (hours, minutes, seconds, fractional
+seconds), `"%dd %Hh"` (days and hours), and locale-aware formatting.
+Requires a duration format parser, component extraction from the
+`Duration` representation, and output string building.
+
+### M10: Add btree_map range-delete optimisation
+
+The `btree_map` in `container/btree_map.h` supports `erase(first, last)`
+for iterator-range deletion, but it erases elements one by one. Add an
+optimised range-delete path in the btree internal implementation
+(`container/internal/btree.h`) that removes entire nodes when the range
+spans complete node boundaries, improving performance from O(k log n)
+to O(log n + k/B) where B is the node fanout.
+
+## Wide
+
+### W1: Implement a concurrent hash map for high-contention scenarios
+
+Add `absl::ConcurrentHashMap<K, V>` — a lock-striped concurrent hash
+map with fine-grained locking, lock-free reads for immutable entries,
+configurable stripe count, and `ForEach` iteration under snapshot
+semantics. Requires a new module under `container/`, integration with
+`absl::Mutex` for per-stripe locks, `absl::Hash` for key hashing,
+`raw_hash_set` design influence for probing, and comprehensive
+thread-safety annotations.
+
+### W2: Add a coroutine-aware synchronization library
+
+Implement `absl::CoMutex`, `absl::CoCondVar`, and `absl::CoNotification`
+that integrate with C++20 coroutines. When a coroutine awaits a mutex,
+it suspends without blocking the thread. Requires coroutine handle
+management in a new `synchronization/co_` module, `Awaitable` concepts,
+integration with the existing `Mutex` waiter infrastructure for hybrid
+thread/coroutine scheduling, and a coroutine-friendly `BoundedQueue`.
+
+### W3: Implement a type-erased serialisation framework
+
+Add `absl::Serialize(const T&) -> Cord` and `absl::Deserialize<T>(Cord)
+-> StatusOr<T>` using a reflection-like registration system. Support
+primitive types, containers, `absl::optional`, `absl::variant`, nested
+structs, and schema evolution (added/removed fields). Requires a type
+registry, encoder/decoder for a compact binary format, `Cord` builder
+integration, schema versioning metadata, and compile-time registration
+via `ABSL_SERIALIZABLE()` macro.
+
+### W4: Add a comprehensive benchmarking framework
+
+Implement `absl::Benchmark` — a micro-benchmarking framework: `ABSL_BENCHMARK(BM_Sort)`,
+fixture support, parameterised benchmarks, CPU/wall time measurement,
+memory allocation tracking, statistical analysis (mean, stddev, CI),
+and CSV/JSON output. Requires a benchmark registry, runner with
+warm-up and iteration control, platform-specific timers (TSC, clock_gettime),
+allocator interposition, and result comparison between runs.
+
+### W5: Implement a command-line subcommand framework on top of absl::flags
+
+Extend `absl/flags/` with subcommand support: `myapp build --jobs 4`,
+`myapp test --filter "..."`. Add `ABSL_SUBCOMMAND()` macro, subcommand
+routing in `ParseCommandLine()`, per-subcommand flag namespacing, help
+text generation with subcommand listing, completion generation, and
+nested subcommand hierarchies. Changes span `flags/flag.h`, `flags/parse.cc`,
+`flags/usage.cc`, and a new `flags/subcommand.h`. Also update
+`CMakeLists.txt` to add the new `flags/subcommand.h` to the
+`absl_cc_library` target and update `README.md` with a subcommand
+quickstart section.
+
+### W6: Add a safe subset of absl::strings for untrusted input processing
+
+Implement `absl::SafeStrFormat()`, `absl::SafeStrCat()`, and
+`absl::SafeSubstitute()` that enforce output length limits, reject
+format strings with unbounded repetition, sanitise non-printable
+characters, and support HTML/URL/SQL escaping modes. Requires input
+validation in `str_format` internals, configurable escaping backends,
+output truncation with indicators, and integration with `Status` for
+error reporting on malformed input.
+
+### W7: Implement an asynchronous logging pipeline
+
+Add `absl::AsyncLogSink` — a `LogSink` that buffers log entries in a
+lock-free queue and flushes them from a background thread. Support
+backpressure when the queue is full, configurable flush interval and
+batch size, graceful drain on process exit, and sink chaining (async →
+file, async → network). Requires a lock-free SPSC queue, background
+thread management with `Mutex`/`CondVar`, integration with `log_sink.h`,
+and `LOG` macro performance optimisation.
+
+### W8: Add a compile-time reflection system for absl types
+
+Implement `absl::Reflect<T>()` that provides compile-time access to
+struct field names, types, and offsets for types annotated with
+`ABSL_REFLECT()`. Support field iteration, field access by name,
+`StructuredLog` integration, `Serialize` integration, and `StrFormat`
+integration for automatic struct formatting. Requires a macro-based
+field registration system, `constexpr` field descriptor types, and
+template metaprogramming for field pack traversal.
+
+### W9: Implement a distributed-systems time library extension
+
+Extend `absl/time/` with distributed-clock primitives: `HybridLogicalClock`
+(HLC) for causally-ordered timestamps, `VectorClock` for partial
+ordering, `TrueTime`-style clock with uncertainty bounds, and clock
+synchronisation utilities. Requires new types in `time/`, serialisation
+to `Cord`, comparison operators respecting uncertainty, integration with
+`Status` for clock-error reporting, and compatibility with the existing
+`absl::Time` type.
+
+### W10: Add a safe memory management module
+
+Implement `absl::Arena` — a region-based memory allocator for bulk
+allocation and deallocation, `absl::ObservedPtr<T>` — a non-owning
+pointer that detects use-after-free in debug mode, and `absl::Pool<T>` —
+a thread-safe object pool with pre-allocation. Requires allocator
+integration in `base/`, `flat_hash_map` allocator support tests,
+`Cord` arena-allocated node support, debug-mode poisoning for freed
+memory, and thread-safety annotations.
+
+### N11: Update CMake build configuration and documentation for new modules
+
+The `CMakeLists.txt` at the project root includes each `absl/` module
+via `add_subdirectory()`, but the `CMake/README.md` instructions do not
+clearly document how downstream consumers should selectively link
+individual Abseil targets. Update `CMake/README.md` to add a
+cheat-sheet table mapping public header directories to their CMake
+target names (e.g., `absl/strings/ → absl::strings`,
+`absl/container/ → absl::flat_hash_map`, etc.). Also update
+`UPGRADES.md` to document the `ABSL_PROPAGATE_CXX_STD` CMake option
+and its effect on consumers that embed Abseil via `add_subdirectory()`,
+clarifying when it should and should not be enabled.
+
+### M11: Add CI sanitizer matrix and contributor testing guide
+
+The `ci/` directory contains per-platform build scripts (e.g.,
+`ci/linux_clang-latest_libcxx_asan_bazel.sh` for ASAN,
+`ci/linux_clang-latest_libcxx_tsan_bazel.sh` for TSAN) but these are
+not consistently documented. Add a new section to `CONTRIBUTING.md`
+that documents the CI sanitizer matrix — listing each
+`ci/linux_*.sh` script, the sanitizer it enables, the toolchain it
+uses, and how contributors can reproduce the CI locally. Update
+`FAQ.md` with a "How do I run sanitizer builds?" entry cross-
+referencing the new `CONTRIBUTING.md` section. Also update
+`.github/PULL_REQUEST_TEMPLATE.md` to add a checkbox asking whether
+sanitizer CI passed.
+
+### W11: Overhaul build system and packaging across CMake, Bazel, and Conan
+
+The project supports three build systems — CMake (`CMakeLists.txt`,
+`CMake/AbseilHelpers.cmake`, `CMake/AbseilDll.cmake`), Bazel
+(`BUILD.bazel`, `MODULE.bazel`), and Conan (`conanfile.py`) — but
+they are not consistently maintained. Synchronize the list of public
+libraries across all three systems, ensuring that new modules added
+via `absl_cc_library` in CMake are also exported in the Bazel
+`cc_library` rules and the Conan `cpp_info.components` mapping.
+Update `CMakeLists.txt` to add an `ABSL_INSTALL_PKGCONFIG` option
+that generates a `pkg-config` `.pc` file. Update `MODULE.bazel` to
+declare minimum Bazel version and toolchain requirements. Update
+`README.md` with a unified build matrix covering CMake, Bazel, and
+Conan installation paths, and add a `SECURITY.md` file documenting
+the project's vulnerability reporting process.

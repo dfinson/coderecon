@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 if TYPE_CHECKING:
@@ -52,6 +52,14 @@ def _get_runtime_info() -> dict[str, Any]:
     }
 
 
+def _get_ranking_info() -> dict[str, Any]:
+    """Get ranking model version and training metadata."""
+    from codeplane.ranking.version import load_manifest
+
+    manifest = load_manifest()
+    return manifest.to_dict()
+
+
 def create_routes(controller: ServerController) -> list[Route]:
     """Create HTTP routes bound to the daemon controller."""
     start_time = time.time()
@@ -86,6 +94,7 @@ def create_routes(controller: ServerController) -> list[Route]:
             "version": version,
             "uptime_seconds": round(time.time() - start_time, 1),
             "runtime": _get_runtime_info(),
+            "ranking": _get_ranking_info(),
             "indexer": {
                 "state": indexer_status.state.value,
                 "queue_size": indexer_status.queue_size,

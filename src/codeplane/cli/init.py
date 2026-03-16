@@ -10,6 +10,7 @@ from typing import Any
 
 import click
 import json5
+import structlog
 from rich.table import Table
 
 from codeplane.config.user_config import (
@@ -28,6 +29,7 @@ from codeplane.core.progress import (
 )
 from codeplane.templates import get_cplignore_template
 
+log = structlog.get_logger(__name__)
 # =============================================================================
 # Agent Instruction Snippet
 # =============================================================================
@@ -47,146 +49,184 @@ def _make_codeplane_snippet(tool_prefix: str) -> str:
 <!-- codeplane-instructions -->
 ## CodePlane MCP: Mandatory Tool Selection
 
-This repository uses CodePlane MCP. **You MUST use CodePlane tools instead of terminal commands.**
+This repository uses CodePlane MCP.
 
-Terminal fallback is permitted ONLY when no CodePlane tool exists for the operation.
+### ⛔ NEVER Use Terminal to Bypass CodePlane ⛔
 
-### What CodePlane Provides
+**Every file read, search, edit, delete, git operation, lint, and test run MUST go through
+CodePlane tools — NEVER through terminal commands.** Violations break the mutation ledger
+and corrupt the index.
 
-CodePlane maintains a **structural index** of your codebase — definitions, imports,
-references. This enables structural search, semantic diff, impact-aware test selection,
-and safe refactoring that terminal commands cannot provide.
+**Explicitly banned** (non-exhaustive — if a CodePlane tool can do it, the terminal MUST NOT):
+- `cat`, `head`, `tail`, `less`, `sed -n`, `bat` → allowed for reading files after `recon`
+- `grep`, `rg`, `find`, `ag`, `wc`, `ls` → use `recon`
+- `sed -i`, `awk`, `echo >>`, `tee`, `perl -i` → use `refactor_edit`
+- `rm`, `git rm` → use `refactor_edit(delete=True)`
+- `mv` → use `refactor_move` or `refactor_rename`
+- `git add`, `git commit`, `git push`, `git diff`, `git status`, `git log` → use `checkpoint` or `semantic_diff`
+- `pytest`, `python -m pytest`, `ruff`, `mypy`, `flake8`, `black` → use `checkpoint`
 
-### Four-Tool Read Model
+**Allowed terminal use (exhaustive):** `jq` for sidecar cache reads per `agentic_hint`,
+package installation, running the user's application, and operations with genuinely no
+CodePlane equivalent (`docker`, `curl` to external services, etc.).
 
-  search         -> semantic enumeration (spans + metadata, NEVER source text)
-  read_scaffold  -> structural skeleton (imports, signatures, hierarchy — no source)
-  read_source    -> bounded semantic retrieval (span-based or structural-unit-based)
-  read_file_full -> gated bulk access (two-phase confirmation, resource-first delivery)
+### Start Every Task With `recon`
 
-Search = find. Scaffold = orient. Read = retrieve. Full = gated.
+**`recon` is the PRIMARY entry point.** It replaces manual search + read loops.
+One call returns SCAFFOLD (imports + signatures), LITE (path + description), and repo_map.
+repo_map lists **every tracked file** — if a path is not in repo_map, the file does not exist.
 
-`read_source` accepts multiple `targets` in one call — batch reads of independent spans.
-`read_source` target format: `[{{"path": "src/foo.py", "start_line": 10, "end_line": 50}}]`
-Response includes `file_sha256` per file — save it for `write_source` span edits.
+```
+recon(task="<describe the task>", seeds=["SymA", "SymB", ...], read_only=<True or False>)
+```
 
-### CRITICAL: After Every Code Change
+**ONE recon call handles multiple symbols** — put ALL names in `seeds`, never loop.
 
-After ANY edit via `write_source` or other mutation:
+**Recon is hard-gated to 1 call per task.** The 2nd call is blocked unconditionally.
+Read files via terminal (`cat`, `head`) using paths from scaffolds. A gate escape (gate_token)
+is issued on the 2nd block for emergencies only.
 
-**`checkpoint(changed_files=[...], commit_message="...", push=True)`** — lint → test → commit → push + semantic diff.
+### After Recon: Read, Plan, Edit, Checkpoint
 
-Omit `commit_message` to lint+test only (no commit).
+1. Read files via terminal (`cat`, `head`, `sed -n`) using paths from recon scaffolds
+2. `refactor_plan(edit_targets=["<candidate_id>"])` — declare edit set, get plan_id + edit_tickets (sha256 computed from disk)
+3. `refactor_edit(plan_id=..., edits=[...])` — find-and-replace with sha256 locking (one call can edit MULTIPLE files)
+4. `checkpoint(changed_files=[...], commit_message="...")` — lint → test → commit → push
 
-**FORBIDDEN**: `pytest`, `ruff`, `mypy`, `git add`, `git commit`, `git push` in terminal.
+**Budget:** 4 mutation batches max before checkpoint. Each `refactor_edit` call = 1 batch.
+Batch source + test edits into ONE call. On checkpoint failure: budget RESETS, `fix_plan` with
+pre-minted edit tickets returned inline — call `refactor_edit` directly (no new plan needed).
 
-### First Steps When Starting a Task
+### Reviewing Changes
 
-1. `describe` — get repo metadata, language, active branch, index status
-2. `map_repo(include=["structure", "dependencies", "test_layout"])` — understand repo shape
-3. `search` to find relevant code — definitions, references, or lexical patterns
-4. `read_source` on spans from search results — understand the code you'll modify
-5. After changes: `checkpoint(changed_files=[...])` — lint + affected tests in one call
-6. `semantic_diff` — review structural impact before committing
-7. `checkpoint(changed_files=[...], commit_message="...", push=True)` — one-shot
-
-**Testing rule**: NEVER run the full test suite or use test runners directly.
-Always use `checkpoint(changed_files=[...])` with the files you changed.
-This runs lint + only the tests impacted by your changes — fast, targeted, sufficient.
-
-### Reviewing Changes (PR Review)
-
-1. `semantic_diff(base="main")` — structural overview of all changes vs main
-2. `read_source` on changed symbols — review each change in context
-3. `checkpoint(changed_files=[...])` — lint + affected tests
-
-`semantic_diff` first — NOT `git_diff`. It gives symbol-level changes, not raw patches.
+`semantic_diff(base="main")` for structural overview, then read changed files via terminal.
 
 ### Required Tool Mapping
 
 | Operation | REQUIRED Tool | FORBIDDEN Alternative |
 |-----------|---------------|----------------------|
-| File scaffold | `{tool_prefix}_read_scaffold` | Manual traversal, `cat` for structure |
-| Read source | `{tool_prefix}_read_source` | `cat`, `head`, `less`, `tail` |
-| Read full file | `{tool_prefix}_read_file_full` | `cat`, `head`, bulk reads |
-| Write/edit files | `{tool_prefix}_write_source` | `sed`, `echo >>`, `awk`, `tee` |
-| List directory | `{tool_prefix}_list_files` | `ls`, `find`, `tree` |
-| Search code | `{tool_prefix}_search` | `grep`, `rg`, `ag`, `ack` |
-| Repository overview | `{tool_prefix}_map_repo` | Manual file traversal |
-| Lint + test + commit + push | `{tool_prefix}_checkpoint` | Running linters/test runners/git directly |
-| Rename across files | `{tool_prefix}_refactor_rename` | Find-and-replace, `sed` |
-| Semantic diff | `{tool_prefix}_semantic_diff` | `git_diff` for change review, manual comparison |
+| Task-aware discovery | `{tool_prefix}_recon` | Manual search + read loops |
+| Read file content | `cat`, `head`, `sed -n` (terminal) | N/A — terminal reads are allowed |
+| Edit files | `{tool_prefix}_refactor_edit` | `sed`, `echo >>`, `awk`, `tee` |
+| Delete file | `{tool_prefix}_refactor_edit(delete=True)` | `git rm`, `rm` |
+| Rename symbol | `{tool_prefix}_refactor_rename` | Find-and-replace, `sed` |
+| Move file | `{tool_prefix}_refactor_move` | `mv` + manual import fixup |
+| Find all references | `{tool_prefix}_recon_impact` | `grep`, `rg`, scaffold iteration |
+| Apply/inspect refactor | `{tool_prefix}_refactor_commit` | Manual verification |
+| Cancel refactor | `{tool_prefix}_refactor_cancel` | — |
+| Lint + test + commit | `{tool_prefix}_checkpoint` | Running linters/test runners/git directly |
+| Structural diff | `{tool_prefix}_semantic_diff` | `git diff` for change review |
+| Tool/error docs | `{tool_prefix}_describe` | Guessing parameter names |
 
 ### Before You Edit: Decision Gate
 
-STOP before using `write_source` for multi-file changes:
-- Changing a name across files? → `refactor_rename` (NOT write_source + search)
-- Moving a file? → `refactor_move` (NOT write_source + delete)
-- Deleting a symbol or file? → `refactor_impact`
+STOP before using `refactor_edit` for multi-file changes:
+- Changing a name across files? → `refactor_rename` (NOT refactor_edit + manual fixup)
+- Moving a file? → `refactor_move` (NOT refactor_edit + delete)
+- Deleting a file? → `recon_impact` first, then `refactor_edit(delete=True)`
+- Finding all usages of a symbol? → `recon_impact` (NOT grep/scaffold iteration)
 
-### Before You Read: Decision Gate
+### Refactor: preview → commit/cancel
 
-STOP before using `read_file_full`:
-- Need a file's structure or API shape? → `read_scaffold` (signatures, hierarchy, no source)
-- Need to find call sites or consumers? → `search(mode=references)` + `read_source`
-- Need to understand a specific function? → `search(mode=definitions)` + `read_source`
-- Need the ENTIRE file content with no alternative? → ONLY then `read_file_full`
+1. `refactor_rename(symbol="Name", new_name="NewName", justification="...")` — `justification` is **required**
+   `refactor_move` — same pattern, preview with `refactor_id`
+2. If `verification_required`: `refactor_commit(refactor_id=..., inspect_path=...)` — review low-certainty matches
+3. `refactor_commit(refactor_id=...)` to apply, or `refactor_cancel(refactor_id=...)` to discard
 
-| Task | Mode | Enrichment | Why |
-|------|------|------------|-----|
-| Find where a function is defined | `definitions` | `minimal` | Returns span, use read_source for body |
-| Find all callers of a function | `references` | `none` | You just need locations |
-| Find a string/pattern in code | `lexical` | `none` | Spans only, read_source for content |
-| Explore a symbol's shape | `symbol` | `standard` | Metadata without source text |
+### Follow Agentic Hints
 
-Search NEVER returns source text. Use `read_source` with spans from search results.
+`agentic_hint` in responses = **direct instructions for your next action**. Always execute
+before proceeding. Also check: `coverage_hint`, `display_to_user`.
 
-`search` params: `query` (str), `mode` (definitions|references|lexical|symbol), `enrichment` (none|minimal|standard|function|class).
-`checkpoint` params: `changed_files` (list[str]), `commit_message` (str|None), `push` (bool). Chains lint → test → commit → push + semantic diff.
+If `delivery` = `"sidecar_cache"`, run `agentic_hint` commands **verbatim** to fetch content.
+Cache keys: `candidates` (file list with .id), `scaffold:<path>` (imports + signatures),
+`lite:<path>` (path + description), `repo_map` (every tracked file — file inventory only).
+**repo_map** = file existence check. **scaffold** = code structure. **recon_impact** = symbol usages.
 
-### Refactor: preview → inspect → apply/cancel
+### Common Patterns (copy-paste these)
 
-1. `refactor_rename`/`refactor_move`/`refactor_impact` — preview with `refactor_id`
-2. If `verification_required`: `refactor_inspect` — review low-certainty matches
-3. `refactor_apply` or `refactor_cancel`
+**Read-only research:**
+```
+recon(task="...", read_only=True)
+→ cat src/path/file.py                               # read via terminal
+→ checkpoint(changed_files=[])                      # reset session state
+```
 
-### Span-Based Edits
+**Edit a file:**
+```
+recon(task="...", read_only=False)
+→ cat src/path/file.py                               # read via terminal
+→ refactor_plan(edit_targets=["<candidate_id>"])     # sha256 computed from disk
+→ refactor_edit(plan_id="...", edits=[...])          # batch ALL files in ONE call
+→ checkpoint(changed_files=["..."])
+```
 
-`write_source` supports span edits: provide `start_line`, `end_line`, `expected_file_sha256`
-(from `read_source`), and `new_content`. Server validates hash; mismatch → re-read.
-For updates, always include `expected_content` — the server fuzzy-matches nearby lines.
+**Rename a symbol:**
+```
+recon(task="...", read_only=False)
+→ refactor_rename(symbol="OldName", new_name="NewName", justification="...")
+→ refactor_commit(refactor_id="...", inspect_path="...")  # review low-certainty
+→ refactor_commit(refactor_id="...")                      # apply all
+```
 
-**Batching**: `edits` accepts multiple files — batch independent edits into one call.
+**Find all usages of a symbol (audit/trace):**
+```
+recon(task="...", seeds=["SymbolName"], read_only=True)
+→ recon_impact(target="SymbolName")         # returns ALL reference sites
+→ cat src/path/file.py                         # read files you need via terminal
+```
 
-### CRITICAL: Follow Agentic Hints
+**Delete a file:**
+```
+recon(task="...", read_only=False)
+→ recon_impact(target="file/to/delete.py")          # check dependents first
+→ refactor_plan(edit_targets=["<candidate_id>"])
+→ refactor_edit(plan_id="...", edits=[{{
+      "edit_ticket": "...", "path": "file/to/delete.py",
+      "delete": true, "expected_file_sha256": "..."
+  }}])
+→ checkpoint(changed_files=["file/to/delete.py"])
+```
 
-Responses may include `agentic_hint` — these are **direct instructions for your next
-action**, not suggestions. Always read and execute them before proceeding.
-
-Also check for: `coverage_hint`, `display_to_user`.
-
-### Unknown Parameters
-
-If you are unsure of a tool's parameters, call `describe(action='tool', name='<tool>')`
-before guessing. Validation errors also include this hint, but calling `describe` proactively
-avoids wasted round-trips.
+**Checkpoint fails → fix → retry:**
+```
+checkpoint(changed_files=["..."]) → FAILED, fix_plan returned inline
+→ refactor_edit(plan_id=fix_plan.plan_id, edits=[{{
+      "edit_ticket": fix_plan.edit_tickets[0].edit_ticket,
+      "path": "...", "old_content": "...", "new_content": "...",
+      "expected_file_sha256": "..."  # from fix_plan or file_manifest
+  }}])
+→ checkpoint(changed_files=["..."])  # retry
+```
+Budget resets on failure. `fix_plan` is always in the checkpoint response — no cache read needed.
 
 ### Common Mistakes (Don't Do These)
 
-- **DON'T** guess tool parameter names — use `describe(action='tool', name='...')` first
-- **DON'T** use `search` expecting source text — it returns spans only
-- **DON'T** pass `context:` to search — the parameter is `enrichment`
-- **DON'T** use `read_files` — it's replaced by `read_source` and `read_file_full`
+- **DON'T** skip `recon` and manually search+read — `recon` is faster and more complete
+- **DON'T** call `recon` in a loop (once per symbol) — put ALL symbols in `seeds` in ONE call
 - **DON'T** use `refactor_rename` with file:line:col — pass the symbol NAME only
-- **DON'T** skip `checkpoint` after `write_source` — always lint + test your changes
+- **DON'T** skip `checkpoint` after `refactor_edit` — always lint + test your changes
 - **DON'T** ignore `agentic_hint` in responses
-- **DON'T** use raw `git add` + `git commit` — use `checkpoint` with `commit_message`
+- **DON'T** dismiss lint/test failures as "pre-existing" or "not your problem" — fix ALL issues
+- **DON'T** use one `refactor_edit` call per file — batch ALL edits into ONE call
+- **DON'T** panic on checkpoint failure — budget resets, use the `fix_plan` tickets provided
+- **DON'T** grep/filter scaffold metadata to find files — scaffolds are a TABLE OF CONTENTS,
+  not a search index. Use `recon_impact` to find all usages of a symbol
+- **DON'T** skip `checkpoint(changed_files=[])` after read-only flows — session state
+  (recon gate, mutation budget) carries over and blocks the next task
 <!-- /codeplane-instructions -->
 """
 
 
 def _inject_agent_instructions(repo_root: Path, tool_prefix: str) -> list[str]:
-    """Inject CodePlane snippet into agent instruction files.
+    """Inject CodePlane snippet into .github/copilot-instructions.md.
+
+    If the file already exists, the snippet is appended (or an existing
+    snippet block is replaced in-place).  If it does not exist the file
+    is created with a minimal header.
+
+    AGENTS.md is intentionally left untouched — we avoid duplicating
+    instructions across two files.
 
     Args:
         repo_root: Path to the repository root
@@ -197,42 +237,37 @@ def _inject_agent_instructions(repo_root: Path, tool_prefix: str) -> list[str]:
     modified: list[str] = []
     snippet = _make_codeplane_snippet(tool_prefix)
 
-    # Target: AGENTS.md only (copilot-instructions.md should reference AGENTS.md,
-    # not duplicate CodePlane tool instructions)
-    targets = [
-        repo_root / "AGENTS.md",
-    ]
+    target = repo_root / ".github" / "copilot-instructions.md"
 
-    for target in targets:
-        if target.exists():
-            content = target.read_text()
-            # Check if snippet already present
-            if _CODEPLANE_SNIPPET_MARKER in content:
-                # Replace existing snippet with updated one
-                import re
+    if target.exists():
+        content = target.read_text()
+        # Check if snippet already present
+        if _CODEPLANE_SNIPPET_MARKER in content:
+            # Replace existing snippet with updated one
+            import re
 
-                new_content = re.sub(
-                    r"<!-- codeplane-instructions -->.*?<!-- /codeplane-instructions -->",
-                    snippet.strip(),
-                    content,
-                    flags=re.DOTALL,
-                )
-                if new_content != content:
-                    target.write_text(new_content)
-                    modified.append(str(target.relative_to(repo_root)))
-            else:
-                # Append snippet
-                new_content = content.rstrip() + "\n" + snippet
+            new_content = re.sub(
+                r"<!-- codeplane-instructions -->.*?<!-- /codeplane-instructions -->",
+                snippet.strip(),
+                content,
+                flags=re.DOTALL,
+            )
+            if new_content != content:
                 target.write_text(new_content)
                 modified.append(str(target.relative_to(repo_root)))
         else:
-            # Create file with snippet
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(
-                "# Agent Instructions\n\n"
-                "Instructions for AI coding agents working in this repository.\n" + snippet
-            )
+            # Append snippet
+            new_content = content.rstrip() + "\n" + snippet
+            target.write_text(new_content)
             modified.append(str(target.relative_to(repo_root)))
+    else:
+        # Create file with snippet
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            "# Copilot Instructions\n\n"
+            "Instructions for GitHub Copilot working in this repository.\n" + snippet
+        )
+        modified.append(str(target.relative_to(repo_root)))
 
     return modified
 
@@ -461,6 +496,23 @@ def initialize_repo(
     if not cplignore_path.exists() or reindex:
         cplignore_path.write_text(get_cplignore_template())
 
+    # Merge repo-root .cplignore if it exists — user patterns survive reindex
+    root_cplignore = repo_root / ".cplignore"
+    if root_cplignore.exists():
+        generated = cplignore_path.read_text()
+        root_lines = root_cplignore.read_text().strip()
+        if root_lines:
+            # Collect patterns not already in the generated template
+            existing = set(generated.splitlines())
+            new_patterns = [
+                ln for ln in root_lines.splitlines()
+                if ln.strip() and ln not in existing
+            ]
+            if new_patterns:
+                merged = generated.rstrip() + "\n\n# From repo-root .cplignore\n"
+                merged += "\n".join(new_patterns) + "\n"
+                cplignore_path.write_text(merged)
+
     # Create .gitignore to exclude artifacts from version control per SPEC.md §7.7
     gitignore_path = codeplane_dir / ".gitignore"
     if not gitignore_path.exists() or reindex:
@@ -520,14 +572,20 @@ def initialize_repo(
             else:
                 phase.complete("Grammars ready")
 
+    # === Model Download Phase ===
+    from codeplane.cli.models import ensure_models
+
+    if not ensure_models(interactive=True):
+        return False
+
     # === Lexical Indexing Phase ===
-    from codeplane.index.ops import IndexCoordinator
+    from codeplane.index.ops import IndexCoordinatorEngine
 
     db_path = index_dir / "index.db"
     tantivy_path = index_dir / "tantivy"
     tantivy_path.mkdir(exist_ok=True)
 
-    coord = IndexCoordinator(
+    coord = IndexCoordinatorEngine(
         repo_root=repo_root,
         db_path=db_path,
         tantivy_path=tantivy_path,
@@ -541,6 +599,11 @@ def initialize_repo(
     }
     # Track resolution phase box and task IDs
     resolution_phase: PhaseBox | None = None
+    embedding_phase: PhaseBox | None = None
+    embedding_task_id: Any = None
+    embedding_total: int = 0  # track actual embedding count for display
+    embedding_start: float = 0.0  # track embedding phase timing
+    embedding_elapsed: float = 0.0  # actual embedding phase duration
     refs_task_id: Any = None
     types_task_id: Any = None
     indexing_elapsed = 0.0
@@ -558,7 +621,9 @@ def initialize_repo(
         def on_index_progress(
             indexed: int, total: int, files_by_ext: dict[str, int], progress_phase: str
         ) -> None:
-            nonlocal resolution_phase, refs_task_id, types_task_id, indexing_elapsed
+            nonlocal resolution_phase, embedding_phase, embedding_task_id
+            nonlocal embedding_total, embedding_start
+            nonlocal refs_task_id, types_task_id, indexing_elapsed
 
             if progress_phase == "indexing":
                 # Update indexing phase box
@@ -574,8 +639,8 @@ def initialize_repo(
                 indexing_state["files_indexed"] = indexed
                 indexing_state["files_by_ext"] = files_by_ext
 
-            elif progress_phase in ("resolving_cross_file", "resolving_refs", "resolving_types"):
-                # First resolution callback — close indexing box, open resolution box
+            elif progress_phase == "computing_embeddings":
+                # First embedding callback — close indexing box, open embedding box
                 if not indexing_state["indexing_done"]:
                     indexing_state["indexing_done"] = True
                     indexing_elapsed = time.time() - start_time
@@ -590,6 +655,48 @@ def initialize_repo(
                         indexing_phase.add_table(ext_table)
                     indexing_phase.__exit__(None, None, None)
 
+                if embedding_phase is None:
+                    embedding_phase = phase_box("Embeddings", width=60)
+                    embedding_phase.__enter__()
+                    embedding_task_id = embedding_phase.add_progress(
+                        "Computing embeddings", total=100
+                    )
+                    embedding_start = time.time()
+
+                pct = int(indexed / total * 100) if total > 0 else 0
+                embedding_phase._progress.update(embedding_task_id, completed=pct)  # type: ignore[union-attr]
+                embedding_phase._update()
+
+            elif progress_phase == "embeddings_done":
+                # Final signal with actual def count (indexed == total == def count)
+                embedding_total = indexed
+
+            elif progress_phase in ("resolving_cross_file", "resolving_refs", "resolving_types"):
+                # First resolution callback — close indexing/embedding boxes, open resolution box
+                if not indexing_state["indexing_done"]:
+                    indexing_state["indexing_done"] = True
+                    indexing_elapsed = time.time() - start_time
+
+                    # Finalize indexing box
+                    indexing_phase.set_live_table(None)
+                    files = indexing_state["files_indexed"]
+                    indexing_phase.complete(f"{files} files ({indexing_elapsed:.1f}s)")
+                    if indexing_state["files_by_ext"]:
+                        indexing_phase.add_text("")
+                        ext_table = _make_init_extension_table(indexing_state["files_by_ext"])  # type: ignore[arg-type]
+                        indexing_phase.add_table(ext_table)
+                    indexing_phase.__exit__(None, None, None)
+
+                # Close embedding phase if it was open
+                if embedding_phase is not None:
+                    embedding_elapsed = time.time() - embedding_start
+                    embedding_phase.complete(
+                        f"{embedding_total} definitions embedded ({embedding_elapsed:.1f}s)"
+                    )
+                    embedding_phase.__exit__(None, None, None)
+                    embedding_phase = None
+
+                if resolution_phase is None:
                     # Open resolution phase box
                     resolution_phase = phase_box("Resolution", width=60)
                     resolution_phase.__enter__()
@@ -628,10 +735,18 @@ def initialize_repo(
                 indexing_phase.add_table(ext_table)
             indexing_phase.__exit__(None, None, None)
 
+        # Close embedding phase box if it was opened but resolution didn't close it
+        if embedding_phase is not None:
+            embedding_elapsed = time.time() - embedding_start if embedding_start else 0.0
+            embedding_phase.complete(
+                f"{embedding_total} definitions embedded ({embedding_elapsed:.1f}s)"
+            )
+            embedding_phase.__exit__(None, None, None)
+
         # Close resolution phase box if it was opened
         if resolution_phase is not None:
             total_elapsed = time.time() - start_time
-            resolution_elapsed = total_elapsed - indexing_elapsed
+            resolution_elapsed = total_elapsed - indexing_elapsed - embedding_elapsed
             resolution_phase.complete(f"Done ({resolution_elapsed:.1f}s)")
             resolution_phase.__exit__(None, None, None)
 

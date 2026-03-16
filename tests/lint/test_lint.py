@@ -16,12 +16,16 @@ from codeplane.lint import (
     parsers,
     registry,
 )
-from codeplane.lint.ops import _LANGUAGE_TO_TOOL_PREFIX, _generate_agentic_hint
+from codeplane.lint.ops import (
+    _LANGUAGE_TO_TOOL_PREFIX,
+    LINT_TIMEOUT_SECONDS,
+    _generate_agentic_hint,
+)
 from codeplane.lint.tools import LintTool
 
 
 def create_mock_coordinator() -> MagicMock:
-    """Create a mock IndexCoordinator for testing."""
+    """Create a mock IndexCoordinatorEngine for testing."""
     coordinator = MagicMock()
     coordinator.get_file_stats = AsyncMock(return_value={"python": 10})
     coordinator.get_indexed_file_count = AsyncMock(return_value=10)
@@ -34,6 +38,18 @@ def create_mock_coordinator() -> MagicMock:
 # =============================================================================
 # Model Tests
 # =============================================================================
+
+
+class TestLintTimeoutConstant:
+    """Tests for LINT_TIMEOUT_SECONDS constant."""
+
+    def test_lint_timeout_value(self) -> None:
+        """LINT_TIMEOUT_SECONDS equals 30."""
+        assert LINT_TIMEOUT_SECONDS == 30
+
+    def test_lint_timeout_is_int(self) -> None:
+        """LINT_TIMEOUT_SECONDS is an int."""
+        assert isinstance(LINT_TIMEOUT_SECONDS, int)
 
 
 class TestSeverity:
@@ -884,6 +900,19 @@ class TestLintOps:
             assert result is not None
 
     @pytest.mark.asyncio
+    async def test_check_all_deleted_paths_returns_clean(self) -> None:
+        """When all changed_files are deleted, lint should return clean (not E902)."""
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            coordinator = create_mock_coordinator()
+            ops = LintOps(root, coordinator)
+
+            result = await ops.check(paths=["deleted_file.py", "also_gone.py"])
+            assert result.status == "clean"
+            assert result.tools_run == []
+            assert result.total_diagnostics == 0
+
+    @pytest.mark.asyncio
     async def test_check_with_categories(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -958,6 +987,8 @@ class TestLintOps:
     def test_resolve_paths_specific(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
+            (root / "src").mkdir()
+            (root / "tests").mkdir()
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
 
@@ -965,6 +996,88 @@ class TestLintOps:
             assert len(paths) == 2
             assert paths[0] == root / "src/"
             assert paths[1] == root / "tests/"
+
+    def test_resolve_paths_filters_deleted_files(self) -> None:
+        """Deleted files should be silently filtered out."""
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "existing.py").write_text("x = 1")
+            coordinator = create_mock_coordinator()
+            ops = LintOps(root, coordinator)
+
+            paths = ops._resolve_paths(["existing.py", "deleted.py"])
+            assert paths == [root / "existing.py"]
+
+    def test_resolve_paths_all_deleted_returns_empty(self) -> None:
+        """When all paths are deleted, return empty list."""
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            coordinator = create_mock_coordinator()
+            ops = LintOps(root, coordinator)
+
+            paths = ops._resolve_paths(["deleted.py", "also_deleted.py"])
+            assert paths == []
+
+    def test_filter_paths_for_tool_repo_root_passes_through(self) -> None:
+        """When repo root is passed, all tools get it unfiltered."""
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            coordinator = create_mock_coordinator()
+            ops = LintOps(root, coordinator)
+
+            tool = registry.get("python.ruff")
+            assert tool is not None
+
+            result = ops._filter_paths_for_tool(tool, [root], root)
+            assert result == [root]
+
+    def test_filter_paths_for_tool_keeps_matching_language(self) -> None:
+        """Python files pass through to a python tool."""
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            coordinator = create_mock_coordinator()
+            ops = LintOps(root, coordinator)
+
+            tool = registry.get("python.ruff")
+            assert tool is not None
+
+            paths = [root / "app.py", root / "lib.py"]
+            result = ops._filter_paths_for_tool(tool, paths, root)
+            assert result == paths
+
+    def test_filter_paths_for_tool_removes_wrong_language(self) -> None:
+        """Non-python files (yaml, json, md) are filtered out of python tools."""
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            coordinator = create_mock_coordinator()
+            ops = LintOps(root, coordinator)
+
+            tool = registry.get("python.ruff")
+            assert tool is not None
+
+            paths = [
+                root / "app.py",
+                root / "config.yaml",
+                root / "data.json",
+                root / "README.md",
+                root / "lib.py",
+            ]
+            result = ops._filter_paths_for_tool(tool, paths, root)
+            assert result == [root / "app.py", root / "lib.py"]
+
+    def test_filter_paths_for_tool_returns_empty_when_no_match(self) -> None:
+        """When no files match the tool's language, return empty list."""
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            coordinator = create_mock_coordinator()
+            ops = LintOps(root, coordinator)
+
+            tool = registry.get("python.ruff")
+            assert tool is not None
+
+            paths = [root / "config.yaml", root / "data.json"]
+            result = ops._filter_paths_for_tool(tool, paths, root)
+            assert result == []
 
     @pytest.mark.asyncio
     async def test_get_file_count_from_index(self) -> None:

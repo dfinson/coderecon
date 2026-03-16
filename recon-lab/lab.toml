@@ -1,0 +1,25 @@
+# Recon Lab — default configuration.
+# Override per-field via CLI flags or CPL_LAB_* env vars.
+
+[workspace]
+# Base directory for mutable data (clones, ground truth, signals, models).
+# Override: --workspace CLI flag.
+path = "~/.cpl-lab"
+
+[clone]
+jobs = 4
+depth = 1  # shallow clone depth (1 = single commit)
+
+[index]
+timeout = 1800  # 30 minutes per repo
+
+[generate]
+concurrency = 5
+model = "claude-opus-4"
+
+[train]
+# "auto" resolves to $workspace/data
+data_dir = "auto"
+
+[eval]
+default_experiment = "recon_ranking.yaml"

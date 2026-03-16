@@ -46,7 +46,13 @@ from codeplane.index.models import (
     ScopeFact,
     ScopeKind,
 )
-from codeplane.index.ops import IndexCoordinator, IndexStats, InitResult, SearchMode, SearchResult
+from codeplane.index.ops import (
+    IndexCoordinatorEngine,
+    IndexStats,
+    InitResult,
+    SearchMode,
+    SearchResult,
+)
 
 # Import ContextRuntime to register it with SQLModel metadata for create_all()
 # This model lives in testing/runtime.py but is part of the index schema
@@ -54,7 +60,7 @@ from codeplane.testing.runtime import ContextRuntime
 
 __all__ = [
     # Public API
-    "IndexCoordinator",
+    "IndexCoordinatorEngine",
     "IndexStats",
     "InitResult",
     "SearchMode",

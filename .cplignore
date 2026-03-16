@@ -1,0 +1,10 @@
+# Heavy benchmark raw traces and results (100MB+)
+benchmarking/results/baseline/
+benchmarking/results/0.1.dev120-8cdf362e/
+benchmarking/results/recon_*.json
+
+# Benchmark experiment output (EVEE results)
+benchmarking/experiments/output/
+
+# Cloned repos for ranking training (large, external)
+ranking/clones/

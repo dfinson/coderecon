@@ -98,6 +98,10 @@ class StructureInfo:
     tree: list[DirectoryNode]
     file_count: int
     contexts: list[str]  # Valid context root paths
+    all_paths: list[tuple[str, int | None]] = field(default_factory=list)
+    """Flat (path, line_count) for every filtered file — used by the text
+    formatter to build depth-collapsed directory summaries without
+    re-querying the database."""
 
 
 @dataclass
@@ -157,9 +161,7 @@ class RepoMapper:
         result = MapRepoResult()
 
         if "structure" in include and filtered_files is not None:
-            result.structure, _truncated, _file_count = self._build_structure(
-                depth, limit, filtered_files
-            )
+            result.structure, _truncated, _file_count = self._build_structure(depth, filtered_files)
 
         if "languages" in include and filtered_files is not None:
             result.languages = self._analyze_languages(limit, filtered_files)
@@ -207,10 +209,14 @@ class RepoMapper:
     ) -> list[tuple[str, str | None, int | None]]:
         """Single query for file data, filtered once.
 
-        Returns list of (path, language_family, line_count) tuples.
-        All sections that need File data share this result set.
+        Returns list of (path, language_family, line_count) tuples
+        sorted by path.  All sections that need File data share this
+        result set.  Path ordering is essential so that ``limit``-based
+        truncation in ``_build_structure`` produces a balanced cross-section
+        of the repo (e.g. ``benchmarking/ → src/ → tests/``) instead of
+        being biased by SQLite insertion order.
         """
-        stmt = select(File.path, File.language_family, File.line_count)
+        stmt = select(File.path, File.language_family, File.line_count).order_by(File.path)
         rows = list(self._session.exec(stmt).all())
         return [
             (path, lang, lines)
@@ -221,24 +227,30 @@ class RepoMapper:
     def _build_structure(
         self,
         depth: int,
-        limit: int,
         filtered_files: list[tuple[str, str | None, int | None]],
     ) -> tuple[StructureInfo, bool, int]:
         """Build directory tree from pre-filtered file data.
+
+        All files are included — ``depth`` controls how many levels of
+        the tree are rendered, which is the appropriate budget knob for
+        the structure section.  File-count truncation was removed because
+        it silently dropped entire top-level directories depending on
+        SQLite insertion order.
 
         Returns:
             Tuple of (structure, truncated, total_file_count)
         """
         total_count = len(filtered_files)
-        truncated = total_count > limit
+        truncated = False
 
-        # Apply limit
-        limited = filtered_files[:limit]
-        path_to_lines: dict[str, int | None] = {path: lines for path, _, lines in limited}
+        path_to_lines: dict[str, int | None] = {path: lines for path, _, lines in filtered_files}
 
-        # Get valid contexts
+        # Get valid contexts (deduplicated, empty root renamed)
         ctx_stmt = select(Context.root_path).where(Context.probe_status == ProbeStatus.VALID.value)
-        contexts = list(self._session.exec(ctx_stmt).all())
+        raw_contexts = list(self._session.exec(ctx_stmt).all())
+        contexts = sorted(set(
+            c if c else "root" for c in raw_contexts
+        ))
 
         # Build tree
         root_node = DirectoryNode(
@@ -295,6 +307,7 @@ class RepoMapper:
                 tree=root_node.children,
                 file_count=len(path_to_lines),
                 contexts=contexts,
+                all_paths=list(path_to_lines.items()),
             ),
             truncated,
             total_count,

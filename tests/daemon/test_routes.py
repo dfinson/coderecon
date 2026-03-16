@@ -58,6 +58,8 @@ class TestCreateRoutes:
         assert "/status" in paths
 
 
+
+
 class TestHealthEndpoint:
     """Tests for /health endpoint."""
 
@@ -181,3 +183,7 @@ class TestStatusEndpoint:
         response = client.get("/status")
         data = response.json()
         assert data["watcher"]["running"] is False
+
+
+# =============================================================================
+

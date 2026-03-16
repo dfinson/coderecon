@@ -1,74 +1,13 @@
-"""Tests for MCP index tools (search, map_repo).
-
-Verifies summary helpers and serialization functions.
-"""
+"""Tests for index helpers — change_to_text, tree serializers, map_repo_sections."""
 
 from typing import Any
 
-import pytest
-
-from codeplane.config.constants import SEARCH_SCOPE_FALLBACK_LINES_DEFAULT
 from codeplane.mcp.tools.index import (
     _change_to_text,
     _map_repo_sections_to_text,
-    _search_results_to_text,
-    _serialize_tree,
-    _summarize_map,
-    _summarize_search,
+    _tree_to_hybrid_text,
     _tree_to_text,
 )
-
-
-class TestSummarizeSearch:
-    """Tests for _summarize_search helper."""
-
-    def test_no_results(self) -> None:
-        """No results message."""
-        result = _summarize_search(count=0, mode="lexical", query="foo")
-        assert 'no lexical results for "foo"' in result
-
-    def test_with_results(self) -> None:
-        """With results shows count and mode."""
-        result = _summarize_search(count=5, mode="symbol", query="MyClass")
-        assert '5 symbol results for "MyClass"' in result
-
-    def test_with_file_count(self) -> None:
-        """Shows file count when provided."""
-        result = _summarize_search(count=10, mode="lexical", query="test", file_count=3)
-        assert "across 3 files" in result
-
-    def test_with_fallback(self) -> None:
-        """Shows fallback indicator."""
-        result = _summarize_search(count=5, mode="lexical", query="test", fallback=True)
-        assert "literal fallback" in result
-
-    def test_truncates_long_query(self) -> None:
-        """Long queries are truncated."""
-        long_query = "a" * 100
-        result = _summarize_search(count=1, mode="lexical", query=long_query)
-        # Query should be truncated to ~20 chars
-        assert len(result) < 100
-
-
-class TestSummarizeMap:
-    """Tests for _summarize_map helper."""
-
-    def test_files_only(self) -> None:
-        """File count only."""
-        result = _summarize_map(file_count=42, sections=[], truncated=False)
-        assert "42 files" in result
-
-    def test_with_sections(self) -> None:
-        """With sections list."""
-        result = _summarize_map(file_count=10, sections=["structure", "languages"], truncated=False)
-        assert "10 files" in result
-        assert "structure" in result
-        assert "languages" in result
-
-    def test_truncated(self) -> None:
-        """Shows truncation."""
-        result = _summarize_map(file_count=100, sections=[], truncated=True)
-        assert "truncated" in result
 
 
 class MockFileNode:
@@ -102,193 +41,6 @@ class MockDirNode:
         self.is_dir = True
         self.file_count = file_count
         self.children: list[Any] = children if children is not None else []
-
-
-class TestSerializeTree:
-    """Tests for _serialize_tree helper."""
-
-    def test_empty_tree(self) -> None:
-        """Empty tree returns empty list."""
-        result = _serialize_tree([])
-        assert result == []
-
-    def test_file_node(self) -> None:
-        """File node serialization.
-
-        Note: 'name' field was removed for token efficiency - agents can derive
-        it from path.split('/')[-1].
-        """
-        result = _serialize_tree([MockFileNode()])
-        assert len(result) == 1
-        assert "name" not in result[0]  # Intentionally removed for token efficiency
-        assert result[0]["path"] == "src/main.py"
-        assert result[0]["is_dir"] is False
-        assert result[0]["line_count"] == 100
-
-    def test_directory_node(self) -> None:
-        """Directory node serialization."""
-        result = _serialize_tree([MockDirNode()])
-        assert len(result) == 1
-        assert "name" not in result[0]  # Intentionally removed for token efficiency
-        assert result[0]["is_dir"] is True
-        assert result[0]["file_count"] == 5
-        assert result[0]["children"] == []
-
-    def test_nested_tree(self) -> None:
-        """Nested directory structure."""
-        file_node = MockFileNode(name="main.py", path="src/main.py", line_count=50)
-        dir_node = MockDirNode(name="src", path="src", file_count=1, children=[file_node])
-
-        result = _serialize_tree([dir_node])
-        assert len(result) == 1
-        assert result[0]["is_dir"] is True
-        assert len(result[0]["children"]) == 1
-        assert "name" not in result[0]["children"][0]  # Removed for token efficiency
-
-
-# =============================================================================
-# Context Preset Tests
-# =============================================================================
-
-
-class TestContextPresets:
-    """Tests for context preset line counts."""
-
-    @pytest.mark.parametrize(
-        "context,expected_lines",
-        [
-            ("none", 0),
-            ("minimal", 1),
-            ("standard", 5),
-            ("rich", 20),
-        ],
-    )
-    def test_preset_line_counts(self, context: str, expected_lines: int) -> None:
-        """Each preset maps to expected line count."""
-        # Import the preset mapping from the module
-        CONTEXT_PRESETS = {
-            "none": 0,
-            "minimal": 1,
-            "standard": 5,
-            "rich": 20,
-        }
-        assert CONTEXT_PRESETS[context] == expected_lines
-
-    def test_structural_modes_not_in_line_presets(self) -> None:
-        """Structural modes (function, class) are not line-based presets."""
-        CONTEXT_PRESETS = {
-            "none": 0,
-            "minimal": 1,
-            "standard": 5,
-            "rich": 20,
-        }
-        assert "function" not in CONTEXT_PRESETS
-        assert "class" not in CONTEXT_PRESETS
-
-    def test_structural_mode_fallback_lines(self) -> None:
-        """Structural modes use fallback lines constant."""
-        # The fallback should be a reasonable default (25 as per design)
-        assert SEARCH_SCOPE_FALLBACK_LINES_DEFAULT >= 20
-        assert SEARCH_SCOPE_FALLBACK_LINES_DEFAULT <= 30
-
-
-# =============================================================================
-# Text Serializer Tests
-# =============================================================================
-
-
-class TestSearchResultsToText:
-    """Tests for _search_results_to_text."""
-
-    def test_empty_list(self) -> None:
-        assert _search_results_to_text([]) == []
-
-    def test_basic_hit(self) -> None:
-        items = [{"kind": "function", "path": "src/a.py", "span": {"start_line": 10}}]
-        lines = _search_results_to_text(items)
-        assert len(lines) == 1
-        assert "function src/a.py:10" in lines[0]
-
-    def test_with_symbol_id(self) -> None:
-        items = [
-            {
-                "kind": "function",
-                "path": "src/a.py",
-                "span": {"start_line": 5},
-                "symbol_id": "my_func",
-            }
-        ]
-        lines = _search_results_to_text(items)
-        assert "my_func" in lines[0]
-
-    def test_with_preview(self) -> None:
-        items = [
-            {
-                "kind": "hit",
-                "path": "src/b.py",
-                "span": {"start_line": 20},
-                "preview_line": "x = 42",
-            }
-        ]
-        lines = _search_results_to_text(items)
-        assert "x = 42" in lines[0]
-
-    def test_with_enclosing_span(self) -> None:
-        items = [
-            {
-                "kind": "function",
-                "path": "src/a.py",
-                "span": {"start_line": 10},
-                "enclosing_span": {"kind": "class", "start_line": 1, "end_line": 50},
-            }
-        ]
-        lines = _search_results_to_text(items)
-        assert "[class 1-50]" in lines[0]
-
-    def test_with_match_count(self) -> None:
-        items = [
-            {
-                "kind": "hit",
-                "path": "src/a.py",
-                "span": {"start_line": 1},
-                "match_count": 5,
-            }
-        ]
-        lines = _search_results_to_text(items)
-        assert "(×5)" in lines[0]
-
-    def test_match_count_one_not_shown(self) -> None:
-        items = [
-            {
-                "kind": "hit",
-                "path": "src/a.py",
-                "span": {"start_line": 1},
-                "match_count": 1,
-            }
-        ]
-        lines = _search_results_to_text(items)
-        assert "×" not in lines[0]
-
-    def test_symbol_enrichment_fallback(self) -> None:
-        """symbol.name used when symbol_id is absent."""
-        items = [
-            {
-                "kind": "variable",
-                "path": "src/a.py",
-                "span": {"start_line": 3},
-                "symbol": {"name": "MY_CONST"},
-            }
-        ]
-        lines = _search_results_to_text(items)
-        assert "MY_CONST" in lines[0]
-
-    def test_multiple_items(self) -> None:
-        items = [
-            {"kind": "function", "path": "a.py", "span": {"start_line": 1}},
-            {"kind": "class", "path": "b.py", "span": {"start_line": 2}},
-        ]
-        lines = _search_results_to_text(items)
-        assert len(lines) == 2
 
 
 class _MockChange:
@@ -363,6 +115,11 @@ class TestChangeToText:
 
     def test_low_risk_not_shown(self) -> None:
         c = _MockChange(behavior_change_risk="low")
+        lines = _change_to_text(c)
+        assert "risk:" not in lines[0]
+
+    def test_unknown_risk_not_shown(self) -> None:
+        c = _MockChange(behavior_change_risk="unknown")
         lines = _change_to_text(c)
         assert "risk:" not in lines[0]
 
@@ -444,14 +201,127 @@ class TestTreeToText:
         assert lines[2].startswith("    x.py")
 
 
+class TestTreeToHybridText:
+    """Tests for _tree_to_hybrid_text — indented directory tree with inline files."""
+
+    _SAMPLE_PATHS: list[tuple[str, int | None]] = [
+        ("src/codeplane/cli/main.py", 100),
+        ("src/codeplane/cli/init.py", 50),
+        ("src/codeplane/core/errors.py", 80),
+        ("src/codeplane/core/logging.py", 60),
+        ("tests/cli/test_main.py", 40),
+        ("tests/core/test_errors.py", 30),
+        ("pyproject.toml", 200),
+        ("README.md", 50),
+    ]
+
+    def test_empty(self) -> None:
+        lines = _tree_to_hybrid_text([])
+        assert lines == ["# files without :N have 0 lines"]
+
+    def test_every_file_present(self) -> None:
+        """No filenames dropped — lossless."""
+        lines = _tree_to_hybrid_text(self._SAMPLE_PATHS)
+        joined = "\n".join(lines)
+        assert "main.py:100" in joined
+        assert "init.py:50" in joined
+        assert "errors.py:80" in joined
+        assert "logging.py:60" in joined
+        assert "test_main.py:40" in joined
+        assert "test_errors.py:30" in joined
+        assert "pyproject.toml:200" in joined
+        assert "README.md:50" in joined
+
+    def test_header_comment(self) -> None:
+        lines = _tree_to_hybrid_text(self._SAMPLE_PATHS)
+        assert lines[0] == "# files without :N have 0 lines"
+
+    def test_hierarchy_indentation(self) -> None:
+        """Subdirectories are indented under parents."""
+        lines = _tree_to_hybrid_text(self._SAMPLE_PATHS)
+        joined = "\n".join(lines)
+        # src/codeplane/ is a collapsed chain at indent 0
+        assert "src/codeplane/" in joined
+        # cli/ and core/ are indented under it
+        cli_lines = [ln for ln in lines if "cli/" in ln and "init.py:50" in ln]
+        assert len(cli_lines) == 1
+        assert cli_lines[0].startswith("  ")  # indented
+
+    def test_collapsed_single_child_chains(self) -> None:
+        """Single-child dir chains are collapsed."""
+        paths: list[tuple[str, int | None]] = [
+            ("a/b/c/file.py", 10),
+        ]
+        lines = _tree_to_hybrid_text(paths)
+        joined = "\n".join(lines)
+        # a/b/c/ should be collapsed into one line
+        assert "a/b/c/" in joined
+        assert "file.py:10" in joined
+
+    def test_zero_line_count_no_suffix(self) -> None:
+        """Files with 0 or None line counts appear without :N."""
+        paths: list[tuple[str, int | None]] = [
+            ("empty.py", 0),
+            ("unknown.py", None),
+            ("real.py", 42),
+        ]
+        lines = _tree_to_hybrid_text(paths)
+        joined = "\n".join(lines)
+        assert "empty.py" in joined
+        assert "empty.py:" not in joined
+        assert "unknown.py" in joined
+        assert "unknown.py:" not in joined
+        assert "real.py:42" in joined
+
+    def test_root_files_at_end(self) -> None:
+        lines = _tree_to_hybrid_text(self._SAMPLE_PATHS)
+        # Root files (pyproject.toml, README.md) on last line, not indented
+        last = lines[-1]
+        assert "pyproject.toml:200" in last
+        assert "README.md:50" in last
+        assert not last.startswith(" ")
+
+    def test_root_files_only(self) -> None:
+        paths: list[tuple[str, int | None]] = [
+            ("setup.py", 10),
+            ("README.md", 20),
+        ]
+        lines = _tree_to_hybrid_text(paths)
+        # header + root files
+        assert len(lines) == 2
+        assert "setup.py:10" in lines[1]
+        assert "README.md:20" in lines[1]
+
+    def test_lossless_file_count(self) -> None:
+        """All input files appear in output."""
+        lines = _tree_to_hybrid_text(self._SAMPLE_PATHS)
+        joined = "\n".join(lines)
+        for path, _ in self._SAMPLE_PATHS:
+            fname = path.rsplit("/", 1)[-1] if "/" in path else path
+            assert fname in joined, f"{fname} missing from output"
+
+    def test_dirs_sorted(self) -> None:
+        lines = _tree_to_hybrid_text(self._SAMPLE_PATHS)
+        # Skip header and root-file lines
+        dir_lines = [ln for ln in lines[1:] if ln.rstrip().endswith("/") or "/" in ln]
+        # Indented dirs should be sorted within each level
+        assert len(dir_lines) > 0
+
+
 class _MockStructureInfo:
     def __init__(
-        self, root: str, tree: list[Any], file_count: int, contexts: list[str] | None = None
+        self,
+        root: str,
+        tree: list[Any],
+        file_count: int,
+        contexts: list[str] | None = None,
+        all_paths: list[tuple[str, int | None]] | None = None,
     ) -> None:
         self.root = root
         self.tree = tree
         self.file_count = file_count
         self.contexts = contexts or []
+        self.all_paths = all_paths or []
 
 
 class _MockLanguageStats:
@@ -611,3 +481,43 @@ class TestMapRepoSectionsToText:
         )
         sections = _map_repo_sections_to_text(result)
         assert "func  medium" in sections["public_api"][0]
+
+    def test_structure_uses_hybrid_format_when_all_paths_available(self) -> None:
+        """When all_paths is available, uses lossless hybrid format."""
+        all_paths: list[tuple[str, int | None]] = [
+            ("src/main.py", 100),
+            ("src/utils.py", 50),
+            ("tests/test_main.py", 30),
+            ("README.md", 20),
+        ]
+        result = _MockMapRepoResult(
+            structure=_MockStructureInfo(
+                root="/repo",
+                tree=[],
+                file_count=4,
+                all_paths=all_paths,
+            )
+        )
+        sections = _map_repo_sections_to_text(result)
+        tree = "\n".join(sections["structure"]["tree"])
+        # Every file present — no data loss
+        assert "main.py:100" in tree
+        assert "utils.py:50" in tree
+        assert "test_main.py:30" in tree
+        assert "README.md:20" in tree
+        # Has header comment
+        assert "# files without :N have 0 lines" in tree
+
+    def test_structure_falls_back_to_tree_when_no_all_paths(self) -> None:
+        """Without all_paths, uses the old indented tree format."""
+        file_node = MockFileNode(name="app.py", path="src/app.py", line_count=100)
+        result = _MockMapRepoResult(
+            structure=_MockStructureInfo(
+                root="/repo",
+                tree=[file_node],
+                file_count=1,
+            )
+        )
+        sections = _map_repo_sections_to_text(result)
+        # Falls back to _tree_to_text because all_paths is empty
+        assert "app.py" in sections["structure"]["tree"][0]

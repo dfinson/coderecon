@@ -8,11 +8,12 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from codeplane.core.languages import detect_language_family
 from codeplane.lint.models import LintResult, ToolCategory, ToolResult
 from codeplane.lint.tools import LintTool, registry
 
 if TYPE_CHECKING:
-    from codeplane.index.ops import IndexCoordinator
+    from codeplane.index.ops import IndexCoordinatorEngine
 
 
 # Language name to tool language mapping
@@ -30,6 +31,9 @@ _LANGUAGE_TO_TOOL_PREFIX: dict[str, str] = {
     "markdown": "markdown",
     "sql": "sql",
 }
+
+LINT_TIMEOUT_SECONDS: int = 30
+"""Default timeout in seconds for lint subprocess execution."""
 
 
 def _generate_agentic_hint(languages: list[str]) -> str:
@@ -67,9 +71,35 @@ class LintOps:
     when no tools are detected or configured.
     """
 
-    def __init__(self, repo_root: Path, coordinator: IndexCoordinator) -> None:
+    def __init__(self, repo_root: Path, coordinator: IndexCoordinatorEngine) -> None:
         self._repo_root = repo_root
         self._coordinator = coordinator
+        self._venv_bin: str | None = self._detect_venv_bin()
+
+    def _detect_venv_bin(self) -> str | None:
+        """Detect venv bin directory for PATH augmentation."""
+        for name in (".venv", "venv", ".env", "env"):
+            venv = self._repo_root / name
+            if not venv.is_dir():
+                continue
+            unix_bin = venv / "bin"
+            if unix_bin.is_dir() and (unix_bin / "activate").exists():
+                return str(unix_bin)
+            win_bin = venv / "Scripts"
+            if win_bin.is_dir() and (win_bin / "activate").exists():
+                return str(win_bin)
+        return None
+
+    def _resolve_path(self) -> str | None:
+        """Return PATH with venv bin prepended (if detected)."""
+        import os
+
+        if not self._venv_bin:
+            return None
+        current = os.environ.get("PATH", "")
+        if self._venv_bin in current.split(os.pathsep):
+            return None  # already present
+        return self._venv_bin + os.pathsep + current
 
     async def check(
         self,
@@ -141,12 +171,35 @@ class LintOps:
                 agentic_hint=no_tools_hint,
             )
 
-        # Resolve paths
+        # Resolve paths (filters out deleted files)
         resolved_paths = self._resolve_paths(paths)
 
-        # Run tools concurrently
-        tasks = [self._run_tool(tool, resolved_paths, dry_run) for tool in tools_to_run]
-        results = await asyncio.gather(*tasks)
+        # All requested paths were deleted — nothing to lint
+        if paths and not resolved_paths:
+            return LintResult(
+                action=action,
+                dry_run=dry_run,
+                tools_run=[],
+                duration_seconds=time.time() - start_time,
+            )
+
+        # Run tools concurrently, filtering paths per-tool by language
+        tasks: list[asyncio.Task[ToolResult]] = []
+        skipped: list[ToolResult] = []
+        for tool in tools_to_run:
+            tool_paths = self._filter_paths_for_tool(tool, resolved_paths, self._repo_root)
+            if not tool_paths:
+                skipped.append(
+                    ToolResult(
+                        tool_id=tool.tool_id,
+                        status="skipped",
+                        error_detail="No files match tool languages",
+                        duration_seconds=0.0,
+                    )
+                )
+                continue
+            tasks.append(asyncio.ensure_future(self._run_tool(tool, tool_paths, dry_run)))
+        results = [*skipped, *(await asyncio.gather(*tasks))]
 
         # Check for any tools that errored - provide agentic hint
         errored_tools = [r for r in results if r.status == "error"]
@@ -242,10 +295,23 @@ class LintOps:
         return detected
 
     def _resolve_paths(self, paths: list[str] | None) -> list[Path]:
-        """Resolve paths to check."""
+        """Resolve paths to check, filtering out non-existent paths (e.g. deletions)."""
         if not paths:
             return [self._repo_root]
-        return [self._repo_root / p for p in paths]
+        return [self._repo_root / p for p in paths if (self._repo_root / p).exists()]
+
+    @staticmethod
+    def _filter_paths_for_tool(tool: LintTool, paths: list[Path], repo_root: Path) -> list[Path]:
+        """Filter paths to only include files whose language matches the tool.
+
+        When the full repo root is passed (no explicit files), returns it
+        unchanged — the tool will discover its own files.  When explicit
+        file paths are given, only keeps files whose detected language is
+        in the tool's ``languages`` set.
+        """
+        if len(paths) == 1 and paths[0] == repo_root:
+            return paths
+        return [p for p in paths if detect_language_family(p.name) in tool.languages]
 
     async def _run_tool(
         self,
@@ -256,8 +322,11 @@ class LintOps:
         """Run a single lint tool."""
         start_time = time.time()
 
-        # Check if executable exists
-        if not shutil.which(tool.executable):
+        # Resolve PATH with venv bin so we find venv-installed tools
+        augmented_path = self._resolve_path()
+
+        # Check if executable exists (use augmented PATH if available)
+        if not shutil.which(tool.executable, path=augmented_path):
             return ToolResult(
                 tool_id=tool.tool_id,
                 status="skipped",
@@ -268,14 +337,25 @@ class LintOps:
         # Build command
         cmd = self._build_command(tool, paths, dry_run)
 
+        # Build subprocess environment with venv PATH
+        import os
+
+        sub_env: dict[str, str] | None = None
+        if augmented_path:
+            sub_env = dict(os.environ)
+            sub_env["PATH"] = augmented_path
+
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=self._repo_root,
+                env=sub_env,
             )
-            stdout_bytes, stderr_bytes = await proc.communicate()
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                proc.communicate(), timeout=LINT_TIMEOUT_SECONDS
+            )
             stdout = stdout_bytes.decode(errors="replace")
             stderr = stderr_bytes.decode(errors="replace")
 
@@ -384,6 +464,14 @@ class LintOps:
             cmd.extend(tool.dry_run_args or tool.check_args)
         else:
             cmd.extend(tool.fix_args or tool.check_args)
+
+        # When explicit file paths are given (not just the repo root), inject
+        # --force-exclude (or equivalent) so the tool still honours its own
+        # exclude / extend-exclude config.  Without this flag most tools
+        # (ruff, mypy, etc.) skip exclusion checks for explicitly named files.
+        explicit_paths = paths and not (len(paths) == 1 and paths[0] == self._repo_root)
+        if explicit_paths and tool.force_exclude_flag:
+            cmd.append(tool.force_exclude_flag)
 
         # Add paths
         if tool.paths_position == "end" and paths:

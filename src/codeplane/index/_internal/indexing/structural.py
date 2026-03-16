@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -31,8 +32,8 @@ from codeplane.core.languages import detect_language_family, has_grammar
 from codeplane.index._internal.parsing import (
     SyntacticScope,
     SyntacticSymbol,
-    TreeSitterParser,
 )
+from codeplane.index._internal.parsing.service import tree_sitter_service
 from codeplane.index.models import (
     BindReasonCode,
     BindTargetKind,
@@ -52,6 +53,237 @@ from codeplane.index.models import (
     TypeAnnotationFact,
     TypeMemberFact,
 )
+
+# ===================================================================
+# String literal discovery — grammar-metadata-driven (SPEC §16.5)
+# ===================================================================
+
+# Regex pattern for discovering string-related node types from grammar metadata
+_STRING_NODE_PATTERN = re.compile(r"(?i).*string.*")
+
+# Cache: grammar id → frozenset of string node type names
+_string_node_types_cache: dict[int, frozenset[str]] = {}
+
+# Regex fallback for string literal extraction
+_STRING_REGEX_DQ = re.compile(r'"([^"]{4,80})"')
+_STRING_REGEX_SQ = re.compile(r"'([^']{4,80})'")
+
+
+def _discover_string_node_types(ts_language: Any) -> frozenset[str]:
+    """Discover string literal node types from tree-sitter Language metadata.
+
+    Scans all node kinds in the grammar for types whose name matches
+    ``.*string.*`` (case-insensitive) and are marked as named nodes.
+    Excludes internal repeat/content types.
+
+    Language-agnostic: driven by grammar artifacts, not a manually
+    maintained per-language list.  See SPEC.md §16.5.
+    """
+    lang_id = id(ts_language)
+    if lang_id in _string_node_types_cache:
+        return _string_node_types_cache[lang_id]
+
+    types: set[str] = set()
+    try:
+        for i in range(ts_language.node_kind_count):
+            name = ts_language.node_kind_for_id(i)
+            if not name:
+                continue
+            if not ts_language.node_kind_is_named(i):
+                continue
+            if "repeat" in name:
+                continue
+            if name.startswith("_"):
+                continue
+            if _STRING_NODE_PATTERN.match(name):
+                types.add(name)
+    except Exception:
+        pass  # Grammar doesn't support introspection
+
+    result = frozenset(types)
+    _string_node_types_cache[lang_id] = result
+    return result
+
+
+def _collect_string_literals(
+    root_node: Any,
+    content: bytes,
+    start_line: int,
+    end_line: int,
+    string_node_types: frozenset[str],
+) -> list[str]:
+    """Collect string literal content from parse tree within a def span.
+
+    Walks the tree and extracts text from nodes whose type is in
+    ``string_node_types``.  Prefers child ``string_content`` nodes;
+    falls back to slicing source bytes and stripping quotes.
+
+    Args:
+        root_node: Tree-sitter root node.
+        content: Source file as bytes.
+        start_line: Def start line (0-indexed tree-sitter convention).
+        end_line: Def end line.
+        string_node_types: Set of node type names to match.
+
+    Returns:
+        List of string literal texts (unquoted, non-empty).
+    """
+    results: list[str] = []
+
+    def walk(node: Any) -> None:
+        # Skip nodes entirely outside the def span
+        if node.end_point[0] < start_line or node.start_point[0] > end_line:
+            return
+        if node.type in string_node_types and node.start_point[0] >= start_line:
+            # Try to get content from child nodes (e.g. string_content)
+            text = None
+            for child in node.children:
+                if "content" in child.type.lower():
+                    raw = content[child.start_byte : child.end_byte]
+                    text = raw.decode("utf-8", errors="replace").strip()
+                    break
+            if text is None:
+                # Fall back to slicing source and stripping quotes
+                raw = content[node.start_byte : node.end_byte]
+                text = raw.decode("utf-8", errors="replace").strip("\"'`")
+            if text and 4 <= len(text) <= 80:
+                results.append(text)
+            return  # Don't recurse into string children
+        for child in node.children:
+            walk(child)
+
+    walk(root_node)
+    return results
+
+
+def _extract_string_literals_regex(
+    content_text: str,
+    start_line: int,
+    end_line: int,
+) -> list[str]:
+    """Regex fallback for string literal extraction.
+
+    Used when tree-sitter grammar metadata doesn't yield string node types.
+    """
+    lines = content_text.split("\n")
+    # Clamp to valid line range (1-indexed in def dicts, but content is 0-indexed)
+    sl = max(0, start_line - 1)
+    el = min(len(lines), end_line)
+    source_slice = "\n".join(lines[sl:el])
+
+    results: list[str] = []
+    for match in _STRING_REGEX_DQ.finditer(source_slice):
+        text = match.group(1)
+        results.append(text)
+    for match in _STRING_REGEX_SQ.finditer(source_slice):
+        text = match.group(1)
+        results.append(text)
+    return results
+
+
+# ===================================================================
+# SEM_FACTS extraction — tree-sitter query driven (SPEC §16.6)
+# ===================================================================
+
+# Cache: (grammar id, ts_lang_name) → compiled query object or None
+_sem_query_cache: dict[tuple[int, str], Any] = {}
+
+
+def _extract_sem_facts(
+    root_node: Any,
+    content: bytes,
+    ts_language: Any,
+    language: str,
+    defs: list[dict[str, Any]],
+) -> None:
+    """Extract SEM_FACTS from parse tree and assign to def dicts.
+
+    Runs per-language tree-sitter queries once per file, then distributes
+    captured semantic facts (calls, field assigns, returns, raises, key
+    literals) to the def whose span contains each match.
+
+    Modifies ``defs`` in-place: adds ``_sem_facts`` dict to each def that
+    has matches.  Gracefully returns nothing when:
+    - No query defined for the language
+    - Query compilation fails (grammar mismatch)
+    - No captures within any def span
+    """
+    from codeplane.index._internal.parsing.packs import get_pack
+
+    # Mapping from tree-sitter capture names to SEM_FACTS categories
+    _capture_categories = {
+        "sem_call": "calls",
+        "sem_field": "assigns",
+        "sem_return": "returns",
+        "sem_raise": "raises",
+        "sem_key": "literals",
+    }
+
+    pack = get_pack(language)
+    if pack is None or pack.sem_query is None:
+        return
+    query_text = pack.sem_query
+
+    # Compile query (cached per grammar × language)
+    cache_key = (id(ts_language), pack.grammar_name)
+    if cache_key in _sem_query_cache:
+        compiled = _sem_query_cache[cache_key]
+    else:
+        try:
+            from tree_sitter import Query as _TSQuery
+            from tree_sitter import QueryCursor as _TSQueryCursor  # noqa: F841
+
+            compiled = _TSQuery(ts_language, query_text)
+        except Exception:
+            compiled = None
+        _sem_query_cache[cache_key] = compiled
+
+    if compiled is None:
+        return
+
+    # Run query once over the entire file
+    try:
+        from tree_sitter import QueryCursor as _TSQueryCursor
+
+        cursor = _TSQueryCursor(compiled)
+        matches: list[tuple[int, dict[str, list[Any]]]] = cursor.matches(root_node)
+    except Exception:
+        return
+
+    # Collect captures: (category, raw_text, line_0idx)
+    all_captures: list[tuple[str, str, int]] = []
+    for _pattern_idx, captures in matches:
+        for capture_name, nodes in captures.items():
+            category = _capture_categories.get(capture_name)
+            if not category:
+                continue
+            for node in nodes:
+                raw = content[node.start_byte : node.end_byte]
+                text = raw.decode("utf-8", errors="replace").strip("\"'`")
+                if text and len(text) <= 80:
+                    all_captures.append((category, text, node.start_point[0]))
+
+    if not all_captures:
+        return
+
+    # Sort by line for efficient bucketing
+    all_captures.sort(key=lambda x: x[2])
+
+    # Distribute captures into def spans
+    for def_dict in defs:
+        start_line_0 = def_dict["start_line"] - 1  # tree-sitter 0-indexed
+        end_line_0 = def_dict["end_line"] - 1
+
+        facts: dict[str, list[str]] = {}
+        for category, text, line in all_captures:
+            if line < start_line_0 or line > end_line_0:
+                continue
+            cat_list = facts.setdefault(category, [])
+            if text not in cat_list:
+                cat_list.append(text)
+
+        if facts:
+            def_dict["_sem_facts"] = facts
 
 
 def _compute_def_uid(
@@ -186,7 +418,7 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
             result.parse_time_ms = int((time.monotonic() - start) * 1000)
             return result
 
-        parser = TreeSitterParser()
+        parser = tree_sitter_service.parser
         try:
             parse_result = parser.parse(full_path, content)
         except ValueError as e:
@@ -267,12 +499,14 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
             # Find containing scope
             containing_scope = _find_containing_scope(scopes, sym.line, sym.column)
 
+            lp = _compute_lexical_path(sym, symbols)
             def_dict = {
                 "def_uid": def_uid,
                 "unit_id": unit_id,
                 "kind": sym.kind,
                 "name": sym.name,
-                "lexical_path": _compute_lexical_path(sym, symbols),
+                "qualified_name": lp if "." in lp else None,
+                "lexical_path": lp,
                 "namespace": _type_to_ns.get(sym.name),
                 "start_line": sym.line,
                 "start_col": sym.column,
@@ -317,6 +551,43 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                 "reason_code": BindReasonCode.DEF_IN_SCOPE.value,
             }
             result.binds.append(bind_dict)
+
+        # Extract string literals per def for LIT_HINTS (SPEC §16.5)
+        string_types = frozenset[str]()
+        if parse_result.ts_language is not None:
+            string_types = _discover_string_node_types(parse_result.ts_language)
+        for def_dict in result.defs:
+            _sl: Any = def_dict["start_line"]
+            _el: Any = def_dict["end_line"]
+            sl = int(_sl)
+            el = int(_el)
+            if string_types:
+                literals = _collect_string_literals(
+                    parse_result.root_node,
+                    content,
+                    sl - 1,  # tree-sitter uses 0-indexed lines
+                    el - 1,
+                    string_types,
+                )
+            else:
+                # Regex fallback when grammar doesn't expose string node types
+                literals = _extract_string_literals_regex(
+                    result.content_text or "",
+                    sl,
+                    el,
+                )
+            if literals:
+                def_dict["_string_literals"] = literals
+
+        # Extract SEM_FACTS per def via tree-sitter queries (SPEC §16.6)
+        if parse_result.ts_language is not None and parse_result.language:
+            _extract_sem_facts(
+                parse_result.root_node,
+                content,
+                parse_result.ts_language,
+                parse_result.language,
+                result.defs,
+            )
 
         # Convert imports to ImportFact dicts and create bindings
         import_uid_by_alias: dict[str, str] = {}  # alias/name -> import_uid
@@ -463,18 +734,18 @@ def _extract_type_aware_facts(
     """
     try:
         from codeplane.index._internal.extraction import get_registry
-        from codeplane.index._internal.extraction.languages import ALL_LANGUAGE_CONFIGS
+        from codeplane.index._internal.parsing.packs import get_pack
 
         language = extraction.language
         if not language:
             return
 
-        config = ALL_LANGUAGE_CONFIGS.get(language)
-        if config is None:
+        pack = get_pack(language)
+        if pack is None or pack.type_config is None:
             return
 
         registry = get_registry()
-        extractor = registry.get_or_fallback(config.language_family)
+        extractor = registry.get_or_fallback(pack.type_config.language_family)
 
         # Extract type annotations
         annotations = extractor.extract_type_annotations(tree, file_path, extraction.scopes)
@@ -634,7 +905,6 @@ class StructuralIndexer:
     def __init__(self, db: Database, repo_path: Path | str):
         self.db = db
         self.repo_path = Path(repo_path)
-        self._parser = TreeSitterParser()
 
     def extract_files(
         self,

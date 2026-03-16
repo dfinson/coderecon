@@ -22,7 +22,7 @@ from codeplane.index._internal.ignore import PRUNABLE_DIRS
 
 # Import packs to trigger registration
 from codeplane.testing import packs as _packs  # noqa: F401
-from codeplane.testing.coverage import (
+from codeplane.testing.emitters import (
     CoverageArtifact,
     CoverageCapability,
     PackRuntime,
@@ -48,7 +48,7 @@ from codeplane.testing.runtime import (
 from codeplane.testing.safe_execution import SafeExecutionConfig, SafeExecutionContext
 
 if TYPE_CHECKING:
-    from codeplane.index.ops import IndexCoordinator
+    from codeplane.index.ops import IndexCoordinatorEngine
 
 
 # =============================================================================
@@ -403,7 +403,7 @@ class TestOps:
     def __init__(
         self,
         repo_root: Path,
-        coordinator: IndexCoordinator,
+        coordinator: IndexCoordinatorEngine,
     ) -> None:
         """Initialize test ops."""
         self._repo_root = repo_root
@@ -660,7 +660,7 @@ class TestOps:
         parallelism: int | None = None,
         timeout_sec: int | None = None,
         fail_fast: bool = False,
-        coverage: bool = False,
+        coverage: bool = True,
         coverage_dir: str | None = None,
     ) -> TestResult:
         """Run tests using runner packs.
@@ -676,8 +676,8 @@ class TestOps:
             parallelism: Max concurrent test invocations
             timeout_sec: Per-target timeout
             fail_fast: Stop on first failure
-            coverage: Enable coverage collection if supported
-            coverage_dir: Directory for coverage artifacts (required when coverage=True)
+            coverage: Enable coverage collection if supported (default: True)
+            coverage_dir: Directory for coverage artifacts (auto-derived if not provided)
         """
         # Validate that targets is not an empty list
         if targets is not None and len(targets) == 0:
@@ -698,6 +698,15 @@ class TestOps:
         # Create artifact directory
         artifact_dir = self._artifacts_base / run_id
         artifact_dir.mkdir(parents=True, exist_ok=True)
+
+        # Auto-derive coverage_dir when coverage enabled and not provided
+        effective_coverage_dir: Path | None = None
+        if coverage:
+            if coverage_dir:
+                effective_coverage_dir = Path(coverage_dir)
+            else:
+                effective_coverage_dir = artifact_dir / "coverage"
+            effective_coverage_dir.mkdir(parents=True, exist_ok=True)
 
         progress = TestProgress(
             targets=TargetProgress(),
@@ -765,7 +774,7 @@ class TestOps:
                 timeout_sec=timeout_sec or 300,
                 fail_fast=fail_fast,
                 coverage=coverage,
-                coverage_dir=Path(coverage_dir) if coverage_dir else None,
+                coverage_dir=effective_coverage_dir,
             )
         )
 
@@ -1105,9 +1114,9 @@ class TestOps:
             runtime_env = exec_ctx.build_env()
             safe_env.update(runtime_env)
 
-        # Verify executable exists
+        # Verify executable exists (use safe_env PATH which includes venv bin)
         executable = cmd[0]
-        resolved_executable = shutil.which(executable)
+        resolved_executable = shutil.which(executable, path=safe_env.get("PATH"))
         if not resolved_executable:
             safe_ctx.cleanup()
             return (
@@ -1238,6 +1247,210 @@ class TestOps:
             )
         finally:
             # Always cleanup safe execution context
+            safe_ctx.cleanup()
+
+    async def _run_batch_targets(
+        self,
+        targets: list[TestTarget],
+        artifact_dir: Path,
+        test_filter: str | None,
+        tags: list[str] | None,
+        timeout_sec: int,
+        coverage_dir: Path | None = None,
+    ) -> tuple[ParsedTestSuite, CoverageArtifact | None]:
+        """Run multiple targets in a single subprocess invocation.
+
+        All targets must share the same ``runner_pack_id`` and
+        ``workspace_root``.  The runner pack's ``build_batch_command``
+        method produces a single command that exercises every target.
+
+        Returns (ParsedTestSuite, CoverageArtifact | None).
+        """
+        if not targets:
+            return ParsedTestSuite(name="batch-empty", total=0), None
+
+        first = targets[0]
+        pack_class = runner_registry.get(first.runner_pack_id)
+        if not pack_class:
+            return ParsedTestSuite(
+                name="batch",
+                errors=len(targets),
+                error_type="unknown",
+                error_detail=f"Runner pack not found: {first.runner_pack_id}",
+            ), None
+
+        pack = pack_class()
+        exec_ctx = await self._get_execution_context(first)
+
+        # Deterministic batch name for artifact files
+        batch_name = "batch_" + "_".join(
+            t.target_id.replace("/", "_").replace(":", "_") for t in targets[:5]
+        )
+        if len(targets) > 5:
+            batch_name += f"_plus{len(targets) - 5}"
+        output_path = artifact_dir / f"{batch_name}.xml"
+
+        cmd = pack.build_batch_command(
+            targets,
+            output_path=output_path,
+            pattern=test_filter,
+            tags=tags,
+            exec_ctx=exec_ctx,
+        )
+        if not cmd:
+            # Fallback: pack doesn't support batching
+            return ParsedTestSuite(
+                name="batch",
+                errors=len(targets),
+                error_type="unknown",
+                error_detail="Runner pack does not support batch execution",
+            ), None
+
+        # Coverage handling - always enabled when supported
+        cov_artifact: CoverageArtifact | None = None
+        emitter = get_emitter(first.runner_pack_id) if coverage_dir else None
+        coverage_available = False
+        if emitter:
+            coverage_tools = await self._coordinator.get_coverage_capability(
+                first.workspace_root, first.runner_pack_id
+            )
+            runtime = PackRuntime(
+                workspace_root=Path(first.workspace_root),
+                runner_available=True,
+                coverage_tools=coverage_tools,
+            )
+            capability = emitter.capability(runtime)
+            coverage_available = capability == CoverageCapability.AVAILABLE
+
+        safe_ctx = SafeExecutionContext(
+            SafeExecutionConfig(
+                artifact_dir=artifact_dir,
+                workspace_root=Path(first.workspace_root),
+                timeout_sec=timeout_sec,
+                strip_coverage_flags=coverage_available,
+            )
+        )
+        cmd = safe_ctx.sanitize_command(cmd, first.runner_pack_id)
+
+        # Add coverage flags after sanitization
+        if coverage_available and emitter and coverage_dir:
+            cmd = emitter.modify_command(cmd, coverage_dir, source_dirs=None)
+            cov_artifact = CoverageArtifact(
+                format=emitter.format_id,
+                path=emitter.artifact_path(coverage_dir),
+                pack_id=first.runner_pack_id,
+                invocation_id=f"batch_{len(targets)}",
+            )
+
+        safe_env = safe_ctx.prepare_environment(first.runner_pack_id)
+
+        if exec_ctx:
+            runtime_env = exec_ctx.build_env()
+            safe_env.update(runtime_env)
+
+        executable = cmd[0]
+        resolved_executable = shutil.which(executable, path=safe_env.get("PATH"))
+        if not resolved_executable:
+            safe_ctx.cleanup()
+            selectors = ", ".join(t.selector for t in targets)
+            return ParsedTestSuite(
+                name="batch",
+                errors=len(targets),
+                error_type="command_not_found",
+                error_detail=f"Executable not found: {executable}",
+                suggested_action=f"Install {executable} or activate the correct environment",
+                execution=ExecutionContext(command=cmd),
+                target_selector=selectors,
+                workspace_root=first.workspace_root,
+            ), None
+
+        cwd = pack.get_cwd(first)
+        stdout = ""
+        stderr = ""
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=cwd,
+                env=safe_env,
+            )
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                proc.communicate(), timeout=timeout_sec
+            )
+            stdout = stdout_bytes.decode(errors="replace")
+            stderr = stderr_bytes.decode(errors="replace")
+            exit_code = proc.returncode
+
+            # Write artifacts
+            stdout_path = artifact_dir / f"{batch_name}.stdout.txt"
+            stdout_path.write_text(stdout)
+            if stderr:
+                stderr_path = artifact_dir / f"{batch_name}.stderr.txt"
+                stderr_path.write_text(stderr)
+
+            execution = ExecutionContext(
+                command=cmd,
+                working_directory=str(cwd),
+                exit_code=exit_code,
+                raw_stdout=stdout,
+                raw_stderr=stderr if stderr else None,
+            )
+
+            result = pack.parse_output(output_path, stdout)
+            selectors = ", ".join(t.selector for t in targets)
+            result.target_selector = selectors
+            result.workspace_root = first.workspace_root
+            result.execution = execution
+
+            if result.tests is not None:
+                result.parsed_test_count = len(result.tests)
+
+            if result.errors > 0 and result.total == 0:
+                if not output_path.exists() and not stdout.strip():
+                    result.error_type = "output_missing"
+                    result.error_detail = "No output file or stdout from test runner"
+                elif result.error_type == "none":
+                    result.error_type = "parse_failed"
+                    result.error_detail = "Could not parse test output"
+            elif exit_code and exit_code != 0 and result.failed == 0 and result.errors == 0:
+                result.error_type = "command_failed"
+                result.error_detail = f"Command exited with code {exit_code}"
+                result.errors = 1
+
+            return result, cov_artifact
+
+        except TimeoutError:
+            safe_ctx.cleanup()
+            selectors = ", ".join(t.selector for t in targets)
+            return ParsedTestSuite(
+                name="batch",
+                errors=len(targets),
+                error_type="timeout",
+                error_detail=f"Batch command timed out after {timeout_sec} seconds",
+                execution=ExecutionContext(
+                    command=cmd,
+                    working_directory=str(cwd),
+                    raw_stdout=stdout if stdout else None,
+                    raw_stderr=stderr if stderr else None,
+                ),
+                target_selector=selectors,
+                workspace_root=first.workspace_root,
+            ), None
+        except OSError as e:
+            safe_ctx.cleanup()
+            selectors = ", ".join(t.selector for t in targets)
+            return ParsedTestSuite(
+                name="batch",
+                errors=len(targets),
+                error_type="command_failed",
+                error_detail=f"OS error executing batch command: {e}",
+                execution=ExecutionContext(command=cmd, working_directory=str(cwd)),
+                target_selector=selectors,
+                workspace_root=first.workspace_root,
+            ), None
+        finally:
             safe_ctx.cleanup()
 
     def _persist_result(self, artifact_dir: Path, status: TestRunStatus) -> None:

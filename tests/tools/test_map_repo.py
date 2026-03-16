@@ -281,3 +281,49 @@ class TestRepoMapper:
         names = [s.name for s in result.public_api]
         assert "MyClass" in names
         assert "helper_func" in names
+
+    def test_given_many_files_when_limit_applied_then_structure_includes_all_dirs(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        """Structure tree includes all directories regardless of limit.
+
+        Regression: when files were inserted tests/ first, src/ second,
+        a limit=10 slice would only contain tests/ files because the
+        query had no ORDER BY and _build_structure truncated the file
+        list.  Now the structure tree uses all files (depth controls
+        rendering budget) so no directory subtree is silently dropped.
+        """
+        # Given — insert tests/ files first, then src/ files
+        # (simulates real indexing order that triggered the bug)
+        for i in range(15):
+            db_session.add(
+                File(
+                    path=f"tests/test_{i:02d}.py",
+                    language_family="python",
+                    line_count=10,
+                )
+            )
+        for i in range(5):
+            db_session.add(
+                File(
+                    path=f"src/mod_{i:02d}.py",
+                    language_family="python",
+                    line_count=20,
+                )
+            )
+        db_session.commit()
+
+        mapper = RepoMapper(db_session, tmp_path)
+
+        # When — limit=10 (less than total 20 files)
+        result = mapper.map(include=["structure"], limit=10)
+
+        # Then — both src/ and tests/ should appear in tree
+        assert result.structure is not None
+        dir_names = [n.name for n in result.structure.tree if n.is_dir]
+        assert "src" in dir_names, f"src/ missing from structure; got dirs: {dir_names}"
+        assert "tests" in dir_names, f"tests/ missing from structure; got dirs: {dir_names}"
+        # All 20 files should be in the tree (limit doesn't truncate structure)
+        assert result.structure.file_count == 20
+        # all_paths should have every file for collapsed text rendering
+        assert len(result.structure.all_paths) == 20

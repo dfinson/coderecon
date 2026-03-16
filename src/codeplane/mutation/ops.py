@@ -83,7 +83,7 @@ class MutationOps:
         Args:
             repo_root: Repository root path
             on_mutation: Callback invoked with changed paths after mutation.
-                         Typically triggers IndexCoordinator.reindex_incremental().
+                         Typically triggers IndexCoordinatorEngine.reindex_incremental().
         """
         self._repo_root = repo_root
         self._on_mutation = on_mutation

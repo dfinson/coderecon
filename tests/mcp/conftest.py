@@ -81,7 +81,7 @@ def mock_git_ops() -> MagicMock:
 
 @pytest.fixture
 def mock_coordinator() -> MagicMock:
-    """Create a mock IndexCoordinator."""
+    """Create a mock IndexCoordinatorEngine."""
     mock = MagicMock()
     mock._initialized = True
     mock.get_current_epoch.return_value = 1

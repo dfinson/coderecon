@@ -9,6 +9,7 @@ Covers:
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -158,8 +159,8 @@ class TestCheckpointCommitChain:
         assert result["passed"] is True
         assert "commit" in result
         assert result["commit"]["oid"] == "aaa1111222233334444"
-        assert "semantic_diff" in result["commit"]
-        assert result["commit"]["semantic_diff"]["summary"] == "1 changed"
+        assert "diff" in result["commit"]
+        assert result["commit"]["diff"] == "1 changed"
         assert "committed" in result["agentic_hint"].lower()
 
     @pytest.mark.asyncio
@@ -238,7 +239,7 @@ class TestCheckpointCommitChain:
         assert result["commit"]["pushed"] == "origin"
         mock_context.git_ops.push.assert_called_once_with(remote="origin", force=False)
         # semantic_diff failed gracefully
-        assert "semantic_diff" not in result["commit"]
+        assert "diff" not in result["commit"]
 
 
 class TestCheckpointSemanticDiff:
@@ -283,8 +284,8 @@ class TestCheckpointSemanticDiff:
 
         assert result["passed"] is True
         assert result["commit"]["oid"] == "ccc3333444455556666"
-        assert "semantic_diff" in result["commit"]
-        assert result["commit"]["semantic_diff"]["summary"] == "2 files changed"
+        assert "diff" in result["commit"]
+        assert result["commit"]["diff"] == "2 files changed"
 
     @pytest.mark.asyncio
     async def test_checkpoint_commit_semantic_diff_failure_is_silent(
@@ -315,4 +316,55 @@ class TestCheckpointSemanticDiff:
 
         assert result["passed"] is True
         assert result["commit"]["oid"] == "ddd4444555566667777"
-        assert "semantic_diff" not in result["commit"]
+        assert "diff" not in result["commit"]
+
+
+# ---- _validate_paths_exist unit tests ----------------------------------------
+
+
+class TestValidatePathsExist:
+    """Unit tests for _validate_paths_exist with git-aware deletion support."""
+
+    def test_existing_file_passes(self, tmp_path: Path) -> None:
+        from codeplane.mcp.tools.checkpoint import _validate_paths_exist
+
+        (tmp_path / "foo.py").write_text("x = 1")
+        _validate_paths_exist(tmp_path, ["foo.py"])  # should not raise
+
+    def test_missing_untracked_file_raises(self, tmp_path: Path) -> None:
+        from codeplane.git.errors import PathsNotFoundError
+        from codeplane.mcp.tools.checkpoint import _validate_paths_exist
+
+        with pytest.raises(PathsNotFoundError):
+            _validate_paths_exist(tmp_path, ["typo.py"])
+
+    def test_deleted_tracked_file_passes(self, tmp_path: Path) -> None:
+        """A file that doesn't exist on disk but is tracked by git is a valid deletion."""
+        from codeplane.mcp.tools.checkpoint import _validate_paths_exist
+
+        tracked = {"deleted.py", "other.py"}
+        _validate_paths_exist(tmp_path, ["deleted.py"], tracked_files=tracked)  # should not raise
+
+    def test_deleted_untracked_file_raises(self, tmp_path: Path) -> None:
+        """A file that doesn't exist on disk AND isn't tracked is a typo."""
+        from codeplane.git.errors import PathsNotFoundError
+        from codeplane.mcp.tools.checkpoint import _validate_paths_exist
+
+        tracked = {"other.py"}
+        with pytest.raises(PathsNotFoundError):
+            _validate_paths_exist(tmp_path, ["never_existed.py"], tracked_files=tracked)
+
+    def test_mixed_existing_and_deleted_tracked(self, tmp_path: Path) -> None:
+        """Mix of existing files and tracked deletions should pass."""
+        from codeplane.mcp.tools.checkpoint import _validate_paths_exist
+
+        (tmp_path / "alive.py").write_text("x = 1")
+        tracked = {"alive.py", "deleted.py"}
+        _validate_paths_exist(
+            tmp_path, ["alive.py", "deleted.py"], tracked_files=tracked
+        )  # should not raise
+
+    def test_empty_paths_is_noop(self, tmp_path: Path) -> None:
+        from codeplane.mcp.tools.checkpoint import _validate_paths_exist
+
+        _validate_paths_exist(tmp_path, [])  # should not raise

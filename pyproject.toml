@@ -33,6 +33,7 @@ dependencies = [
     # Index
     "sqlmodel>=0.0.24",
     "tantivy>=0.25.0",
+    "fastembed>=0.5.0",
     # Tree-sitter core runtime only - grammars installed dynamically per-repo
     "tree-sitter>=0.24.0",
     # Git
@@ -48,6 +49,7 @@ dependencies = [
     "watchfiles>=1.0.0",
     # Retry logic for network operations
     "tenacity>=8.2.0",
+    "onnxruntime>=1.24.2",
 ]
 
 [project.optional-dependencies]
@@ -101,10 +103,18 @@ source = "vcs"
 [tool.hatch.build.targets.wheel]
 packages = ["src/codeplane"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"src/codeplane/ranking/data" = "codeplane/ranking/data"
+
 [tool.ruff]
 target-version = "py312"
 line-length = 100
 src = ["src"]
+extend-exclude = [
+    "benchmarking/data",
+    "benchmarking/experiments",
+    "benchmarking/vendor",
+]
 
 [tool.ruff.lint]
 select = [
@@ -127,6 +137,8 @@ ignore = [
 "src/codeplane/mcp/tools/*.py" = ["B008", "ARG001"]
 # E2E test fixtures require parameters for pytest dependency injection even if unused
 "tests/e2e/*.py" = ["ARG001"]
+# EVEE decorators pass extra kwargs to __init__; benchmarking scripts are not library code
+"benchmarking/**/*.py" = ["ARG002"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["codeplane"]
@@ -160,6 +172,7 @@ module = [
     "tenacity.*",
     "opentelemetry.*",
     "json5.*",
+    "hatchling.*",
 ]
 ignore_missing_imports = true
 
@@ -172,6 +185,11 @@ module = "tests.*"
 disallow_untyped_defs = false
 strict = false
 warn_return_any = false
+
+[[tool.mypy.overrides]]
+module = "benchmarking.*"
+ignore_errors = true
+follow_imports = "skip"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -202,7 +220,11 @@ exclude_lines = [
 exclude_dirs = ["tests", ".venv", "venv"]
 skips = ["B101"]  # Skip assert_used - we use asserts in tests
 
+[tool.uv.sources]
+evee-ms-core = { path = "assets/evee_wheels/evee_ms_core-0.4.0-py3-none-any.whl" }
+
 [dependency-groups]
 dev = [
+    "evee-ms-core",
     "types-tqdm>=4.67.0.20250809",
 ]

@@ -46,14 +46,31 @@ class FactQueries:
         """Get a definition by its stable UID."""
         return self._session.get(DefFact, def_uid)
 
+    def batch_get_defs(self, def_uids: list[str]) -> dict[str, DefFact]:
+        """Get multiple definitions by UID in a single query.
+
+        Returns a dict mapping def_uid → DefFact for found UIDs.
+        Missing UIDs are silently omitted.
+        """
+        if not def_uids:
+            return {}
+        stmt = select(DefFact).where(col(DefFact.def_uid).in_(def_uids))
+        results = list(self._session.exec(stmt).all())
+        return {d.def_uid: d for d in results}
+
     def list_defs_by_name(self, unit_id: int, name: str, *, limit: int = 100) -> list[DefFact]:
         """List definitions by simple name within a build unit."""
         stmt = select(DefFact).where(DefFact.unit_id == unit_id, DefFact.name == name).limit(limit)
         return list(self._session.exec(stmt).all())
 
     def list_defs_in_file(self, file_id: int, *, limit: int = 1000) -> list[DefFact]:
-        """List all definitions in a file."""
-        stmt = select(DefFact).where(DefFact.file_id == file_id).limit(limit)
+        """List all definitions in a file, ordered by source position."""
+        stmt = (
+            select(DefFact)
+            .where(DefFact.file_id == file_id)
+            .order_by(col(DefFact.start_line), col(DefFact.def_uid))
+            .limit(limit)
+        )
         return list(self._session.exec(stmt).all())
 
     # -------------------------------------------------------------------------
@@ -125,6 +142,77 @@ class FactQueries:
         stmt = select(RefFact).where(RefFact.file_id == file_id).limit(limit)
         return list(self._session.exec(stmt).all())
 
+    def list_callees_in_scope(
+        self,
+        file_id: int,
+        start_line: int,
+        end_line: int,
+        *,
+        limit: int = 100,
+    ) -> list[DefFact]:
+        """List definitions referenced (called/used) within a line range.
+
+        Joins ref_facts → def_facts for refs whose scope falls within
+        the given line range. This answers "what does this function call?"
+
+        Args:
+            file_id: File containing the scope.
+            start_line: Start line of the scope (inclusive).
+            end_line: End line of the scope (inclusive).
+            limit: Maximum results.
+
+        Returns:
+            Deduplicated list of DefFact objects referenced in the scope.
+        """
+        stmt = (
+            select(DefFact)
+            .join(RefFact, onclause=col(RefFact.target_def_uid) == col(DefFact.def_uid))
+            .where(
+                RefFact.file_id == file_id,
+                RefFact.start_line >= start_line,
+                RefFact.start_line <= end_line,
+                RefFact.target_def_uid.is_not(None),  # type: ignore[union-attr]
+            )
+            .distinct()
+            .order_by(DefFact.def_uid)
+            .limit(limit)
+        )
+        return list(self._session.exec(stmt).all())
+
+    def count_callers(self, def_uid: str) -> int:
+        """Count distinct files that reference a definition (hub inbound score)."""
+        from sqlalchemy import func
+
+        stmt = select(func.count(func.distinct(RefFact.file_id))).where(
+            RefFact.target_def_uid == def_uid
+        )
+        result = self._session.exec(stmt).one()
+        return int(result) if result else 0
+
+    def batch_count_callers(self, def_uids: list[str]) -> dict[str, int]:
+        """Count distinct caller files for multiple defs in a single query.
+
+        Returns a dict mapping def_uid → caller count. UIDs with zero
+        callers are included with count 0.
+        """
+        if not def_uids:
+            return {}
+        from sqlalchemy import func
+
+        stmt = (
+            select(
+                RefFact.target_def_uid,
+                func.count(func.distinct(RefFact.file_id)),
+            )
+            .where(col(RefFact.target_def_uid).in_(def_uids))
+            .group_by(RefFact.target_def_uid)
+        )
+        rows = list(self._session.exec(stmt).all())
+        result = {uid: 0 for uid in def_uids}
+        for uid, count in rows:
+            result[uid] = int(count)
+        return result
+
     def list_refs_by_token(
         self, unit_id: int, token_text: str, *, limit: int = 100
     ) -> list[RefFact]:
@@ -170,8 +258,13 @@ class FactQueries:
     # -------------------------------------------------------------------------
 
     def list_imports(self, file_id: int, *, limit: int = 100) -> list[ImportFact]:
-        """List all imports in a file."""
-        stmt = select(ImportFact).where(ImportFact.file_id == file_id).limit(limit)
+        """List all imports in a file, ordered by source position."""
+        stmt = (
+            select(ImportFact)
+            .where(ImportFact.file_id == file_id)
+            .order_by(col(ImportFact.start_line), col(ImportFact.import_uid))
+            .limit(limit)
+        )
         return list(self._session.exec(stmt).all())
 
     def get_import(self, import_uid: str) -> ImportFact | None:
@@ -223,14 +316,98 @@ class FactQueries:
         """Get a file by ID."""
         return self._session.get(File, file_id)
 
+    def batch_get_files(self, file_ids: list[int]) -> dict[int, File]:
+        """Get multiple files by ID in a single query.
+
+        Returns a dict mapping file_id → File for found IDs.
+        """
+        if not file_ids:
+            return {}
+        stmt = select(File).where(col(File.id).in_(file_ids))
+        results = list(self._session.exec(stmt).all())
+        return {f.id: f for f in results if f.id is not None}
+
     def get_file_by_path(self, path: str) -> File | None:
         """Get a file by path."""
         stmt = select(File).where(File.path == path)
         return self._session.exec(stmt).first()
 
+    def batch_get_files_by_paths(self, paths: list[str]) -> dict[str, File]:
+        """Get multiple files by path in a single query.
+
+        Returns a dict mapping path → File for found paths.
+        """
+        if not paths:
+            return {}
+        stmt = select(File).where(col(File.path).in_(paths))
+        results = list(self._session.exec(stmt).all())
+        return {f.path: f for f in results}
+
     def list_files(self, *, limit: int = 10000) -> list[File]:
         """List all indexed files."""
         stmt = select(File).limit(limit)
+        return list(self._session.exec(stmt).all())
+
+    # -------------------------------------------------------------------------
+    # Seed finding (recon-dedicated)
+    # -------------------------------------------------------------------------
+
+    def find_defs_matching_term(
+        self,
+        term: str,
+        *,
+        limit: int = 200,
+    ) -> list[DefFact]:
+        """Find definitions whose name, qualified_name, or docstring contain a term.
+
+        Uses SQL LIKE for case-insensitive substring matching directly on
+        the structural index — no BM25, no Tantivy.
+
+        Results are ordered by ``def_uid`` for deterministic output across
+        index rebuilds.
+
+        Args:
+            term: Lowercase search term (minimum 2 chars).
+            limit: Maximum results.
+
+        Returns:
+            List of DefFact objects matching the term.
+        """
+        if len(term) < 2:
+            return []
+        pattern = f"%{term}%"
+        stmt = (
+            select(DefFact)
+            .where(
+                (col(DefFact.name).ilike(pattern))
+                | (col(DefFact.qualified_name).ilike(pattern))
+                | (col(DefFact.docstring).ilike(pattern))
+                | (col(DefFact.lexical_path).ilike(pattern))
+            )
+            .order_by(DefFact.def_uid)
+            .limit(limit)
+        )
+        return list(self._session.exec(stmt).all())
+
+    def find_files_matching_term(
+        self,
+        term: str,
+        *,
+        limit: int = 100,
+    ) -> list[File]:
+        """Find files whose path contains a term.
+
+        Args:
+            term: Lowercase search term (minimum 2 chars).
+            limit: Maximum results.
+
+        Returns:
+            List of File objects whose path matches.
+        """
+        if len(term) < 2:
+            return []
+        pattern = f"%{term}%"
+        stmt = select(File).where(col(File.path).ilike(pattern)).order_by(File.path).limit(limit)
         return list(self._session.exec(stmt).all())
 
 

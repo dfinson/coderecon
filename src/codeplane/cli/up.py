@@ -23,7 +23,7 @@ from codeplane.core.progress import (
     animate_text,
     get_console,
 )
-from codeplane.index.ops import IndexCoordinator
+from codeplane.index.ops import IndexCoordinatorEngine
 
 LOGO = r"""
                     ++++++++++++++++++++++
@@ -111,7 +111,12 @@ def _print_banner(
     is_flag=True,
     help="Wipe and rebuild the entire index from scratch",
 )
-def up_command(path: Path | None, port: int | None, reindex: bool) -> None:
+@click.option(
+    "--dev-mode",
+    is_flag=True,
+    help="Enable development tools (recon_raw_signals endpoint)",
+)
+def up_command(path: Path | None, port: int | None, reindex: bool, dev_mode: bool) -> None:
     """Start the CodePlane server for this repository.
 
     If already running, reports the existing instance. Runs in foreground.
@@ -155,13 +160,21 @@ def up_command(path: Path | None, port: int | None, reindex: bool) -> None:
     ):
         raise click.ClickException("Failed to initialize repository")
 
+    # Ensure embedding models are cached before starting the server.
+    # (initialize_repo already calls this, but `cpl up` on an existing repo
+    # skips init, so we check here too — it's a no-op if already cached.)
+    from codeplane.cli.models import ensure_models
+
+    if not ensure_models(interactive=True):
+        raise click.ClickException("Required embedding models not available")
+
     # Get index paths from config AFTER init (so we read the created config)
     from codeplane.config.loader import get_index_paths
 
     db_path, tantivy_path = get_index_paths(repo_root)
 
     # Create coordinator and load existing index
-    coordinator = IndexCoordinator(
+    coordinator = IndexCoordinatorEngine(
         repo_root=repo_root,
         db_path=db_path,
         tantivy_path=tantivy_path,
@@ -177,7 +190,7 @@ def up_command(path: Path | None, port: int | None, reindex: bool) -> None:
                 raise click.ClickException("Failed to build index")
             # Reload paths (may differ after init) and retry
             db_path, tantivy_path = get_index_paths(repo_root)
-            coordinator = IndexCoordinator(
+            coordinator = IndexCoordinatorEngine(
                 repo_root=repo_root,
                 db_path=db_path,
                 tantivy_path=tantivy_path,
@@ -223,7 +236,7 @@ def up_command(path: Path | None, port: int | None, reindex: bool) -> None:
     sys.unraisablehook = _suppress_event_loop_closed
 
     try:
-        asyncio.run(run_server(repo_root, coordinator, config))
+        asyncio.run(run_server(repo_root, coordinator, config, dev_mode=dev_mode))
     except KeyboardInterrupt:
         click.echo("\nStopped")
     finally:

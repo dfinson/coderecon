@@ -23,11 +23,13 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from sqlalchemy import case, delete, func, text
 from sqlmodel import col, select
+
+log = structlog.get_logger(__name__)
 
 from codeplane.core.languages import detect_language_family, is_test_file
 from codeplane.index._internal.db import (
@@ -56,7 +58,13 @@ from codeplane.index._internal.indexing import (
     resolve_type_traced,
     run_pass_1_5,
 )
+from codeplane.index._internal.indexing.def_embedding import (
+    DefEmbeddingIndex,
+    _is_code_kind,
+)
+from codeplane.index._internal.indexing.file_embedding import FileEmbeddingIndex
 from codeplane.index._internal.parsing import TreeSitterParser
+from codeplane.index._internal.parsing.service import tree_sitter_service
 from codeplane.index._internal.state import FileStateService
 from codeplane.index.models import (
     CandidateContext,
@@ -65,6 +73,7 @@ from codeplane.index.models import (
     ContextMarker,
     DefFact,
     File,
+    ImportFact,
     IndexedCoverageCapability,
     IndexedLintTool,
     ProbeStatus,
@@ -82,6 +91,7 @@ if TYPE_CHECKING:
         CoverageSourceResult,
         ImportGraphResult,
     )
+    from codeplane.index._internal.indexing.structural import ExtractionResult
     from codeplane.index.models import FileState
 
 
@@ -279,7 +289,7 @@ class SearchMode:
     PATH = "path"
 
 
-class IndexCoordinator:
+class IndexCoordinatorEngine:
     """
     High-level orchestration with serialization guarantees.
 
@@ -326,6 +336,8 @@ class IndexCoordinator:
 
         # Components (initialized lazily in initialize())
         self._lexical: LexicalIndex | None = None
+        self._file_embedding: FileEmbeddingIndex | None = None
+        self._def_embedding: DefEmbeddingIndex | None = None
         self._parser: TreeSitterParser | None = None
         self._router: ContextRouter | None = None
         self._structural: StructuralIndexer | None = None
@@ -335,6 +347,10 @@ class IndexCoordinator:
         self._epoch_manager: EpochManager | None = None
 
         self._initialized = False
+
+        # Optional in-memory cache of all DefFacts (keyed by def_uid).
+        # Lazy-loaded on first batch_get_defs() call; cleared on close().
+        self._def_cache: dict[str, DefFact] | None = None
 
     def mark_stale(self) -> None:
         """Mark index as stale (query methods will block until fresh).
@@ -374,8 +390,10 @@ class IndexCoordinator:
         create_additional_indexes(self.db.engine)
 
         # Initialize components
-        self._parser = TreeSitterParser()
+        self._parser = tree_sitter_service.parser
         self._lexical = LexicalIndex(self.tantivy_path)
+        self._file_embedding = FileEmbeddingIndex(self.repo_root / ".codeplane")
+        self._def_embedding = DefEmbeddingIndex(self.repo_root / ".codeplane")
         self._epoch_manager = EpochManager(self.db, self._lexical)
 
         # Step 3: Discover contexts
@@ -552,8 +570,14 @@ class IndexCoordinator:
             return False
 
         # Initialize components
-        self._parser = TreeSitterParser()
+        self._parser = tree_sitter_service.parser
         self._lexical = LexicalIndex(self.tantivy_path)
+        self._file_embedding = FileEmbeddingIndex(self.repo_root / ".codeplane")
+        self._file_embedding.load()
+        self._file_embedding.prune_missing(self.repo_root)
+        self._def_embedding = DefEmbeddingIndex(self.repo_root / ".codeplane")
+        self._def_embedding.load()
+        self._def_embedding.prune_missing(self.repo_root)
         self._epoch_manager = EpochManager(self.db, self._lexical)
 
         # Initialize router from existing contexts
@@ -582,9 +606,113 @@ class IndexCoordinator:
         if self._lexical is not None:
             self._lexical.reload()
 
+        # Validate embedding completeness — rebuild if interrupted init
+        # left structural index complete but embeddings empty/partial
+        await self._validate_embeddings()
+
         self._initialized = True
         self._fresh_event.set()
         return True
+
+    async def _validate_embeddings(self) -> None:
+        """Check embedding indices match structural index and rebuild if needed.
+
+        Handles the case where `cpl init -r` was killed after structural
+        indexing completed but before embedding commit finished. The DB
+        has all files/defs but the embedding npz is empty or partial.
+        """
+        if self._def_embedding is None or self._structural is None:
+            return
+
+        # Count code defs in DB vs embedded defs
+        with self.db.session() as session:
+            row = session.exec(
+                text(
+                    "SELECT COUNT(*) FROM def_facts "
+                    "WHERE kind IN ('function','method','class','struct',"
+                    "'interface','trait','enum','property')"
+                )
+            ).one()
+            code_def_count: int = int(row[0])
+
+        embedded_count = self._def_embedding.count
+        # Allow 5% tolerance for minor drift (e.g. defs added by incremental
+        # reindex that haven't been embedded yet)
+        if code_def_count > 0 and embedded_count < code_def_count * 0.95:
+            log.warning(
+                "index.embedding_incomplete",
+                code_defs=code_def_count,
+                embedded=embedded_count,
+                action="rebuilding",
+            )
+            await self._rebuild_embeddings()
+        else:
+            log.info(
+                "index.embedding_valid",
+                code_defs=code_def_count,
+                embedded=embedded_count,
+            )
+
+    async def _rebuild_embeddings(self) -> None:
+        """Rebuild def embeddings from scratch using indexed defs."""
+        if self._def_embedding is None:
+            return
+
+        with self.db.session() as session:
+            rows = session.exec(
+                text(
+                    "SELECT d.def_uid, d.kind, d.name, d.lexical_path, "
+                    "d.signature_text, d.docstring, f.path, "
+                    "d.start_line, d.end_line "
+                    "FROM def_facts d JOIN files f ON d.file_id = f.id"
+                )
+            ).all()
+
+        # Group by file path
+        by_file: dict[str, list[dict[str, Any]]] = {}
+        for r in rows:
+            by_file.setdefault(r[6], []).append({
+                "def_uid": r[0], "kind": r[1], "name": r[2],
+                "lexical_path": r[3], "signature_text": r[4], "docstring": r[5],
+                "start_line": r[7], "end_line": r[8],
+            })
+
+        _NON_CODE_KINDS = {"heading", "pair", "key", "table", "target"}
+
+        # Inject body text for non-code defs by reading the source file
+        repo_root = self.repo_root
+        for path, defs in by_file.items():
+            needs_body = any(d["kind"] in _NON_CODE_KINDS for d in defs)
+            if not needs_body:
+                continue
+            full_path = repo_root / path
+            if not full_path.exists():
+                continue
+            try:
+                content_lines = full_path.read_text(
+                    encoding="utf-8", errors="replace",
+                ).split("\n")
+            except Exception:  # noqa: BLE001
+                continue
+            for d in defs:
+                if d["kind"] in _NON_CODE_KINDS:
+                    sl = d.get("start_line", 0)
+                    el = d.get("end_line", 0)
+                    if sl > 0 and el >= sl:
+                        body = "\n".join(content_lines[sl - 1 : el])
+                        if body:
+                            d["_body_text"] = body
+
+        # Clear and re-stage
+        self._def_embedding.clear()
+        for path, defs in by_file.items():
+            self._def_embedding.stage_defs(path, defs)
+
+        staged = sum(len(v) for v in self._def_embedding._staged_defs.values())
+        log.info("index.embedding_rebuild_staged", defs=staged)
+
+        count = self._def_embedding.commit_staged()
+        log.info("index.embedding_rebuild_done", embedded=count)
 
     async def reindex_incremental(self, changed_paths: list[Path]) -> IndexStats:
         """
@@ -598,6 +726,7 @@ class IndexCoordinator:
         try:
             return await self._reindex_incremental_impl(changed_paths)
         finally:
+            self._def_cache = None
             self._fresh_event.set()
 
     async def _reindex_incremental_impl(self, changed_paths: list[Path]) -> IndexStats:
@@ -790,6 +919,11 @@ class IndexCoordinator:
                                 file_id=fid,
                                 symbols=extraction.symbol_names,
                             )
+
+                            # Stage embeddings: per-def for code, per-file for non-code
+                            if extraction.content_text:
+                                self._stage_embeddings(extraction)
+
                             if extraction.file_path in existing_set:
                                 files_updated += 1
                             symbols_indexed += len(extraction.symbol_names)
@@ -810,10 +944,17 @@ class IndexCoordinator:
                         if failed_paths:
                             self._remove_structural_facts_for_paths(failed_paths)
 
-                    # Stage removals
+                    # Stage removals (lexical + file embedding)
                     for path in removed_paths:
                         self._lexical.stage_remove(str(path))
                         files_removed += 1
+
+                    # Stage embedding removals (both indices)
+                    path_strs = [str(p) for p in removed_paths]
+                    if self._file_embedding is not None and path_strs:
+                        self._file_embedding.stage_remove(path_strs)
+                    if self._def_embedding is not None and path_strs:
+                        self._def_embedding.stage_remove_by_path(path_strs)
 
                     # Commit all staged changes atomically
                     self._lexical.commit_staged()
@@ -822,10 +963,15 @@ class IndexCoordinator:
                 self._lexical.reload()
 
                 # Pass 1.5 / 2 / 3: cross-file resolution (scoped to changed files)
+                # Run BEFORE embedding commit so CTX_USAGE records have resolved refs.
                 if changed_file_ids:
                     run_pass_1_5(self.db, None, file_ids=changed_file_ids)
                     resolve_references(self.db, file_ids=changed_file_ids)
                     resolve_type_traced(self.db, file_ids=changed_file_ids)
+
+                # Commit embeddings (both indices, after resolver)
+                with self._tantivy_write_lock:
+                    self._commit_embeddings()
 
                 # Mark successfully indexed files as indexed
                 if changed_file_ids:
@@ -845,8 +991,17 @@ class IndexCoordinator:
                         if self._lexical is not None:
                             self._lexical.stage_remove(str(path))
                         files_removed += 1
+
+                    # Stage embedding removals (both indices)
+                    path_strs_rm = [str(p) for p in removed_paths]
+                    if self._file_embedding is not None and path_strs_rm:
+                        self._file_embedding.stage_remove(path_strs_rm)
+                    if self._def_embedding is not None and path_strs_rm:
+                        self._def_embedding.stage_remove_by_path(path_strs_rm)
+
                     if self._lexical is not None:
                         self._lexical.commit_staged()
+                    self._commit_embeddings()
                 if self._lexical is not None:
                     self._lexical.reload()
 
@@ -988,7 +1143,26 @@ class IndexCoordinator:
                 by_context[ctx_id].append(rel_path)
 
             for ctx_id, paths in by_context.items():
-                self._structural.index_files(paths, context_id=ctx_id, file_id_map=file_id_map)
+                # Extract first, then persist + stage embeddings
+                extractions = self._structural.extract_files(paths, ctx_id)
+                self._structural.index_files(
+                    paths,
+                    context_id=ctx_id,
+                    file_id_map=file_id_map,
+                    _extractions=extractions,
+                )
+
+                # Stage embeddings from extraction data
+                for extraction in extractions:
+                    if extraction.content_text:
+                        self._stage_embeddings(extraction)
+
+            # Create synthetic import edges from config files to source files.
+            from codeplane.index._internal.indexing.config_refs import (
+                resolve_config_file_refs,
+            )
+
+            resolve_config_file_refs(self.db, self.repo_root)
 
             # Pass 1.5: DB-backed cross-file resolution (all languages)
             # Use unit_id=None to allow cross-context resolution, which is the
@@ -1001,6 +1175,17 @@ class IndexCoordinator:
 
             # Resolve type-traced member accesses (Pass 3 - follows type annotations)
             resolve_type_traced(self.db)
+
+        # Stage embedding removals (both indices)
+        if to_remove:
+            rm_list = list(to_remove)
+            if self._file_embedding is not None:
+                self._file_embedding.stage_remove(rm_list)
+            if self._def_embedding is not None:
+                self._def_embedding.stage_remove_by_path(rm_list)
+
+        # Commit embeddings (both indices, shared model)
+        self._commit_embeddings()
 
         # Remove structural facts for removed files
         if to_remove:
@@ -1064,6 +1249,7 @@ class IndexCoordinator:
         try:
             return await self._reindex_full_impl()
         finally:
+            self._def_cache = None
             self._fresh_event.set()
 
     async def _reindex_full_impl(self) -> IndexStats:
@@ -1132,7 +1318,7 @@ class IndexCoordinator:
             to_remove = indexed_paths - should_index
             to_add = should_index - indexed_paths
 
-            # Process removals and additions
+            # Process removals
             with self._tantivy_write_lock:
                 # Remove files that no longer exist or are now ignored
                 for rel_path in to_remove:
@@ -1140,7 +1326,7 @@ class IndexCoordinator:
                         self._lexical.remove_file(rel_path)
                     files_removed += 1
 
-                # Add new files
+                # Add new files via lexical index
                 for rel_path in to_add:
                     full_path = self.repo_root / rel_path
                     if full_path.exists():
@@ -1157,11 +1343,13 @@ class IndexCoordinator:
                         except (OSError, UnicodeDecodeError):
                             continue
 
-            # Reload index
+            # Reload lexical index
             if self._lexical is not None:
                 self._lexical.reload()
 
-            # Create File records for added files
+            # Pre-create File records for added files before structural indexing
+            # (flush to get IDs for FK constraints in structural facts)
+            file_id_map: dict[str, int] = {}
             if to_add:
                 with self.db.session() as session:
                     for rel_path in to_add:
@@ -1169,7 +1357,6 @@ class IndexCoordinator:
                         if not full_path.exists():
                             continue
                         content_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
-                        # Use canonical language detection
                         lang = detect_language_family(full_path)
 
                         file_record = File(
@@ -1179,7 +1366,53 @@ class IndexCoordinator:
                             indexed_at=time.time(),
                         )
                         session.add(file_record)
+                        session.flush()
+                        if file_record.id is not None:
+                            file_id_map[rel_path] = file_record.id
                     session.commit()
+
+            # Structural indexing + file embeddings for added files
+            if to_add and self._structural is not None:
+                # Group files by context_id
+                by_context: dict[int, list[str]] = {}
+                for rel_path in to_add:
+                    ctx_id = file_to_context.get(rel_path, 1)
+                    by_context.setdefault(ctx_id, []).append(rel_path)
+
+                for ctx_id, paths in by_context.items():
+                    # Extract facts (tree-sitter parse + structural extraction)
+                    extractions = self._structural.extract_files(paths, ctx_id)
+                    self._structural.index_files(
+                        paths,
+                        context_id=ctx_id,
+                        file_id_map=file_id_map,
+                        _extractions=extractions,
+                    )
+
+                    # Stage embeddings from extraction data
+                    for extraction in extractions:
+                        if extraction.content_text:
+                            self._stage_embeddings(extraction)
+
+                # Cross-file resolution passes
+                run_pass_1_5(self.db, None)
+                resolve_references(self.db)
+                resolve_type_traced(self.db)
+
+            # Stage embedding removals (both indices)
+            if to_remove:
+                rm_list = list(to_remove)
+                if self._file_embedding is not None:
+                    self._file_embedding.stage_remove(rm_list)
+                if self._def_embedding is not None:
+                    self._def_embedding.stage_remove_by_path(rm_list)
+
+            # Commit embeddings (both indices, shared model)
+            self._commit_embeddings()
+
+            # Remove structural facts for removed files
+            if to_remove:
+                self._remove_structural_facts_for_paths(list(to_remove))
 
             # Remove File records for removed paths
             if to_remove:
@@ -1211,6 +1444,18 @@ class IndexCoordinator:
             msg = "Coordinator not initialized"
             raise RuntimeError(msg)
         await self._fresh_event.wait()
+
+    def score_files_bm25(self, query: str, limit: int = 500) -> dict[str, float]:
+        """Score files by BM25 relevance to *query* using Tantivy.
+
+        Parallel plumbing for recon — does NOT touch the existing search flow.
+        Returns ``{repo-relative-path: bm25_score}`` for files with any
+        lexical overlap with the query.  Files absent from the dict have
+        zero relevance.
+        """
+        if self._lexical is None:
+            return {}
+        return self._lexical.score_files_bm25(query, limit=limit)
 
     async def search(
         self,
@@ -1539,6 +1784,55 @@ class IndexCoordinator:
             facts = FactQueries(session)
             return facts.list_all_refs_by_def_uid(def_fact.def_uid)
 
+    async def get_callees(
+        self,
+        def_fact: DefFact,
+        *,
+        limit: int = 50,
+    ) -> list[DefFact]:
+        """Get definitions referenced (called/used) by a definition. Thread-safe.
+
+        Args:
+            def_fact: The definition whose callees to find.
+            limit: Maximum callees to return.
+
+        Returns:
+            Deduplicated list of DefFact objects referenced within
+            the definition's span.
+        """
+        await self.wait_for_freshness()
+        with self.db.session() as session:
+            facts = FactQueries(session)
+            return facts.list_callees_in_scope(
+                def_fact.file_id,
+                def_fact.start_line,
+                def_fact.end_line,
+                limit=limit,
+            )
+
+    async def get_file_imports(
+        self,
+        rel_path: str,
+        *,
+        limit: int = 100,
+    ) -> list[ImportFact]:
+        """Get import facts for a file by its repo-relative path. Thread-safe.
+
+        Args:
+            rel_path: Repo-relative file path.
+            limit: Maximum imports to return.
+
+        Returns:
+            List of ImportFact objects for the file.
+        """
+        await self.wait_for_freshness()
+        with self.db.session() as session:
+            facts = FactQueries(session)
+            file_rec = facts.get_file_by_path(rel_path)
+            if file_rec is None or file_rec.id is None:
+                return []
+            return facts.list_imports(file_rec.id, limit=limit)
+
     async def get_file_state(self, file_id: int, context_id: int) -> FileState:
         """Get computed file state for mutation gating."""
         await self.wait_for_freshness()
@@ -1741,8 +2035,11 @@ class IndexCoordinator:
         await self.wait_for_freshness()
         with self.db.session() as session:
             # Find context by root_path - normalize to relative path
+            # Convention: root_path="" means repo root (not ".")
             try:
                 rel_path = str(Path(workspace_root).relative_to(self.repo_root))
+                if rel_path == ".":
+                    rel_path = ""
             except ValueError:
                 rel_path = ""  # workspace_root is repo_root itself
 
@@ -1866,6 +2163,7 @@ class IndexCoordinator:
     def close(self) -> None:
         """Close all resources."""
         self._lexical = None
+        self._def_cache = None
         self._initialized = False
         # Dispose DB engine to release file handles
         if hasattr(self, "db") and self.db is not None:
@@ -2409,6 +2707,7 @@ class IndexCoordinator:
 
             if self._structural is not None:
                 batch_size = 50
+                _extract_start = time.time()
 
                 for batch_start in range(0, total, batch_size):
                     batch_end = min(batch_start + batch_size, total)
@@ -2438,6 +2737,11 @@ class IndexCoordinator:
                                 context_id=ctx_id,
                                 symbols=extraction.symbol_names,
                             )
+
+                            # Stage embeddings: per-def for code, per-file for non-code
+                            if extraction.content_text:
+                                self._stage_embeddings(extraction)
+
                             count += 1
                             indexed_paths.append(extraction.file_path)
 
@@ -2458,7 +2762,21 @@ class IndexCoordinator:
 
                 # Re-resolve any import paths that couldn't resolve during
                 # batched indexing (e.g. batch 1 imports targeting batch 2 files).
+                _extract_elapsed = time.time() - _extract_start
+                log.info("index.stage.extract_complete",
+                         files=count, elapsed_sec=round(_extract_elapsed, 1),
+                         workers=workers)
+
+                _resolve_start = time.time()
                 self._structural.resolve_all_imports()
+
+                # Create synthetic import edges from config files (TOML,
+                # YAML, Makefile, etc.) to source files they reference.
+                from codeplane.index._internal.indexing.config_refs import (
+                    resolve_config_file_refs,
+                )
+
+                resolve_config_file_refs(self.db, self.repo_root)
 
                 # Pass 1.5: DB-backed cross-file resolution (all languages)
                 on_progress(0, 1, files_by_ext, "resolving_cross_file")
@@ -2477,14 +2795,204 @@ class IndexCoordinator:
 
                 on_progress(0, 1, files_by_ext, "resolving_types")
                 resolve_type_traced(self.db, on_progress=pass3_progress)
+                _resolve_elapsed = time.time() - _resolve_start
+                log.info("index.stage.resolve_complete",
+                         elapsed_sec=round(_resolve_elapsed, 1))
+
+                # Commit embeddings (both indices, shared model)
+                _staged_file = (
+                    len(self._file_embedding._staged_files)
+                    if self._file_embedding is not None
+                    else 0
+                )
+                _staged_def = (
+                    sum(len(v) for v in self._def_embedding._staged_defs.values())
+                    if self._def_embedding is not None
+                    else 0
+                )
+                staged_total = _staged_file + _staged_def
+                _embed_start = time.time()
+                if staged_total > 0:
+                    on_progress(0, staged_total, files_by_ext, "computing_embeddings")
+
+                    def _embed_progress(done: int, total: int) -> None:
+                        on_progress(done, total, files_by_ext, "computing_embeddings")
+
+                    self._commit_embeddings(on_progress=_embed_progress)
+                    on_progress(staged_total, staged_total, files_by_ext, "embeddings_done")
+                else:
+                    self._commit_embeddings()
+                _embed_elapsed = time.time() - _embed_start
+                log.info("index.stage.embeddings_complete",
+                         staged_file=_staged_file, staged_def=_staged_def,
+                         elapsed_sec=round(_embed_elapsed, 1))
 
         return count, indexed_paths, files_by_ext
+
+    def _stage_embeddings(self, extraction: ExtractionResult) -> None:
+        """Route an extraction to the embedding index.
+
+        All files with defs (code or non-code) → per-def embedding.
+        Files with zero defs (binary, empty) → per-file embedding.
+        """
+        if extraction.defs and self._def_embedding is not None:
+            # Inject body text for non-code defs so their scaffolds
+            # capture section content, not just headings/key names.
+            content = extraction.content_text or ""
+            if content:
+                content_lines = content.split("\n")
+                for d in extraction.defs:
+                    kind = d.get("kind", "")
+                    if kind in ("heading", "pair", "key", "table", "target"):
+                        sl = d.get("start_line", 0)
+                        el = d.get("end_line", 0)
+                        if sl > 0 and el >= sl:
+                            body = "\n".join(content_lines[sl - 1 : el])
+                            if body:
+                                d["_body_text"] = body
+            self._def_embedding.stage_defs(extraction.file_path, extraction.defs)
+        elif not extraction.defs and self._file_embedding is not None:
+            self._file_embedding.stage_file(
+                extraction.file_path,
+                extraction.content_text,
+                defs=extraction.defs,
+                imports=extraction.imports,
+            )
+
+    def query_file_embeddings(self, text: str) -> list[tuple[str, float]]:
+        """File-level semantic search for non-code files.
+
+        Returns (relative_path, cosine_similarity) pairs ranked by similarity.
+        Only searches the non-code file embedding index (config, docs, build files).
+        All files with positive similarity are returned.
+        """
+        if self._file_embedding is None or self._file_embedding.count == 0:
+            return []
+        return self._file_embedding.query(text)
+
+    def query_def_embeddings(self, text: str) -> list[tuple[str, float]]:
+        """Per-DefFact semantic search for code objects.
+
+        Returns (def_uid, cosine_similarity) pairs ranked by similarity.
+        Searches the per-def embedding index (functions, classes, methods, etc.).
+        All defs with positive similarity are returned.
+        """
+        if self._def_embedding is None or self._def_embedding.count == 0:
+            return []
+        return self._def_embedding.query(text)
+
+    def batch_get_defs(self, def_uids: list[str]) -> dict[str, DefFact]:
+        """Get DefFacts by UID, using an in-memory cache.
+
+        On first call, loads ALL DefFacts from the database into memory
+        (~25 MB for the largest repos). Subsequent calls return from
+        cache with zero DB overhead.
+        """
+        if not def_uids:
+            return {}
+        if self._def_cache is None:
+            with self.db.session() as session:
+                all_defs = list(session.exec(select(DefFact)).all())
+                # Expunge so objects are usable outside the session
+                for d in all_defs:
+                    session.expunge(d)
+                self._def_cache = {d.def_uid: d for d in all_defs}
+                log.debug(
+                    "def_cache.loaded",
+                    count=len(self._def_cache),
+                )
+        return {uid: self._def_cache[uid] for uid in def_uids if uid in self._def_cache}
+
+    def _share_embedding_model(self) -> None:
+        """Share the ONNX model between file and def embedding indices.
+
+        Avoids loading the same ~67 MB model twice. Whichever index has
+        a loaded model shares it with the other.
+        """
+        fe = self._file_embedding
+        de = self._def_embedding
+        if fe is None or de is None:
+            return
+        if fe._model is not None and de._model is None:
+            de.set_shared_model(fe._model, fe._batch_size)
+        elif de._model is not None and fe._model is None:
+            fe._model = de._model
+            fe._batch_size = de._batch_size
+
+    def _commit_embeddings(
+        self,
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> int:
+        """Commit both embedding indices with model sharing.
+
+        Ensures the ONNX model is loaded only once across both indices.
+        Progress callback receives cumulative (done, grand_total) across
+        both indices — the total never changes mid-stream.
+
+        Returns total number of items embedded.
+        """
+        fe = self._file_embedding
+        de = self._def_embedding
+        fe_has = fe is not None and fe.has_staged_changes()
+        de_has = de is not None and de.has_staged_changes()
+
+        if not fe_has and not de_has:
+            return 0
+
+        # Compute grand total ONCE so progress never jumps
+        fe_count = len(fe._staged_files) if fe_has and fe is not None else 0
+        de_count = (
+            sum(len(v) for v in de._staged_defs.values())
+            if de_has and de is not None
+            else 0
+        )
+        grand_total = fe_count + de_count
+
+        embedded = 0
+        offset = 0
+
+        if fe_has:
+            assert fe is not None
+            if on_progress is not None:
+                _gt = grand_total
+                def _fe_progress(done: int, total: int) -> None:  # noqa: ARG001
+                    on_progress(done, _gt)
+                embedded += fe.commit_staged(on_progress=_fe_progress)
+            else:
+                embedded += fe.commit_staged()
+            offset = fe_count
+            # Share model with def embedding
+            if de is not None and fe._model is not None and de._model is None:
+                de.set_shared_model(fe._model, fe._batch_size)
+
+        if de_has:
+            assert de is not None
+            # If file embedding didn't run, share model the other way
+            if fe is not None and de._model is not None and fe._model is None:
+                fe._model = de._model
+                fe._batch_size = de._batch_size
+            if on_progress is not None:
+                _off = offset
+                _gt2 = grand_total
+                def _de_progress(done: int, total: int) -> None:  # noqa: ARG001
+                    on_progress(_off + done, _gt2)
+                embedded += de.commit_staged(on_progress=_de_progress)
+            else:
+                embedded += de.commit_staged()
+
+        return embedded
 
     def _clear_all_structural_facts(self) -> None:
         """Clear all structural facts from the database.
 
         Used before full reindex to avoid duplicate key violations.
         """
+        # Clear both embedding indices alongside structural facts
+        if self._file_embedding is not None:
+            self._file_embedding.clear()
+        if self._def_embedding is not None:
+            self._def_embedding.clear()
+
         with self.db.session() as session:
             # Clear all fact tables
             session.exec(text("DELETE FROM def_facts"))  # type: ignore[call-overload]
@@ -2542,12 +3050,22 @@ class IndexCoordinator:
 
         all_files: list[str] = []
         for dirpath, dirnames, filenames in os.walk(self.repo_root):
-            # Prune dirs in-place to skip expensive subtrees
-            dirnames[:] = [d for d in dirnames if not checker.should_prune_dir(d)]
-
             dirpath_p = Path(dirpath)
             rel_dir = str(dirpath_p.relative_to(self.repo_root)).replace("\\", "/")
             prefix = "" if rel_dir == "." else rel_dir
+
+            # Prune dirs in-place to skip expensive subtrees.
+            # Two checks: (1) bare name against hardcoded/default sets,
+            # (2) full relative path against .cplignore/.gitignore patterns.
+            pruned: list[str] = []
+            for d in dirnames:
+                if checker.should_prune_dir(d):
+                    continue
+                child_rel = f"{prefix}/{d}" if prefix else d
+                if checker.should_prune_dir_path(child_rel):
+                    continue
+                pruned.append(d)
+            dirnames[:] = pruned
 
             # Load nested ignore files (skip root — already loaded above)
             if prefix:
@@ -2642,7 +3160,7 @@ class IndexCoordinator:
 
 
 __all__ = [
-    "IndexCoordinator",
+    "IndexCoordinatorEngine",
     "IndexStats",
     "InitResult",
     "SearchMode",

@@ -2,7 +2,6 @@
 
 Provides a single two-phase confirmation protocol used by all gated operations:
 - Destructive actions (git reset --hard)
-- Expensive reads (read_file_full on large files, read_source cap violations)
 - Budget resets
 - Pattern-break interventions (thrash detection)
 
@@ -35,6 +34,7 @@ class GateSpec:
         reason_min_chars: Minimum characters required in the gate_reason.
         reason_prompt: The question posed to the agent to justify continuation.
         expires_calls: Token dies after this many non-confirming tool calls.
+        expires_seconds: Token dies after this many seconds (if set).
         message: Human-readable explanation of why the gate fired.
     """
 
@@ -42,6 +42,7 @@ class GateSpec:
     reason_min_chars: int
     reason_prompt: str
     expires_calls: int = 3
+    expires_seconds: float | None = None
     message: str = ""
 
 
@@ -101,6 +102,7 @@ class GateManager:
             "reason_min_chars": spec.reason_min_chars,
             "reason_prompt": spec.reason_prompt,
             "expires_calls": spec.expires_calls,
+            "expires_seconds": spec.expires_seconds,
             "message": spec.message,
         }
 
@@ -116,6 +118,13 @@ class GateManager:
             return GateResult(
                 ok=False,
                 error="Invalid or expired gate token. Request a new one.",
+            )
+
+        if self._is_expired(pending):
+            del self._pending[gate_token]
+            return GateResult(
+                ok=False,
+                error="Gate token expired. Request a new one.",
             )
 
         reason = gate_reason.strip()
@@ -142,11 +151,30 @@ class GateManager:
         """
         expired: list[str] = []
         for gate_id, gate in self._pending.items():
+            if self._is_expired(gate):
+                expired.append(gate_id)
+                continue
             gate.calls_remaining -= 1
             if gate.calls_remaining <= 0:
                 expired.append(gate_id)
         for gate_id in expired:
             del self._pending[gate_id]
+
+    def _is_expired(self, gate: PendingGate) -> bool:
+        """Check time-based expiration for a pending gate."""
+        if gate.spec.expires_seconds is None:
+            return False
+        return (time.monotonic() - gate.issued_at) >= gate.spec.expires_seconds
+
+    def _expire_time_based_gates(self) -> None:
+        """Remove gates that have exceeded their time-based expiry."""
+        expired = [gate_id for gate_id, gate in self._pending.items() if self._is_expired(gate)]
+        for gate_id in expired:
+            del self._pending[gate_id]
+
+    def expire_time_based_gates(self) -> None:
+        """Public helper to evict time-expired gates."""
+        self._expire_time_based_gates()
 
     def has_pending(self, kind: str | None = None) -> bool:
         """Check if any gates are pending, optionally filtered by kind."""
@@ -172,36 +200,11 @@ EXPENSIVE_READ_GATE = GateSpec(
     kind="expensive_read",
     reason_min_chars=50,
     reason_prompt=(
-        "Why do you need the entire file? What specific information can't you "
-        "get via read_scaffold (structure/signatures) + search(mode=references) "
-        "+ read_source on the spans?"
+        "Why do you need the entire file? recon provides scaffolds. "
+        "Read files via terminal (cat/head) using paths from scaffolds."
     ),
     expires_calls=3,
 )
-
-READ_CAP_EXCEEDED_GATE = GateSpec(
-    kind="expensive_read",
-    reason_min_chars=50,
-    reason_prompt=(
-        "Why do you need to exceed read caps? Can you split into smaller "
-        "read_source calls or use search to narrow down the relevant spans?"
-    ),
-    expires_calls=3,
-)
-
-
-def budget_reset_gate(has_mutations: bool) -> GateSpec:
-    """Create a gate spec for budget reset based on mutation state."""
-    min_chars = 50 if has_mutations else 250
-    return GateSpec(
-        kind="budget_reset",
-        reason_min_chars=min_chars,
-        reason_prompt=(
-            "What new information do you need that the previous budget window didn't provide?"
-        ),
-        expires_calls=3,
-        message=f"Budget reset (min {min_chars} char justification required).",
-    )
 
 
 BROAD_FILTER_TEST_GATE = GateSpec(
@@ -244,21 +247,16 @@ def has_recent_scoped_test(window: deque[CallRecord]) -> bool:
 # =============================================================================
 
 TOOL_CATEGORIES: dict[str, str] = {
-    "search": "search",
-    "read_source": "read",
-    "read_file_full": "read_full",
-    "write_source": "write",
+    "recon": "search",
+    "refactor_edit": "write",
+    "refactor_plan": "write",
     "refactor_rename": "refactor",
     "refactor_move": "refactor",
-    "refactor_impact": "refactor",
-    "refactor_apply": "refactor",
+    "recon_impact": "search",
+    "refactor_commit": "refactor",
     "refactor_cancel": "meta",
-    "refactor_inspect": "meta",
     "semantic_diff": "diff",
-    "map_repo": "meta",
-    "list_files": "meta",
     "describe": "meta",
-    "reset_budget": "meta",
     "checkpoint": "test",
 }
 
@@ -400,28 +398,9 @@ class CallPatternDetector:
 # =============================================================================
 
 _SEARCH_WORKFLOW: dict[str, str] = {
-    "if_exploring_structure": (
-        "Use map_repo(include=['structure','dependencies']) for overview, then one targeted search"
-    ),
-    "if_finding_references": (
-        "Use search(mode='references', enrichment='function') - "
-        "one call gets callers with full function bodies"
-    ),
-    "if_reading_code": ("Switch to read_source with multiple targets per call (up to 20)"),
-    "if_ready_to_act": ("Proceed to write_source, refactor_rename, or checkpoint"),
-}
-
-_READ_WORKFLOW: dict[str, str] = {
-    "if_exploring_file_structure": (
-        "Use read_scaffold(path) to see imports, classes, functions, and signatures "
-        "without reading source — then read_source on specific symbols"
-    ),
-    "if_looking_for_callers": ("Use search(mode='references') instead of reading files manually"),
-    "if_understanding_a_function": (
-        "Use search(mode='definitions', enrichment='function') for edit-ready code"
-    ),
-    "if_reading_multiple_spans": ("Batch up to 20 targets in one read_source call"),
-    "if_ready_to_act": ("Proceed to write_source, refactor_rename, or checkpoint"),
+    "if_exploring_structure": ("recon includes a repo_map — use it for structural orientation"),
+    "if_reading_code": ("Read files via terminal (cat/head) using paths from scaffolds"),
+    "if_ready_to_act": ("Proceed to refactor_plan → refactor_edit → checkpoint"),
 }
 
 
@@ -455,9 +434,8 @@ def _check_pure_search_chain(window: deque[CallRecord]) -> PatternMatch | None:
     else:
         cause = "inefficient"
         reason_prompt = (
-            "You're making many individual searches. Can you use "
-            "search(mode='references', enrichment='function') to get "
-            "callers with bodies in one call? Or map_repo for structure?"
+            "You're making many recon calls. Do you have enough context "
+            "to proceed? Read files via terminal (cat/head)."
         )
 
     return PatternMatch(
@@ -469,122 +447,6 @@ def _check_pure_search_chain(window: deque[CallRecord]) -> PatternMatch | None:
             f"Cause: {cause.replace('_', ' ')}."
         ),
         reason_prompt=reason_prompt,
-        suggested_workflow=_SEARCH_WORKFLOW,
-    )
-
-
-def _check_read_spiral(window: deque[CallRecord]) -> PatternMatch | None:
-    """Detect 6+ reads touching <= 1 unique file (re-reading same file).
-
-    Even large files should be read with batched targets (up to 20 per
-    call). Six separate single-file reads means the agent is making
-    round-trips instead of batching.
-    """
-    recent = list(window)[-10:]
-    read_records = [r for r in recent if r.category in ("read", "read_full")]
-    if len(read_records) < 6:
-        return None
-
-    all_files: set[str] = set()
-    for r in read_records:
-        all_files.update(r.files)
-
-    if len(all_files) > 1:
-        return None
-
-    return PatternMatch(
-        pattern_name="read_spiral",
-        severity="break",
-        cause="over_gathering",
-        message=(
-            f"{len(read_records)} reads touching only {len(all_files)} unique file(s). "
-            "You're re-reading files you've already seen."
-        ),
-        reason_prompt=(
-            "You've read these files multiple times. What specific uncertainty "
-            "remains? Batch up to 20 targets in one read_source call for "
-            "different spans of the same file."
-        ),
-        suggested_workflow=_READ_WORKFLOW,
-    )
-
-
-def _check_scatter_read(window: deque[CallRecord]) -> PatternMatch | None:
-    """Detect 6+ reads across 5+ different files (unfocused)."""
-    read_records = [r for r in window if r.category in ("read", "read_full")]
-    if len(read_records) < 6:
-        return None
-
-    all_files: set[str] = set()
-    for r in read_records:
-        all_files.update(r.files)
-
-    if len(all_files) < 5:
-        return None
-
-    # Check if reads have 1 target each (inefficient batching)
-    single_target_reads = sum(1 for r in read_records if len(r.files) == 1)
-    if single_target_reads >= 4:
-        cause = "inefficient"
-        reason_prompt = (
-            "You're reading files one at a time. Use read_scaffold(path) to see "
-            "a file's structure first, then read_source on specific symbols. "
-            "Batch up to 20 targets in a single read_source call."
-        )
-    else:
-        cause = "over_gathering"
-        reason_prompt = (
-            f"You've read {len(all_files)} different files. "
-            "Use read_scaffold to orient on a file's structure before reading. "
-            "Which files are actually relevant to your change?"
-        )
-
-    return PatternMatch(
-        pattern_name="scatter_read",
-        severity="warn",
-        cause=cause,
-        message=(f"{len(read_records)} reads across {len(all_files)} different files."),
-        reason_prompt=reason_prompt,
-        suggested_workflow=_READ_WORKFLOW,
-    )
-
-
-def _check_search_read_loop(window: deque[CallRecord]) -> PatternMatch | None:
-    """Detect repeated search-then-read cycling.
-
-    Instead of requiring strict alternation, count how many
-    search->read "rounds" appear in the window.  A round is any
-    search followed (eventually) by a read before another search
-    starts a new round.  This catches realistic loops like
-    search, search, read, search, read, read -- not just perfect
-    ABABAB alternation.
-    """
-    rounds = 0
-    saw_search = False
-    for r in window:
-        cat = r.category
-        if cat == "search":
-            saw_search = True
-        elif cat in ("read", "read_full") and saw_search:
-            rounds += 1
-            saw_search = False  # reset for next round
-
-    if rounds < 4:
-        return None
-
-    return PatternMatch(
-        pattern_name="search_read_loop",
-        severity="warn",
-        cause="inefficient",
-        message=(
-            f"{rounds} search-then-read rounds detected. "
-            "You're bouncing between searching and reading."
-        ),
-        reason_prompt=(
-            "Use search(enrichment='function') to get source code with "
-            "search results directly, eliminating the search-then-read "
-            "round-trip."
-        ),
         suggested_workflow=_SEARCH_WORKFLOW,
     )
 
@@ -606,91 +468,17 @@ def _check_zero_result_searches(window: deque[CallRecord]) -> PatternMatch | Non
             "Your search strategy needs adjustment."
         ),
         reason_prompt=(
-            "Multiple searches returned nothing. Try: mode='lexical' for "
-            "text patterns, map_repo to discover correct module/symbol names, "
-            "or list_files to verify paths exist."
+            "Multiple recon calls returned nothing. Try using more specific "
+            "terms, symbol names, or file paths in your task description."
         ),
         suggested_workflow=_SEARCH_WORKFLOW,
     )
 
 
-def _check_full_file_creep(window: deque[CallRecord]) -> PatternMatch | None:
-    """Detect 3+ read_file_full calls in the window."""
-    full_reads = [r for r in window if r.category == "read_full"]
-    if len(full_reads) < 3:
-        return None
-
-    return PatternMatch(
-        pattern_name="full_file_creep",
-        severity="warn",
-        cause="inefficient",
-        message=(
-            f"{len(full_reads)} full-file reads in recent calls. "
-            "Full reads are expensive - most tasks only need specific spans."
-        ),
-        reason_prompt=(
-            "Use read_scaffold(path) for structural overview (imports, signatures, "
-            "hierarchy) without downloading source. Then read_source on the "
-            "specific symbols you need."
-        ),
-        suggested_workflow=_READ_WORKFLOW,
-    )
-
-
 _BYPASS_WORKFLOW: dict[str, str] = {
-    "for_editing": "Use write_source with span edits — NOT sed, awk, echo, or tee",
-    "for_searching": "Use search(mode='lexical') — NOT grep, rg, or ag",
-    "for_reading": "Use read_source with multiple targets — NOT cat, head, or tail",
+    "for_editing": "Use refactor_edit with find-and-replace — NOT sed, awk, echo, or tee",
     "for_git": "Use checkpoint with commit_message for staging+committing — for other git ops, use terminal",
 }
-
-
-def _check_phantom_read(window: deque[CallRecord]) -> PatternMatch | None:
-    """Detect search followed by write with no read in between.
-
-    If the agent searched for code then jumped straight to editing without
-    reading via read_source/read_file_full, it likely used cat/head/grep
-    in the terminal to read the actual source content.
-    """
-    # Find the most recent write_source/refactor_apply
-    last_write_idx = None
-    for i in range(len(window) - 1, -1, -1):
-        if window[i].category in ("write", "refactor"):
-            last_write_idx = i
-            break
-
-    if last_write_idx is None:
-        return None
-
-    # Look for any search before this write
-    has_search_before = any(window[i].category == "search" for i in range(last_write_idx))
-    if not has_search_before:
-        return None  # No search → write sequence to flag
-
-    # Check for reads between the first search and the write
-    has_read_between = any(
-        window[i].category in ("read", "read_full") for i in range(last_write_idx)
-    )
-    if has_read_between:
-        return None  # Agent properly read via MCP before writing
-
-    return PatternMatch(
-        pattern_name="phantom_read",
-        severity="warn",
-        cause="tool_bypass",
-        message=(
-            "You searched for code then wrote edits without reading through "
-            "read_source first. search never returns source text — you need "
-            "read_source to get file content, expected_content, and file_sha256. "
-            "If you read files via cat/head/grep, that is FORBIDDEN."
-        ),
-        reason_prompt=(
-            "How did you obtain the source content for your edit? "
-            "read_source was never called between your search and write. "
-            "Use read_source to get expected_content and file_sha256 before editing."
-        ),
-        suggested_workflow=_BYPASS_WORKFLOW,
-    )
 
 
 # Pattern checks in priority order:
@@ -699,12 +487,7 @@ def _check_phantom_read(window: deque[CallRecord]) -> PatternMatch | None:
 # 3. General warn patterns (workflow efficiency hints)
 _PATTERN_CHECKS = [
     _check_pure_search_chain,  # break
-    _check_read_spiral,  # break
-    _check_phantom_read,  # warn (bypass)
-    _check_scatter_read,  # warn
-    _check_search_read_loop,  # warn
     _check_zero_result_searches,  # warn
-    _check_full_file_creep,  # warn
 ]
 
 

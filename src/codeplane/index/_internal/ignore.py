@@ -145,6 +145,51 @@ class IgnoreChecker:
         # Not in any prunable set
         return False
 
+    def should_prune_dir_path(self, rel_dir_path: str) -> bool:
+        """Check if a directory path should be pruned based on .cplignore patterns.
+
+        Unlike ``should_prune_dir`` (which only checks bare directory names
+        against the hardcoded/default sets), this method checks the full
+        relative path against all loaded .cplignore and .gitignore patterns.
+
+        This ensures that user-defined directory exclusions like
+        ``ranking/clones/`` actually prevent the walker from descending
+        into those directories rather than just filtering their files.
+
+        Args:
+            rel_dir_path: Relative directory path in POSIX format
+                (e.g. ``"ranking/clones"``).
+
+        Returns:
+            True if directory should be pruned.
+        """
+        if not rel_dir_path or rel_dir_path == ".":
+            return False
+
+        # Check the directory path (with and without trailing /) against patterns
+        for pattern in self._patterns:
+            if pattern.startswith("!"):
+                if fnmatch.fnmatch(rel_dir_path, pattern[1:]) or fnmatch.fnmatch(
+                    rel_dir_path + "/", pattern[1:]
+                ):
+                    return False
+                continue
+
+            if fnmatch.fnmatch(rel_dir_path, pattern) or fnmatch.fnmatch(
+                rel_dir_path + "/", pattern
+            ):
+                return True
+
+            # Also check with trailing ** stripped (directory patterns expand to dir/**)
+            if pattern.endswith("**"):
+                dir_pattern = pattern[:-2]  # "ranking/clones/**" -> "ranking/clones/"
+                if rel_dir_path + "/" == dir_pattern or fnmatch.fnmatch(
+                    rel_dir_path + "/", dir_pattern
+                ):
+                    return True
+
+        return False
+
     @property
     def cplignore_paths(self) -> list[Path]:
         """Return list of all .cplignore files that were loaded.

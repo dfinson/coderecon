@@ -23,7 +23,7 @@ from codeplane.config.models import IndexerConfig
 from codeplane.core.progress import pluralize, spinner, status
 
 if TYPE_CHECKING:
-    from codeplane.index.ops import IndexCoordinator, IndexStats
+    from codeplane.index.ops import IndexCoordinatorEngine, IndexStats
 
 logger = structlog.get_logger()
 
@@ -56,10 +56,10 @@ class BackgroundIndexer:
     - HTTP server runs in main asyncio loop
     - Indexing work is submitted to ThreadPoolExecutor
     - Queue batches rapid changes with debouncing
-    - IndexCoordinator locks ensure thread safety
+    - IndexCoordinatorEngine locks ensure thread safety
     """
 
-    coordinator: IndexCoordinator
+    coordinator: IndexCoordinatorEngine
     config: IndexerConfig = field(default_factory=IndexerConfig)
 
     _state: IndexerState = field(default=IndexerState.IDLE, init=False)

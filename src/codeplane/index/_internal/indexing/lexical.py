@@ -743,6 +743,116 @@ class LexicalIndex:
             return matches[0]
         return ("", 1)
 
+    def score_files_bm25(
+        self,
+        query: str,
+        context_id: int | None = None,
+        limit: int = 500,
+    ) -> dict[str, float]:
+        """Score files by BM25 relevance to *query* using Tantivy.
+
+        This is **parallel plumbing** — it does NOT touch the existing
+        ``search()`` flow (which ignores BM25 scores and returns per-line
+        matches).  Instead it returns a ``{path: max_bm25_score}`` map
+        suitable for gating/ranking in downstream consumers like recon.
+
+        Differences from ``search()``:
+        - Uses **OR** semantics (any term matches) so partial overlap still
+          scores.
+        - Returns the **max BM25 score per file** (when Tantivy finds a
+          document, the score reflects how well its content matches the
+          query).
+        - Does NOT extract snippets — purely a scoring pass.
+        - A file absent from the returned dict has zero relevance.
+
+        Args:
+            query: Natural-language query (task description).
+            context_id: Optional context filter.
+            limit: Max documents to score (default 500, covers most repos).
+
+        Returns:
+            Dict mapping repo-relative file path → BM25 score (> 0).
+        """
+        self._ensure_initialized()
+
+        # Build an OR query from the terms so partial overlap still yields
+        # a positive score.  Quoted phrases are kept intact.
+        # Tokenize on whitespace, strip punctuation that isn't part of
+        # meaningful identifiers, and escape Tantivy syntax characters.
+        raw_tokens = re.findall(r'"[^"]+"|\S+', query)
+        if not raw_tokens:
+            return {}
+
+        # Tantivy query syntax characters (including : for field prefix,
+        # . and , which commonly appear in natural language task text).
+        _syntax_chars = set(r'+-&|!(){}[]^~*?:\\/".@,;')
+
+        def _clean_token(tok: str) -> str:
+            """Strip Tantivy syntax chars from a token entirely.
+
+            For BM25 scoring we want plain words, not escaped operators.
+            Stripping is safer than escaping because some characters
+            (notably ``:`` for field prefixes) cause parse errors even
+            when escaped in certain positions.
+            """
+            cleaned = "".join(ch for ch in tok if ch not in _syntax_chars)
+            return cleaned
+
+        parts: list[str] = []
+        for token in raw_tokens:
+            upper = token.upper()
+            if upper in ("AND", "OR", "NOT"):
+                continue  # strip boolean operators from the task text
+            if token.startswith('"') and token.endswith('"'):
+                # Strip quotes and clean the inner text
+                inner = token[1:-1]
+                cleaned = _clean_token(inner)
+                if cleaned:
+                    parts.append(f'"{cleaned}"')
+            else:
+                cleaned = _clean_token(token)
+                if cleaned and len(cleaned) >= 2:  # skip single-char noise
+                    parts.append(cleaned)
+
+        if not parts:
+            return {}
+
+        # OR-join so any token contributes score (unlike search() which AND-joins)
+        or_query = " OR ".join(parts)
+        full_query = (
+            f"({or_query}) AND context_id:{context_id}" if context_id is not None else or_query
+        )
+
+        searcher = self._index.searcher()
+
+        try:
+            parsed = self._index.parse_query(full_query, ["content", "symbols", "path"])
+        except ValueError:
+            # Bad syntax — try escaping the whole thing
+            escaped = self._escape_query(query)
+            full_esc = (
+                f"({escaped}) AND context_id:{context_id}" if context_id is not None else escaped
+            )
+            try:
+                parsed = self._index.parse_query(full_esc, ["content", "symbols", "path"])
+            except ValueError:
+                return {}
+
+        top_docs = searcher.search(parsed, limit=limit).hits
+
+        scores: dict[str, float] = {}
+        for bm25_score, doc_addr in top_docs:
+            doc = searcher.doc(doc_addr)
+            file_path = doc.get_first("path") or ""
+            if not file_path:
+                continue
+            # Keep max score per file (a file may appear once per doc, but
+            # defensive in case of duplicates)
+            if file_path not in scores or bm25_score > scores[file_path]:
+                scores[file_path] = float(bm25_score)
+
+        return scores
+
     def clear(self) -> None:
         """Clear all documents from the index."""
         self._ensure_initialized()

@@ -43,14 +43,15 @@ class TestCreateMcpServer:
         assert len(get_tools_sync(mcp)) > 0
 
     def test_has_expected_tools(self, mock_context: MagicMock) -> None:
-        """Has core tools registered."""
+        """Has core v2 tools registered."""
         mcp = create_mcp_server(mock_context)
         from codeplane.mcp._compat import get_tools_sync
 
         tool_names = set(get_tools_sync(mcp).keys())
-        assert "read_source" in tool_names
-        assert "search" in tool_names
+        assert "recon" in tool_names
+        assert "refactor_edit" in tool_names
         assert "checkpoint" in tool_names
+        assert "describe" in tool_names
 
 
 class TestPatchFastmcpDocket:
@@ -129,14 +130,14 @@ class TestEnrichToolDescriptions:
         mcp = FastMCP("test")
 
         @mcp.tool()
-        def search(query: str) -> str:
+        def checkpoint(changed_files: list[str]) -> str:
             """Original description."""
-            return query
+            return str(changed_files)
 
         _enrich_tool_descriptions(mcp)
         tools = get_tools_sync(mcp)
-        # 'search' has TOOL_DOCS entry, description should be enriched
-        desc = tools["search"].description or ""
+        # 'checkpoint' has TOOL_DOCS entry, description should be enriched
+        desc = tools["checkpoint"].description or ""
         assert len(desc) > len("Original description.")
 
     def test_no_change_for_unknown_tool(self) -> None:

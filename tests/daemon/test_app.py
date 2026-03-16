@@ -27,7 +27,7 @@ def temp_repo(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def mock_coordinator() -> MagicMock:
-    """Create a mock IndexCoordinator."""
+    """Create a mock IndexCoordinatorEngine."""
     coordinator = MagicMock()
     coordinator.get_db_path.return_value = None
     return coordinator

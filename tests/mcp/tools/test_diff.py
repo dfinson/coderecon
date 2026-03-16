@@ -16,6 +16,9 @@ from codeplane.index._internal.diff.models import (
 )
 from codeplane.mcp.tools.diff import (
     _build_agentic_hint,
+    _classify_domains,
+    _detect_cross_domain_edges,
+    _domain_key,
     _result_to_dict,
     _result_to_text,
 )
@@ -33,9 +36,10 @@ def _change(
     qualified_name: str | None = None,
     impact: ImpactInfo | None = None,
     behavior_risk: str = "unknown",
+    path: str = "src/a.py",
 ) -> StructuralChange:
     return StructuralChange(
-        path="src/a.py",
+        path=path,
         kind=kind,
         name=name,
         qualified_name=qualified_name,
@@ -135,7 +139,7 @@ class TestAgenticHint:
     def test_affected_tests_hint(self) -> None:
         impact = ImpactInfo(affected_test_files=["tests/test_a.py"])
         hint = _build_agentic_hint(_result([_change("removed", "breaking", "foo", impact=impact)]))
-        assert "Run 1 affected test files" in hint
+        assert "1 affected test files" in hint
 
     def test_high_risk_noted(self) -> None:
         hint = _build_agentic_hint(
@@ -449,8 +453,11 @@ class TestResultToText:
         d = _result_to_text(_result([c]))
         lines = d["structural_changes"]
         assert isinstance(lines, list)
-        assert len(lines) == 1
-        assert "added function new_func" in lines[0]
+        # First line is the risk header comment
+        assert lines[0].startswith("#")
+        content_lines = [ln for ln in lines if not ln.startswith("#")]
+        assert len(content_lines) == 1
+        assert "added function new_func" in content_lines[0]
 
     def test_non_structural_changes_as_text(self) -> None:
         fc = _file_change(path="data/config.json", status="modified", category="config")
@@ -497,11 +504,229 @@ class TestResultToText:
             _change(change="body_changed", name="c"),
         ]
         d = _result_to_text(_result(changes))
-        assert len(d["structural_changes"]) == 3
+        content_lines = [ln for ln in d["structural_changes"] if not ln.startswith("#")]
+        assert len(content_lines) == 3
 
     def test_signature_change_shows_sigs(self) -> None:
         c = _change(change="signature_changed", name="func")
         d = _result_to_text(_result([c]))
-        line = d["structural_changes"][0]
-        assert "old:" in line
-        assert "new:" in line
+        content_lines = [ln for ln in d["structural_changes"] if not ln.startswith("#")]
+        assert "old:" in content_lines[0]
+        assert "new:" in content_lines[0]
+
+    def test_risk_unknown_header_comment(self) -> None:
+        """risk:unknown is omitted; header comment documents convention."""
+        c = _change(change="added", name="foo", behavior_risk="unknown")
+        d = _result_to_text(_result([c]))
+        headers = [ln for ln in d["structural_changes"] if ln.startswith("#")]
+        assert any("entries without risk:" in h for h in headers)
+        content = [ln for ln in d["structural_changes"] if not ln.startswith("#")]
+        assert "risk:" not in content[0]
+
+    def test_no_headers_when_empty(self) -> None:
+        """Empty result produces no header comments."""
+        d = _result_to_text(_result())
+        assert d["structural_changes"] == []
+
+    def test_nested_path_dedup(self) -> None:
+        """Nested entries omit path, showing only :start-end."""
+        inner = StructuralChange(
+            path="src/a.py",
+            kind="method",
+            name="inner_fn",
+            qualified_name=None,
+            change="body_changed",
+            structural_severity="non_breaking",
+            behavior_change_risk="low",
+            old_sig=None,
+            new_sig=None,
+            impact=None,
+            start_line=30,
+            end_line=40,
+        )
+        outer = StructuralChange(
+            path="src/a.py",
+            kind="class",
+            name="MyClass",
+            qualified_name=None,
+            change="body_changed",
+            structural_severity="non_breaking",
+            behavior_change_risk="low",
+            old_sig=None,
+            new_sig=None,
+            impact=None,
+            start_line=10,
+            end_line=50,
+            nested_changes=[inner],
+        )
+        d = _result_to_text(_result([outer]))
+        content = [ln for ln in d["structural_changes"] if not ln.startswith("#")]
+        assert len(content) == 2
+        # Parent has full path
+        assert "src/a.py:10-50" in content[0]
+        # Nested has only :start-end (no path)
+        assert ":30-40" in content[1]
+        assert "src/a.py" not in content[1]
+
+    def test_test_aliases(self) -> None:
+        """Test paths appearing 3+ times get aliased."""
+        impact = ImpactInfo(
+            affected_test_files=["tests/very/long/path/test_module.py"],
+        )
+        # Create 4 changes all referencing the same test file
+        changes = [_change(change="body_changed", name=f"fn{i}", impact=impact) for i in range(4)]
+        d = _result_to_text(_result(changes))
+        headers = [ln for ln in d["structural_changes"] if ln.startswith("#")]
+        alias_headers = [h for h in headers if "test aliases:" in h]
+        assert len(alias_headers) == 1
+        assert "t1=tests/very/long/path/test_module.py" in alias_headers[0]
+        # Content uses alias
+        content = [ln for ln in d["structural_changes"] if not ln.startswith("#")]
+        assert all("tests/very/long/path/test_module.py" not in ln for ln in content)
+        assert any("t1" in ln for ln in content)
+
+    def test_no_alias_header_when_no_aliases(self) -> None:
+        """No test alias header when no test paths repeat enough."""
+        c = _change(change="added", name="foo")
+        d = _result_to_text(_result([c]))
+        headers = [ln for ln in d["structural_changes"] if ln.startswith("#")]
+        assert not any("test aliases:" in h for h in headers)
+
+
+# =============================================================================
+# Domain Classification
+# =============================================================================
+
+
+class TestDomainKey:
+    """Unit tests for _domain_key."""
+
+    def test_deep_path(self) -> None:
+        assert _domain_key("src/codeplane/mcp/tools/diff.py") == "src/codeplane"
+
+    def test_two_segments(self) -> None:
+        assert _domain_key("tests/mcp/test_foo.py") == "tests/mcp"
+
+    def test_shallow_path(self) -> None:
+        assert _domain_key("src/foo.py") == "src"
+
+    def test_root_file(self) -> None:
+        assert _domain_key("README.md") == "(root)"
+
+
+class TestClassifyDomains:
+    """Unit tests for _classify_domains."""
+
+    def test_single_domain(self) -> None:
+        changes = [
+            _change(change="added", name="foo", path="src/codeplane/a.py"),
+            _change(change="removed", name="bar", path="src/codeplane/b.py"),
+        ]
+        domains = _classify_domains(changes)
+        assert len(domains) == 1
+        assert domains[0]["name"] == "src/codeplane"
+        assert domains[0]["change_count"] == 2
+        assert domains[0]["review_priority"] == 1
+
+    def test_multi_domain_sorted_by_risk(self) -> None:
+        changes = [
+            _change(change="added", name="foo", path="src/codeplane/a.py"),
+            _change(
+                change="removed",
+                name="bar",
+                structural_severity="breaking",
+                path="tests/mcp/test_a.py",
+            ),
+        ]
+        domains = _classify_domains(changes)
+        assert len(domains) == 2
+        # Breaking domain should be priority 1
+        assert domains[0]["name"] == "tests/mcp"
+        assert domains[0]["breaking_count"] == 1
+        assert domains[0]["review_priority"] == 1
+        assert domains[1]["review_priority"] == 2
+
+    def test_high_risk_body_changes_counted(self) -> None:
+        changes = [
+            _change(
+                change="body_changed",
+                name="fn",
+                path="src/codeplane/x.py",
+                behavior_risk="high",
+            ),
+        ]
+        domains = _classify_domains(changes)
+        assert domains[0]["high_risk_count"] == 1
+
+    def test_non_structural_included_in_files(self) -> None:
+        changes = [_change(change="added", name="foo", path="src/codeplane/a.py")]
+        non_structural = [
+            FileChangeInfo(path="src/codeplane/b.py", status="modified", category="config")
+        ]
+        domains = _classify_domains(changes, non_structural)
+        assert "src/codeplane/b.py" in domains[0]["files"]
+
+
+class TestDetectCrossDomainEdges:
+    """Unit tests for _detect_cross_domain_edges."""
+
+    def test_no_edges_single_domain(self) -> None:
+        changes = [
+            _change(change="added", name="foo", path="src/codeplane/a.py"),
+            _change(change="added", name="bar", path="src/codeplane/b.py"),
+        ]
+        domains = _classify_domains(changes)
+        edges = _detect_cross_domain_edges(changes, domains)
+        assert edges == []
+
+    def test_cross_domain_edge_detected(self) -> None:
+        imp = ImpactInfo(importing_files=["tests/mcp/test_a.py"])
+        changes = [
+            _change(change="removed", name="foo", path="src/codeplane/a.py", impact=imp),
+            _change(change="added", name="bar", path="tests/mcp/test_a.py"),
+        ]
+        domains = _classify_domains(changes)
+        edges = _detect_cross_domain_edges(changes, domains)
+        assert len(edges) == 1
+        assert edges[0]["from_domain"] == "src/codeplane"
+        assert edges[0]["to_domain"] == "tests/mcp"
+
+    def test_no_edge_for_same_domain_imports(self) -> None:
+        imp = ImpactInfo(importing_files=["src/codeplane/b.py"])
+        changes = [
+            _change(change="added", name="foo", path="src/codeplane/a.py", impact=imp),
+            _change(change="added", name="bar", path="src/codeplane/b.py"),
+        ]
+        domains = _classify_domains(changes)
+        edges = _detect_cross_domain_edges(changes, domains)
+        assert edges == []
+
+
+class TestMultiDomainHint:
+    """Test _build_agentic_hint with multi-domain changes."""
+
+    def test_review_plan_emitted(self) -> None:
+        changes = [
+            _change(
+                change="removed",
+                structural_severity="breaking",
+                name="foo",
+                path="src/codeplane/a.py",
+            ),
+            _change(change="added", name="bar", path="tests/mcp/test_a.py"),
+        ]
+        domains = _classify_domains(changes)
+        cross_edges = _detect_cross_domain_edges(changes, domains)
+        hint = _build_agentic_hint(_result(changes), domains, cross_edges)
+        assert "REVIEW PLAN" in hint
+        assert "2 domains" in hint
+
+    def test_single_domain_no_review_plan(self) -> None:
+        changes = [
+            _change(change="added", name="foo", path="src/codeplane/a.py"),
+            _change(change="added", name="bar", path="src/codeplane/b.py"),
+        ]
+        domains = _classify_domains(changes)
+        hint = _build_agentic_hint(_result(changes), domains)
+        assert "REVIEW PLAN" not in hint
+        assert "2 additions" in hint

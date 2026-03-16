@@ -2,15 +2,20 @@
 
 Covers:
 - SessionState dataclass and touch()
+- EditTicket dataclass
 - SessionManager.get_or_create()
 - SessionManager.get()
 - SessionManager.close()
 - SessionManager.cleanup_stale()
+- Exclusive lock for blocking tools (checkpoint, semantic_diff, map_repo)
 """
 
 from __future__ import annotations
 
+import asyncio
 import time
+
+import pytest
 
 from codeplane.config.models import TimeoutsConfig
 from codeplane.mcp.session import SessionManager, SessionState
@@ -291,3 +296,252 @@ class TestSessionManagerIntegration:
 
         assert mgr.get("s1").fingerprints["key"] == "value1"  # type: ignore[union-attr]
         assert mgr.get("s2").fingerprints["key"] == "value2"  # type: ignore[union-attr]
+
+
+# =========================================================================
+# Exclusive Lock Tests
+# =========================================================================
+
+
+class TestExclusiveLock:
+    """Tests for the exclusive session lock used by checkpoint/semantic_diff/map_repo."""
+
+    def test_exclusive_holder_default_none(self) -> None:
+        """Exclusive holder is None when no tool holds the lock."""
+        state = SessionState(session_id="x", created_at=0, last_active=0)
+        assert state.exclusive_holder is None
+
+    @pytest.mark.asyncio
+    async def test_exclusive_sets_and_clears_holder(self) -> None:
+        """exclusive() context manager sets holder during, clears after."""
+        state = SessionState(session_id="x", created_at=0, last_active=0)
+        async with state.exclusive("checkpoint"):
+            assert state.exclusive_holder == "checkpoint"
+        assert state.exclusive_holder is None
+
+    @pytest.mark.asyncio
+    async def test_exclusive_blocks_concurrent_calls(self) -> None:
+        """Second call to exclusive() blocks until first completes."""
+        state = SessionState(session_id="x", created_at=0, last_active=0)
+        order: list[str] = []
+
+        async def hold_lock(name: str, delay: float) -> None:
+            async with state.exclusive(name):
+                order.append(f"{name}_start")
+                await asyncio.sleep(delay)
+                order.append(f"{name}_end")
+
+        # Start checkpoint (holds lock for 0.1s), then immediately start search
+        task1 = asyncio.create_task(hold_lock("checkpoint", 0.1))
+        await asyncio.sleep(0.01)  # Let checkpoint acquire first
+        task2 = asyncio.create_task(hold_lock("search", 0.0))
+
+        await asyncio.gather(task1, task2)
+
+        # search must start AFTER checkpoint ends
+        assert order == [
+            "checkpoint_start",
+            "checkpoint_end",
+            "search_start",
+            "search_end",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_exclusive_clears_on_exception(self) -> None:
+        """Holder is cleared even if the tool raises an exception."""
+        state = SessionState(session_id="x", created_at=0, last_active=0)
+        with pytest.raises(ValueError, match="boom"):
+            async with state.exclusive("checkpoint"):
+                raise ValueError("boom")
+        assert state.exclusive_holder is None
+
+    def test_exclusive_tools_frozenset(self) -> None:
+        """EXCLUSIVE_TOOLS contains expected tool names."""
+        from codeplane.mcp.session import EXCLUSIVE_TOOLS
+
+        assert "checkpoint" in EXCLUSIVE_TOOLS
+        assert "semantic_diff" in EXCLUSIVE_TOOLS
+        assert "map_repo" not in EXCLUSIVE_TOOLS
+
+
+class TestEditTicket:
+    """Tests for EditTicket dataclass."""
+
+    def test_create(self) -> None:
+        from codeplane.mcp.session import EditTicket
+
+        t = EditTicket(
+            ticket_id="abc:0:deadbeef",
+            path="src/foo.py",
+            sha256="deadbeef" * 8,
+            candidate_id="abc:0",
+            issued_by="resolve",
+        )
+        assert t.ticket_id == "abc:0:deadbeef"
+        assert t.path == "src/foo.py"
+        assert t.used is False
+
+    def test_used_flag(self) -> None:
+        from codeplane.mcp.session import EditTicket
+
+        t = EditTicket(
+            ticket_id="abc:0:deadbeef",
+            path="src/foo.py",
+            sha256="deadbeef" * 8,
+            candidate_id="abc:0",
+            issued_by="resolve",
+        )
+        assert t.used is False
+        t.used = True
+        assert t.used is True
+
+
+class TestSessionStateEditTickets:
+    """Tests for edit ticket fields on SessionState."""
+
+    def test_defaults(self) -> None:
+        s = SessionState(session_id="s", created_at=0, last_active=0)
+        assert s.edit_tickets == {}
+        assert s.edits_since_checkpoint == 0
+
+    def test_ticket_storage(self) -> None:
+        from codeplane.mcp.session import EditTicket
+
+        s = SessionState(session_id="s", created_at=0, last_active=0)
+        t = EditTicket(
+            ticket_id="r:0:abcd1234",
+            path="foo.py",
+            sha256="abcd1234" * 8,
+            candidate_id="r:0",
+            issued_by="resolve",
+        )
+        s.edit_tickets[t.ticket_id] = t
+        assert "r:0:abcd1234" in s.edit_tickets
+
+    def test_max_edit_batches_constant(self) -> None:
+        from codeplane.mcp.session import _MAX_EDIT_BATCHES
+
+        assert _MAX_EDIT_BATCHES == 4
+
+    def test_last_recon_id_default(self) -> None:
+        """Gap 4: last_recon_id defaults to None."""
+        s = SessionState(session_id="s", created_at=0, last_active=0)
+        assert s.last_recon_id is None
+
+    def test_last_recon_id_set(self) -> None:
+        """Gap 4: last_recon_id can be set."""
+        s = SessionState(session_id="s", created_at=0, last_active=0)
+        s.last_recon_id = "recon_abc123"
+        assert s.last_recon_id == "recon_abc123"
+
+
+class TestMutationContext:
+    """Tests for MutationContext unified lifecycle tracker."""
+
+    def test_defaults(self) -> None:
+        from codeplane.mcp.session import MutationContext
+
+        ctx = MutationContext()
+        assert ctx.plan is None
+        assert ctx.edit_tickets == {}
+        assert ctx.pending_refactors == {}
+        assert ctx.mutations_since_checkpoint == 0
+        assert ctx.context_id  # auto-generated
+
+    def test_has_plan(self) -> None:
+        from codeplane.mcp.session import MutationContext, RefactorPlan
+
+        ctx = MutationContext()
+        assert not ctx.has_plan
+        ctx.plan = RefactorPlan(plan_id="p1", recon_id="r1", description="test")
+        assert ctx.has_plan
+
+    def test_has_pending_refactors(self) -> None:
+        from codeplane.mcp.session import MutationContext
+
+        ctx = MutationContext()
+        assert not ctx.has_pending_refactors
+        ctx.pending_refactors["ref1"] = "rename"
+        assert ctx.has_pending_refactors
+
+    def test_is_empty(self) -> None:
+        from codeplane.mcp.session import MutationContext, RefactorPlan
+
+        ctx = MutationContext()
+        assert ctx.is_empty
+        ctx.plan = RefactorPlan(plan_id="p1", recon_id="r1", description="test")
+        assert not ctx.is_empty
+        ctx.plan = None
+        ctx.pending_refactors["ref1"] = "rename"
+        assert not ctx.is_empty
+
+    def test_clear(self) -> None:
+        from codeplane.mcp.session import EditTicket, MutationContext, RefactorPlan
+
+        ctx = MutationContext()
+        ctx.plan = RefactorPlan(plan_id="p1", recon_id="r1", description="test")
+        ctx.edit_tickets["t1"] = EditTicket(
+            ticket_id="t1",
+            path="a.py",
+            sha256="abc",
+            candidate_id="c1",
+            issued_by="resolve",
+        )
+        ctx.pending_refactors["ref1"] = "rename"
+        ctx.mutations_since_checkpoint = 3
+
+        ctx.clear()
+
+        assert ctx.plan is None
+        assert ctx.edit_tickets == {}
+        assert ctx.pending_refactors == {}
+        assert ctx.mutations_since_checkpoint == 0
+
+
+class TestBackwardCompatProperties:
+    """Tests that SessionState backward-compat properties delegate to mutation_ctx."""
+
+    def test_active_plan_getter(self) -> None:
+        from codeplane.mcp.session import RefactorPlan
+
+        s = SessionState(session_id="s", created_at=0, last_active=0)
+        assert s.active_plan is None
+        plan = RefactorPlan(plan_id="p1", recon_id="r1", description="test")
+        s.mutation_ctx.plan = plan
+        assert s.active_plan is plan
+
+    def test_active_plan_setter(self) -> None:
+        from codeplane.mcp.session import RefactorPlan
+
+        s = SessionState(session_id="s", created_at=0, last_active=0)
+        plan = RefactorPlan(plan_id="p1", recon_id="r1", description="test")
+        s.active_plan = plan
+        assert s.mutation_ctx.plan is plan
+        s.active_plan = None
+        assert s.mutation_ctx.plan is None
+
+    def test_edit_tickets_delegates(self) -> None:
+        from codeplane.mcp.session import EditTicket
+
+        s = SessionState(session_id="s", created_at=0, last_active=0)
+        ticket = EditTicket(
+            ticket_id="t1",
+            path="a.py",
+            sha256="abc",
+            candidate_id="c1",
+            issued_by="resolve",
+        )
+        s.mutation_ctx.edit_tickets["t1"] = ticket
+        assert s.edit_tickets["t1"] is ticket
+        assert s.edit_tickets is s.mutation_ctx.edit_tickets
+
+    def test_edits_since_checkpoint_getter(self) -> None:
+        s = SessionState(session_id="s", created_at=0, last_active=0)
+        assert s.edits_since_checkpoint == 0
+        s.mutation_ctx.mutations_since_checkpoint = 5
+        assert s.edits_since_checkpoint == 5
+
+    def test_edits_since_checkpoint_setter(self) -> None:
+        s = SessionState(session_id="s", created_at=0, last_active=0)
+        s.edits_since_checkpoint = 3
+        assert s.mutation_ctx.mutations_since_checkpoint == 3
