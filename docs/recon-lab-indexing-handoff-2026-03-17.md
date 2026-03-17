@@ -2,14 +2,27 @@
 
 ## Purpose
 
-This document captures the current recon-lab experiment state so a
-future agent can resume work without re-deriving the setup, repo subset,
- Azure strategy, or the failure modes we already hit.
+This experiment is trying to produce a clean ranking-training dataset
+and held-out evaluation run for a fixed 12-repo subset in recon-lab.
 
-The run completed the indexing stage for the selected 12 repos and left
-fresh `.recon/index.db` files on disk locally. Ground-truth generation,
-signal collection, merge, training, and eval were not resumed in this
-session.
+The intended pipeline is:
+
+1. Index the selected repos.
+2. Generate ground truth.
+3. Collect signals.
+4. Merge training data.
+5. Train all models.
+6. Run held-out eval on the 2 eval repos.
+
+This handoff is meant to tell the next agent where that pipeline stands,
+what artifacts already exist, and what should happen next.
+
+Current checkpoint:
+
+- Indexing is complete for the selected 12 repos.
+- Fresh local `.recon/index.db` files exist for all 12 selected repos.
+- GT generation, collect, merge, training, and eval were not resumed in
+  this session.
 
 ## Canonical Local Paths
 
@@ -50,7 +63,22 @@ Important:
 - `python-pydantic` -> `/home/dave01/.recon/recon-lab/clones/eval/pydantic`
 - `typescript-vitest` -> `/home/dave01/.recon/recon-lab/clones/eval/vitest`
 
-## What We Learned Before the Successful Run
+## Experiment Goal
+
+Produce a clean end-to-end recon-lab dataset and evaluation run for this
+exact subset:
+
+- Train: 7 repos
+- Cutoff: 3 repos
+- Eval: 2 repos
+
+The main output we needed from this session was not Azure
+infrastructure. It was a clean indexing checkpoint that unblocks the
+rest of the lab pipeline.
+
+That checkpoint now exists locally.
+
+## What Actually Mattered
 
 ### 1. The requested `cpl` binary was not the repo indexer
 
@@ -88,116 +116,59 @@ Practical implication for future agents:
   model bootstrap step.
 - Prime that cache before launching a large unattended batch.
 
-### 4. Direct SSH copy-back was unreliable from this session
+### 4. The remote run was only an execution detail
 
-Pushing source repos to the VM worked only intermittently over repeated
-`rsync` attempts, and pulling `.recon` directories back over SSH proved
-too unreliable to use as the final artifact path.
+The point of the Azure run was simply to produce the 12 missing local
+indexes when local execution had become unreliable.
 
-The stable fallback was:
+What mattered operationally:
 
-1. Build all remote indexes on the VM.
-2. Pack the remote `.recon` trees into one `.tar.zst` archive.
-3. Upload that archive to Azure Blob Storage from the VM.
-4. Download the archive locally.
-5. Decompress and extract it into the local clone tree.
+1. Run indexing remotely for the selected repos.
+2. Bring the resulting `.recon` artifacts back to the canonical local
+   lab workspace.
+3. Delete the temporary cloud resources afterward.
 
-## Azure Compute Strategy Used
+That is complete.
 
-This is the strategy that actually worked, not just the initial plan.
+## Azure Execution Strategy
 
-### Resource Layout
+Keep this section short: it exists only so a future agent knows what was
+done if remote indexing is needed again.
 
-- Resource group: `rg-reconlab-index-f6b523`
-- VM: `recon-indexer-f6b523`
-- Storage account: `stidxf6b523`
-- Temporary transfer container: `transfer`
+### Summary
 
-### Region Choice
+- We used a temporary Azure VM because the local indexing path had
+  become unreliable during this session.
+- The working shape was a 16 vCPU / 64 GiB Ubuntu VM, sized to run 3
+  repo indexes concurrently with headroom.
+- The VM was used only to produce `.recon` artifacts for the selected 12
+  repos.
+- Once the indexes were back on local disk, the Azure resource group was
+  deleted.
 
-- The original plan was to use a `Standard_D16as_v5` Ubuntu VM in
-  `eastus`.
-- That SKU was unavailable in `eastus` at provisioning time.
-- The VM was instead created in `eastus2`.
-- The storage account remained in `eastus`.
+### Practical Notes
 
-### Why This VM Shape
+- `Standard_D16as_v5` in `eastus` was unavailable at runtime, so the VM
+  ended up in `eastus2`.
+- Direct SSH restore proved flaky, so the successful path was to relay a
+  packed archive of all `.recon` outputs through Blob storage and then
+  restore locally.
+- This cloud path is not part of the experiment output. It was only a
+  means to get the local indexing checkpoint into the desired state.
 
-We targeted a machine capable of handling 3 concurrent index jobs with
-headroom for the largest repos in the selected set.
+## Produced Artifact
 
-Reasoning used during the run:
+The important output from this session is:
 
-- The repo set is skewed heavily by `fastapi`, with `vitest`,
-  `composer`, `Newtonsoft.Json`, `pydantic`, and `abseil-cpp` as the
-  heavier follow-ons.
-- Earlier successful remote jobs showed peak resident memory roughly in
-  the high-single-digit GiB range per process and several effective CPUs
-  per active indexer.
-- A 16 vCPU / 64 GiB class machine was a conservative 3-way-parallel
-  choice.
+- 12 fresh local repo indexes under the canonical lab workspace
+- no remaining temporary Azure infrastructure
 
-### Concurrency Strategy
+If a future agent has to repeat remote indexing, the essential pattern
+is simple:
 
-- Remote indexing ran with 3 workers in parallel.
-- This was enough to keep the VM busy without immediately running into
-  obvious memory pressure.
-
-### Transfer Strategy That Ultimately Worked
-
-Direct SSH restore was abandoned in favor of Blob relay.
-
-Working transfer sequence:
-
-1. Build `/home/dave01/recon-indexes.tar.zst` on the VM from all 12
-   remote `.recon` directories.
-2. Grant the VM managed identity temporary Blob data-plane roles on the
-   storage account.
-3. Wait for RBAC propagation.
-4. Use `azcopy login --identity` on the VM.
-5. Upload the archive to:
-   `https://stidxf6b523.blob.core.windows.net/transfer/recon-indexes.tar.zst`
-6. Grant the signed-in user temporary Blob Data Reader on the storage
-   account.
-7. Download the archive locally with Azure AD auth.
-8. Decompress it locally and extract into the clone tree.
-
-Important details:
-
-- SAS-based uploads were attempted multiple ways and failed with either
-  `403` or `AuthorizationPermissionMismatch`.
-- Managed-identity `azcopy` upload worked only after assigning the VM
-  `Storage Blob Data Contributor`, then `Storage Blob Data Owner`, and
-  allowing time for RBAC propagation.
-- Local Azure CLI download initially timed out near completion with the
-  default downloader settings. Retrying with `--max-connections 1`
-  succeeded.
-
-## Remote Artifact Handling
-
-### Archive produced on VM
-
-- `/home/dave01/recon-indexes.tar.zst`
-
-Observed archive size:
-
-- Approximately `362M` on the VM
-- Downloaded blob length: `378582169` bytes
-
-### Local extraction method used
-
-The local machine did not have a system `zstd` binary available. The
-archive was restored by:
-
-1. Installing Python `zstandard` in the user environment.
-2. Streaming decompression into `tar`.
-
-Effective form:
-
-```bash
-python3 -c 'import sys, zstandard; d=zstandard.ZstdDecompressor(); f=open("/home/dave01/.recon/recon-lab/recon-indexes.tar.zst", "rb"); d.copy_stream(f, sys.stdout.buffer)' \
-  | tar -xf - -C /home/dave01/.recon/recon-lab/clones
-```
+1. Produce the repo-local `.recon` directories remotely.
+2. Return them to `/home/dave01/.recon/recon-lab/clones/.../.recon`.
+3. Tear the cloud resources down.
 
 ## Final Local Index State
 
@@ -225,7 +196,7 @@ These indexes now live under the corresponding local clone paths in:
 ## Azure Cleanup Status
 
 The temporary Azure infrastructure from this run was removed after the
-indexes were restored locally.
+local indexing checkpoint was restored.
 
 Deleted:
 
@@ -248,6 +219,7 @@ As of this handoff, the experiment state is:
 
 - Canonical lab workspace is `/home/dave01/.recon/recon-lab`.
 - The 12 selected repos have local indexes on disk.
+- The experiment is ready to continue from GT generation onward.
 - The Azure indexing infrastructure used for this run has been torn
   down.
 - GT generation, collect, merge, train, and eval still remain to be run
@@ -274,5 +246,6 @@ As of this handoff, the experiment state is:
   for the final artifact path.
 - Do not start a large unattended indexing batch in a fresh environment
   without pre-priming the embedding model cache.
-- Do not forget that `Standard_D16as_v5` may be unavailable in `eastus`;
-  be ready to place the VM in `eastus2`.
+- Do not let infrastructure details dominate the handoff. The real goal
+  is to produce the lab artifacts that unblock generate, collect, merge,
+  train, and eval.
