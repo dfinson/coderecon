@@ -97,7 +97,7 @@ WHERE f.path = :path
 Defs overlapping a changed hunk = **minimum_sufficient** (the developer
 literally modified them to solve the issue).
 
-### 4.5 Step 5: Enrich with Context Defs
+### 4.5 Step 5: Enrich with Context Defs + Doc/Config Discovery
 
 For each minimum_sufficient def, find **thrash_preventing** candidates:
 
@@ -105,26 +105,63 @@ For each minimum_sufficient def, find **thrash_preventing** candidates:
    (developer had to read them for context).
 2. **Test file defs**: Defs in corresponding test files (conventional
    mapping: `src/foo.py` → `tests/test_foo.py`).
-3. **Import dependents** (future): Defs that import from the changed
+3. **Sibling docs**: README, CHANGELOG in the same or parent directory
+   as changed source files.
+4. **Docs directory**: Files under `docs/` whose filename relates to
+   changed module names (matched against def_facts heading/key/table kinds).
+5. **Root config files**: pyproject.toml, Cargo.toml, package.json, Makefile
+   etc. — always candidates when present (build/dependency context).
+6. **Import dependents** (future): Defs that import from the changed
    module, found via the index's reference/import tables.
 
-### 4.6 Step 6: Cheap LLM Filter (Optional)
+**New function:** `_add_doc_and_config_defs()` in `pr_to_ground_truth.py`
 
-For repos where precision matters, pass each thrash_preventing candidate
-through a cheap model (Haiku, GPT-4o-mini):
+### 4.6 Step 6: Candidate Filtering (Heuristic + LLM)
+
+Two-stage filtering reduces thrash_preventing from hundreds of raw candidates
+to ~10-20 task-relevant defs:
+
+#### Stage A: Heuristic pre-filter (free, always applied)
+
+Drops obviously irrelevant candidates:
+- `.github/` workflow files
+- Lock files, generated files (`.lock`, `.min.js`, `.pb.go`)
+- Low-value def kinds (`variable`, `constant`, `key`) in non-changed files
+- Same-file defs far from changed hunks (>50 lines away)
+
+#### Stage B: LLM classification (cheap, default-on)
+
+Each surviving candidate gets a focused yes/no judgment:
 
 ```
-Issue: "{issue_title}"
-Changed def: {name} in {path}
-Candidate context def: {candidate_name} in {candidate_path}
-Would a developer need to READ this def to understand how to make the change?
-Answer: YES or NO
+System: You are a code relevance judge...
+User:
+  Issue: "{issue_title}" — {issue_body}
+  Changed defs (minimum_sufficient): {summary}
+  Candidate: {path}:{name} ({kind}) — {reason}
+  Would a developer need to READ this item to solve the issue?
+Response: {"relevant": true/false, "reason": "..."}
 ```
 
-~1K tokens/call × ~20 candidates/task × 100 tasks/repo × 90 repos = ~180M tokens.  
-At $0.25/1M tokens (Haiku input): **~$12 total.**
+**Optimizations:**
+- Files with >5 defs → single batch call for the whole file
+- Heuristic pre-filter reduces candidates ~50% before any LLM call
+- Max 60 candidates per task (overflow dropped by priority)
 
-Pass `--no-filter` to skip this step entirely (pure static analysis).
+**Scope — the LLM evaluates ALL candidate types:**
+- Same-file defs (code context)
+- Test file defs (test patterns)
+- Doc files (README, guides, API docs near changed modules)
+- Config files (pyproject.toml, Makefile, package.json)
+- Example/sample files
+
+**Cost estimate:**
+~800 tokens/call × ~15 calls/task × 100 tasks/repo × 90 repos = ~108M tokens.  
+At $0.25/1M (Haiku): **~$27 total.** At $0.075/1M (GPT-4o-mini): **~$8.**
+
+Pass `--no-filter` to skip LLM and use heuristic-only filtering.
+
+**New file:** `recon-lab/src/cpl_lab/llm_filter.py`
 
 ### 4.7 Step 7: Generate Query Variants
 

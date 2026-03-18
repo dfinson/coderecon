@@ -161,6 +161,8 @@ def mine_repo(
     data_dir: Path,
     clones_dir: Path,
     max_prs: int = 100,
+    no_filter: bool = False,
+    llm_model: str = "claude-haiku-4.5",
 ) -> dict[str, Any]:
     """Mine PRs for a single repo and write GT JSON files.
 
@@ -202,6 +204,7 @@ def mine_repo(
     errors = 0
     total_min_suff = 0
     total_thrash_prev = 0
+    total_llm_calls = 0
 
     for pr in good_prs:
         pr_number = pr["number"]
@@ -240,6 +243,38 @@ def mine_repo(
                     break
             if not issue_body:
                 issue_body = pr.get("body", "") or pr["title"]
+
+            # ── LLM / heuristic filtering of thrash_preventing candidates ──
+            min_suff_dicts = [
+                {"path": d.path, "name": d.name, "kind": d.kind,
+                 "start_line": d.start_line, "end_line": d.end_line,
+                 "reason": d.reason}
+                for d in min_suff
+            ]
+
+            if no_filter:
+                from cpl_lab.llm_filter import heuristic_filter_only
+                filt = heuristic_filter_only(min_suff_dicts, thrash_prev)
+            else:
+                from cpl_lab.llm_filter import filter_candidates
+                filt = filter_candidates(
+                    issue_title=pr["title"],
+                    issue_body=issue_body,
+                    min_suff_defs=min_suff_dicts,
+                    thrash_prev_defs=thrash_prev,
+                    model=llm_model,
+                )
+                total_llm_calls += filt.llm_calls
+
+            # Rebuild thrash_prev from filtered results
+            thrash_prev = [
+                DefEntry(
+                    path=d["path"], name=d["name"], kind=d["kind"],
+                    start_line=d["start_line"], end_line=d["end_line"],
+                    reason=d.get("reason", ""),
+                ) if isinstance(d, dict) else d
+                for d in filt.kept
+            ]
 
             # Generate queries
             changed_paths = [fd.path for fd in file_diffs if not fd.is_deleted]
@@ -284,6 +319,7 @@ def mine_repo(
         "tasks": tasks_written,
         "min_suff_defs": total_min_suff,
         "thrash_prev_defs": total_thrash_prev,
+        "llm_calls": total_llm_calls,
         "errors": errors,
         "elapsed_sec": elapsed,
     }
@@ -315,6 +351,8 @@ def run_mine(
     repo_set: str = "all",
     repo: str | None = None,
     max_prs: int = 100,
+    no_filter: bool = False,
+    llm_model: str = "claude-haiku-4.5",
     verbose: bool = False,
 ) -> None:
     """Run PR mining across repos with Rich progress display."""
@@ -364,6 +402,8 @@ def run_mine(
                 data_dir=data_dir,
                 clones_dir=clones_dir,
                 max_prs=max_prs,
+                no_filter=no_filter,
+                llm_model=llm_model,
             )
 
             status = summary.get("status", "error")

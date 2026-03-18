@@ -216,6 +216,9 @@ def map_hunks_to_defs(
     # Find test file defs for changed source files
     _add_test_file_defs(cur, changed_paths, thrash_prev)
 
+    # Find relevant doc/config files near changed source files
+    _add_doc_and_config_defs(cur, changed_paths, min_suff, thrash_prev)
+
     con.close()
     return min_suff, thrash_prev, excluded
 
@@ -255,6 +258,137 @@ def _add_test_file_defs(
                 ))
             if rows:
                 existing_paths.add(test_path)
+
+
+_DOC_EXTENSIONS = frozenset({
+    ".md", ".rst", ".txt", ".yaml", ".yml", ".toml", ".cfg", ".ini",
+    ".json", ".xml",
+})
+
+_DOC_DIR_PREFIXES = ("docs/", "doc/", "documentation/", "guide/", "wiki/")
+
+# Files that are always relevant when they exist near changed code
+_ALWAYS_RELEVANT_NAMES = frozenset({
+    "README.md", "readme.md", "README.rst", "CHANGELOG.md", "CHANGES.rst",
+    "CHANGES.md", "CONTRIBUTING.md",
+})
+
+
+def _add_doc_and_config_defs(
+    cur: sqlite3.Cursor,
+    changed_paths: set[str],
+    min_suff: list[DefEntry],
+    thrash_prev: list[DefEntry],
+) -> None:
+    """Find doc/config files that may be relevant to the changed code.
+
+    Three strategies:
+    1. **Sibling docs**: README, CHANGELOG in the same or parent directory
+       as changed source files.
+    2. **Docs directory**: Files under docs/ whose path or name relates to
+       changed module/directory names.
+    3. **Config files**: pyproject.toml, Makefile, Cargo.toml etc. in the
+       repo root — relevant if the PR might touch build/dependency config.
+    """
+    existing_paths = {d.path for d in min_suff} | {d.path for d in thrash_prev}
+
+    # Collect directory names and module stems from changed paths for matching
+    changed_dirs: set[str] = set()
+    changed_stems: set[str] = set()
+    for p in changed_paths:
+        parts = p.split("/")
+        changed_stems.add(parts[-1].rsplit(".", 1)[0].lower())
+        for i in range(1, len(parts)):
+            changed_dirs.add("/".join(parts[:i]))
+
+    # Query all doc/config files from the index
+    doc_files = cur.execute(
+        """
+        SELECT f.id, f.path FROM files f
+        WHERE f.language_family IN ('markdown', 'toml', 'yaml', 'json', 'makefile', 'restructuredtext')
+           OR f.path LIKE '%.md'
+           OR f.path LIKE '%.rst'
+           OR f.path LIKE '%.toml'
+           OR f.path LIKE '%.yaml'
+           OR f.path LIKE '%.yml'
+           OR f.path LIKE '%.cfg'
+        """
+    ).fetchall()
+
+    matched_doc_paths: list[tuple[str, str]] = []  # (path, reason)
+
+    for _file_id, doc_path in doc_files:
+        if doc_path in existing_paths:
+            continue
+
+        doc_name = doc_path.split("/")[-1]
+        doc_dir = "/".join(doc_path.split("/")[:-1])
+        doc_stem = doc_name.rsplit(".", 1)[0].lower()
+
+        # Strategy 1: sibling docs (same or parent directory)
+        if doc_name in _ALWAYS_RELEVANT_NAMES and doc_dir in changed_dirs:
+            matched_doc_paths.append((
+                doc_path,
+                f"Sibling doc in same directory as changed source",
+            ))
+            continue
+
+        # Strategy 2: docs directory with name matching changed module
+        if any(doc_path.startswith(prefix) for prefix in _DOC_DIR_PREFIXES):
+            if any(stem in doc_stem or doc_stem in stem
+                   for stem in changed_stems if len(stem) > 2):
+                matched_doc_paths.append((
+                    doc_path,
+                    f"Documentation file name relates to changed module",
+                ))
+                continue
+
+        # Strategy 3: root config files (always candidates for broader tasks)
+        if "/" not in doc_path and doc_name in (
+            "pyproject.toml", "setup.cfg", "setup.py", "Cargo.toml",
+            "package.json", "go.mod", "Makefile", "CMakeLists.txt",
+            "build.gradle", "pom.xml", "composer.json",
+        ):
+            matched_doc_paths.append((
+                doc_path,
+                "Root config file — may contain related build/dependency config",
+            ))
+
+    # Add matched docs as thrash_preventing with their defs
+    for doc_path, reason in matched_doc_paths:
+        rows = cur.execute(
+            """
+            SELECT d.name, d.kind, d.start_line, d.end_line
+            FROM def_facts d
+            JOIN files f ON d.file_id = f.id
+            WHERE f.path = ?
+            ORDER BY d.start_line
+            """,
+            (doc_path,),
+        ).fetchall()
+
+        if rows:
+            for name, kind, start, end in rows:
+                thrash_prev.append(DefEntry(
+                    path=doc_path,
+                    name=name,
+                    kind=kind,
+                    start_line=start,
+                    end_line=end,
+                    reason=reason,
+                ))
+        else:
+            # Doc file has no indexed defs (e.g. plain text) — add a
+            # file-level placeholder so the LLM filter can still evaluate it
+            thrash_prev.append(DefEntry(
+                path=doc_path,
+                name=doc_path.split("/")[-1],
+                kind="heading",
+                start_line=1,
+                end_line=1,
+                reason=reason,
+            ))
+        existing_paths.add(doc_path)
 
 
 def _guess_test_paths(src_path: str) -> list[str]:

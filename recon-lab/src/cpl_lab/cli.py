@@ -96,8 +96,12 @@ def index(ctx: click.Context, repo_set: str, timeout: int | None, reindex: bool)
               help="Which repo set to mine PRs for.")
 @click.option("--repo", default=None, help="Single repo ID (e.g. python-flask).")
 @click.option("--max-prs", type=int, default=100, help="Max PRs to fetch per repo.")
+@click.option("--no-filter", is_flag=True, help="Skip LLM filtering (heuristic only).")
+@click.option("--llm-model", default="claude-haiku-4.5",
+              help="LLM model for candidate filtering.")
 @click.pass_context
-def mine(ctx: click.Context, repo_set: str, repo: str | None, max_prs: int) -> None:
+def mine(ctx: click.Context, repo_set: str, repo: str | None, max_prs: int,
+         no_filter: bool, llm_model: str) -> None:
     """Mine PRs from GitHub to generate ground truth (replaces generate)."""
     from cpl_lab.mine import run_mine
 
@@ -108,6 +112,8 @@ def mine(ctx: click.Context, repo_set: str, repo: str | None, max_prs: int) -> N
         repo_set=repo_set,
         repo=repo,
         max_prs=max_prs,
+        no_filter=no_filter,
+        llm_model=llm_model,
         verbose=ctx.obj["verbose"],
     )
 
