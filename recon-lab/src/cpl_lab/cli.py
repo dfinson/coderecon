@@ -3,7 +3,8 @@
 Usage:
     cpl-lab clone [--set SET]
     cpl-lab index [--set SET] [--timeout SECS]
-    cpl-lab generate [--set SET] [--repo ID] [--stage STAGE] [--concurrency N]
+    cpl-lab mine [--set SET] [--repo ID] [--max-prs N]
+    cpl-lab generate-legacy [--set SET] [--repo ID] [--stage STAGE] [--concurrency N]
     cpl-lab collect [--set SET] [--repo ID]
     cpl-lab merge [--what {gt,signals,all}]
     cpl-lab train [--model {ranker,cutoff,gate,all}]
@@ -87,10 +88,34 @@ def index(ctx: click.Context, repo_set: str, timeout: int | None, reindex: bool)
     )
 
 
-# ── generate ─────────────────────────────────────────────────────
+# ── mine (NEW — replaces generate) ───────────────────────────────
 
 
 @main.command()
+@click.option("--set", "repo_set", type=click.Choice(SETS), default="all",
+              help="Which repo set to mine PRs for.")
+@click.option("--repo", default=None, help="Single repo ID (e.g. python-flask).")
+@click.option("--max-prs", type=int, default=100, help="Max PRs to fetch per repo.")
+@click.pass_context
+def mine(ctx: click.Context, repo_set: str, repo: str | None, max_prs: int) -> None:
+    """Mine PRs from GitHub to generate ground truth (replaces generate)."""
+    from cpl_lab.mine import run_mine
+
+    cfg = ctx.obj["config"]
+    run_mine(
+        data_dir=cfg["data_dir"],
+        clones_dir=cfg["clones_dir"],
+        repo_set=repo_set,
+        repo=repo,
+        max_prs=max_prs,
+        verbose=ctx.obj["verbose"],
+    )
+
+
+# ── generate-legacy ──────────────────────────────────────────────
+
+
+@main.command("generate-legacy")
 @click.option("--set", "repo_set", type=click.Choice(SETS[:-1]), default=None,
               help="Which repo set to generate GT for.")
 @click.option("--repo", default=None, help="Single repo ID (e.g. python-httpx).")
@@ -99,9 +124,9 @@ def index(ctx: click.Context, repo_set: str, timeout: int | None, reindex: bool)
 @click.option("--concurrency", type=int, default=None, help="Max concurrent sessions.")
 @click.option("--resume", is_flag=True, help="Resume from last checkpoint.")
 @click.pass_context
-def generate(ctx: click.Context, repo_set: str | None, repo: str | None,
-             stage: str, concurrency: int | None, resume: bool) -> None:
-    """Run the Copilot SDK ground truth pipeline."""
+def generate_legacy(ctx: click.Context, repo_set: str | None, repo: str | None,
+                    stage: str, concurrency: int | None, resume: bool) -> None:
+    """[Legacy] Run the Copilot SDK ground truth pipeline."""
     from cpl_lab.generate import run_generate
 
     cfg = ctx.obj["config"]

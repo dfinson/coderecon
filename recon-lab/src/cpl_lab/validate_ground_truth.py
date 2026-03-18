@@ -102,8 +102,14 @@ def validate_task(task: dict, file_path: str) -> list[str]:
         for i, q in enumerate(queries):
             errors.extend(_check_query(q, f"{ctx}/queries[{i}]"))
             query_types_seen.add(q.get("query_type"))
-        # At least 6 query types for narrow, 8 for medium/wide
-        min_queries = 6 if tc == "narrow" else 8
+        # At least 6 query types for narrow, 8 for medium/wide.
+        # PR-mined tasks get a relaxed minimum (4) since issue text
+        # may not provide enough material for 6+ distinct query types.
+        is_pr_mined = task.get("source") == "pr-mining"
+        if is_pr_mined:
+            min_queries = 4
+        else:
+            min_queries = 6 if tc == "narrow" else 8
         if len(queries) < min_queries:
             errors.append(f"{ctx}: expected >= {min_queries} queries, got {len(queries)}")
 
@@ -183,7 +189,12 @@ def validate_repo(data_dir: Path) -> list[str]:
             continue
         errors.extend(validate_task(task, tf.name))
 
-    # Non-OK queries
+    # Non-OK queries — required for AI-generated GT, optional for PR-mined
+    has_pr_mined = any(
+        json.loads(tf.read_text()).get("source") == "pr-mining"
+        for tf in task_files
+        if tf.name != "non_ok_queries.json"
+    )
     non_ok_path = data_dir / "non_ok_queries.json"
     if non_ok_path.exists():
         try:
@@ -192,7 +203,7 @@ def validate_repo(data_dir: Path) -> list[str]:
             errors.append(f"non_ok_queries.json: invalid JSON — {e}")
         else:
             errors.extend(validate_non_ok(non_ok, "non_ok_queries.json"))
-    else:
+    elif not has_pr_mined:
         errors.append("non_ok_queries.json not found")
 
     return errors
