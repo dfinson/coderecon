@@ -19,28 +19,27 @@ console = Console()
 
 
 def _iter_repos(data_dir: Path, repo_set: str) -> list[str]:
-    """List repo IDs for signal collection (training sets only)."""
+    """List repo-instance IDs for signal collection."""
     from cpl_lab.collector import iter_task_json_files
-    from cpl_lab.clone import REPO_MANIFEST
+    from cpl_lab.data_manifest import iter_repo_data_dirs, repo_set_for_dir
 
     train_sets = {"ranker-gate", "cutoff"}
     allowed = {repo_set} if repo_set != "all" else train_sets
-    train_ids = {rid for rid, info in REPO_MANIFEST.items() if info.get("set") in allowed}
     return sorted(
-        d.name for d in data_dir.iterdir()
-        if d.is_dir()
-        and d.name in train_ids
+        repo_dir.name for repo_dir in iter_repo_data_dirs(data_dir)
+        if repo_set_for_dir(repo_dir) in allowed
         and (
-            (d / "ground_truth" / "queries.jsonl").exists()
-            or iter_task_json_files(d / "ground_truth")
-            or (d / "ground_truth.jsonl").exists()
+            (repo_dir / "ground_truth" / "queries.jsonl").exists()
+            or iter_task_json_files(repo_dir / "ground_truth")
+            or (repo_dir / "ground_truth.jsonl").exists()
         )
     )
 
 
-def _find_clone_dir(clones_dir: Path, repo_id: str) -> Path | None:
-    from cpl_lab.clone import clone_dir_for
-    return clone_dir_for(repo_id, clones_dir)
+def _find_clone_dir(clones_dir: Path, repo_dir: Path) -> Path | None:
+    from cpl_lab.data_manifest import clone_dir_for_dir
+
+    return clone_dir_for_dir(repo_dir, clones_dir)
 
 
 def _ensure_ground_truth_tables(repo_id: str, repo_dir: Path, clone_dir: Path) -> None:
@@ -84,15 +83,16 @@ def run_collect(
         if (sig_dir / "summary.json").exists() and (sig_dir / "candidates_rank.parquet").exists():
             skipped += 1
             continue
-        cd = _find_clone_dir(clones_dir, rid)
+        repo_dir = data_dir / rid
+        cd = _find_clone_dir(clones_dir, repo_dir)
         if cd and (cd / ".recon" / "index.db").exists():
             try:
-                _ensure_ground_truth_tables(rid, data_dir / rid, cd)
+                _ensure_ground_truth_tables(rid, repo_dir, cd)
             except Exception as exc:
                 if verbose:
                     console.print(f"[red]Skipping {rid}: GT postprocess failed: {exc}[/red]")
                 continue
-            jobs.append((rid, data_dir / rid, cd))
+            jobs.append((rid, repo_dir, cd))
 
     if skipped:
         console.print(f"[dim]Skipping {skipped} repos with completed signals.[/dim]")

@@ -21,8 +21,8 @@ from coderecon.mcp.context import AppContext
 from coderecon.mcp.tools.recon.raw_signals import raw_signals_pipeline
 from coderecon.ranking.features import extract_ranker_features
 
-CLONE_DIR = Path(os.path.expanduser("~/.cpl-lab/clones/eval"))
-DATA_DIR = Path(os.path.expanduser("~/.cpl-lab/data"))
+CLONE_DIR = Path(os.path.expanduser("~/.recon/recon-lab/clones/eval"))
+DATA_DIR = Path(os.path.expanduser("~/.recon/recon-lab/data"))
 
 REPO_CLONE_MAP = {}
 for d in CLONE_DIR.iterdir():

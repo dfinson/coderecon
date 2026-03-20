@@ -42,7 +42,7 @@ from rich.progress import (
 from rich.table import Table
 from rich.text import Text
 
-from cpl_lab.clone import REPO_MANIFEST
+from cpl_lab.data_manifest import iter_repo_data_dirs, load_repo_manifest
 
 console = Console()
 
@@ -92,6 +92,7 @@ _MERGED_SCHEMA = pa.schema([
     pa.field("label_relevant", pa.int64()),
     pa.field("repo_id", pa.large_string()),
     pa.field("repo_set", pa.large_string()),
+    pa.field("logical_repo_id", pa.large_string()),
     pa.field("object_count", pa.int64()),
     pa.field("file_count", pa.int64()),
     pa.field("label_gate", pa.large_string()),
@@ -165,12 +166,13 @@ def merge_signals(data_dir: Path) -> dict[str, Any]:
 
     # Repo features: repo_id → {object_count, file_count}
     rf_path = merged_dir / "repo_features.parquet"
-    repo_feat_map: dict[str, dict[str, int]] = {}
+    repo_feat_map: dict[str, dict[str, Any]] = {}
     if rf_path.exists():
         for _, rf in pd.read_parquet(rf_path).iterrows():
             repo_feat_map[rf["repo_id"]] = {
                 "object_count": int(rf["object_count"]),
                 "file_count": int(rf["file_count"]),
+                "logical_repo_id": rf.get("logical_repo_id", rf["repo_id"]),
             }
 
     # ── stream per-repo signals row-group by row-group ───────────
@@ -184,15 +186,18 @@ def merge_signals(data_dir: Path) -> dict[str, Any]:
     repo_jobs: list[tuple[str, Path, str, dict[str, int], int, int]] = []
     total_row_groups = 0
     total_rows_est = 0
-    for repo_dir in sorted(data_dir.iterdir()):
-        if not repo_dir.is_dir() or repo_dir.name in ("merged", "logs", "index_logs"):
-            continue
+    for repo_dir in iter_repo_data_dirs(data_dir):
         repo_id = repo_dir.name
         pq_src = repo_dir / "signals" / "candidates_rank.parquet"
         if not pq_src.exists():
             continue
-        repo_set = REPO_MANIFEST.get(repo_id, {}).get("set", "unknown")
-        rf = repo_feat_map.get(repo_id, {"object_count": 0, "file_count": 0})
+        manifest = load_repo_manifest(repo_dir)
+        repo_set = manifest.get("repo_set", "unknown")
+        rf = repo_feat_map.get(repo_id, {
+            "object_count": 0,
+            "file_count": 0,
+            "logical_repo_id": manifest.get("logical_repo_id", repo_id),
+        })
         pf = pq.ParquetFile(pq_src)
         n_rg = pf.metadata.num_row_groups
         n_rows = pf.metadata.num_rows
@@ -271,6 +276,7 @@ def merge_signals(data_dir: Path) -> dict[str, Any]:
 
                 df["repo_id"] = repo_id
                 df["repo_set"] = repo_set
+                df["logical_repo_id"] = rf.get("logical_repo_id", repo_id)
                 df["object_count"] = rf["object_count"]
                 df["file_count"] = rf["file_count"]
                 df["query_type"] = df["query_id"].map(

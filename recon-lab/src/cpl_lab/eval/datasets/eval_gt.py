@@ -14,7 +14,7 @@ from pathlib import Path
 
 from evee import dataset
 
-from cpl_lab.clone import REPO_MANIFEST
+from cpl_lab.data_manifest import iter_repo_data_dirs, repo_set_for_dir
 
 
 def _def_key(d: dict) -> str:
@@ -32,13 +32,13 @@ class EvalGroundTruthDataset:
 
     def __init__(self, data_dir: str = "~/.recon/recon-lab/data", **kwargs: object) -> None:
         data_root = Path(data_dir).expanduser()
-        eval_repos = [
-            rid for rid, info in REPO_MANIFEST.items() if info["set"] == "eval"
-        ]
 
         self.records: list[dict] = []
-        for repo_id in sorted(eval_repos):
-            gt_dir = data_root / repo_id / "ground_truth"
+        for repo_dir in iter_repo_data_dirs(data_root):
+            if repo_set_for_dir(repo_dir) != "eval":
+                continue
+            repo_id = repo_dir.name
+            gt_dir = repo_dir / "ground_truth"
             queries_file = gt_dir / "queries.jsonl"
             touched_file = gt_dir / "touched_objects.jsonl"
             legacy_file = data_root / repo_id / "ground_truth.jsonl"

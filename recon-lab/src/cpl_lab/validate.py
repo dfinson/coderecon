@@ -6,6 +6,8 @@ from pathlib import Path
 
 import click
 
+from cpl_lab.data_manifest import iter_repo_data_dirs, repo_set_for_dir
+
 
 def run_validate(
     data_dir: Path,
@@ -24,11 +26,11 @@ def run_validate(
             raise click.ClickException(f"Repo data not found: {rd}")
         repo_dirs = [rd]
     else:
-        for d in sorted(data_dir.iterdir()):
-            if d.is_dir() and d.name != "merged":
-                gt = d / "ground_truth"
-                if gt.is_dir() and any(gt.glob("*.json")):
-                    repo_dirs.append(d)
+        for repo_dir in iter_repo_data_dirs(data_dir):
+            gt = repo_dir / "ground_truth"
+            if gt.is_dir() and any(gt.glob("*.json")):
+                if repo_set == "all" or repo_set_for_dir(repo_dir) == repo_set:
+                    repo_dirs.append(repo_dir)
 
     if not repo_dirs:
         click.echo("No repos with ground truth found to validate.")

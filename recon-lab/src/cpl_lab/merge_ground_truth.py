@@ -25,7 +25,7 @@ from typing import Any
 import click
 import pandas as pd
 
-from cpl_lab.clone import REPO_MANIFEST, clone_dir_for
+from cpl_lab.data_manifest import clone_dir_for_dir, iter_repo_data_dirs, load_repo_manifest
 
 
 def _postprocess_repos(
@@ -42,9 +42,7 @@ def _postprocess_repos(
     processed = skipped = failed = 0
     details: list[dict[str, Any]] = []
 
-    for repo_dir in sorted(data_dir.iterdir()):
-        if not repo_dir.is_dir() or repo_dir.name in ("merged", "logs", "index_logs"):
-            continue
+    for repo_dir in iter_repo_data_dirs(data_dir):
         repo_id = repo_dir.name
         gt_dir = repo_dir / "ground_truth"
 
@@ -59,7 +57,7 @@ def _postprocess_repos(
             continue
 
         # Find the index.db
-        clone = clone_dir_for(repo_id, clones_dir)
+        clone = clone_dir_for_dir(repo_dir, clones_dir)
         if clone is None or not clone.is_dir():
             click.echo(f"  {repo_id}: clone not found, skipping postprocess", err=True)
             failed += 1
@@ -127,19 +125,20 @@ def merge_ground_truth(
 
     for table_name, rel_path in tables.items():
         rows: list[dict] = []
-        for repo_dir in sorted(data_dir.iterdir()):
-            if not repo_dir.is_dir() or repo_dir.name in ("merged", "logs", "index_logs"):
-                continue
+        for repo_dir in iter_repo_data_dirs(data_dir):
             repo_id = repo_dir.name
             src = repo_dir / rel_path
             if not src.exists():
                 continue
-            repo_set = REPO_MANIFEST.get(repo_id, {}).get("set", "unknown")
+            manifest = load_repo_manifest(repo_dir)
+            repo_set = manifest.get("repo_set", "unknown")
+            logical_repo_id = manifest.get("logical_repo_id", repo_id)
             for ln in src.read_text().splitlines():
                 if ln.strip():
                     row = json.loads(ln)
                     row["repo_id"] = repo_id
                     row["repo_set"] = repo_set
+                    row["logical_repo_id"] = logical_repo_id
                     rows.append(row)
 
         df = pd.DataFrame(rows)
@@ -166,11 +165,10 @@ def _collect_repo_features(
 ) -> list[dict[str, Any]]:
     """Query each repo's index.db for object_count and file_count."""
     rows: list[dict[str, Any]] = []
-    for repo_dir in sorted(data_dir.iterdir()):
-        if not repo_dir.is_dir() or repo_dir.name in ("merged", "logs", "index_logs"):
-            continue
+    for repo_dir in iter_repo_data_dirs(data_dir):
         repo_id = repo_dir.name
-        clone = clone_dir_for(repo_id, clones_dir)
+        manifest = load_repo_manifest(repo_dir)
+        clone = clone_dir_for_dir(repo_dir, clones_dir)
         if clone is None:
             continue
         index_db = clone / ".recon" / "index.db"
@@ -186,6 +184,7 @@ def _collect_repo_features(
             con.close()
         rows.append({
             "repo_id": repo_id,
+            "logical_repo_id": manifest.get("logical_repo_id", repo_id),
             "object_count": obj_count,
             "file_count": file_count,
         })

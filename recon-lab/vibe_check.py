@@ -22,9 +22,9 @@ from coderecon.ranking.gate import load_gate
 from coderecon.ranking.models import GateLabel
 from coderecon.ranking.ranker import load_ranker
 
-CLONE_DIR = Path("~/.cpl-lab/clones/eval/celery").expanduser()
-MODELS_DIR = Path("~/.cpl-lab/models").expanduser()
-GT_DIR = Path("~/.cpl-lab/data/python-celery/ground_truth").expanduser()
+CLONE_DIR = Path("~/.recon/recon-lab/clones/eval/celery").expanduser()
+MODELS_DIR = Path("~/.recon/recon-lab/models").expanduser()
+GT_DIR = Path("~/.recon/recon-lab/data/python-celery/ground_truth").expanduser()
 
 
 def def_key(c: dict) -> str:

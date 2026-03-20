@@ -30,9 +30,9 @@ from coderecon.ranking.gate import load_gate
 from coderecon.ranking.models import GateLabel
 from coderecon.ranking.ranker import load_ranker
 
-CLONE_DIR = Path(os.path.expanduser("~/.cpl-lab/clones/eval"))
-MODELS_DIR = Path(os.path.expanduser("~/.cpl-lab/models"))
-DATA_DIR = Path(os.path.expanduser("~/.cpl-lab/data"))
+CLONE_DIR = Path(os.path.expanduser("~/.recon/recon-lab/clones/eval"))
+MODELS_DIR = Path(os.path.expanduser("~/.recon/recon-lab/models"))
+DATA_DIR = Path(os.path.expanduser("~/.recon/recon-lab/data"))
 
 # Repo manifest: data dir name -> clone dir name
 REPO_CLONE_MAP = {}

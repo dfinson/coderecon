@@ -28,15 +28,15 @@ experiment:
   models:
     - name: recon-ranking
       args:
-        - clone_dir: ["~/.recon-lab/clones"]
+        - clone_dir: ["~/.recon/recon-lab/clones"]
         - mode: ["baseline", "ranking"]
-        - models_dir: ["~/.recon-lab/models"]
+        - models_dir: ["~/.recon/recon-lab/models"]
 
   dataset:
     name: recon-eval-gt
     type: custom
     args:
-      data_dir: "~/.recon-lab/data"
+      data_dir: "~/.recon/recon-lab/data"
 
   metrics:
     - name: recon-ranking

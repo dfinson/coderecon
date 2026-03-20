@@ -13,9 +13,16 @@ depth = 1  # shallow clone depth (1 = single commit)
 [index]
 timeout = 1800  # 30 minutes per repo
 
-[mine]
-max_prs = 100
+[swebench]
+training_dataset = "princeton-nlp/SWE-bench"
+training_split = "dev"
+eval_dataset = "princeton-nlp/SWE-bench_Verified"
+eval_split = "test"
 llm_model = "claude-haiku-4.5"
+filter_model = "claude-haiku-4.5"
+max_instances = 0
+cutoff_mod = 5
+cutoff_remainder = 4
 
 [train]
 # "auto" resolves to $workspace/data

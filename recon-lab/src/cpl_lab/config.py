@@ -57,6 +57,7 @@ def get_config(cli_override: str | None = None) -> dict:
     """Return merged config dict with resolved workspace paths."""
     cfg = _load_toml(_DEFAULT_CONFIG)
     ws = resolve_workspace(cli_override)
+    swebench_cfg = cfg.get("swebench", {})
 
     return {
         "workspace": ws,
@@ -74,9 +75,20 @@ def get_config(cli_override: str | None = None) -> dict:
         "index": {
             "timeout": cfg.get("index", {}).get("timeout", 1800),
         },
-        "mine": {
-            "max_prs": cfg.get("mine", {}).get("max_prs", 100),
-            "llm_model": cfg.get("mine", {}).get("llm_model", "claude-haiku-4.5"),
+        "swebench": {
+            "training_dataset": swebench_cfg.get(
+                "training_dataset", "princeton-nlp/SWE-bench"
+            ),
+            "training_split": swebench_cfg.get("training_split", "dev"),
+            "eval_dataset": swebench_cfg.get(
+                "eval_dataset", "princeton-nlp/SWE-bench_Verified"
+            ),
+            "eval_split": swebench_cfg.get("eval_split", "test"),
+            "llm_model": swebench_cfg.get("llm_model", "claude-haiku-4.5"),
+            "filter_model": swebench_cfg.get("filter_model", "claude-haiku-4.5"),
+            "max_instances": swebench_cfg.get("max_instances", 0),
+            "cutoff_mod": swebench_cfg.get("cutoff_mod", 5),
+            "cutoff_remainder": swebench_cfg.get("cutoff_remainder", 4),
         },
         "eval": {
             "default_experiment": cfg.get("eval", {}).get(

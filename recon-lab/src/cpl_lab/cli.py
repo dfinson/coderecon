@@ -3,7 +3,7 @@
 Usage:
     cpl-lab clone [--set SET]
     cpl-lab index [--set SET] [--timeout SECS]
-    cpl-lab mine [--set SET] [--repo ID] [--max-prs N]
+    cpl-lab swebench [--set SET] [--repo ID] [--max-instances N]
     cpl-lab collect [--set SET] [--repo ID]
     cpl-lab merge [--what {gt,signals,all}]
     cpl-lab train [--model {ranker,cutoff,gate,all}]
@@ -86,34 +86,43 @@ def index(ctx: click.Context, repo_set: str, timeout: int | None, reindex: bool)
     )
 
 
-# ── mine (NEW — replaces generate) ───────────────────────────────
+# ── swebench ─────────────────────────────────────────────────────
 
 
 @main.command()
 @click.option("--set", "repo_set", type=click.Choice(SETS), default="all",
-              help="Which repo set to mine PRs for.")
-@click.option("--repo", default=None, help="Single repo ID (e.g. python-flask).")
-@click.option("--max-prs", type=int, default=None, help="Max PRs to fetch per repo.")
-@click.option("--no-filter", is_flag=True, help="Skip LLM filtering (heuristic only).")
+              help="Which repo set to import from SWE-bench.")
+@click.option("--repo", default=None,
+              help="Filter to a single repo slug or logical repo ID.")
+@click.option("--max-instances", type=int, default=None,
+              help="Limit imported instances after set/repo filtering.")
 @click.option("--llm-model", default=None,
-              help="LLM model for candidate filtering.")
+              help="LLM model for query/tier adaptation.")
+@click.option("--filter-model", default=None,
+              help="LLM model for context filtering.")
 @click.pass_context
-def mine(ctx: click.Context, repo_set: str, repo: str | None, max_prs: int,
-         no_filter: bool, llm_model: str) -> None:
-    """Mine PRs from GitHub to generate ground truth (replaces generate)."""
-    from cpl_lab.mine import run_mine
+def swebench(ctx: click.Context, repo_set: str, repo: str | None,
+             max_instances: int | None, llm_model: str | None,
+             filter_model: str | None) -> None:
+    """Import SWE-bench instances and adapt them into ground truth."""
+    from cpl_lab.swebench import run_swebench
 
     cfg = ctx.obj["config"]
-    max_prs = max_prs or cfg["mine"]["max_prs"]
-    llm_model = llm_model or cfg["mine"]["llm_model"]
-    run_mine(
+    swebench_cfg = cfg["swebench"]
+    run_swebench(
         data_dir=cfg["data_dir"],
         clones_dir=cfg["clones_dir"],
         repo_set=repo_set,
         repo=repo,
-        max_prs=max_prs,
-        no_filter=no_filter,
-        llm_model=llm_model,
+        max_instances=max_instances if max_instances is not None else swebench_cfg["max_instances"],
+        llm_model=llm_model or swebench_cfg["llm_model"],
+        filter_model=filter_model or swebench_cfg["filter_model"],
+        training_dataset=swebench_cfg["training_dataset"],
+        training_split=swebench_cfg["training_split"],
+        eval_dataset=swebench_cfg["eval_dataset"],
+        eval_split=swebench_cfg["eval_split"],
+        cutoff_mod=swebench_cfg["cutoff_mod"],
+        cutoff_remainder=swebench_cfg["cutoff_remainder"],
         verbose=ctx.obj["verbose"],
     )
 

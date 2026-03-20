@@ -43,9 +43,9 @@ class RankingModel:
 
     def __init__(
         self,
-        clone_dir: str = "~/.cpl-lab/clones",
+        clone_dir: str = "~/.recon/recon-lab/clones",
         mode: str = "baseline",
-        models_dir: str = "~/.cpl-lab/models",
+        models_dir: str = "~/.recon/recon-lab/models",
         **kwargs: object,
     ) -> None:
         self._clone_root = Path(clone_dir).expanduser()

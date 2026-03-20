@@ -3,7 +3,7 @@
 #
 # Creates the directory structure that clone.py, index.py,
 # and gt_orchestrator.py expect.  The workspace path is read
-# from lab.toml (workspace.path) or defaults to ~/.cpl-lab.
+# from lab.toml (workspace.path) or defaults to ~/.recon/recon-lab.
 #
 # Usage:
 #   bash recon-lab/setup_workspace.sh
@@ -15,7 +15,7 @@ WORKSPACE=$(python3 -c "
 import tomllib, pathlib, sys
 lab = pathlib.Path('${SCRIPT_DIR}/lab.toml')
 cfg = tomllib.loads(lab.read_text()) if lab.exists() else {}
-print(pathlib.Path(cfg.get('workspace',{}).get('path','~/.cpl-lab')).expanduser())
+print(pathlib.Path(cfg.get('workspace',{}).get('path','~/.recon/recon-lab')).expanduser())
 ")
 
 mkdir -p \
