@@ -86,8 +86,8 @@ _SIGNALS_SCHEMA = pa.schema([
 # Ground-truth parsing
 # ---------------------------------------------------------------------------
 
-def _parse_gt(gt_file: Path) -> tuple[list[dict[str, Any]], dict[str, dict[str, int]]]:
-    """Parse ground_truth.jsonl -> (flat_queries, relevance_map)."""
+def _parse_legacy_gt(gt_file: Path) -> tuple[list[dict[str, Any]], dict[str, dict[str, int]]]:
+    """Parse legacy ground_truth.jsonl -> (flat_queries, relevance_map)."""
     flat: list[dict[str, Any]] = []
     rel: dict[str, dict[str, int]] = {}
     for ln in gt_file.read_text().splitlines():
@@ -115,6 +115,86 @@ def _parse_gt(gt_file: Path) -> tuple[list[dict[str, Any]], dict[str, dict[str, 
                 "seeds": q.get("seeds", []),
                 "pins": q.get("pins", []),
             })
+    return flat, rel
+
+
+def _parse_gt_tables(
+    repo_id: str,
+    gt_dir: Path,
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, int]]]:
+    """Parse post-processed GT tables -> (flat_queries, relevance_map)."""
+    queries_file = gt_dir / "queries.jsonl"
+    touched_file = gt_dir / "touched_objects.jsonl"
+
+    flat: list[dict[str, Any]] = []
+    rel: dict[str, dict[str, int]] = {}
+
+    for line in touched_file.read_text().splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        run_id = row.get("run_id", "")
+        if run_id == f"{repo_id}__non_ok":
+            continue
+        task_id = run_id.removeprefix(f"{repo_id}_")
+        if not task_id:
+            continue
+        rel.setdefault(task_id, {})[row["candidate_key"]] = 2 if row.get("tier") == "minimum" else 1
+
+    for line in queries_file.read_text().splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        run_id = row.get("run_id", "")
+        if run_id == f"{repo_id}__non_ok":
+            task_id = "__non_ok"
+        else:
+            task_id = run_id.removeprefix(f"{repo_id}_")
+        if not task_id:
+            continue
+        flat.append({
+            "task_id": task_id,
+            "query_id": row["query_id"],
+            "query_text": row["query_text"],
+            "query_type": row.get("query_type", ""),
+            "seeds": row.get("seeds", []),
+            "pins": row.get("pins", []),
+        })
+
+    return flat, rel
+
+
+def _parse_raw_task_jsons(gt_dir: Path) -> tuple[list[dict[str, Any]], dict[str, dict[str, int]]]:
+    """Parse raw per-task JSON files directly when JSONL tables are absent."""
+    from cpl_lab.collector import iter_task_json_files
+
+    flat: list[dict[str, Any]] = []
+    rel: dict[str, dict[str, int]] = {}
+
+    for task_file in iter_task_json_files(gt_dir):
+        task = json.loads(task_file.read_text())
+        tid = task.get("task_id")
+        if not tid:
+            continue
+
+        rel[tid] = {}
+        for d in task.get("minimum_sufficient_defs", []):
+            key = f"{d['path']}:{d.get('kind', '')}:{d.get('name', '')}:{d.get('start_line', 0)}"
+            rel[tid][key] = 2
+        for d in task.get("thrash_preventing_defs", []):
+            key = f"{d['path']}:{d.get('kind', '')}:{d.get('name', '')}:{d.get('start_line', 0)}"
+            rel[tid].setdefault(key, 1)
+
+        for qi, q in enumerate(task.get("queries", [])):
+            flat.append({
+                "task_id": tid,
+                "query_id": f"{tid}/Q{qi}",
+                "query_text": q["query_text"],
+                "query_type": q.get("query_type", ""),
+                "seeds": q.get("seeds", []),
+                "pins": q.get("pins", []),
+            })
+
     return flat, rel
 
 
@@ -153,8 +233,18 @@ def _worker_inner(args: tuple[str, str, str, str], queue: mp.Queue) -> None:  # 
         pass
     sys.stderr = open(os.devnull, "w")
 
+    gt_dir = data_dir / "ground_truth"
+    queries_file = gt_dir / "queries.jsonl"
+    touched_file = gt_dir / "touched_objects.jsonl"
     gt_file = data_dir / "ground_truth.jsonl"
-    queries, rel_map = _parse_gt(gt_file)
+
+    if queries_file.exists() and touched_file.exists():
+        queries, rel_map = _parse_gt_tables(repo_id, gt_dir)
+    elif gt_file.exists():
+        queries, rel_map = _parse_legacy_gt(gt_file)
+    else:
+        queries, rel_map = _parse_raw_task_jsons(gt_dir)
+
     if not queries:
         queue.put(("done", repo_id, {
             "repo_id": repo_id, "status": "skip", "queries_processed": 0,

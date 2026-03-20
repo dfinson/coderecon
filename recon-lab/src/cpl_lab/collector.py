@@ -16,6 +16,23 @@ from pathlib import Path
 from typing import Any
 
 
+_SPECIAL_GT_JSON_FILES = frozenset({
+    "non_ok_queries.json",
+    "summary.json",
+})
+
+
+def iter_task_json_files(gt_dir: Path) -> list[Path]:
+    """Return per-task ground-truth JSON files, excluding derived artifacts."""
+    if not gt_dir.is_dir():
+        return []
+    return sorted(
+        path
+        for path in gt_dir.glob("*.json")
+        if path.name not in _SPECIAL_GT_JSON_FILES
+    )
+
+
 def _resolve_end_line(
     cursor: sqlite3.Cursor,
     path: str,
@@ -82,7 +99,7 @@ def collect_ground_truth(
         Summary dict with counts and unmatched defs.
     """
     gt_dir = data_dir / "ground_truth"
-    task_files = sorted(gt_dir.glob("[NMW]*.json"))
+    task_files = iter_task_json_files(gt_dir)
     if not task_files:
         raise FileNotFoundError(f"No ground truth JSON files in {gt_dir}")
 

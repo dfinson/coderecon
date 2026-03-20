@@ -102,6 +102,19 @@ def fetch_prs(
     return prs
 
 
+def fetch_issue_body(owner: str, repo_name: str, issue_number: int) -> str:
+    """Fetch the body for a linked issue referenced by a PR."""
+    try:
+        issue = _gh_json([
+            "issue", "view", str(issue_number),
+            "--repo", f"{owner}/{repo_name}",
+            "--json", "body",
+        ], timeout=60)
+    except Exception:
+        return ""
+    return issue.get("body", "") or ""
+
+
 def fetch_pr_diff(owner: str, repo_name: str, pr_number: int) -> str:
     """Fetch the unified diff for a specific PR."""
     result = subprocess.run(
@@ -125,7 +138,8 @@ def filter_prs(prs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     Criteria:
     - Has at least one closing issue reference
     - Changed ≤ 20 files (not a bulk refactor)
-    - Has a meaningful issue body (≥ 50 chars from any linked issue)
+    - At least one linked issue body, fetched issue body, or PR body has ≥ 50
+      characters (prevents title-only tasks that contaminate GT quality)
     """
     good: list[dict[str, Any]] = []
 
@@ -138,19 +152,38 @@ def filter_prs(prs: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if changed_files > 20 or changed_files == 0:
             continue
 
-        # Check that at least one linked issue has a body
-        has_body = any(
-            len(issue.get("body", "") or "") >= 50
-            for issue in issues
-        )
+        # Require a substantive task description (≥ 50 chars) from any source.
+        # resolve_issue_text() falls back to the PR title when nothing else
+        # reaches this threshold, so check the sources directly here.
+        has_body = any(len((i.get("body", "") or "")) >= 50 for i in issues)
         if not has_body:
-            # Fall back to PR body if issues lack body
-            if len(pr.get("body", "") or "") < 50:
-                continue
+            pr_body = pr.get("body", "") or ""
+            has_body = len(pr_body) >= 50
+        if not has_body:
+            continue
 
         good.append(pr)
 
     return good
+
+
+def resolve_issue_text(owner: str, repo_name: str, pr: dict[str, Any]) -> str:
+    """Resolve the best available task text from linked issues or PR body."""
+    for issue in pr.get("closingIssuesReferences", []):
+        body = issue.get("body", "") or ""
+        if len(body) >= 50:
+            return body
+
+        number = issue.get("number")
+        if isinstance(number, int):
+            fetched_body = fetch_issue_body(owner, repo_name, number)
+            if len(fetched_body) >= 50:
+                return fetched_body
+
+    pr_body = pr.get("body", "") or ""
+    if len(pr_body) >= 50:
+        return pr_body
+    return pr["title"]
 
 
 # ── Single-repo mining ───────────────────────────────────────────
@@ -233,16 +266,7 @@ def mine_repo(
                 # (e.g., whitespace-only, config files, docs)
                 continue
 
-            # Get issue body (prefer linked issue, fall back to PR body)
-            issues = pr.get("closingIssuesReferences", [])
-            issue_body = ""
-            for issue in issues:
-                body = issue.get("body", "") or ""
-                if len(body) >= 50:
-                    issue_body = body
-                    break
-            if not issue_body:
-                issue_body = pr.get("body", "") or pr["title"]
+            issue_body = resolve_issue_text(owner, repo_name, pr)
 
             # ── LLM / heuristic filtering of thrash_preventing candidates ──
             min_suff_dicts = [

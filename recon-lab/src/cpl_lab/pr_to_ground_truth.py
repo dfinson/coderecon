@@ -490,6 +490,11 @@ def generate_queries(
     # Collect seeds and pins from defs
     seeds = list(dict.fromkeys(d.name for d in min_suff_defs))[:8]
     pins = list(dict.fromkeys(changed_paths))[:5]
+    fallback_identifiers = list(dict.fromkeys(
+        extract_identifiers_from_diff(diff_text)
+        + seeds
+        + [Path(path).stem for path in changed_paths]
+    ))[:10]
 
     # Q_SEMANTIC: natural language description from issue
     semantic_text = _first_meaningful_paragraph(issue_body) or issue_title
@@ -502,7 +507,7 @@ def generate_queries(
     ))
 
     # Q_IDENTIFIER: def names from the diff
-    diff_idents = extract_identifiers_from_diff(diff_text)[:10]
+    diff_idents = fallback_identifiers[:10]
     if diff_idents:
         queries.append(QueryEntry(
             query_type="Q_IDENTIFIER",
@@ -554,7 +559,12 @@ def generate_queries(
     ))
 
     # Q_STRUCTURAL: if we have class/module names
-    structural_names = [d.name for d in min_suff_defs if d.kind in ("class", "module", "struct", "interface", "trait")]
+    structural_names = [
+        d.name for d in min_suff_defs
+        if d.kind in ("class", "module", "struct", "interface", "trait")
+    ]
+    if not structural_names:
+        structural_names = seeds[:4]
     if structural_names:
         queries.append(QueryEntry(
             query_type="Q_STRUCTURAL",
@@ -648,6 +658,7 @@ def assemble_task_json(
                 "name": d.name,
                 "kind": d.kind,
                 "start_line": d.start_line,
+                "end_line": d.end_line,
                 "reason": d.reason,
             }
             for d in min_suff
@@ -658,6 +669,7 @@ def assemble_task_json(
                 "name": d.name,
                 "kind": d.kind,
                 "start_line": d.start_line,
+                "end_line": d.end_line,
                 "reason": d.reason,
             }
             for d in thrash_prev
@@ -673,6 +685,7 @@ def assemble_task_json(
                 "name": d.name,
                 "kind": d.kind,
                 "start_line": d.start_line,
+                "end_line": d.end_line,
                 "reason": d.reason,
             }
             for d in excluded

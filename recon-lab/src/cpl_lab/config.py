@@ -40,7 +40,7 @@ def _load_toml(path: Path) -> dict:
 def resolve_workspace(cli_override: str | None = None) -> Path:
     """Resolve the workspace directory.
 
-    Priority: CLI flag > lab.toml > default (~/.cpl-lab).
+    Priority: CLI flag > lab.toml > default (~/.recon/recon-lab).
     """
     if cli_override:
         return Path(cli_override).expanduser().resolve()
@@ -50,7 +50,7 @@ def resolve_workspace(cli_override: str | None = None) -> Path:
     if toml_path:
         return Path(toml_path).expanduser().resolve()
 
-    return Path.home() / ".cpl-lab"
+    return Path.home() / ".recon" / "recon-lab"
 
 
 def get_config(cli_override: str | None = None) -> dict:
@@ -74,9 +74,9 @@ def get_config(cli_override: str | None = None) -> dict:
         "index": {
             "timeout": cfg.get("index", {}).get("timeout", 1800),
         },
-        "generate": {
-            "concurrency": cfg.get("generate", {}).get("concurrency", 5),
-            "model": cfg.get("generate", {}).get("model", "claude-opus-4"),
+        "mine": {
+            "max_prs": cfg.get("mine", {}).get("max_prs", 100),
+            "llm_model": cfg.get("mine", {}).get("llm_model", "claude-haiku-4.5"),
         },
         "eval": {
             "default_experiment": cfg.get("eval", {}).get(

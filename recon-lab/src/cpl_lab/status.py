@@ -2,66 +2,20 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 import click
 
+from cpl_lab.collector import iter_task_json_files
 from cpl_lab.clone import REPO_SETS
-
-STAGES = ["audit", "exec_n", "exec_m", "exec_w", "review"]
-STAGE_LABELS = {
-    "audit": "Audit",
-    "exec_n": "Exec N",
-    "exec_m": "Exec M",
-    "exec_w": "Exec W",
-    "review": "Review",
-}
-PIPELINE_STEPS = ["clone", "index", "generate", "collect", "merge", "train"]
-
-
-def _load_gt_state(data_dir: Path) -> dict | None:
-    state_file = data_dir / "gt_state.json"
-    if state_file.exists():
-        return json.loads(state_file.read_text())
-    return None
-
-
-def _current_stage(state: dict) -> str | None:
-    """Determine which GT stage the pipeline is currently on."""
-    repos = state.get("repos", {})
-    if not repos:
-        return None
-    for stage in STAGES:
-        done = sum(
-            1 for rd in repos.values()
-            if rd.get(stage, {}).get("status") in ("done", "merged")
-        )
-        if done < len(repos):
-            return stage
-    return "complete"
-
-
-def _stage_counts(state: dict, stage: str) -> dict[str, int]:
-    """Count repos in each status for a given stage."""
-    counts: dict[str, int] = {"done": 0, "active": 0, "failed": 0, "pending": 0}
-    for rd in state.get("repos", {}).values():
-        st = rd.get(stage, {}).get("status", "pending")
-        if st in ("done", "merged"):
-            counts["done"] += 1
-        elif st in counts:
-            counts[st] += 1
-        else:
-            counts["pending"] += 1
-    return counts
+PIPELINE_STEPS = ["clone", "index", "mine", "collect", "merge", "train"]
 
 
 def _pipeline_position(
     clones_dir: Path,
     data_dir: Path,
     models_dir: Path,
-    gt_state: dict | None,
 ) -> tuple[str, str]:
     """Return (current_step, detail) for the overall pipeline."""
     # Check clones
@@ -83,25 +37,27 @@ def _pipeline_position(
     if total_indexed < total_expected:
         return "index", f"{total_indexed}/{total_expected} repos indexed"
 
-    # Check GT generation
-    if gt_state is None:
-        return "generate", "gt_state.json not found — run 'cpl-lab generate run'"
-    current = _current_stage(gt_state)
-    if current and current != "complete":
-        label = STAGE_LABELS.get(current, current)
-        counts = _stage_counts(gt_state, current)
-        total = sum(counts.values())
-        return "generate", f"stage {label}: {counts['done']}/{total} done, {counts['active']} active, {counts['failed']} failed"
-    if current == "complete":
-        pass  # fall through to signals
+    # total_expected is already computed above from REPO_SETS manifest.
+    mined_repos = 0
+    if data_dir.is_dir():
+        for repo_dir in data_dir.iterdir():
+            if not repo_dir.is_dir() or repo_dir.name == "merged":
+                continue
+            gt_dir = repo_dir / "ground_truth"
+            if (gt_dir / "queries.jsonl").exists() or iter_task_json_files(gt_dir):
+                mined_repos += 1
+    if mined_repos == 0:
+        return "mine", "no mined ground truth yet — run 'cpl-lab mine'"
+    if mined_repos < total_expected:
+        return "mine", f"{mined_repos}/{total_expected} repos have mined ground truth"
 
     # Check signals
     sig_repos = 0
     if data_dir.is_dir():
         for rd in data_dir.iterdir():
-            if rd.is_dir() and rd.name != "merged" and (rd / "signals" / "candidates_rank.jsonl").exists():
+            if rd.is_dir() and rd.name != "merged" and (rd / "signals" / "candidates_rank.parquet").exists():
                 sig_repos += 1
-    gt_repos = len(gt_state.get("repos", {})) if gt_state else 0
+    gt_repos = mined_repos
     if sig_repos < gt_repos:
         return "collect", f"{sig_repos}/{gt_repos} repos have signals"
 
@@ -132,8 +88,7 @@ def run_status(config: dict[str, Any], verbose: bool = False) -> None:
     click.echo()
 
     # ── Pipeline Position ────────────────────────────────────────
-    gt_state = _load_gt_state(data_dir)
-    step, detail = _pipeline_position(clones_dir, data_dir, models_dir, gt_state)
+    step, detail = _pipeline_position(clones_dir, data_dir, models_dir)
     step_idx = PIPELINE_STEPS.index(step) if step in PIPELINE_STEPS else len(PIPELINE_STEPS)
 
     click.echo("=== Pipeline Position ===")
@@ -146,24 +101,6 @@ def run_status(config: dict[str, Any], verbose: bool = False) -> None:
             click.echo(f"    {s}")
     if step == "done":
         click.echo(f"  ✓ {detail}")
-
-    # ── GT Stage Breakdown ───────────────────────────────────────
-    if gt_state and gt_state.get("repos"):
-        click.echo("\n=== Ground Truth Stages ===")
-        total = len(gt_state["repos"])
-        for stage in STAGES:
-            counts = _stage_counts(gt_state, stage)
-            done = counts["done"]
-            pct = done * 100 // total if total else 0
-            filled = pct // 4
-            bar = f"{'█' * filled}{'░' * (25 - filled)}"
-            label = STAGE_LABELS.get(stage, stage)
-            parts = [f"{done}/{total}"]
-            if counts["active"]:
-                parts.append(f"{counts['active']} active")
-            if counts["failed"]:
-                parts.append(f"{counts['failed']} failed")
-            click.echo(f"  {label:8s} {bar} {' | '.join(parts)}")
 
     # ── Clones ───────────────────────────────────────────────────
     click.echo("\n=== Clones ===")
@@ -184,7 +121,7 @@ def run_status(config: dict[str, Any], verbose: bool = False) -> None:
                 continue
             gt_dir = rd / "ground_truth"
             if gt_dir.is_dir():
-                tasks = list(gt_dir.glob("*.json"))
+                tasks = iter_task_json_files(gt_dir)
                 if tasks:
                     gt_repos += 1
                     gt_tasks += len(tasks)
@@ -199,7 +136,7 @@ def run_status(config: dict[str, Any], verbose: bool = False) -> None:
         for rd in sorted(data_dir.iterdir()):
             if not rd.is_dir() or rd.name == "merged":
                 continue
-            if (rd / "signals" / "candidates_rank.jsonl").exists():
+            if (rd / "signals" / "candidates_rank.parquet").exists():
                 sig_repos += 1
     click.echo(f"  Repos with signals: {sig_repos}")
 

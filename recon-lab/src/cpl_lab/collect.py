@@ -20,19 +20,44 @@ console = Console()
 
 def _iter_repos(data_dir: Path, repo_set: str) -> list[str]:
     """List repo IDs for signal collection (training sets only)."""
+    from cpl_lab.collector import iter_task_json_files
     from cpl_lab.clone import REPO_MANIFEST
+
     train_sets = {"ranker-gate", "cutoff"}
     allowed = {repo_set} if repo_set != "all" else train_sets
     train_ids = {rid for rid, info in REPO_MANIFEST.items() if info.get("set") in allowed}
     return sorted(
         d.name for d in data_dir.iterdir()
-        if d.is_dir() and d.name in train_ids and (d / "ground_truth.jsonl").exists()
+        if d.is_dir()
+        and d.name in train_ids
+        and (
+            (d / "ground_truth" / "queries.jsonl").exists()
+            or iter_task_json_files(d / "ground_truth")
+            or (d / "ground_truth.jsonl").exists()
+        )
     )
 
 
 def _find_clone_dir(clones_dir: Path, repo_id: str) -> Path | None:
     from cpl_lab.clone import clone_dir_for
     return clone_dir_for(repo_id, clones_dir)
+
+
+def _ensure_ground_truth_tables(repo_id: str, repo_dir: Path, clone_dir: Path) -> None:
+    """Post-process raw task JSONs into JSONL tables when needed."""
+    from cpl_lab.collector import collect_ground_truth, iter_task_json_files
+
+    gt_dir = repo_dir / "ground_truth"
+    if (gt_dir / "queries.jsonl").exists() and (gt_dir / "touched_objects.jsonl").exists():
+        return
+    if not iter_task_json_files(gt_dir):
+        return
+
+    index_db = clone_dir / ".recon" / "index.db"
+    if not index_db.exists():
+        raise FileNotFoundError(f"index.db not found: {index_db}")
+
+    collect_ground_truth(repo_id, repo_dir, index_db)
 
 
 def run_collect(
@@ -61,6 +86,12 @@ def run_collect(
             continue
         cd = _find_clone_dir(clones_dir, rid)
         if cd and (cd / ".recon" / "index.db").exists():
+            try:
+                _ensure_ground_truth_tables(rid, data_dir / rid, cd)
+            except Exception as exc:
+                if verbose:
+                    console.print(f"[red]Skipping {rid}: GT postprocess failed: {exc}[/red]")
+                continue
             jobs.append((rid, data_dir / rid, cd))
 
     if skipped:

@@ -37,7 +37,7 @@ def _postprocess_repos(
 
     Returns summary with counts of processed / skipped / failed repos.
     """
-    from cpl_lab.collector import collect_ground_truth
+    from cpl_lab.collector import collect_ground_truth, iter_task_json_files
 
     processed = skipped = failed = 0
     details: list[dict[str, Any]] = []
@@ -49,7 +49,7 @@ def _postprocess_repos(
         gt_dir = repo_dir / "ground_truth"
 
         # Skip if no per-task JSONs
-        task_jsons = list(gt_dir.glob("[NMW]*.json")) if gt_dir.is_dir() else []
+        task_jsons = iter_task_json_files(gt_dir)
         if not task_jsons:
             continue
 

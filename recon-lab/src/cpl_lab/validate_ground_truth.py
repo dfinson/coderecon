@@ -38,10 +38,13 @@ def _check_def_entry(entry: dict, context: str) -> list[str]:
     for field in ("path", "name", "kind", "reason"):
         if field not in entry:
             errors.append(f"{context}: missing required field '{field}'")
-    if "start_line" not in entry:
-        errors.append(f"{context}: missing required field 'start_line'")
-    elif not isinstance(entry["start_line"], int):
-        errors.append(f"{context}: 'start_line' must be int, got {type(entry['start_line']).__name__}")
+    for line_field in ("start_line", "end_line"):
+        if line_field not in entry:
+            errors.append(f"{context}: missing required field '{line_field}'")
+        elif not isinstance(entry[line_field], int):
+            errors.append(
+                f"{context}: '{line_field}' must be int, got {type(entry[line_field]).__name__}"
+            )
     if entry.get("kind") and entry["kind"] not in VALID_KINDS:
         errors.append(f"{context}: invalid kind '{entry['kind']}'")
     return errors
@@ -103,10 +106,10 @@ def validate_task(task: dict, file_path: str) -> list[str]:
             errors.extend(_check_query(q, f"{ctx}/queries[{i}]"))
             query_types_seen.add(q.get("query_type"))
         # At least 6 query types for narrow, 8 for medium/wide.
-        # PR-mined tasks get a relaxed minimum (4) since issue text
-        # may not provide enough material for 6+ distinct query types.
+        # PR-mined narrow tasks get a relaxed minimum (4) since
+        # issue text may not provide enough material for 6+ variants.
         is_pr_mined = task.get("source") == "pr-mining"
-        if is_pr_mined:
+        if is_pr_mined and tc == "narrow":
             min_queries = 4
         else:
             min_queries = 6 if tc == "narrow" else 8
@@ -169,6 +172,8 @@ def validate_non_ok(data: dict, file_path: str) -> list[str]:
 
 def validate_repo(data_dir: Path) -> list[str]:
     """Validate all ground truth files for a repo."""
+    from cpl_lab.collector import iter_task_json_files
+
     errors: list[str] = []
 
     gt_dir = data_dir / "ground_truth"
@@ -176,7 +181,7 @@ def validate_repo(data_dir: Path) -> list[str]:
         errors.append(f"Directory not found: {gt_dir}")
         return errors
 
-    task_files = sorted(gt_dir.glob("*.json"))
+    task_files = iter_task_json_files(gt_dir)
     if not task_files:
         errors.append(f"No JSON files in {gt_dir}")
         return errors
@@ -193,9 +198,8 @@ def validate_repo(data_dir: Path) -> list[str]:
     has_pr_mined = any(
         json.loads(tf.read_text()).get("source") == "pr-mining"
         for tf in task_files
-        if tf.name != "non_ok_queries.json"
     )
-    non_ok_path = data_dir / "non_ok_queries.json"
+    non_ok_path = gt_dir / "non_ok_queries.json"
     if non_ok_path.exists():
         try:
             non_ok = json.loads(non_ok_path.read_text())

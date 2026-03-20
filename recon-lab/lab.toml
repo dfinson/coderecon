@@ -4,7 +4,7 @@
 [workspace]
 # Base directory for mutable data (clones, ground truth, signals, models).
 # Override: --workspace CLI flag.
-path = "~/.recon-lab"
+path = "~/.recon/recon-lab"
 
 [clone]
 jobs = 4
@@ -13,9 +13,9 @@ depth = 1  # shallow clone depth (1 = single commit)
 [index]
 timeout = 1800  # 30 minutes per repo
 
-[generate]
-concurrency = 5
-model = "claude-opus-4"
+[mine]
+max_prs = 100
+llm_model = "claude-haiku-4.5"
 
 [train]
 # "auto" resolves to $workspace/data

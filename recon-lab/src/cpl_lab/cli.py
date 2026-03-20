@@ -4,7 +4,6 @@ Usage:
     cpl-lab clone [--set SET]
     cpl-lab index [--set SET] [--timeout SECS]
     cpl-lab mine [--set SET] [--repo ID] [--max-prs N]
-    cpl-lab generate-legacy [--set SET] [--repo ID] [--stage STAGE] [--concurrency N]
     cpl-lab collect [--set SET] [--repo ID]
     cpl-lab merge [--what {gt,signals,all}]
     cpl-lab train [--model {ranker,cutoff,gate,all}]
@@ -20,7 +19,6 @@ import click
 from cpl_lab.config import get_config
 
 SETS = ("ranker-gate", "cutoff", "eval", "all")
-STAGES = ("audit", "exec_n", "exec_m", "exec_w", "review", "all")
 MODELS = ("ranker", "cutoff", "gate", "all")
 MERGE_TARGETS = ("gt", "signals", "all")
 
@@ -95,9 +93,9 @@ def index(ctx: click.Context, repo_set: str, timeout: int | None, reindex: bool)
 @click.option("--set", "repo_set", type=click.Choice(SETS), default="all",
               help="Which repo set to mine PRs for.")
 @click.option("--repo", default=None, help="Single repo ID (e.g. python-flask).")
-@click.option("--max-prs", type=int, default=100, help="Max PRs to fetch per repo.")
+@click.option("--max-prs", type=int, default=None, help="Max PRs to fetch per repo.")
 @click.option("--no-filter", is_flag=True, help="Skip LLM filtering (heuristic only).")
-@click.option("--llm-model", default="claude-haiku-4.5",
+@click.option("--llm-model", default=None,
               help="LLM model for candidate filtering.")
 @click.pass_context
 def mine(ctx: click.Context, repo_set: str, repo: str | None, max_prs: int,
@@ -106,6 +104,8 @@ def mine(ctx: click.Context, repo_set: str, repo: str | None, max_prs: int,
     from cpl_lab.mine import run_mine
 
     cfg = ctx.obj["config"]
+    max_prs = max_prs or cfg["mine"]["max_prs"]
+    llm_model = llm_model or cfg["mine"]["llm_model"]
     run_mine(
         data_dir=cfg["data_dir"],
         clones_dir=cfg["clones_dir"],
@@ -114,37 +114,6 @@ def mine(ctx: click.Context, repo_set: str, repo: str | None, max_prs: int,
         max_prs=max_prs,
         no_filter=no_filter,
         llm_model=llm_model,
-        verbose=ctx.obj["verbose"],
-    )
-
-
-# ── generate-legacy ──────────────────────────────────────────────
-
-
-@main.command("generate-legacy")
-@click.option("--set", "repo_set", type=click.Choice(SETS[:-1]), default=None,
-              help="Which repo set to generate GT for.")
-@click.option("--repo", default=None, help="Single repo ID (e.g. python-httpx).")
-@click.option("--stage", type=click.Choice(STAGES), default="all",
-              help="Run a single pipeline stage.")
-@click.option("--concurrency", type=int, default=None, help="Max concurrent sessions.")
-@click.option("--resume", is_flag=True, help="Resume from last checkpoint.")
-@click.pass_context
-def generate_legacy(ctx: click.Context, repo_set: str | None, repo: str | None,
-                    stage: str, concurrency: int | None, resume: bool) -> None:
-    """[Legacy] Run the Copilot SDK ground truth pipeline."""
-    from cpl_lab.generate import run_generate
-
-    cfg = ctx.obj["config"]
-    concurrency = concurrency or cfg["generate"]["concurrency"]
-    run_generate(
-        config=cfg,
-        repo_set=repo_set,
-        repo=repo,
-        stage=None if stage == "all" else stage,
-        concurrency=concurrency,
-        resume=resume,
-        dry_run=ctx.obj["dry_run"],
         verbose=ctx.obj["verbose"],
     )
 
@@ -269,3 +238,7 @@ def status(ctx: click.Context) -> None:
 
     cfg = ctx.obj["config"]
     run_status(config=cfg, verbose=ctx.obj["verbose"])
+
+
+if __name__ == "__main__":
+    main()
