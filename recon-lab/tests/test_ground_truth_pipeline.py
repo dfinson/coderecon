@@ -3,10 +3,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import click
+import pytest
+
 from cpl_lab.collect_signals import _parse_gt_tables, _parse_raw_task_jsons
 from cpl_lab.collect import _find_clone_dir
 from cpl_lab.collector import iter_task_json_files
 from cpl_lab.data_manifest import load_repo_manifest, write_repo_manifest
+from cpl_lab.github_models import _token_budget_field, response_text
+from cpl_lab.index import _ensure_recon_models, _find_recon_python, _recon_env, _recon_init_cmd
 from cpl_lab.merge_signals import _align_to_merged
 from cpl_lab.patch_ground_truth import parse_unified_diff
 from cpl_lab.validate_ground_truth import validate_task
@@ -227,3 +232,70 @@ def test_align_to_merged_preserves_logical_repo_id() -> None:
 
     assert "logical_repo_id" in aligned.column_names
     assert aligned.column("logical_repo_id").to_pylist() == ["django__django"]
+
+
+def test_find_recon_python_prefers_repo_venv(tmp_path: Path, monkeypatch) -> None:
+    repo_root = tmp_path / "coderecon"
+    venv_python = repo_root / ".venv" / "bin" / "python"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.write_text("#!/usr/bin/env python3\n")
+    venv_python.chmod(0o755)
+
+    fallback_python = tmp_path / "python3"
+    fallback_python.write_text("#!/usr/bin/env python3\n")
+    fallback_python.chmod(0o755)
+    monkeypatch.setattr("sys.executable", str(fallback_python))
+
+    assert _find_recon_python(repo_root) == str(venv_python)
+
+
+def test_recon_env_prepends_coderecon_src(tmp_path: Path, monkeypatch) -> None:
+    repo_root = tmp_path / "coderecon"
+    monkeypatch.setenv("PYTHONPATH", "existing:path")
+
+    env = _recon_env(repo_root)
+
+    assert env["PYTHONPATH"] == f"{repo_root / 'src'}:existing:path"
+
+
+def test_token_budget_field_uses_gpt5_compat_name() -> None:
+    assert _token_budget_field("openai/gpt-4.1-mini") == "max_tokens"
+    assert _token_budget_field("openai/gpt-5-mini") == "max_completion_tokens"
+
+
+def test_response_text_supports_string_and_part_lists() -> None:
+    assert response_text({"choices": [{"message": {"content": "ok"}}]}) == "ok"
+    assert response_text(
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": [
+                            {"type": "text", "text": "o"},
+                            {"type": "text", "text": "k"},
+                        ]
+                    }
+                }
+            ]
+        }
+    ) == "ok"
+
+
+def test_recon_init_cmd_supports_reindex_flag(tmp_path: Path, monkeypatch) -> None:
+    repo_root = tmp_path / "coderecon"
+    venv_python = repo_root / ".venv" / "bin" / "python"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.write_text("#!/usr/bin/env python3\n")
+    venv_python.chmod(0o755)
+    monkeypatch.setattr("cpl_lab.index._coderecon_repo_root", lambda: repo_root)
+
+    cmd, _ = _recon_init_cmd(tmp_path / "repo", reindex=True)
+
+    assert cmd[-3:] == ["init", "-r", str(tmp_path / "repo")]
+
+
+def test_ensure_recon_models_raises_when_bootstrap_fails(monkeypatch) -> None:
+    monkeypatch.setattr("coderecon.cli.models.ensure_models", lambda interactive: False)
+
+    with pytest.raises(click.ClickException):
+        _ensure_recon_models()

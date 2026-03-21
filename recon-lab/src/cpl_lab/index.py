@@ -1,19 +1,56 @@
-"""Index cloned repos with `cpl init` — ported from index_all.sh."""
+"""Index cloned repos with `recon init` — ported from index_all.sh."""
 
 from __future__ import annotations
 
-import shutil
+import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 
 import click
 
 
-def _find_cpl() -> str:
-    """Find the cpl binary, preferring the coderecon venv."""
-    from cpl_lab.collect import _find_cpl_bin
-    return _find_cpl_bin()
+def _coderecon_repo_root() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
+def _find_recon_python(repo_root: Path | None = None) -> str:
+    """Find a Python interpreter that can run CodeRecon's source-tree CLI."""
+    root = repo_root or _coderecon_repo_root()
+    candidates = [
+        root / ".venv" / "bin" / "python",
+        Path(sys.executable),
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    raise click.ClickException("Could not find a Python interpreter for recon init")
+
+
+def _recon_env(repo_root: Path | None = None) -> dict[str, str]:
+    root = repo_root or _coderecon_repo_root()
+    env = os.environ.copy()
+    src_path = str(root / "src")
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{src_path}:{existing}" if existing else src_path
+    return env
+
+
+def _recon_init_cmd(repo_dir: Path, *, reindex: bool = False) -> tuple[list[str], dict[str, str]]:
+    repo_root = _coderecon_repo_root()
+    cmd = [_find_recon_python(repo_root), "-m", "coderecon.cli.main", "init"]
+    if reindex:
+        cmd.append("-r")
+    cmd.append(str(repo_dir))
+    return cmd, _recon_env(repo_root)
+
+
+def _ensure_recon_models() -> None:
+    from coderecon.cli.models import ensure_models
+
+    if not ensure_models(interactive=False):
+        raise click.ClickException("Embedding models are required for recon init")
 
 
 def _iter_clones(clones_dir: Path, repo_set: str) -> list[Path]:
@@ -42,9 +79,11 @@ def run_index(
     dry_run: bool = False,
     verbose: bool = False,
 ) -> None:
-    """Run `cpl init` on each clone."""
-    cpl = _find_cpl()
+    """Run `recon init` on each clone."""
     repos = _iter_clones(clones_dir, repo_set)
+
+    if repos and not dry_run:
+        _ensure_recon_models()
 
     ok = skipped = failed = 0
 
@@ -64,14 +103,11 @@ def run_index(
         click.echo(f"INDEX {rel} ... ", nl=False)
         start = time.monotonic()
 
-        cmd = [cpl, "init"]
-        if reindex:
-            cmd.append("-r")
-        cmd.append(str(repo_dir))
+        cmd, env = _recon_init_cmd(repo_dir, reindex=reindex)
 
         try:
             subprocess.run(
-                cmd, timeout=timeout, check=True,
+                cmd, env=env, timeout=timeout, check=True,
                 capture_output=True, text=True,
             )
             elapsed = time.monotonic() - start
@@ -84,7 +120,7 @@ def run_index(
         except subprocess.CalledProcessError as e:
             elapsed = time.monotonic() - start
             click.echo(f"FAILED exit={e.returncode} ({elapsed:.0f}s)")
-            if verbose and e.stderr:
+            if e.stderr:
                 click.echo(f"  {e.stderr[:200]}")
             failed += 1
 

@@ -290,13 +290,18 @@ def _process_repo(
     if result.returncode == 0:
         _git(["remote", "remove", "origin"], cwd=dest)
 
-    # Stage 4: cpl init
-    if (dest / ".recon").is_dir():
+    # Stage 4: recon init
+    recon_dir = dest / ".recon"
+    if recon_dir.is_dir() and (recon_dir / "index.db").is_file():
         if verbose:
             click.echo(f"  {name}: already indexed")
     else:
-        click.echo(f"  {name}: running cpl init...")
-        subprocess.run(["cpl", "init"], cwd=dest, check=False)
+        from cpl_lab.index import _ensure_recon_models, _recon_init_cmd
+
+        click.echo(f"  {name}: running recon init...")
+        _ensure_recon_models()
+        cmd, env = _recon_init_cmd(dest, reindex=recon_dir.is_dir())
+        subprocess.run(cmd, env=env, check=False)
 
     # Commit any uncommitted artifacts
     result = _git(["status", "--porcelain"], cwd=dest)

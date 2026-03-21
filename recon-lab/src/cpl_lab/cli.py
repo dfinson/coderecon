@@ -71,7 +71,7 @@ def clone(ctx: click.Context, repo_set: str, jobs: int | None) -> None:
 @click.option("--reindex", is_flag=True, help="Force re-index even if .recon/ exists.")
 @click.pass_context
 def index(ctx: click.Context, repo_set: str, timeout: int | None, reindex: bool) -> None:
-    """Run `cpl init` on each clone."""
+    """Run `recon init` on each clone."""
     from cpl_lab.index import run_index
 
     cfg = ctx.obj["config"]

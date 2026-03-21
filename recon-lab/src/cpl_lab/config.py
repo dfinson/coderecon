@@ -84,8 +84,8 @@ def get_config(cli_override: str | None = None) -> dict:
                 "eval_dataset", "princeton-nlp/SWE-bench_Verified"
             ),
             "eval_split": swebench_cfg.get("eval_split", "test"),
-            "llm_model": swebench_cfg.get("llm_model", "claude-haiku-4.5"),
-            "filter_model": swebench_cfg.get("filter_model", "claude-haiku-4.5"),
+            "llm_model": swebench_cfg.get("llm_model", "openai/gpt-4.1-mini"),
+            "filter_model": swebench_cfg.get("filter_model", "openai/gpt-4.1-mini"),
             "max_instances": swebench_cfg.get("max_instances", 0),
             "cutoff_mod": swebench_cfg.get("cutoff_mod", 5),
             "cutoff_remainder": swebench_cfg.get("cutoff_remainder", 4),

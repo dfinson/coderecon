@@ -22,11 +22,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from cpl_lab.github_models import response_text, run_chat_completion
+
 logger = logging.getLogger(__name__)
 
 # ── Configuration ────────────────────────────────────────────────
 
-DEFAULT_MODEL = "claude-haiku-4.5"
+DEFAULT_MODEL = "openai/gpt-4.1-mini"
 
 # Cap per-task candidates to avoid runaway costs on wide PRs
 MAX_CANDIDATES_PER_TASK = 60
@@ -154,26 +156,17 @@ def _call_llm(
     system_prompt: str,
     user_prompt: str,
 ) -> dict[str, Any]:
-    """Call an LLM via the `gh` CLI (Copilot API) or subprocess.
-
-    Tries `gh copilot` first, falls back to `gh models run`.
-    Returns parsed JSON response or a default.
-    """
-    # Try gh models run (GitHub Models API — works with gh CLI)
+    """Call an LLM and return a parsed relevance judgment."""
     try:
-        result = subprocess.run(
-            [
-                "gh", "models", "run", model,
-                "--system-prompt", system_prompt,
-                user_prompt,
-            ],
-            capture_output=True,
-            text=True,
+        response = run_chat_completion(
+            model=model,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            max_tokens=150,
             timeout=30,
         )
-        if result.returncode == 0:
-            return _parse_llm_response(result.stdout)
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return _parse_llm_response(response_text(response))
+    except RuntimeError:
         pass
 
     # Fallback: try via environment ANTHROPIC_API_KEY + curl

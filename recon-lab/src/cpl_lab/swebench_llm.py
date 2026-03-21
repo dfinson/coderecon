@@ -8,6 +8,8 @@ import subprocess
 from dataclasses import dataclass
 from typing import Any
 
+from cpl_lab.github_models import response_text, run_chat_completion
+
 
 OK_QUERY_TYPES = (
     "Q_SEMANTIC",
@@ -108,23 +110,17 @@ def adapt_instance(
 
 
 def _call_llm_json(*, model: str, system_prompt: str, user_prompt: str) -> dict[str, Any]:
-    commands = [
-        ["gh", "models", "run", model, "--system-prompt", system_prompt, user_prompt],
-    ]
-
-    for command in commands:
-        try:
-            result = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                timeout=90,
-                check=False,
-            )
-        except FileNotFoundError:
-            continue
-        if result.returncode == 0:
-            return _parse_json_object(result.stdout)
+    try:
+        response = run_chat_completion(
+            model=model,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            max_tokens=2500,
+            timeout=90,
+        )
+        return _parse_json_object(response_text(response))
+    except RuntimeError:
+        pass
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if api_key:

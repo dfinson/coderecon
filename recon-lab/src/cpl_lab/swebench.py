@@ -320,15 +320,21 @@ def _ensure_instance_checkout(instance: SwebenchInstance, clones_dir: Path) -> P
                 f"Existing instance checkout at {instance_dir} is pinned to {current[:12]}, expected {instance.base_commit[:12]}"
             )
 
-    if not (instance_dir / ".recon" / "index.db").exists():
-        from cpl_lab.index import _find_cpl
+    index_db = instance_dir / ".recon" / "index.db"
+    if not index_db.exists():
+        from cpl_lab.index import _ensure_recon_models, _recon_init_cmd
 
-        subprocess.run([_find_cpl(), "init", str(instance_dir)], check=True, capture_output=True, text=True)
+        _ensure_recon_models()
+        cmd, env = _recon_init_cmd(instance_dir, reindex=(instance_dir / ".recon").is_dir())
+        result = subprocess.run(cmd, env=env, check=False, capture_output=True, text=True)
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip() or "recon init failed"
+            raise RuntimeError(detail)
 
     return instance_dir
 
 
-def _run_git(args: list[str], cwd: Path) -> str:
+def _run_git(args: list[str], cwd: Path | None = None) -> str:
     result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "git command failed")
