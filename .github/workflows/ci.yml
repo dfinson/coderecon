@@ -116,7 +116,7 @@ jobs:
           coverage report --fail-under=90 || echo "::warning::Coverage is below 90% threshold. Please add tests to improve coverage."
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
@@ -124,7 +124,7 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: junit.xml
@@ -193,7 +193,7 @@ jobs:
 
   #     - name: Upload test results to Codecov
   #       if: ${{ !cancelled() }}
-  #       uses: codecov/codecov-action@v5
+  #       uses: codecov/codecov-action@v6
   #       with:
   #         token: ${{ secrets.CODECOV_TOKEN }}
   #         files: junit-e2e.xml
