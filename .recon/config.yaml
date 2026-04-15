@@ -1,0 +1,13 @@
+# CodeRecon Configuration
+# Docs: https://coderecon.dev/config
+
+# Server port (can also use: recon up --port <N>)
+port: 7654
+
+# Maximum file size to index (MB). Files larger than this are skipped.
+# Increase for repos with large source files, but may slow indexing.
+# max_file_size_mb: 20
+
+# Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+# DEBUG is very verbose - use only for troubleshooting.
+# log_level: INFO

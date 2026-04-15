@@ -1,12 +1,26 @@
 {
   "folders": [
-    { "path": "src" },
-    { "path": "tests" },
-    { "path": "docs" },
-    { "path": "data" },
-    { "path": ".github" },
-    { "path": ".vscode" },
-    { "path": ".recon" }
+    {
+      "path": "src"
+    },
+    {
+      "path": "tests"
+    },
+    {
+      "path": "docs"
+    },
+    {
+      "path": ".github"
+    },
+    {
+      "path": ".vscode"
+    },
+    {
+      "path": ".recon"
+    },
+    {
+      "path": "recon-lab"
+    }
   ],
   "settings": {
     "github.copilot.chat.virtualTools.threshold": 128,
