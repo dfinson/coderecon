@@ -17,7 +17,6 @@ from fastmcp import Context
 from pydantic import Field
 
 from coderecon.mcp.tools.recon.harvesters import (
-    _harvest_def_embedding,
     _harvest_explicit,
     _harvest_graph,
     _harvest_imports,
@@ -54,10 +53,7 @@ async def raw_signals_pipeline(
     # Parse query
     parsed = parse_task(query)
 
-    # Run all harvesters in parallel-safe order
-    # A: Embedding (per-def + per-file, both indices) — no cap
-    emb_candidates = await _harvest_def_embedding(app_ctx, parsed)
-
+    # Run all harvesters
     # B: Term match
     term_candidates = await _harvest_term_match(app_ctx, parsed)
 
@@ -66,8 +62,8 @@ async def raw_signals_pipeline(
         app_ctx, parsed, explicit_seeds=seeds or None,
     )
 
-    # Merge A-D
-    merged = _merge_candidates(emb_candidates, term_candidates, explicit_candidates)
+    # Merge B-D
+    merged = _merge_candidates(term_candidates, explicit_candidates)
 
     # D2: Pin injection — add all defs from pinned files
     if pins:
@@ -116,21 +112,15 @@ async def raw_signals_pipeline(
     # Enrich: resolve missing DefFacts, populate metadata
     await _enrich_candidates(app_ctx, merged)
 
-    # Build per-retriever score/rank lists
-    # Embedding scores from evidence
-    emb_scores: dict[str, float] = {}
-    for uid, cand in emb_candidates.items():
-        for ev in cand.evidence:
-            if ev.category == "embedding":
-                emb_scores[uid] = ev.score
-                break
-
-    # Compute ranks for embedding only (other signals use categorical features)
-    def _compute_ranks(scores: dict[str, float]) -> dict[str, int]:
-        sorted_uids = sorted(scores.keys(), key=lambda u: -scores[u])
-        return {uid: rank for rank, uid in enumerate(sorted_uids, 1)}
-
-    emb_ranks = _compute_ranks(emb_scores)
+    # Collect seed file paths for path/package distance computation
+    seed_paths: list[str] = []
+    seed_modules: list[str] = []
+    for uid, cand in merged.items():
+        if cand.from_explicit:
+            if cand.file_path:
+                seed_paths.append(cand.file_path)
+            if cand.declared_module:
+                seed_modules.append(cand.declared_module)
 
     # Build candidate list
     candidates_out: list[dict[str, Any]] = []
@@ -142,7 +132,6 @@ async def raw_signals_pipeline(
 
         # Count retrievers that found this def
         retriever_hits = sum([
-            uid in emb_scores,
             cand.from_term_match,
             cand.from_graph,
             cand.from_explicit,
@@ -156,6 +145,14 @@ async def raw_signals_pipeline(
 
         # Nesting depth from lexical_path
         nesting_depth = d.lexical_path.count(".") if d.lexical_path else 0
+
+        # Path distance to nearest seed (shared prefix depth)
+        seed_path_distance = _min_path_distance(cand.file_path, seed_paths)
+
+        # Package distance to nearest seed module
+        same_package, package_distance = _min_package_distance(
+            cand.declared_module, seed_modules
+        )
 
         candidates_out.append({
             # Identity
@@ -183,22 +180,32 @@ async def raw_signals_pipeline(
             "has_parent_scope": nesting_depth > 0,
             "hub_score": cand.hub_score,
             "is_test": cand.is_test,
-            # Embedding signal (continuous)
-            "emb_score": emb_scores.get(uid),
-            "emb_rank": emb_ranks.get(uid),
+            "is_barrel": cand.is_barrel,
+            "is_endpoint": cand.is_endpoint,
+            "test_coverage_count": cand.test_coverage_count,
+            "artifact_kind": cand.artifact_kind,
+            # Structural link signals
+            "shares_file_with_seed": cand.shares_file_with_seed,
+            "is_callee_of_top": cand.is_callee_of_top,
+            "is_imported_by_top": cand.is_imported_by_top,
             # Term match signal (raw counts)
             "term_match_count": cand.term_match_count if cand.from_term_match else None,
             "term_total_matches": cand.term_total_matches if cand.from_term_match else None,
-
+            "lex_hit_count": cand.lex_hit_count,
             # Graph signal (categorical)
             "graph_edge_type": cand.graph_edge_type,
             "graph_seed_rank": cand.graph_seed_rank,
+            "graph_caller_max_tier": cand.graph_caller_max_tier,
             # Symbol/explicit signal (categorical)
             "symbol_source": cand.symbol_source,
             # Import signal (categorical)
             "import_direction": cand.import_direction,
             # Retriever agreement
             "retriever_hits": retriever_hits,
+            # Locality signals
+            "seed_path_distance": seed_path_distance,
+            "same_package": same_package,
+            "package_distance": package_distance,
         })
 
     elapsed_ms = round((time.monotonic() - t0) * 1000)
@@ -214,6 +221,10 @@ async def raw_signals_pipeline(
         "has_numbers": any(c.isdigit() for c in query),
         "has_quoted_strings": '"' in query or "'" in query,
         "term_count": len(parsed.primary_terms) + len(parsed.secondary_terms),
+        # Task intent signals
+        "intent": parsed.intent,
+        "is_stacktrace_driven": parsed.is_stacktrace_driven,
+        "is_test_driven": parsed.is_test_driven,
     }
 
     # Repo features
@@ -241,8 +252,8 @@ async def raw_signals_pipeline(
         "diagnostics": {
             "elapsed_ms": elapsed_ms,
             "candidate_count": len(candidates_out),
-            "emb_hits": len(emb_scores),
             "term_hits": sum(1 for c in merged.values() if c.from_term_match),
+            "lex_hits": sum(1 for c in merged.values() if c.lex_hit_count > 0),
             "graph_hits": sum(1 for c in merged.values() if c.from_graph),
             "symbol_hits": sum(1 for c in merged.values() if c.from_explicit),
             "import_hits": sum(1 for c in merged.values() if c.import_direction is not None),
@@ -281,7 +292,7 @@ def register_raw_signals_tool(mcp: FastMCP, app_ctx: AppContext) -> None:
     ) -> dict[str, Any]:
         """Raw retrieval signals for ranking model training.
 
-        Runs all retrievers (embedding, lexical, term match, graph,
+        Runs all retrievers (lexical, term match, graph,
         symbol) against the current index and returns the unfiltered
         candidate pool with per-retriever scores and ranks per DefFact.
 
@@ -302,3 +313,68 @@ def register_raw_signals_tool(mcp: FastMCP, app_ctx: AppContext) -> None:
             resource_kind="raw_signals",
             session_id=ctx.session_id,
         )
+
+
+# ---------------------------------------------------------------------------
+# Locality helpers
+# ---------------------------------------------------------------------------
+
+
+def _shared_prefix_depth(a: str, b: str) -> int:
+    """Count shared directory prefix segments between two paths."""
+    a_parts = a.split("/")
+    b_parts = b.split("/")
+    shared = 0
+    for pa, pb in zip(a_parts, b_parts):
+        if pa == pb:
+            shared += 1
+        else:
+            break
+    return shared
+
+
+def _min_path_distance(candidate_path: str, seed_paths: list[str]) -> int:
+    """Minimum directory distance from candidate to any seed path.
+
+    Distance = (candidate depth - shared) + (seed depth - shared).
+    Returns 999 if no seeds (neutral default for model).
+    """
+    if not seed_paths or not candidate_path:
+        return 999
+    c_depth = candidate_path.count("/")
+    best = 999
+    for sp in seed_paths:
+        shared = _shared_prefix_depth(candidate_path, sp)
+        s_depth = sp.count("/")
+        dist = (c_depth - shared) + (s_depth - shared)
+        if dist < best:
+            best = dist
+    return best
+
+
+def _min_package_distance(
+    candidate_module: str, seed_modules: list[str]
+) -> tuple[bool, int]:
+    """Minimum package distance from candidate to any seed module.
+
+    Returns (same_package: bool, distance: int).
+    """
+    if not seed_modules or not candidate_module:
+        return False, 999
+    c_parts = candidate_module.split(".")
+    best_dist = 999
+    same = False
+    for sm in seed_modules:
+        s_parts = sm.split(".")
+        shared = 0
+        for cp, sp in zip(c_parts, s_parts):
+            if cp == sp:
+                shared += 1
+            else:
+                break
+        dist = (len(c_parts) - shared) + (len(s_parts) - shared)
+        if dist < best_dist:
+            best_dist = dist
+        if shared > 0 and shared >= min(len(c_parts), len(s_parts)):
+            same = True
+    return same, best_dist

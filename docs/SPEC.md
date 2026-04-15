@@ -54,7 +54,6 @@
 - [13. Observability and Operator Insight](#13-observability-and-operator-insight)
   - [13.1–13.6 Observability Design](#131-why-observability)
 - [15. Deterministic Refactoring Primitives](#15-deterministic-refactoring-primitives-summary-level-capability-list)
-- [16. Embeddings Policy](#16-embeddings-policy)
 - [17. Subsystem Ownership Boundaries](#17-subsystem-ownership-boundaries-who-owns-what)
 - [18. Resolved Conflicts](#18-resolved-conflicts-previously-open)
 - [19. Semantic Support Exploration](#19-semantic-support-exploration-design-archaeology)
@@ -136,7 +135,6 @@ CodeRecon is **not**:
 - a chatbot
 - an agent
 - a semantic reasoning engine
-- embedding-first
 - a Git or IDE replacement
 - an orchestrator
 
@@ -172,14 +170,34 @@ CodeRecon uses a single operator CLI: `recon`. It is explicitly **not agent-faci
 
 Core commands (idempotent; human output derivable from structured JSON via `--json`):
 
+**Server lifecycle:**
+
 | Command | Description |
 |---|---|
-| `recon init` | One-time repo setup: write `.recon/`, generate `.cplignore`, bind repo ID, build first index (or schedule immediately). |
-| `recon up` | Start the CodeRecon server (foreground). Ctrl+C to stop. Idempotent check prevents duplicate instances. |
-| `recon status` | Single human-readable view: server running, repo fingerprint, index version, last reconcile, last error. |
-| `recon clear` | Remove CodeRecon artifacts (`.recon/` directory) from this repository. Idempotent. |
+| `recon up` | Start the global multi-repo daemon (foreground). Ctrl+C to stop. Idempotent check prevents duplicate instances. |
+| `recon down` | Stop the running daemon. |
+| `recon restart` | Restart the running daemon. |
+| `recon status` | Human-readable view: daemon status, registered repos, index state, last error. |
 
-Humans learn: `init` once, then `up/status/clear`.
+**Repository management:**
+
+| Command | Description |
+|---|---|
+| `recon register [PATH] [-t TARGET]` | Register a repo in the global catalog. Runs index build if needed. Activates immediately if daemon is running. Writes per-tool MCP config (default: auto-detect). |
+| `recon unregister [PATH]` | Remove a repo from the catalog and deactivate its live slot. |
+| `recon catalog` | List all registered repositories and their worktrees. |
+| `recon worktrees [PATH]` | List worktrees for a specific repository. |
+| `recon register-worktree` | Register a specific git worktree. |
+| `recon global-status` | Show daemon health across all registered repos. |
+
+**Per-repo utilities:**
+
+| Command | Description |
+|---|---|
+| `recon clear [PATH]` | Remove CodeRecon artifacts (`.recon/` directory) from a repository. Idempotent. |
+| `recon init [PATH]` | *(Internal)* Low-level repo initialization; use `recon register` instead. |
+
+Humans learn: `recon up` once, then `recon register` per repo.
 
 ### Folded and Removed Commands
 
@@ -195,9 +213,8 @@ The following capabilities are folded into core commands or removed to avoid sur
 Server model:
 
 - **Foreground process** — `recon up` runs in foreground, Ctrl+C to stop. No background daemonization.
-- **Repo-scoped** — one server per repository; no multi-repo mode.
-- `recon up` in a repo directory starts a server for that repo only.
-- Transport: **HTTP localhost** with ephemeral port.
+- **Global multi-repo daemon** — one daemon process manages all registered repos. Repos are added/removed via `recon register` / `recon unregister` without a daemon restart.
+- Transport: **HTTP localhost** with configurable port (default 3100).
   - Cross-platform with identical code (no socket vs named pipe divergence).
   - MCP clients can connect directly via HTTP/SSE transport (no stdio proxy needed).
 - Response header:
@@ -332,7 +349,7 @@ Fields:
 
 Defaults prevent footguns:
 
-- `.cplignore` auto-generated
+- `.reconignore` auto-generated
 - Dangerous paths excluded
 - Overlay disabled by default in CI
 
@@ -366,7 +383,7 @@ One source uses “local, always-on control plane” as conceptual framing; the 
 Unified operational interpretation:
 
 - CodeRecon is **conceptually** a “control plane beneath agents.”
-- It is **operationally** a repo-scoped foreground server started via `recon up` (Ctrl+C to stop).
+- It is **operationally** a global foreground daemon started via `recon up` (Ctrl+C to stop), managing all repos registered with `recon register`.
 
 ---
 
@@ -399,16 +416,16 @@ RepoVersion = (HEAD SHA, .git/index stat metadata, submodule SHAs)
 
 | Type | Defined By | Indexed? |
 |---|---|---|
-| 1. Indexable | All files not excluded by `.cplignore` or PRUNABLE_DIRS | Yes |
-| 2. Ignored | Excluded via `.cplignore` or PRUNABLE_DIRS | No |
+| 1. Indexable | All files not excluded by `.reconignore` or PRUNABLE_DIRS | Yes |
+| 2. Ignored | Excluded via `.reconignore` or PRUNABLE_DIRS | No |
 
-**Note:** Git-tracking is irrelevant for indexing. The index artifacts (`.recon/`) are gitignored by design, so it is safe to index sensitive files like `.env`. The only exclusion mechanism is `.cplignore` patterns and PRUNABLE_DIRS (e.g., `node_modules/`, `.git/`).
+**Note:** Git-tracking is irrelevant for indexing. The index artifacts (`.recon/`) are gitignored by design, so it is safe to index sensitive files like `.env`. The only exclusion mechanism is `.reconignore` patterns and PRUNABLE_DIRS (e.g., `node_modules/`, `.git/`).
 
 ### 5.4 Change Detection Strategy
 
 All indexable files use stat-based change detection:
 
-1. Walk all files (excluding PRUNABLE_DIRS and `.cplignore` patterns).
+1. Walk all files (excluding PRUNABLE_DIRS and `.reconignore` patterns).
 2. For each file:
    - `stat()` compare to cached metadata (mtime, size, inode).
    - If metadata differs → hash file content and compare to stored hash.
@@ -507,22 +524,24 @@ def reconcile(repo):
 - Runs under trusted OS user account.
 - Does not defend against compromised OS or user session.
 
-### 6.3 `.cplignore` Role and Semantics
+### 6.3 `.reconignore` Role and Semantics
 
-`.cplignore` defines what CodeRecon never indexes. Follows `.gitignore` syntax.
+`.reconignore` defines what CodeRecon never indexes. Follows `.gitignore` syntax.
 
-Security-focused posture defines `.cplignore` defaults that block noise. See defaults below.
+Stored at `.recon/.reconignore` (generated on `recon register`/`recon init`). A repo-root `.reconignore` is merged in automatically so user patterns survive `--reindex`.
+
+Security-focused posture defines `.reconignore` defaults that block noise. See defaults below.
 
 ### 6.4 Indexing Model
 
 | Type | Defined By | Indexed? |
 |---|---|---|
-| Indexable | All files not excluded by `.cplignore` or PRUNABLE_DIRS | Yes |
-| Ignored | Blocked via `.cplignore` or PRUNABLE_DIRS | No |
+| Indexable | All files not excluded by `.reconignore` or PRUNABLE_DIRS | Yes |
+| Ignored | Blocked via `.reconignore` or PRUNABLE_DIRS | No |
 
 Git-tracking is irrelevant for indexing. Index artifacts are gitignored, so it's safe to index all files including `.env`.
 
-### 6.5 `.cplignore` Defaults
+### 6.5 `.reconignore` Defaults
 
 Default ignore patterns for efficiency (block noisy directories):
 
@@ -542,7 +561,7 @@ pytest_cache/
 
 | Misconfig | Result | Mitigation |
 |---|---|---|
-| Missing `.cplignore` | All files indexed (may be slow) | Defaults applied automatically |
+| Missing `.reconignore` | All files indexed (may be slow) | Defaults applied automatically |
 
 ### 6.7 Security-Auditability Notes
 
@@ -583,7 +602,7 @@ Indexing scope:
 - CPL-tracked files (local overlay, never shared)
 - CPL-ignored files excluded
 
-No embeddings. Target latency: <100ms for fact lookups, <1s for lexical search.
+Target latency: <100ms for fact lookups, <1s for lexical search.
 
 ### 7.2 Tier 0 — Lexical Retrieval (Tantivy)
 
@@ -1720,7 +1739,7 @@ Results:
 ### 9.4 Scope Enforcement
 
 - All file edits must fall within explicit working set or allowlist.
-- `.cplignore` paths categorically excluded.
+- `.reconignore` paths categorically excluded.
 - Git-ignored files are editable but flagged for agent confirmation.
 - New file paths created under allowed directory accepted.
 - Mutations that touch unscoped paths rejected pre-apply.
@@ -2469,119 +2488,6 @@ All refactors:
 
 ---
 
-## 16. Embeddings — Evidence-Record Multiview Architecture
-
-### 16.1 Design
-
-Embeddings provide dense vector similarity for recon (Harvester A).
-Model: BAAI/bge-small-en-v1.5 (384-dim, 67 MB ONNX, 512-token context).
-
-Each definition produces 1–7 **evidence records**, each embedded independently:
-
-| Kind | Content | Condition |
-|------|---------|-----------|
-| NAME | Def name split on camelCase/snake_case → natural words | Unless frequency-filtered |
-| DOC | First paragraph of docstring (≤ 200 chars) | If docstring exists and > 10 chars |
-| CTX_PATH | File path segments as natural phrase | Always |
-| CTX_USAGE | Names of defs that reference this def | If refs exist |
-| LIT_HINTS | String literals from def body (≤ 120 chars) | Only if DOC absent |
-| SEM_FACTS | Calls, field assigns, returns, raises, key literals (structured tags) | If semantic facts exist |
-| BLOCK | Aggregated config block (grouped by prefix) | Config files only |
-
-### 16.2 Config Block Aggregation
-
-Files where ≥ 80% of defs have body ≤ 3 lines (and ≥ 10 total defs) are
-config files.  Individual defs are grouped by name prefix into BLOCK records.
-Individual NAME records are suppressed for config atoms.
-
-### 16.3 Frequency Filtering
-
-Word-level document frequency across all def names.  Threshold scales with
-repo size: `0.05 * sqrt(N / 1000)`, clamped to [0.02, 0.15].  Defs whose
-name is dominated by high-frequency words have their NAME record suppressed.
-
-### 16.4 Query-Time Retrieval
-
-Multi-view queries with distribution-aware filtering:
-- **Ratio gate**: view valid if `topK[0] / topK[-1] >= 1.10`
-- **Tiered acceptance**: DOC/BLOCK records (Tier A) pass at top-10%;
-  NAME + context (Tier B) pass at median; NAME alone (Tier C) at P75;
-  LIT_HINTS alone (Tier D) always rejected.
-- **strong_cutoff**: `topK[floor(0.10 * K) - 1]` clamped to valid index range.
-- **topK_best**: scores from the single highest-quality valid view (highest ratio).
-
-### 16.5 LIT_HINTS String Discovery
-
-String literal node types discovered from tree-sitter Language metadata
-at grammar load time (`node_kind_for_id` + name matching `.*string.*`).
-Falls back to regex over source slice when grammar metadata unavailable.
-
-### 16.6 SEM_FACTS Structured Tags
-
-Semantic facts extracted from def bodies via per-language tree-sitter queries
-(`_sem_queries.py`).  Each query captures identifiers in five categories:
-
-- **calls** — function/method names at call sites
-- **assigns** — member field names in assignments (e.g. `self.x = ...`)
-- **returns** — identifiers in return statements
-- **raises** — exception/error types in throw/raise
-- **literals** — key literals in dict/map/object construction
-
-Normalization: word-split identifiers, deduplicate, cap tokens (30 per def,
-200 chars).  Rendered as English-structured tags:
-`"calls X Y assigns Z returns W raises E literals L"`.
-
-Languages without a query definition in `_sem_queries.py` gracefully produce
-no SEM_FACTS records.  New languages are added by inserting a tree-sitter
-S-expression query keyed by the tree-sitter language name.
-
-Tiered acceptance: SEM_FACTS counts as context signal (Tier B with NAME,
-Tier C alone).
-
-### 16.7 Invariants
-
-- No absolute score thresholds — all relative to query distribution
-- No language-specific heuristics — grammar-metadata-driven
-- No repo layout assumptions — corpus-derived statistics
-- Deterministic: same input → same records → same vectors
-- Optional: gracefully disabled when fastembed not installed
-
-### 16.8 File-Level Embeddings (v6)
-
-Parallel to the def-level evidence-record system (§16.1–16.7), a
-**file-level embedding index** provides whole-file semantic search.
-
-Model: `jinaai/jina-embeddings-v2-base-code` (768-dim, 8192-token context,
-0.64 GB via fastembed).  Trained on English + 30 programming languages.
-One embedding per file.
-
-**Truncation**: when file content exceeds 24,000 chars (~8K tokens),
-deterministic head+tail truncation applies: 75% head + 25% tail.
-No language-dependent logic.
-
-**Storage**: `.recon/file_embedding/`
-- `file_embeddings.npz` — float16 matrix + path array
-- `file_meta.json` — model name, dim, count, version
-
-**Lifecycle**: mirrors def-level index — `stage_file()` → `commit_staged()`
-→ `load()` → `query()`.  Incremental updates: only changed files are
-re-embedded.
-
-**Recon v6 pipeline**: file-level embeddings are the PRIMARY retrieval
-signal.  The pipeline:
-1. Query file-level embeddings → ranked (path, similarity) list
-2. Def-level harvesters (A–F) run as SECONDARY enrichment
-3. Single-elbow detection on combined scores → two output tiers:
-   - **SCAFFOLD** (above elbow): imports + signatures
-   - **LITE** (below elbow): path + one-line summary
-4. `repo_map` included in every recon response
-5. Agent hint includes `expand_reason` per file
-
-**Fallback**: when file-level embeddings are not available (index not built),
-the legacy def-centric pipeline (v5) is used as fallback.
-
----
-
 ## 17. Subsystem Ownership Boundaries (Who Owns What)
 
 ### 15.1 CodeRecon Owns
@@ -2615,7 +2521,6 @@ the legacy def-centric pipeline (v5) is used as fallback.
 - Planning, strategy selection, retries, success inference
 - Editor buffer state; it reconciles from disk + Git
 - Git protocol itself (CodeRecon exposes git operations as MCP tools but does not own git internals)
-- Embeddings-first semantic retrieval
 - Remote execution / CI sharding
 
 ---
@@ -2624,13 +2529,13 @@ the legacy def-centric pipeline (v5) is used as fallback.
 
 The following contradictions have been resolved:
 
-1. **`.env` overlay indexing**: Resolved. Default-blocked in `.cplignore`. Users can explicitly whitelist via `!.env` if needed. See section 6.10.
+1. **`.env` overlay indexing**: Resolved. Default-blocked in `.reconignore`. Users can explicitly whitelist via `!.env` if needed. See section 6.10.
 
 2. **Refactor fallback semantics**: Resolved. Structural refactors use the structural index (DefFact/RefFact); CodeRecon never guesses bindings. "Structured lexical edits" refers only to non-semantic operations (exact-match comment sweeps, mechanical file renames). These are explicitly not structural refactors.
 
 3. **Tree-sitter failure policy**: Resolved. On parse failure, skip file, log warning, continue indexing. Never abort the indexing pass for a single file failure. See section 7.4.
 
-4. **"Always-on" framing vs explicit lifecycle**: Resolved. CodeRecon is conceptually a control plane, operationally a repo-scoped server managed via `recon up` (Ctrl+C to stop). OS service integration is deferred.
+4. **"Always-on" framing vs explicit lifecycle**: Resolved. CodeRecon is conceptually a control plane, operationally a global foreground daemon managed via `recon up` (Ctrl+C to stop), with repos registered via `recon register`. OS service integration is deferred.
 
 ---
 
@@ -3638,6 +3543,13 @@ Non-MCP endpoints for operators and monitoring.
 |----------|--------|---------|--------|
 | `/health` | GET | Liveness check (returns 200 if alive) | **Implemented** |
 | `/status` | GET | JSON status (server health, index state) | **Implemented** |
+| `/catalog` | GET | List all registered repos and worktrees | **Implemented** |
+| `/catalog/register` | POST | Activate a repo in the live daemon (body: `{"path": "..."}`) | **Implemented** |
+| `/catalog/unregister` | POST | Deactivate a repo and remove its catalog slot (body: `{"path": "..."}`) | **Implemented** |
+| `/repos/{name}/health` | GET | Health status for a specific repo slot | **Implemented** |
+| `/repos/{name}/status` | GET | Detailed status for a specific repo slot | **Implemented** |
+| `/repos/{name}/reindex` | POST | Trigger a full reindex for a specific repo | **Implemented** |
+| `/repos/{name}/refresh-worktrees` | POST | Refresh worktree list for a specific repo | **Implemented** |
 | `/ready` | GET | Readiness check (returns 200 if index loaded) | Planned |
 | `/metrics` | GET | Prometheus-format metrics (see section 13) | Planned |
 | `/dashboard` | GET | Observability dashboard (see section 13) | Planned |
@@ -3703,26 +3615,36 @@ Client must close task and open new one, or configure additional budget.
 
 ### 23.10 MCP Server Configuration
 
-CodeRecon registers as an MCP server. Client configuration example:
+CodeRecon writes per-tool MCP config files automatically during `recon register` (or `recon init`). The target tools are controlled by `--mcp-target` (default: `auto`, which detects installed tools).
 
-**Claude Desktop / Cursor:**
+**Supported targets and config files:**
 
-```json
-{
-  "mcpServers": {
-    "coderecon": {
-      "transport": "http",
-      "url": "http://127.0.0.1:${port}"
-    }
-  }
-}
+| Target | Config file | Format |
+|--------|-------------|--------|
+| `vscode` | `.vscode/mcp.json` | `{"servers": {"coderecon-<repo>": {"type": "http", "url": "http://127.0.0.1:<port>/mcp"}}}` |
+| `claude` | `.mcp.json` | `{"mcpServers": {"coderecon-<repo>": {"type": "http", "url": "http://127.0.0.1:<port>/mcp"}}}` |
+| `cursor` | `.cursor/mcp.json` | `{"mcpServers": {"coderecon-<repo>": {"type": "http", "url": "http://127.0.0.1:<port>/mcp"}}}` |
+| `opencode` | `~/.config/opencode/config.json` | `{"mcp": {"coderecon-<repo>": {"type": "streamable-http", "url": "http://127.0.0.1:<port>/mcp"}}}` |
+
+**Target selection:**
+
+```bash
+# Auto-detect installed tools (default)
+recon register
+recon register --mcp-target auto
+
+# Specific tool(s)
+recon register --mcp-target vscode --mcp-target claude
+
+# All supported tools
+recon register --mcp-target all
 ```
 
+Auto-detection probes: `.vscode/` dir or `VSCODE_IPC_HOOK_CLI` env (VS Code); `which claude` or `~/.claude/` (Claude Code); `~/.cursor/` dir, `.cursor/` in repo, or `which cursor` (Cursor); `~/.config/opencode/` or `which opencode` (OpenCode).
+
+`recon register` also writes agent instruction snippets into the corresponding instruction files (`.github/copilot-instructions.md`, `CLAUDE.md`, `.cursor/rules/coderecon.mdc`, `AGENTS.md`) so each agent discovers the MCP tool prefix automatically.
+
 **Response header:** All responses include `X-CodeRecon-Repo` header with the server's repository path. Clients can use this to verify they're talking to the correct server.
-
-**Dynamic discovery:**
-
-Clients read `.recon/port` for the port number.
 
 ---
 

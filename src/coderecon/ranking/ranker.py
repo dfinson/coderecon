@@ -33,8 +33,11 @@ class Ranker:
     def score(self, candidate_features: list[dict[str, Any]]) -> list[float]:
         """Score each candidate. Returns scores in input order."""
         if self._model is None:
-            # Fallback: return embedding score as proxy
-            return [f.get("emb_score", 0.0) or 0.0 for f in candidate_features]
+            # Fallback: return zero scores
+            return [0.0 for f in candidate_features]
+
+        if not candidate_features:
+            return []
 
         import numpy as np
 

@@ -42,12 +42,11 @@ DefFact kinds across languages:
 
 ### 1.2 Retrieval Signals
 
-Five retrieval sources produce candidates. Each returns its full natural
+Four retrieval sources produce candidates. Each returns its full natural
 result set — no artificial caps, no budget limits.
 
 | Signal | Source | Granularity |
 |--------|--------|-------------|
-| Embedding | Dense vector similarity (bge-small-en-v1.5, 384-dim) | Per code-def or per non-code-file |
 | Lexical | Tantivy full-text search | Line hits mapped to containing DefFact |
 | Term match | SQL LIKE on DefFact names | Per DefFact |
 | Graph | 1-hop structural walk (callees, callers, siblings) | Per DefFact |
@@ -60,7 +59,7 @@ learns signal value from data.
 
 ### 1.3 Query Tiers
 
-Eight OK query tiers: five isolation (each exercises a single retrieval
+Seven OK query tiers: four isolation (each exercises a single retrieval
 signal) and three combination (exercise multi-signal agreement).
 Seeds and pins are separate arguments alongside the query text.
 
@@ -68,7 +67,6 @@ Seeds and pins are separate arguments alongside the query text.
 
 | Tier | Name | Primary signal | Seeds | Pins |
 |------|------|---------------|-------|------|
-| **Q_SEMANTIC** | Semantic | Embedding | none | none |
 | **Q_LEXICAL** | Lexical | Full-text / Tantivy | none | none |
 | **Q_IDENTIFIER** | Identifier | Term match (SQL LIKE) | none | none |
 | **Q_STRUCTURAL** | Structural | Graph (1-hop walk) | 1–2 | none |
@@ -78,7 +76,7 @@ Seeds and pins are separate arguments alongside the query text.
 
 | Tier | Name | Signals combined | Seeds | Pins |
 |------|------|-----------------|-------|------|
-| **Q_SEM_IDENT** | Semantic + Identifier | Embedding + term match | 2–3 | none |
+| **Q_LEX_IDENT** | Lexical + Identifier | Full-text + term match | 2–3 | none |
 | **Q_IDENT_NAV** | Identifier + Navigational | Term match + explicit | 2–4 | 2–4 |
 | **Q_FULL** | Full signal | All signals | 2–4 | 2–4 |
 
@@ -90,7 +88,7 @@ Seeds and pins are separate arguments alongside the query text.
 | **BROAD** | Work spanning 15+ files in 3+ unrelated directories |
 | **AMBIG** | 2+ subsystems could be the target; query doesn't specify which |
 
-Total per task: 8 required OK + 0–12 optional non-OK = 8–20 queries.
+Total per task: 7 required OK + 0–12 optional non-OK = 7–19 queries.
 
 ### 1.4 Gate Taxonomy
 
@@ -146,7 +144,6 @@ hub_score, is_test, signature_text, namespace
 nesting_depth, has_parent_scope
 
 # Retriever signals (None if retriever didn't find this def)
-emb_score, emb_rank
 term_match_count, term_total_matches
 lex_hit_count
 graph_edge_type, graph_seed_rank
@@ -192,7 +189,6 @@ count, retriever agreement, seed presence).
 ```
 Query + Seeds + Pins
   │
-  ├─ Embedding query (def matrix + file matrix)
   ├─ Lexical search (Tantivy)
   ├─ Term match (SQL LIKE)
   ├─ Symbol/path resolution (seeds + pins + query text)
@@ -241,7 +237,7 @@ Three repo sets, 98 repos total:
   (gate uses raw signals, not ranker output, so no leakage).
 - **Eval** (20 repos): held-out evaluation. 10 languages × 2 repos each.
 
-All repos generate the same full query set: 8 OK queries + up to 12
+All repos generate the same full query set: 7 OK queries + up to 12
 non-OK queries per task. Gate uses all queries from all 78 training
 repos. Cutoff uses only OK queries from cutoff repos.
 
@@ -310,7 +306,7 @@ Each imported instance produces one file: `data/{workspace_id}/ground_truth/{wor
     {"path": "...", "name": "...", "kind": "...", "start_line": 1, "end_line": 3, "reason": "..."}
   ],
   "queries": [
-    {"query_type": "Q_SEMANTIC", "query_text": "...", "seeds": [], "pins": [], "justification": "..."}
+    {"query_type": "Q_LEXICAL", "query_text": "...", "seeds": [], "pins": [], "justification": "..."}
   ]
 }
 ```
@@ -441,7 +437,7 @@ Two tiers: `minimum` (human-necessary) and `thrash_preventing`
 | `run_id` | str | Task run identifier |
 | `query_id` | str | Unique query identifier |
 | `query_text` | str | Full query text |
-| `query_type` | str | Q_SEMANTIC / Q_LEXICAL / Q_IDENTIFIER / Q_STRUCTURAL / Q_NAVIGATIONAL / Q_SEM_IDENT / Q_IDENT_NAV / Q_FULL / UNSAT / BROAD / AMBIG |
+| `query_type` | str | Q_LEXICAL / Q_IDENTIFIER / Q_STRUCTURAL / Q_NAVIGATIONAL / Q_LEX_IDENT / Q_IDENT_NAV / Q_FULL / UNSAT / BROAD / AMBIG |
 | `seeds` | list[str] | Symbol names passed as seeds |
 | `pins` | list[str] | File paths passed as pins |
 | `label_gate` | str | OK / UNSAT / BROAD / AMBIG |
@@ -503,7 +499,7 @@ gate label.
 
 ## 7. Evaluation
 
-Uses the EVEE benchmarking framework.
+Uses the Inspect AI evaluation framework.
 
 **Metrics** (reported per query type):
 
@@ -541,10 +537,6 @@ training procedures. Seeds and pins inject candidates but do not boost
 scores — the ranker decides their value. Graph seeds = candidates
 found by ≥2 retrievers or explicitly mentioned, no scoring formula.
 
-Non-code files use file-level embeddings only. Their synthetic defs
-enter the candidate pool via file-embedding expansion. The ranker
-treats them identically to code defs.
-
 ---
 
 ## 9. Project Layout
@@ -556,27 +548,22 @@ recon-lab/
 ├── README.md                   # This file — spec + operations
 ├── pyproject.toml
 ├── lab.toml                    # Default pipeline configuration
+├── dvc.yaml                   # DVC pipeline DAG (clone → eval)
+├── justfile                   # Task runner (just pipeline, just train, etc.)
+├── .env.example               # Environment variable documentation
 ├── repos/                     # 98 task definitions (30 ranker-gate + 48 cutoff + 20 eval)
 │   ├── ranker-gate/           #   30 repos — training set for ranker + gate
 │   ├── cutoff/                #   48 repos — training set for cutoff
 │   └── eval/                  #   20 repos — held-out evaluation set
-├── roles/                     # Agent role files for ground truth generation
-│   ├── auditor.md             #   Pre-flight auditor (verifies task grounding)
-│   ├── executor.md            #   Task executor (solves tasks, writes ground truth)
-│   └── reviewer.md            #   Output reviewer (validates executor output)
-├── infra/                     # Pipeline infrastructure
-│   ├── gt_orchestrator.py     #   Legacy AI GT pipeline (no longer used by CLI)
-│   ├── merge_ground_truth.py  #   Merge per-task JSONs → single JSONL per repo
-│   ├── index_all.sh           #   Local recon init for all clones
-│   └── parse_traces.py        #   Benchmarking trace parser
 └── src/cpl_lab/               # Training code + unified CLI
     ├── cli.py                 # Click CLI entry point (recon-lab)
     ├── config.py              # Configuration resolution
     ├── schema.py              # §5 dataset table schemas
-    ├── clone.py               # Repo cloning (Python port of clone_repos.sh)
-    ├── index.py               # Indexing (Python port of index_all.sh)
-    ├── mine.py                # PR-mining ground truth pipeline
-    ├── pr_to_ground_truth.py  # Diff parsing, def mapping, query generation
+    ├── clone.py               # Repo cloning
+    ├── index.py               # Indexing (recon init on all clones)
+    ├── swebench.py            # SWE-bench ground truth import
+    ├── swebench_llm.py        # LLM adaptation for SWE-bench instances
+    ├── patch_ground_truth.py  # Diff parsing, hunk-to-def mapping
     ├── llm_filter.py          # Cheap relevance filter for context defs
     ├── collector.py           # Ground truth collection
     ├── collect.py             # Signal collection adapter (§4.3 Phase 4)
@@ -589,7 +576,7 @@ recon-lab/
     ├── train_cutoff.py        # §6.2 no-leakage K-fold cutoff training
     ├── train_gate.py          # §6.3 multiclass gate training
     ├── train_all.py           # Orchestrates all 3 training stages
-    ├── evaluate.py            # EVEE evaluation integration (§7)
+    ├── evaluate.py            # Inspect AI evaluation integration (§7)
     ├── validate.py            # Ground truth validation
     └── status.py              # Pipeline status dashboard
 ```
@@ -606,14 +593,18 @@ src/coderecon/ranking/          # Deployed models + inference
 └── data/                       # Serialized .lgbm model artifacts
 ```
 
-### EVEE benchmarking
+### Inspect AI evaluation (in src/cpl_lab/eval/)
 
 ```
-benchmarking/
-├── datasets/ranking_gt.py      # Ground truth dataset loader (§5)
-├── models/recon_ranking.py
-├── metrics/ranking.py, gate.py
-└── experiments/recon_ranking.yaml
+eval/
+├── tasks.py                    # @task definitions (Inspect AI entry points)
+├── run.py                      # Inspect AI evaluation runner
+├── datasets/eval_gt.py         # eval_gt_dataset() → Dataset
+├── datasets/scaffold_rank.py   # scaffold_rank_dataset() → Dataset
+├── models/ranking.py           # @solver ranking_solver()
+├── models/llm_reranker.py      # @solver llm_reranker()
+├── metrics/ranking.py          # @scorer ranking_scorer() NDCG/Hit@K/Cutoff
+└── metrics/gate.py             # @scorer gate_scorer() accuracy/confusion
 ```
 
 ### External workspace (mutable data, outside repo)
@@ -644,10 +635,10 @@ $CPL_LAB_WORKSPACE/              (default: ~/.recon/recon-lab)
 
 ## 10. CLI Reference
 
-All pipeline stages are orchestrated via the `recon-lab` CLI:
+All pipeline stages are orchestrated via the `recon-lab` CLI or via `just`:
 
 ```bash
-cd recon-lab && source .venv/bin/activate
+cd recon-lab
 
 # Clone repos
 recon-lab clone --set ranker-gate
@@ -656,22 +647,22 @@ recon-lab clone --set all
 # Index cloned repos
 recon-lab index
 
-# Mine ground truth from merged PRs
-recon-lab mine --repo python-flask --max-prs 20 --no-filter
-recon-lab mine --set ranker-gate
+# Import SWE-bench ground truth
+recon-lab swebench --set ranker-gate
+recon-lab swebench --set all --max-instances 100
 
-# Collect signals (§4.3 Phase 4)
+# Collect retrieval signals (§4.3 Phase 4)
 recon-lab collect
 
-# Merge data
+# Merge data into training parquets
 recon-lab merge
 
 # Train models (§6)
 recon-lab train --model all
 recon-lab train --model ranker
 
-# Evaluate with EVEE (§7)
-recon-lab eval --experiment recon_ranking.yaml
+# Evaluate with Inspect AI (§7)
+recon-lab eval
 
 # Validate ground truth
 recon-lab validate
@@ -680,28 +671,72 @@ recon-lab validate
 recon-lab status
 ```
 
+Or use the task runner:
+
+```bash
+just pipeline        # Run full DVC pipeline (dvc repro)
+just pipeline-to train  # Run up to train stage
+just eval            # Run Inspect AI evaluation
+just pipeline-dag    # Show pipeline DAG
+just pipeline-status # Show what's changed
+```
+
 ---
 
 ## 11. Setup
 
 ```bash
-# Initialize the workspace (one-time)
-bash recon-lab/setup_workspace.sh
+cd recon-lab
 
-# Or with a custom location:
-export CPL_LAB_WORKSPACE=/mnt/data/recon-lab
-bash recon-lab/setup_workspace.sh
+# Install dependencies (creates .venv)
+uv sync
 
-# Add to .bashrc to persist:
-echo 'export CPL_LAB_WORKSPACE=~/.recon/recon-lab' >> ~/.bashrc
+# Copy and configure environment (optional — for Azure Foundry LLM)
+cp .env.example .env
+# Edit .env with endpoint from: cd ../infra && terraform output
+
+# Workspace directory is created automatically by the CLI at ~/.recon/recon-lab
+# Override via lab.toml [workspace] path or --workspace flag
 ```
 
-## Training workflow (end-to-end)
+## 12. Training workflow (end-to-end)
 
-1. **Clone + index** — `recon-lab clone --set all && recon-lab index`
-2. **Ground truth** — `recon-lab mine --set all` (deterministic PR mining)
-3. **Signals** — `recon-lab collect` calls `recon_raw_signals()` per query
-4. **Merge** — `recon-lab merge` assembles training parquets
-5. **Train** — `recon-lab train --model all` runs ranker → cutoff → gate (§6.4)
-6. **Eval** — `recon-lab eval --experiment recon_ranking.yaml`
-7. **Deploy** — copy `*.lgbm` into `src/coderecon/ranking/data/`
+```bash
+just pipeline   # or: dvc repro
+```
+
+Individual stages:
+
+1. **Clone** — `recon-lab clone --set all`
+2. **Index** — `recon-lab index --set all`
+3. **Ground truth** — `recon-lab swebench --set all` (SWE-bench import + LLM query adaptation)
+4. **Signals** — `recon-lab collect` runs `raw_signals_pipeline()` per query
+5. **Merge** — `recon-lab merge` assembles training parquets
+6. **Train** — `recon-lab train --model all` runs gate → ranker → cutoff (§6)
+7. **Eval** — `recon-lab eval` runs Inspect AI evaluation against held-out set
+8. **Deploy** — copy `*.lgbm` into `src/coderecon/ranking/data/`
+
+## 13. Infrastructure
+
+The pipeline uses Azure AI Foundry for LLM calls during query generation (stage 3).
+Terraform config lives in `../infra/`:
+
+```bash
+just infra-plan   # Preview changes
+just infra-apply  # Provision: rg-coderecon-lab + AI Services + gpt-4.1-mini
+just infra-output # Show endpoint URL for .env
+```
+
+Alternatively, the pipeline works with GitHub Models (no infra needed) — see `.env.example`.
+
+## 14. Archived Artifacts
+
+The original LLM-generated ground truth data (pre-SWE-bench pivot) was removed from
+the working tree. It is recoverable from git history:
+
+```bash
+git show f4a0f30:recon-lab/gt-backup/ranking-data-backup-20260311-111812.zip > old-gt.zip
+```
+
+This data was abandoned after verification showed only 13–46% of LLM-labeled defs
+matched real AST spans. The current pipeline uses SWE-bench patch-based labels instead.

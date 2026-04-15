@@ -434,7 +434,7 @@ def _extract_intent(task: str) -> TaskIntent:
 class EvidenceRecord:
     """A single piece of evidence supporting a candidate's relevance."""
 
-    category: str  # "embedding", "term_match", "lexical", "explicit"
+    category: str  # "term_match", "lexical", "explicit"
     detail: str  # Human-readable description
     score: float = 0.0  # Normalized [0, 1] contribution
 
@@ -462,7 +462,6 @@ class HarvestCandidate:
     artifact_kind: ArtifactKind = ArtifactKind.code
 
     # Which harvesters found this candidate
-    from_embedding: bool = False
     from_term_match: bool = False
     from_explicit: bool = False
     from_graph: bool = False
@@ -473,8 +472,10 @@ class HarvestCandidate:
     # Raw signal fields for ranking model training
     term_match_count: int = 0  # Raw count of query terms matching this def's name
     term_total_matches: int = 0  # How many defs matched each term (IDF denominator)
-    graph_edge_type: str | None = None  # callee/caller/sibling or None
+    lex_hit_count: int = 0  # Per-def Tantivy lexical index hits
+    graph_edge_type: str | None = None  # callee/caller/sibling/override/implementor/doc_xref or None
     graph_seed_rank: int | None = None  # Position of the seed in merged pool
+    graph_caller_max_tier: str | None = None  # Best ref_tier among caller refs (proven > strong > anchored > unknown)
     symbol_source: str | None = None  # agent_seed/auto_seed/task_extracted/path_mention or None
     import_direction: str | None = None  # forward/reverse/barrel/test_pair or None
 
@@ -490,6 +491,9 @@ class HarvestCandidate:
     file_path: str = ""
     is_test: bool = False
     is_barrel: bool = False
+    is_endpoint: bool = False
+    test_coverage_count: int = 0
+    declared_module: str = ""
     shares_file_with_seed: bool = False
     is_callee_of_top: bool = False
     is_imported_by_top: bool = False
@@ -499,7 +503,6 @@ class HarvestCandidate:
         """Count of independent harvester sources that found this candidate."""
         return sum(
             [
-                self.from_embedding,
                 self.from_term_match,
                 self.from_explicit,
                 self.from_graph,
@@ -508,14 +511,9 @@ class HarvestCandidate:
 
     @property
     def has_semantic_evidence(self) -> bool:
-        """Semantic axis: embedding sim >= 0.15, OR matched >= 2 terms,
+        """Semantic axis: matched >= 2 terms,
         OR single term with hub support, OR lexical hit, OR explicit mention,
         OR graph-discovered.
-
-        The embedding threshold is deliberately low (0.15) — it only
-        gates whether embedding produced any signal at all.  The
-        elbow-based adaptive floor in ``_apply_filters`` handles the
-        real precision cut downstream.
         """
         return (
             len(self.matched_terms) >= 2
@@ -573,7 +571,7 @@ class ParsedTask:
         explicit_paths:   File paths mentioned in the task text.
         explicit_symbols: Symbol-like identifiers mentioned in the task.
         keywords:         Union of primary + secondary for broad matching.
-        query_text:       Synthesized embedding query (for dense retrieval).
+        query_text:       Synthesized query text.
         negative_mentions: Terms the user explicitly excludes ("not X", "except Y").
         is_stacktrace_driven: True if task contains error/traceback patterns.
         is_test_driven:   True if the primary goal is writing/fixing tests.

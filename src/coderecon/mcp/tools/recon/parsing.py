@@ -135,7 +135,6 @@ def parse_task(task: str) -> ParsedTask:
     2. Extract file paths (``src/foo/bar.py``).
     3. Extract symbol-like identifiers (PascalCase, snake_case).
     4. Tokenize remaining text into primary (>=4 chars) and secondary (2-3 chars).
-    5. Build a synthesized query for embedding similarity search.
     """
     if not task or not task.strip():
         return ParsedTask(raw=task, intent=TaskIntent.unknown)
@@ -243,62 +242,3 @@ def parse_task(task: str) -> ParsedTask:
         is_stacktrace_driven=is_stacktrace,
         is_test_driven=is_test,
     )
-
-
-# ===================================================================
-# Multi-view query builders
-# ===================================================================
-
-
-def _build_query_views(parsed: ParsedTask) -> list[str]:
-    """Build multiple embedding query texts (views) from a parsed task.
-
-    Multi-view retrieval embeds several reformulations of the same task
-    and merges results, improving recall over a single query.
-
-    Views:
-      1. **Natural-language** — raw task text (broad semantic match).
-      2. **Code-style** — symbols + paths formatted as pseudo-code
-         (matches embedding space of definitions).
-      3. **Keyword-focused** — high-signal terms concatenated
-         (targets exact-concept matches without noise).
-
-    All views are batched into a single ``model.embed()`` call,
-    so there is no per-view latency overhead.
-    """
-    views: list[str] = [parsed.query_text]  # V1: NL view (always present)
-
-    # V2: Code-style view — looks like the text format used at index time
-    #     "kind qualified_name\nsignature\ndocstring"
-    code_parts: list[str] = []
-    for p in parsed.explicit_paths:
-        code_parts.append(p)
-    if parsed.primary_terms:
-        code_parts.extend(parsed.primary_terms[:6])
-    if code_parts:
-        views.append(" ".join(code_parts))
-
-    # V3: Keyword-focused view — only high-signal terms, no noise
-    kw_parts = parsed.primary_terms[:10]
-    if kw_parts and len(kw_parts) >= 2:
-        views.append(" ".join(kw_parts))
-
-    return views
-
-
-def _merge_multi_view_results(
-    per_view: list[list[tuple[str, float]]],
-) -> list[tuple[str, float]]:
-    """Merge results from multiple embedding views by max-similarity.
-
-    For each def_uid that appears in any view's results, keeps the
-    highest similarity score across views.  Returns the merged list
-    sorted descending by score.
-    """
-    best: dict[str, float] = {}
-    for view_results in per_view:
-        for uid, sim in view_results:
-            if uid not in best or sim > best[uid]:
-                best[uid] = sim
-    merged = sorted(best.items(), key=lambda x: (-x[1], x[0]))
-    return merged

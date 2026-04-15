@@ -1,10 +1,4 @@
-"""recon up command - start the server.
-
-Improved UX:
-- Logo renders line-by-line with animation delay (Issue #3)
-- Rich-based banner with centered text and rules
-- Summary stream for startup progress
-"""
+"""recon up command - start the global daemon."""
 
 from __future__ import annotations
 
@@ -12,18 +6,14 @@ import asyncio
 import sys
 from importlib.metadata import version
 from pathlib import Path
-from typing import Any
 
 import click
 
-from coderecon.cli.init import initialize_repo, sync_vscode_mcp_port
-from coderecon.cli.utils import find_repo_root
-from coderecon.config.loader import load_config
+from coderecon.config.user_config import DEFAULT_PORT
 from coderecon.core.progress import (
     animate_text,
     get_console,
 )
-from coderecon.index.ops import IndexCoordinatorEngine
 
 LOGO = r"""
                     ++++++++++++++++++++++
@@ -50,31 +40,15 @@ LOGO = r"""
 """
 
 
-def _print_banner(
-    host: str,
-    port: int,
-    repo_root: Path | None = None,
-    *,
-    animate: bool = True,
-) -> None:
-    """Print startup banner with logo and info using Rich.
-
-    Args:
-        host: Server host
-        port: Server port
-        repo_root: Repository root path (optional)
-        animate: If True, render logo line-by-line with delay (Issue #3)
-    """
+def _print_banner(host: str, port: int, *, animate: bool = True) -> None:
     ver = version("coderecon")
     console = get_console()
 
     if animate:
-        # Render logo line-by-line with small delay for dramatic effect
         animate_text(LOGO, delay=0.015)
     else:
         console.print(LOGO, highlight=False)
 
-    # Ready banner with rule separators (fixed width to match logo ~64 chars)
     banner_width = 64
     rule_line = "─" * banner_width
     base_url = f"http://{host}:{port}"
@@ -86,132 +60,63 @@ def _print_banner(
     )
     console.print(rule_line, style="dim cyan", highlight=False)
     console.print()
-
-    # Endpoint info
-    console.print(f"  MCP Endpoint:    {base_url}/mcp", style="green", highlight=False)
-    # TODO(#115): Uncomment when /dashboard endpoint is implemented
-    # console.print(f"  Dashboard:       {base_url}/dashboard", highlight=False)
-    console.print(f"  Health Check:    {base_url}/health", highlight=False)
-    console.print(f"  Status:          {base_url}/status", highlight=False)
-
-    if repo_root:
-        console.print(f"  Repository:      {repo_root}", style="dim", highlight=False)
-
+    console.print(f"  Health:          {base_url}/health", highlight=False)
+    console.print(f"  Catalog:         {base_url}/catalog", highlight=False)
+    console.print()
+    console.print(
+        "  Use 'recon register [PATH]' to add a repository.",
+        style="dim",
+        highlight=False,
+    )
     console.print()
 
 
 @click.command()
-@click.argument("path", default=None, required=False, type=click.Path(exists=True, path_type=Path))
 @click.option(
-    "--port", "-p", type=int, help="Server port (persisted to config.yaml on init/reindex)"
-)
-@click.option(
-    "-r",
-    "--reindex",
-    is_flag=True,
-    help="Wipe and rebuild the entire index from scratch",
+    "--port", "-p", type=int, default=DEFAULT_PORT, show_default=True,
+    help="Port to bind to.",
 )
 @click.option(
     "--dev-mode",
     is_flag=True,
     help="Enable development tools (recon_raw_signals endpoint)",
 )
-def up_command(path: Path | None, port: int | None, reindex: bool, dev_mode: bool) -> None:
-    """Start the CodeRecon server for this repository.
+def up_command(port: int, dev_mode: bool) -> None:
+    """Start the global CodeRecon daemon.
 
-    If already running, reports the existing instance. Runs in foreground.
-
-    PATH is the repository root. If not specified, auto-detects by walking
-    up from the current directory to find the git root.
+    Activates all repositories already registered in the catalog.
+    Use ``recon register [PATH]`` to add a repository before or after
+    the daemon starts.
     """
+    from coderecon.catalog.db import _default_coderecon_home
+    from coderecon.config.models import LoggingConfig, LogOutputConfig
+    from coderecon.core.logging import configure_logging
+    from coderecon.daemon.global_lifecycle import (
+        is_global_server_running,
+        read_global_server_info,
+        run_global_server,
+    )
+
+    if is_global_server_running():
+        info = read_global_server_info()
+        if info:
+            pid, server_port = info
+            click.echo(f"Daemon already running (PID {pid}, port {server_port})")
+            click.echo(f"  Health:  http://127.0.0.1:{server_port}/health")
+            click.echo(f"  Catalog: http://127.0.0.1:{server_port}/catalog")
+            click.echo("Use 'recon register [PATH]' to add a repository.")
+        return
+
+    # Log to ~/.coderecon/logs/
     from datetime import datetime
     from uuid import uuid4
 
-    from coderecon.config.models import LoggingConfig, LogOutputConfig
-    from coderecon.core.logging import configure_logging
-    from coderecon.daemon.lifecycle import is_server_running, read_server_info, run_server
-
-    repo_root = find_repo_root(path)
-
-    coderecon_dir = repo_root / ".recon"
-
-    # Check if already running
-    if is_server_running(coderecon_dir):
-        info = read_server_info(coderecon_dir)
-        if info:
-            pid, server_port = info
-            click.echo(f"Already running (PID {pid}, port {server_port})")
-            return
-
-    # Load config
-    config = load_config(repo_root)
-    if port is not None:
-        config.server.port = port
-
-    # Initialize if needed, or reindex if requested
-    # Pass port to initialize_repo so it gets persisted to config.yaml
-    coderecon_dir = repo_root / ".recon"
-    if reindex and not initialize_repo(repo_root, reindex=True, show_recon_up_hint=False, port=port):
-        raise click.ClickException("Failed to reinitialize repository")
-    elif (
-        not reindex
-        and not coderecon_dir.exists()
-        and not initialize_repo(repo_root, show_recon_up_hint=False, port=port)
-    ):
-        raise click.ClickException("Failed to initialize repository")
-
-    # Ensure embedding models are cached before starting the server.
-    # (initialize_repo already calls this, but `recon up` on an existing repo
-    # skips init, so we check here too — it's a no-op if already cached.)
-    from coderecon.cli.models import ensure_models
-
-    if not ensure_models(interactive=True):
-        raise click.ClickException("Required embedding models not available")
-
-    # Get index paths from config AFTER init (so we read the created config)
-    from coderecon.config.loader import get_index_paths
-
-    db_path, tantivy_path = get_index_paths(repo_root)
-
-    # Create coordinator and load existing index
-    coordinator = IndexCoordinatorEngine(
-        repo_root=repo_root,
-        db_path=db_path,
-        tantivy_path=tantivy_path,
-    )
-
-    loop = asyncio.new_event_loop()
-    try:
-        if not loop.run_until_complete(coordinator.load_existing()):
-            # Index DB missing or corrupted — auto-rebuild
-            coordinator.close()
-            click.echo("Index not found — building index...")
-            if not initialize_repo(repo_root, reindex=True, show_recon_up_hint=False, port=port):
-                raise click.ClickException("Failed to build index")
-            # Reload paths (may differ after init) and retry
-            db_path, tantivy_path = get_index_paths(repo_root)
-            coordinator = IndexCoordinatorEngine(
-                repo_root=repo_root,
-                db_path=db_path,
-                tantivy_path=tantivy_path,
-            )
-            if not loop.run_until_complete(coordinator.load_existing()):
-                raise click.ClickException("Failed to load index after initialization")
-    finally:
-        loop.close()
-
-    # Sync port in mcp.json if it differs from configured port
-    if sync_vscode_mcp_port(repo_root, config.server.port):
-        click.echo(f"Updated .vscode/mcp.json port to {config.server.port}")
-
-    # Generate log file path
-    # Format: .recon/logs/YYYY-MM-DD/HHMMSS-<6-digit-hash>.log
+    home = _default_coderecon_home()
     now = datetime.now()
     server_run_id = uuid4().hex[:6]
-    log_dir = coderecon_dir / "logs" / now.strftime("%Y-%m-%d")
+    log_dir = home / "logs" / now.strftime("%Y-%m-%d")
     log_file = log_dir / f"{now.strftime('%H%M%S')}-{server_run_id}.log"
 
-    # Configure logging: Console INFO, File DEBUG
     configure_logging(
         config=LoggingConfig(
             level="DEBUG",
@@ -222,23 +127,22 @@ def up_command(path: Path | None, port: int | None, reindex: bool, dev_mode: boo
         ),
     )
 
-    # Suppress asyncio subprocess cleanup errors on Ctrl+C
-    # These occur when event loop closes before subprocess transports are GC'd
+    _print_banner("127.0.0.1", port)
+
     _original_unraisablehook = sys.unraisablehook
 
-    def _suppress_event_loop_closed(unraisable: Any) -> None:
+    def _suppress_event_loop_closed(unraisable: object) -> None:
         if getattr(unraisable, "exc_type", None) is RuntimeError and "Event loop is closed" in str(
             getattr(unraisable, "exc_value", "")
         ):
-            return  # Suppress this specific error
-        _original_unraisablehook(unraisable)
+            return
+        _original_unraisablehook(unraisable)  # type: ignore[arg-type]
 
     sys.unraisablehook = _suppress_event_loop_closed
 
     try:
-        asyncio.run(run_server(repo_root, coordinator, config, dev_mode=dev_mode))
+        asyncio.run(run_global_server(port=port, dev_mode=dev_mode))
     except KeyboardInterrupt:
         click.echo("\nStopped")
     finally:
-        coordinator.close()
         sys.unraisablehook = _original_unraisablehook

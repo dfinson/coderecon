@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
+_TIER_ORDER = {"proven": 0, "strong": 1, "anchored": 2, "unknown": 3}
+
 
 def _merge_candidates(
     *harvests: dict[str, HarvestCandidate],
@@ -36,16 +38,22 @@ def _merge_candidates(
                 merged[uid] = cand
             else:
                 existing = merged[uid]
-                existing.from_embedding = existing.from_embedding or cand.from_embedding
                 existing.from_term_match = existing.from_term_match or cand.from_term_match
                 existing.from_explicit = existing.from_explicit or cand.from_explicit
                 existing.from_graph = existing.from_graph or cand.from_graph
                 existing.matched_terms |= cand.matched_terms
                 existing.term_match_count = max(existing.term_match_count, cand.term_match_count)
                 existing.term_total_matches = max(existing.term_total_matches, cand.term_total_matches)
+                existing.lex_hit_count = max(existing.lex_hit_count, cand.lex_hit_count)
                 if cand.graph_edge_type and not existing.graph_edge_type:
                     existing.graph_edge_type = cand.graph_edge_type
                     existing.graph_seed_rank = cand.graph_seed_rank
+                if cand.graph_caller_max_tier and (
+                    not existing.graph_caller_max_tier
+                    or _TIER_ORDER.get(cand.graph_caller_max_tier, 99)
+                    < _TIER_ORDER.get(existing.graph_caller_max_tier, 99)
+                ):
+                    existing.graph_caller_max_tier = cand.graph_caller_max_tier
                 if cand.import_direction and not existing.import_direction:
                     existing.import_direction = cand.import_direction
                 existing.evidence.extend(cand.evidence)
@@ -99,6 +107,17 @@ async def _enrich_candidates(
         all_uids = [uid for uid, c in candidates.items() if c.def_fact is not None]
         hub_score_cache = fq.batch_count_callers(all_uids)
 
+        # Batch resolve endpoint status
+        endpoint_cache = fq.batch_get_endpoints(all_uids)
+
+        # Batch resolve test coverage counts
+        coverage_cache = fq.batch_count_test_coverage(all_uids)
+
+        # Build declared_module cache from file records
+        module_cache: dict[int, str] = {}
+        for fid, frec in file_map.items():
+            module_cache[fid] = frec.declared_module or "" if frec else ""
+
         for uid, cand in list(candidates.items()):
             if cand.def_fact is None:
                 continue
@@ -109,6 +128,9 @@ async def _enrich_candidates(
             cand.file_path = fid_path_cache.get(d.file_id, "")
             cand.is_test = _is_test_file(cand.file_path)
             cand.is_barrel = _is_barrel_file(cand.file_path)
+            cand.is_endpoint = uid in endpoint_cache
+            cand.test_coverage_count = coverage_cache.get(uid, 0)
+            cand.declared_module = module_cache.get(d.file_id, "")
             cand.artifact_kind = _classify_artifact(cand.file_path)
 
     # --- Populate structural link fields ---
@@ -174,17 +196,31 @@ async def _enrich_candidates(
 
 def _select_graph_seeds(
     merged: dict[str, HarvestCandidate],
+    *,
+    fallback_top_k: int = 10,
 ) -> list[str]:
     """Select candidates to use as graph seeds.
 
     Seeds = all candidates found by ≥2 retrievers, plus all explicit
-    mentions. No scoring formula, no cap.
+    mentions.  When neither explicit seeds produce
+    multi-evidence overlap, falls back to top-K term-match candidates
+    (by matched-term count, minimum 2 terms) so the graph walk still fires.
     """
     seeds: list[str] = []
     for uid, cand in merged.items():
         if cand.from_explicit or cand.evidence_axes >= 2:
             seeds.append(uid)
-    return seeds
+    if seeds:
+        return seeds
+
+    # Fallback: best term-match candidates when no multi-evidence seeds
+    term_scored = [
+        (uid, len(cand.matched_terms))
+        for uid, cand in merged.items()
+        if cand.from_term_match and len(cand.matched_terms) >= 2
+    ]
+    term_scored.sort(key=lambda x: x[1], reverse=True)
+    return [uid for uid, _ in term_scored[:fallback_top_k]]
 
 
 def _add_file_defs_as_candidates(

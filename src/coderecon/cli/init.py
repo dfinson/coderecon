@@ -47,28 +47,9 @@ def _make_coderecon_snippet(tool_prefix: str) -> str:
     # The f-string only interpolates {tool_prefix}
     return f"""
 <!-- coderecon-instructions -->
-## CodeRecon MCP: Mandatory Tool Selection
+## CodeRecon MCP
 
-This repository uses CodeRecon MCP.
-
-### ⛔ NEVER Use Terminal to Bypass CodeRecon ⛔
-
-**Every file read, search, edit, delete, git operation, lint, and test run MUST go through
-CodeRecon tools — NEVER through terminal commands.** Violations break the mutation ledger
-and corrupt the index.
-
-**Explicitly banned** (non-exhaustive — if a CodeRecon tool can do it, the terminal MUST NOT):
-- `cat`, `head`, `tail`, `less`, `sed -n`, `bat` → allowed for reading files after `recon`
-- `grep`, `rg`, `find`, `ag`, `wc`, `ls` → use `recon`
-- `sed -i`, `awk`, `echo >>`, `tee`, `perl -i` → use `refactor_edit`
-- `rm`, `git rm` → use `refactor_edit(delete=True)`
-- `mv` → use `refactor_move` or `refactor_rename`
-- `git add`, `git commit`, `git push`, `git diff`, `git status`, `git log` → use `checkpoint` or `semantic_diff`
-- `pytest`, `python -m pytest`, `ruff`, `mypy`, `flake8`, `black` → use `checkpoint`
-
-**Allowed terminal use (exhaustive):** `jq` for sidecar cache reads per `agentic_hint`,
-package installation, running the user's application, and operations with genuinely no
-CodeRecon equivalent (`docker`, `curl` to external services, etc.).
+This repository uses CodeRecon MCP for code intelligence and semantic refactoring.
 
 ### Start Every Task With `recon`
 
@@ -82,20 +63,11 @@ recon(task="<describe the task>", seeds=["SymA", "SymB", ...], read_only=<True o
 
 **ONE recon call handles multiple symbols** — put ALL names in `seeds`, never loop.
 
-**Recon is hard-gated to 1 call per task.** The 2nd call is blocked unconditionally.
-Read files via terminal (`cat`, `head`) using paths from scaffolds. A gate escape (gate_token)
-is issued on the 2nd block for emergencies only.
-
-### After Recon: Read, Plan, Edit, Checkpoint
+### After Recon: Read, Edit, Checkpoint
 
 1. Read files via terminal (`cat`, `head`, `sed -n`) using paths from recon scaffolds
-2. `refactor_plan(edit_targets=["<candidate_id>"])` — declare edit set, get plan_id + edit_tickets (sha256 computed from disk)
-3. `refactor_edit(plan_id=..., edits=[...])` — find-and-replace with sha256 locking (one call can edit MULTIPLE files)
-4. `checkpoint(changed_files=[...], commit_message="...")` — lint → test → commit → push
-
-**Budget:** 4 mutation batches max before checkpoint. Each `refactor_edit` call = 1 batch.
-Batch source + test edits into ONE call. On checkpoint failure: budget RESETS, `fix_plan` with
-pre-minted edit tickets returned inline — call `refactor_edit` directly (no new plan needed).
+2. Edit files using your host's native edit tools
+3. `checkpoint(changed_files=[...], commit_message="...")` — lint → test → commit → push
 
 ### Reviewing Changes
 
@@ -107,8 +79,6 @@ pre-minted edit tickets returned inline — call `refactor_edit` directly (no ne
 |-----------|---------------|----------------------|
 | Task-aware discovery | `{tool_prefix}_recon` | Manual search + read loops |
 | Read file content | `cat`, `head`, `sed -n` (terminal) | N/A — terminal reads are allowed |
-| Edit files | `{tool_prefix}_refactor_edit` | `sed`, `echo >>`, `awk`, `tee` |
-| Delete file | `{tool_prefix}_refactor_edit(delete=True)` | `git rm`, `rm` |
 | Rename symbol | `{tool_prefix}_refactor_rename` | Find-and-replace, `sed` |
 | Move file | `{tool_prefix}_refactor_move` | `mv` + manual import fixup |
 | Find all references | `{tool_prefix}_recon_impact` | `grep`, `rg`, scaffold iteration |
@@ -120,15 +90,14 @@ pre-minted edit tickets returned inline — call `refactor_edit` directly (no ne
 
 ### Before You Edit: Decision Gate
 
-STOP before using `refactor_edit` for multi-file changes:
-- Changing a name across files? → `refactor_rename` (NOT refactor_edit + manual fixup)
-- Moving a file? → `refactor_move` (NOT refactor_edit + delete)
-- Deleting a file? → `recon_impact` first, then `refactor_edit(delete=True)`
+STOP before editing files manually:
+- Changing a name across files? → `refactor_rename` (NOT manual find-and-replace)
+- Moving a file? → `refactor_move` (NOT `mv` + manual import fixup)
 - Finding all usages of a symbol? → `recon_impact` (NOT grep/scaffold iteration)
 
 ### Refactor: preview → commit/cancel
 
-1. `refactor_rename(symbol="Name", new_name="NewName", justification="...")` — `justification` is **required**
+1. `refactor_rename(symbol="Name", new_name="NewName", justification="...")`
    `refactor_move` — same pattern, preview with `refactor_id`
 2. If `verification_required`: `refactor_commit(refactor_id=..., inspect_path=...)` — review low-certainty matches
 3. `refactor_commit(refactor_id=...)` to apply, or `refactor_cancel(refactor_id=...)` to discard
@@ -156,9 +125,8 @@ recon(task="...", read_only=True)
 ```
 recon(task="...", read_only=False)
 → cat src/path/file.py                               # read via terminal
-→ refactor_plan(edit_targets=["<candidate_id>"])     # sha256 computed from disk
-→ refactor_edit(plan_id="...", edits=[...])          # batch ALL files in ONE call
-→ checkpoint(changed_files=["..."])
+→ (edit files using host tools)
+→ checkpoint(changed_files=["..."], commit_message="...")
 ```
 
 **Rename a symbol:**
@@ -167,6 +135,7 @@ recon(task="...", read_only=False)
 → refactor_rename(symbol="OldName", new_name="NewName", justification="...")
 → refactor_commit(refactor_id="...", inspect_path="...")  # review low-certainty
 → refactor_commit(refactor_id="...")                      # apply all
+→ checkpoint(changed_files=["..."], commit_message="...")
 ```
 
 **Find all usages of a symbol (audit/trace):**
@@ -174,29 +143,6 @@ recon(task="...", read_only=False)
 recon(task="...", seeds=["SymbolName"], read_only=True)
 → recon_impact(target="SymbolName")         # returns ALL reference sites
 → cat src/path/file.py                         # read files you need via terminal
-```
-
-**Delete a file:**
-```
-recon(task="...", read_only=False)
-→ recon_impact(target="file/to/delete.py")          # check dependents first
-→ refactor_plan(edit_targets=["<candidate_id>"])
-→ refactor_edit(plan_id="...", edits=[{{
-      "edit_ticket": "...", "path": "file/to/delete.py",
-      "delete": true, "expected_file_sha256": "..."
-  }}])
-→ checkpoint(changed_files=["file/to/delete.py"])
-```
-
-**Checkpoint fails → fix → retry:**
-```
-checkpoint(changed_files=["..."]) → FAILED, fix_plan returned inline
-→ refactor_edit(plan_id=fix_plan.plan_id, edits=[{{
-      "edit_ticket": fix_plan.edit_tickets[0].edit_ticket,
-      "path": "...", "old_content": "...", "new_content": "...",
-      "expected_file_sha256": "..."  # from fix_plan or file_manifest
-  }}])
-→ checkpoint(changed_files=["..."])  # retry
 ```
 Budget resets on failure. `fix_plan` is always in the checkpoint response — no cache read needed.
 
@@ -218,56 +164,92 @@ Budget resets on failure. `fix_plan` is always in the checkpoint response — no
 """
 
 
-def _inject_agent_instructions(repo_root: Path, tool_prefix: str) -> list[str]:
-    """Inject CodeRecon snippet into .github/copilot-instructions.md.
+def _inject_agent_instructions(
+    repo_root: Path, tool_prefix: str, targets: list[str] | None = None
+) -> list[str]:
+    """Inject CodeRecon snippet into agent instruction files for each target tool.
+
+    Target → instruction file mapping:
+      vscode   → .github/copilot-instructions.md
+      claude   → CLAUDE.md
+      cursor   → .cursor/rules/coderecon.mdc
+      opencode → AGENTS.md
 
     If the file already exists, the snippet is appended (or an existing
     snippet block is replaced in-place).  If it does not exist the file
     is created with a minimal header.
 
-    AGENTS.md is intentionally left untouched — we avoid duplicating
-    instructions across two files.
-
     Args:
         repo_root: Path to the repository root
         tool_prefix: The MCP tool prefix (e.g., 'mcp_coderecon_myrepo')
+        targets: Concrete tool IDs to write for. Defaults to ``["vscode"]`` for
+            backward compatibility.
 
-    Returns list of files that were created or updated.
+    Returns list of files that were created or updated (relative to repo_root,
+    except for global paths which are returned as absolute strings).
     """
+    import re
+
+    if targets is None:
+        targets = ["vscode"]
+
     modified: list[str] = []
     snippet = _make_coderecon_snippet(tool_prefix)
 
-    target = repo_root / ".github" / "copilot-instructions.md"
+    # Map each tool to (path, header) — path is absolute
+    tool_targets: dict[str, tuple[Path, str]] = {
+        "vscode": (
+            repo_root / ".github" / "copilot-instructions.md",
+            "# Copilot Instructions\n\nInstructions for GitHub Copilot working in this repository.\n",
+        ),
+        "claude": (
+            repo_root / "CLAUDE.md",
+            "# Claude Instructions\n\nInstructions for Claude Code working in this repository.\n",
+        ),
+        "cursor": (
+            repo_root / ".cursor" / "rules" / "coderecon.mdc",
+            "---\ndescription: CodeRecon MCP instructions\n---\n\n",
+        ),
+        "opencode": (
+            repo_root / "AGENTS.md",
+            "# Agent Instructions\n\nInstructions for AI agents working in this repository.\n",
+        ),
+    }
 
-    if target.exists():
-        content = target.read_text()
-        # Check if snippet already present
-        if _CODEPLANE_SNIPPET_MARKER in content:
-            # Replace existing snippet with updated one
-            import re
+    for tool in targets:
+        if tool not in tool_targets:
+            continue
+        target, header = tool_targets[tool]
 
-            new_content = re.sub(
-                r"<!-- coderecon-instructions -->.*?<!-- /coderecon-instructions -->",
-                snippet.strip(),
-                content,
-                flags=re.DOTALL,
-            )
-            if new_content != content:
+        if target.exists():
+            content = target.read_text()
+            if _CODEPLANE_SNIPPET_MARKER in content:
+                new_content = re.sub(
+                    r"<!-- coderecon-instructions -->.*?<!-- /coderecon-instructions -->",
+                    snippet.strip(),
+                    content,
+                    flags=re.DOTALL,
+                )
+                if new_content != content:
+                    target.write_text(new_content)
+                    try:
+                        modified.append(str(target.relative_to(repo_root)))
+                    except ValueError:
+                        modified.append(str(target))
+            else:
+                new_content = content.rstrip() + "\n" + snippet
                 target.write_text(new_content)
-                modified.append(str(target.relative_to(repo_root)))
+                try:
+                    modified.append(str(target.relative_to(repo_root)))
+                except ValueError:
+                    modified.append(str(target))
         else:
-            # Append snippet
-            new_content = content.rstrip() + "\n" + snippet
-            target.write_text(new_content)
-            modified.append(str(target.relative_to(repo_root)))
-    else:
-        # Create file with snippet
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(
-            "# Copilot Instructions\n\n"
-            "Instructions for GitHub Copilot working in this repository.\n" + snippet
-        )
-        modified.append(str(target.relative_to(repo_root)))
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(header + snippet)
+            try:
+                modified.append(str(target.relative_to(repo_root)))
+            except ValueError:
+                modified.append(str(target))
 
     return modified
 
@@ -425,6 +407,7 @@ def initialize_repo(
     reindex: bool = False,
     show_recon_up_hint: bool = True,
     port: int | None = None,
+    mcp_targets: list[str] | None = None,
 ) -> bool:
     """Initialize a repository for CodeRecon, returning True on success.
 
@@ -433,6 +416,9 @@ def initialize_repo(
         reindex: Wipe and rebuild the entire index from scratch
         show_recon_up_hint: Show "Run 'recon up'" hint at end (False when auto-init from recon up)
         port: Override port (persisted to config.yaml). If None, preserves existing or uses default.
+        mcp_targets: List of tool IDs to write MCP configs for (e.g. ``["vscode", "claude"]``).
+            Accepts the pseudo-targets ``"auto"`` and ``"all"``.  Defaults to ``["auto"]`` which
+            auto-detects installed tools.
     """
     coderecon_dir = repo_root / ".recon"
     console = get_console()
@@ -525,17 +511,20 @@ def initialize_repo(
         )
 
     # === IDE & Agent Integration ===
-    # Ensure VS Code MCP configuration with static port (returns server_name)
-    mcp_modified, server_name = _ensure_vscode_mcp_config(repo_root, final_port)
-    if mcp_modified:
-        status("Created .vscode/mcp.json with CodeRecon server", style="info")
+    from coderecon.cli.mcp_writers import resolve_targets, write_mcp_configs
+
+    server_name = _get_mcp_server_name(repo_root)
+    resolved = resolve_targets(mcp_targets or ["auto"], repo_root)
+    written_configs = write_mcp_configs(repo_root, final_port, server_name, resolved)
+    for cfg in written_configs:
+        status(f"Updated {cfg} with CodeRecon server", style="info")
 
     # Derive tool prefix from server_name: VS Code creates tools as mcp_{server_name}_{tool}
     # server_name is already normalized (lowercase, underscores)
     tool_prefix = f"mcp_{server_name}"
 
     # Inject CodeRecon instructions into agent instruction files
-    modified_agent_files = _inject_agent_instructions(repo_root, tool_prefix)
+    modified_agent_files = _inject_agent_instructions(repo_root, tool_prefix, resolved)
     if modified_agent_files:
         for f in modified_agent_files:
             status(f"Updated {f} with CodeRecon instructions", style="info")
@@ -572,12 +561,6 @@ def initialize_repo(
             else:
                 phase.complete("Grammars ready")
 
-    # === Model Download Phase ===
-    from coderecon.cli.models import ensure_models
-
-    if not ensure_models(interactive=True):
-        return False
-
     # === Lexical Indexing Phase ===
     from coderecon.index.ops import IndexCoordinatorEngine
 
@@ -599,11 +582,6 @@ def initialize_repo(
     }
     # Track resolution phase box and task IDs
     resolution_phase: PhaseBox | None = None
-    embedding_phase: PhaseBox | None = None
-    embedding_task_id: Any = None
-    embedding_total: int = 0  # track actual embedding count for display
-    embedding_start: float = 0.0  # track embedding phase timing
-    embedding_elapsed: float = 0.0  # actual embedding phase duration
     refs_task_id: Any = None
     types_task_id: Any = None
     indexing_elapsed = 0.0
@@ -621,8 +599,7 @@ def initialize_repo(
         def on_index_progress(
             indexed: int, total: int, files_by_ext: dict[str, int], progress_phase: str
         ) -> None:
-            nonlocal resolution_phase, embedding_phase, embedding_task_id
-            nonlocal embedding_total, embedding_start
+            nonlocal resolution_phase
             nonlocal refs_task_id, types_task_id, indexing_elapsed
 
             if progress_phase == "indexing":
@@ -639,40 +616,8 @@ def initialize_repo(
                 indexing_state["files_indexed"] = indexed
                 indexing_state["files_by_ext"] = files_by_ext
 
-            elif progress_phase == "computing_embeddings":
-                # First embedding callback — close indexing box, open embedding box
-                if not indexing_state["indexing_done"]:
-                    indexing_state["indexing_done"] = True
-                    indexing_elapsed = time.time() - start_time
-
-                    # Finalize indexing box
-                    indexing_phase.set_live_table(None)
-                    files = indexing_state["files_indexed"]
-                    indexing_phase.complete(f"{files} files ({indexing_elapsed:.1f}s)")
-                    if indexing_state["files_by_ext"]:
-                        indexing_phase.add_text("")
-                        ext_table = _make_init_extension_table(indexing_state["files_by_ext"])  # type: ignore[arg-type]
-                        indexing_phase.add_table(ext_table)
-                    indexing_phase.__exit__(None, None, None)
-
-                if embedding_phase is None:
-                    embedding_phase = phase_box("Embeddings", width=60)
-                    embedding_phase.__enter__()
-                    embedding_task_id = embedding_phase.add_progress(
-                        "Computing embeddings", total=100
-                    )
-                    embedding_start = time.time()
-
-                pct = int(indexed / total * 100) if total > 0 else 0
-                embedding_phase._progress.update(embedding_task_id, completed=pct)  # type: ignore[union-attr]
-                embedding_phase._update()
-
-            elif progress_phase == "embeddings_done":
-                # Final signal with actual def count (indexed == total == def count)
-                embedding_total = indexed
-
             elif progress_phase in ("resolving_cross_file", "resolving_refs", "resolving_types"):
-                # First resolution callback — close indexing/embedding boxes, open resolution box
+                # First resolution callback — close indexing box, open resolution box
                 if not indexing_state["indexing_done"]:
                     indexing_state["indexing_done"] = True
                     indexing_elapsed = time.time() - start_time
@@ -686,15 +631,6 @@ def initialize_repo(
                         ext_table = _make_init_extension_table(indexing_state["files_by_ext"])  # type: ignore[arg-type]
                         indexing_phase.add_table(ext_table)
                     indexing_phase.__exit__(None, None, None)
-
-                # Close embedding phase if it was open
-                if embedding_phase is not None:
-                    embedding_elapsed = time.time() - embedding_start
-                    embedding_phase.complete(
-                        f"{embedding_total} definitions embedded ({embedding_elapsed:.1f}s)"
-                    )
-                    embedding_phase.__exit__(None, None, None)
-                    embedding_phase = None
 
                 if resolution_phase is None:
                     # Open resolution phase box
@@ -735,18 +671,10 @@ def initialize_repo(
                 indexing_phase.add_table(ext_table)
             indexing_phase.__exit__(None, None, None)
 
-        # Close embedding phase box if it was opened but resolution didn't close it
-        if embedding_phase is not None:
-            embedding_elapsed = time.time() - embedding_start if embedding_start else 0.0
-            embedding_phase.complete(
-                f"{embedding_total} definitions embedded ({embedding_elapsed:.1f}s)"
-            )
-            embedding_phase.__exit__(None, None, None)
-
         # Close resolution phase box if it was opened
         if resolution_phase is not None:
             total_elapsed = time.time() - start_time
-            resolution_elapsed = total_elapsed - indexing_elapsed - embedding_elapsed
+            resolution_elapsed = total_elapsed - indexing_elapsed
             resolution_phase.complete(f"Done ({resolution_elapsed:.1f}s)")
             resolution_phase.__exit__(None, None, None)
 
@@ -799,26 +727,32 @@ def _make_init_extension_table(files_by_ext: dict[str, int]) -> Table:
     return table
 
 
-@click.command()
+@click.command(hidden=True)
 @click.argument("path", default=None, required=False, type=click.Path(exists=True, path_type=Path))
 @click.option(
     "-r", "--reindex", is_flag=True, help="Wipe and rebuild the entire index from scratch"
 )
 @click.option("--port", "-p", type=int, help="Server port (persisted to config.yaml)")
-def init_command(path: Path | None, reindex: bool, port: int | None) -> None:
-    """Initialize a repository for CodeRecon management.
-
-    Creates .recon/ directory with default configuration and builds
-    the initial index.
-
-    PATH is the repository root. If not specified, auto-detects by walking
-    up from the current directory to find the git root.
-    """
+@click.option(
+    "--mcp-target", "-t",
+    "mcp_targets",
+    multiple=True,
+    type=click.Choice(["vscode", "claude", "cursor", "opencode", "auto", "all"]),
+    default=("auto",),
+    show_default=True,
+    help=(
+        "AI tool(s) to write MCP config for. "
+        "Use 'auto' to detect installed tools, 'all' for every supported tool. "
+        "Repeat to target multiple tools, e.g. -t vscode -t claude."
+    ),
+)
+def init_command(path: Path | None, reindex: bool, port: int | None, mcp_targets: tuple[str, ...]) -> None:
+    """(Use 'recon register' instead.) Initialize a repository for CodeRecon management."""
     from coderecon.cli.utils import find_repo_root
 
     repo_root = find_repo_root(path)
 
-    if not initialize_repo(repo_root, reindex=reindex, port=port):
+    if not initialize_repo(repo_root, reindex=reindex, port=port, mcp_targets=list(mcp_targets)):
         if not reindex:
             return  # Already initialized, message printed
         sys.exit(1)  # Errors occurred

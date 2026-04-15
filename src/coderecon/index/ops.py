@@ -32,6 +32,7 @@ from sqlmodel import col, select
 log = structlog.get_logger(__name__)
 
 from coderecon.core.languages import detect_language_family, is_test_file
+from coderecon.daemon.concurrency import FreshnessGate
 from coderecon.index._internal.db import (
     Database,
     EpochManager,
@@ -58,11 +59,6 @@ from coderecon.index._internal.indexing import (
     resolve_type_traced,
     run_pass_1_5,
 )
-from coderecon.index._internal.indexing.def_embedding import (
-    DefEmbeddingIndex,
-    _is_code_kind,
-)
-from coderecon.index._internal.indexing.file_embedding import FileEmbeddingIndex
 from coderecon.index._internal.parsing import TreeSitterParser
 from coderecon.index._internal.parsing.service import tree_sitter_service
 from coderecon.index._internal.state import FileStateService
@@ -331,13 +327,18 @@ class IndexCoordinatorEngine:
         self._reconcile_lock = threading.Lock()
         self._tantivy_write_lock = threading.Lock()
 
-        # Consistency gating
-        self._fresh_event = asyncio.Event()
+        # Freshness gating — injected by daemon layer.
+        # When None (standalone / test), wait_for_freshness is a no-op.
+        self._freshness_gate: FreshnessGate | None = None
+        self._freshness_worktree: str | None = None
+
+        # Ordered worktree overlay for search queries.  Set by daemon via
+        # set_freshness_gate().  Index 0 has highest priority; later entries
+        # serve as read-through fallbacks (e.g. ["feature-x", "main"]).
+        self._search_worktrees: list[str] = ["main"]
 
         # Components (initialized lazily in initialize())
         self._lexical: LexicalIndex | None = None
-        self._file_embedding: FileEmbeddingIndex | None = None
-        self._def_embedding: DefEmbeddingIndex | None = None
         self._parser: TreeSitterParser | None = None
         self._router: ContextRouter | None = None
         self._structural: StructuralIndexer | None = None
@@ -352,12 +353,16 @@ class IndexCoordinatorEngine:
         # Lazy-loaded on first batch_get_defs() call; cleared on close().
         self._def_cache: dict[str, DefFact] | None = None
 
-    def mark_stale(self) -> None:
-        """Mark index as stale (query methods will block until fresh).
+    def set_freshness_gate(self, gate: FreshnessGate, worktree: str) -> None:
+        """Inject freshness gate from daemon layer.
 
-        Call this BEFORE scheduling async reindex to prevent race conditions.
+        Also sets the search worktrees overlay: feature worktrees fall back
+        to main so that unchanged files are still found via main's index.
         """
-        self._fresh_event.clear()
+        self._freshness_gate = gate
+        self._freshness_worktree = worktree
+        # Overlay: feature branches read their own entries first, then main.
+        self._search_worktrees = [worktree] if worktree == "main" else [worktree, "main"]
 
     async def initialize(
         self,
@@ -392,8 +397,6 @@ class IndexCoordinatorEngine:
         # Initialize components
         self._parser = tree_sitter_service.parser
         self._lexical = LexicalIndex(self.tantivy_path)
-        self._file_embedding = FileEmbeddingIndex(self.repo_root / ".recon")
-        self._def_embedding = DefEmbeddingIndex(self.repo_root / ".recon")
         self._epoch_manager = EpochManager(self.db, self._lexical)
 
         # Step 3: Discover contexts
@@ -542,7 +545,6 @@ class IndexCoordinatorEngine:
             )
 
         self._initialized = True
-        self._fresh_event.set()
 
         return InitResult(
             contexts_discovered=len(all_candidates),
@@ -572,12 +574,6 @@ class IndexCoordinatorEngine:
         # Initialize components
         self._parser = tree_sitter_service.parser
         self._lexical = LexicalIndex(self.tantivy_path)
-        self._file_embedding = FileEmbeddingIndex(self.repo_root / ".recon")
-        self._file_embedding.load()
-        self._file_embedding.prune_missing(self.repo_root)
-        self._def_embedding = DefEmbeddingIndex(self.repo_root / ".recon")
-        self._def_embedding.load()
-        self._def_embedding.prune_missing(self.repo_root)
         self._epoch_manager = EpochManager(self.db, self._lexical)
 
         # Initialize router from existing contexts
@@ -606,115 +602,24 @@ class IndexCoordinatorEngine:
         if self._lexical is not None:
             self._lexical.reload()
 
-        # Validate embedding completeness — rebuild if interrupted init
-        # left structural index complete but embeddings empty/partial
-        await self._validate_embeddings()
-
         self._initialized = True
-        self._fresh_event.set()
         return True
 
-    async def _validate_embeddings(self) -> None:
-        """Check embedding indices match structural index and rebuild if needed.
+    def changed_since_last_index(self) -> list[Path]:
+        """Return paths changed since the last indexed HEAD (git-diff based).
 
-        Handles the case where `recon init -r` was killed after structural
-        indexing completed but before embedding commit finished. The DB
-        has all files/defs but the embedding npz is empty or partial.
+        Runs synchronously — call from a thread or before the event loop starts.
+        Returns an empty list if the index has never been committed or if HEAD
+        matches the last indexed commit.
         """
-        if self._def_embedding is None or self._structural is None:
-            return
+        if self._reconciler is None:
+            return []
+        changed = self._reconciler.get_changed_files()
+        return [self.repo_root / cf.path for cf in changed]
 
-        # Count code defs in DB vs embedded defs
-        with self.db.session() as session:
-            row = session.exec(
-                text(
-                    "SELECT COUNT(*) FROM def_facts "
-                    "WHERE kind IN ('function','method','class','struct',"
-                    "'interface','trait','enum','property')"
-                )
-            ).one()
-            code_def_count: int = int(row[0])
-
-        embedded_count = self._def_embedding.count
-        # Allow 5% tolerance for minor drift (e.g. defs added by incremental
-        # reindex that haven't been embedded yet)
-        if code_def_count > 0 and embedded_count < code_def_count * 0.95:
-            log.warning(
-                "index.embedding_incomplete",
-                code_defs=code_def_count,
-                embedded=embedded_count,
-                action="rebuilding",
-            )
-            await self._rebuild_embeddings()
-        else:
-            log.info(
-                "index.embedding_valid",
-                code_defs=code_def_count,
-                embedded=embedded_count,
-            )
-
-    async def _rebuild_embeddings(self) -> None:
-        """Rebuild def embeddings from scratch using indexed defs."""
-        if self._def_embedding is None:
-            return
-
-        with self.db.session() as session:
-            rows = session.exec(
-                text(
-                    "SELECT d.def_uid, d.kind, d.name, d.lexical_path, "
-                    "d.signature_text, d.docstring, f.path, "
-                    "d.start_line, d.end_line "
-                    "FROM def_facts d JOIN files f ON d.file_id = f.id"
-                )
-            ).all()
-
-        # Group by file path
-        by_file: dict[str, list[dict[str, Any]]] = {}
-        for r in rows:
-            by_file.setdefault(r[6], []).append({
-                "def_uid": r[0], "kind": r[1], "name": r[2],
-                "lexical_path": r[3], "signature_text": r[4], "docstring": r[5],
-                "start_line": r[7], "end_line": r[8],
-            })
-
-        _NON_CODE_KINDS = {"heading", "pair", "key", "table", "target"}
-
-        # Inject body text for non-code defs by reading the source file
-        repo_root = self.repo_root
-        for path, defs in by_file.items():
-            needs_body = any(d["kind"] in _NON_CODE_KINDS for d in defs)
-            if not needs_body:
-                continue
-            full_path = repo_root / path
-            if not full_path.exists():
-                continue
-            try:
-                content_lines = full_path.read_text(
-                    encoding="utf-8", errors="replace",
-                ).split("\n")
-            except Exception:  # noqa: BLE001
-                continue
-            for d in defs:
-                if d["kind"] in _NON_CODE_KINDS:
-                    sl = d.get("start_line", 0)
-                    el = d.get("end_line", 0)
-                    if sl > 0 and el >= sl:
-                        body = "\n".join(content_lines[sl - 1 : el])
-                        if body:
-                            d["_body_text"] = body
-
-        # Clear and re-stage
-        self._def_embedding.clear()
-        for path, defs in by_file.items():
-            self._def_embedding.stage_defs(path, defs)
-
-        staged = sum(len(v) for v in self._def_embedding._staged_defs.values())
-        log.info("index.embedding_rebuild_staged", defs=staged)
-
-        count = self._def_embedding.commit_staged()
-        log.info("index.embedding_rebuild_done", embedded=count)
-
-    async def reindex_incremental(self, changed_paths: list[Path]) -> IndexStats:
+    async def reindex_incremental(
+        self, changed_paths: list[Path], worktree: str = "main"
+    ) -> IndexStats:
         """
         Incremental reindex for changed files.
 
@@ -722,14 +627,14 @@ class IndexCoordinatorEngine:
 
         If .reconignore changes, triggers a full reindex to apply new patterns.
         """
-        self._fresh_event.clear()
         try:
-            return await self._reindex_incremental_impl(changed_paths)
+            return await self._reindex_incremental_impl(changed_paths, worktree)
         finally:
             self._def_cache = None
-            self._fresh_event.set()
 
-    async def _reindex_incremental_impl(self, changed_paths: list[Path]) -> IndexStats:
+    async def _reindex_incremental_impl(
+        self, changed_paths: list[Path], worktree: str = "main"
+    ) -> IndexStats:
         """
         Incremental reindex for changed files (unified single-pass).
 
@@ -907,7 +812,7 @@ class IndexCoordinatorEngine:
                             if extraction.content_text is None:
                                 # File became unreadable — remove stale Tantivy doc
                                 if extraction.file_path in existing_set:
-                                    self._lexical.stage_remove(extraction.file_path)
+                                    self._lexical.stage_remove(extraction.file_path, worktree)
                                     files_removed += 1
                                 failed_paths.append(extraction.file_path)
                                 continue
@@ -918,11 +823,8 @@ class IndexCoordinatorEngine:
                                 context_id=ctx_id,
                                 file_id=fid,
                                 symbols=extraction.symbol_names,
+                                worktree=worktree,
                             )
-
-                            # Stage embeddings: per-def for code, per-file for non-code
-                            if extraction.content_text:
-                                self._stage_embeddings(extraction)
 
                             if extraction.file_path in existing_set:
                                 files_updated += 1
@@ -944,17 +846,10 @@ class IndexCoordinatorEngine:
                         if failed_paths:
                             self._remove_structural_facts_for_paths(failed_paths)
 
-                    # Stage removals (lexical + file embedding)
+                    # Stage removals
                     for path in removed_paths:
-                        self._lexical.stage_remove(str(path))
+                        self._lexical.stage_remove(str(path), worktree)
                         files_removed += 1
-
-                    # Stage embedding removals (both indices)
-                    path_strs = [str(p) for p in removed_paths]
-                    if self._file_embedding is not None and path_strs:
-                        self._file_embedding.stage_remove(path_strs)
-                    if self._def_embedding is not None and path_strs:
-                        self._def_embedding.stage_remove_by_path(path_strs)
 
                     # Commit all staged changes atomically
                     self._lexical.commit_staged()
@@ -963,15 +858,10 @@ class IndexCoordinatorEngine:
                 self._lexical.reload()
 
                 # Pass 1.5 / 2 / 3: cross-file resolution (scoped to changed files)
-                # Run BEFORE embedding commit so CTX_USAGE records have resolved refs.
                 if changed_file_ids:
                     run_pass_1_5(self.db, None, file_ids=changed_file_ids)
                     resolve_references(self.db, file_ids=changed_file_ids)
                     resolve_type_traced(self.db, file_ids=changed_file_ids)
-
-                # Commit embeddings (both indices, after resolver)
-                with self._tantivy_write_lock:
-                    self._commit_embeddings()
 
                 # Mark successfully indexed files as indexed
                 if changed_file_ids:
@@ -989,19 +879,11 @@ class IndexCoordinatorEngine:
                 with self._tantivy_write_lock:
                     for path in removed_paths:
                         if self._lexical is not None:
-                            self._lexical.stage_remove(str(path))
+                            self._lexical.stage_remove(str(path), worktree)
                         files_removed += 1
-
-                    # Stage embedding removals (both indices)
-                    path_strs_rm = [str(p) for p in removed_paths]
-                    if self._file_embedding is not None and path_strs_rm:
-                        self._file_embedding.stage_remove(path_strs_rm)
-                    if self._def_embedding is not None and path_strs_rm:
-                        self._def_embedding.stage_remove_by_path(path_strs_rm)
 
                     if self._lexical is not None:
                         self._lexical.commit_staged()
-                    self._commit_embeddings()
                 if self._lexical is not None:
                     self._lexical.reload()
 
@@ -1143,7 +1025,6 @@ class IndexCoordinatorEngine:
                 by_context[ctx_id].append(rel_path)
 
             for ctx_id, paths in by_context.items():
-                # Extract first, then persist + stage embeddings
                 extractions = self._structural.extract_files(paths, ctx_id)
                 self._structural.index_files(
                     paths,
@@ -1151,11 +1032,6 @@ class IndexCoordinatorEngine:
                     file_id_map=file_id_map,
                     _extractions=extractions,
                 )
-
-                # Stage embeddings from extraction data
-                for extraction in extractions:
-                    if extraction.content_text:
-                        self._stage_embeddings(extraction)
 
             # Create synthetic import edges from config files to source files.
             from coderecon.index._internal.indexing.config_refs import (
@@ -1175,17 +1051,6 @@ class IndexCoordinatorEngine:
 
             # Resolve type-traced member accesses (Pass 3 - follows type annotations)
             resolve_type_traced(self.db)
-
-        # Stage embedding removals (both indices)
-        if to_remove:
-            rm_list = list(to_remove)
-            if self._file_embedding is not None:
-                self._file_embedding.stage_remove(rm_list)
-            if self._def_embedding is not None:
-                self._def_embedding.stage_remove_by_path(rm_list)
-
-        # Commit embeddings (both indices, shared model)
-        self._commit_embeddings()
 
         # Remove structural facts for removed files
         if to_remove:
@@ -1245,12 +1110,10 @@ class IndexCoordinatorEngine:
         """
         Full repository reindex - idempotent and incremental.
         """
-        self._fresh_event.clear()
         try:
             return await self._reindex_full_impl()
         finally:
             self._def_cache = None
-            self._fresh_event.set()
 
     async def _reindex_full_impl(self) -> IndexStats:
         """
@@ -1371,7 +1234,7 @@ class IndexCoordinatorEngine:
                             file_id_map[rel_path] = file_record.id
                     session.commit()
 
-            # Structural indexing + file embeddings for added files
+            # Structural indexing for added files
             if to_add and self._structural is not None:
                 # Group files by context_id
                 by_context: dict[int, list[str]] = {}
@@ -1389,26 +1252,10 @@ class IndexCoordinatorEngine:
                         _extractions=extractions,
                     )
 
-                    # Stage embeddings from extraction data
-                    for extraction in extractions:
-                        if extraction.content_text:
-                            self._stage_embeddings(extraction)
-
                 # Cross-file resolution passes
                 run_pass_1_5(self.db, None)
                 resolve_references(self.db)
                 resolve_type_traced(self.db)
-
-            # Stage embedding removals (both indices)
-            if to_remove:
-                rm_list = list(to_remove)
-                if self._file_embedding is not None:
-                    self._file_embedding.stage_remove(rm_list)
-                if self._def_embedding is not None:
-                    self._def_embedding.stage_remove_by_path(rm_list)
-
-            # Commit embeddings (both indices, shared model)
-            self._commit_embeddings()
 
             # Remove structural facts for removed files
             if to_remove:
@@ -1439,11 +1286,16 @@ class IndexCoordinatorEngine:
         )
 
     async def wait_for_freshness(self) -> None:
-        """Block unti index is fresh (no pending writes)."""
+        """Block until index is fresh (no pending writes).
+
+        Delegates to :class:`FreshnessGate` when injected by the daemon
+        layer.  Without a gate (standalone / test) this is a no-op.
+        """
         if not self._initialized:
             msg = "Coordinator not initialized"
             raise RuntimeError(msg)
-        await self._fresh_event.wait()
+        if self._freshness_gate is not None and self._freshness_worktree is not None:
+            await self._freshness_gate.wait_fresh(self._freshness_worktree)
 
     def score_files_bm25(self, query: str, limit: int = 500) -> dict[str, float]:
         """Score files by BM25 relevance to *query* using Tantivy.
@@ -1455,7 +1307,9 @@ class IndexCoordinatorEngine:
         """
         if self._lexical is None:
             return {}
-        return self._lexical.score_files_bm25(query, limit=limit)
+        return self._lexical.score_files_bm25(
+            query, limit=limit, worktrees=self._search_worktrees
+        )
 
     async def search(
         self,
@@ -1525,11 +1379,13 @@ class IndexCoordinatorEngine:
             )
         elif mode == SearchMode.PATH:
             search_results = self._lexical.search_path(
-                query, limit=search_limit, context_lines=context_lines
+                query, limit=search_limit, context_lines=context_lines,
+                worktrees=self._search_worktrees,
             )
         else:
             search_results = self._lexical.search(
-                query, limit=search_limit, context_lines=context_lines
+                query, limit=search_limit, context_lines=context_lines,
+                worktrees=self._search_worktrees,
             )
 
         # Filter results by language if requested
@@ -1654,7 +1510,9 @@ class IndexCoordinatorEngine:
         # Skip fallback when filter_kinds is set — Tantivy has no kind metadata
         # so we'd return results that violate the caller's kind constraint.
         if len(results) < limit and self._lexical is not None and not filter_kinds:
-            tantivy_results = self._lexical.search_symbols(query, limit=limit, context_lines=1)
+            tantivy_results = self._lexical.search_symbols(
+                query, limit=limit, context_lines=1, worktrees=self._search_worktrees
+            )
             # Cap fallback scores below the lowest Phase 1 score so
             # structural matches always rank first.
             phase1_min = min((r.score for r in results), default=0.5)
@@ -2703,7 +2561,8 @@ class IndexCoordinatorEngine:
             files_by_ext: dict[str, int] = {}
             # Use all available cores for CPU-bound tree-sitter extraction,
             # capped at 16 to prevent runaway on high-core-count servers.
-            workers = min(os.cpu_count() or 4, 16)
+            # CODERECON_INDEX_WORKERS overrides for batch/CI scenarios.
+            workers = int(os.environ.get("CODERECON_INDEX_WORKERS", 0)) or min(os.cpu_count() or 4, 16)
 
             if self._structural is not None:
                 batch_size = 50
@@ -2736,11 +2595,8 @@ class IndexCoordinatorEngine:
                                 extraction.content_text,
                                 context_id=ctx_id,
                                 symbols=extraction.symbol_names,
+                                worktree="main",
                             )
-
-                            # Stage embeddings: per-def for code, per-file for non-code
-                            if extraction.content_text:
-                                self._stage_embeddings(extraction)
 
                             count += 1
                             indexed_paths.append(extraction.file_path)
@@ -2799,87 +2655,7 @@ class IndexCoordinatorEngine:
                 log.info("index.stage.resolve_complete",
                          elapsed_sec=round(_resolve_elapsed, 1))
 
-                # Commit embeddings (both indices, shared model)
-                _staged_file = (
-                    len(self._file_embedding._staged_files)
-                    if self._file_embedding is not None
-                    else 0
-                )
-                _staged_def = (
-                    sum(len(v) for v in self._def_embedding._staged_defs.values())
-                    if self._def_embedding is not None
-                    else 0
-                )
-                staged_total = _staged_file + _staged_def
-                _embed_start = time.time()
-                if staged_total > 0:
-                    on_progress(0, staged_total, files_by_ext, "computing_embeddings")
-
-                    def _embed_progress(done: int, total: int) -> None:
-                        on_progress(done, total, files_by_ext, "computing_embeddings")
-
-                    self._commit_embeddings(on_progress=_embed_progress)
-                    on_progress(staged_total, staged_total, files_by_ext, "embeddings_done")
-                else:
-                    self._commit_embeddings()
-                _embed_elapsed = time.time() - _embed_start
-                log.info("index.stage.embeddings_complete",
-                         staged_file=_staged_file, staged_def=_staged_def,
-                         elapsed_sec=round(_embed_elapsed, 1))
-
         return count, indexed_paths, files_by_ext
-
-    def _stage_embeddings(self, extraction: ExtractionResult) -> None:
-        """Route an extraction to the embedding index.
-
-        All files with defs (code or non-code) → per-def embedding.
-        Files with zero defs (binary, empty) → per-file embedding.
-        """
-        if extraction.defs and self._def_embedding is not None:
-            # Inject body text for non-code defs so their scaffolds
-            # capture section content, not just headings/key names.
-            content = extraction.content_text or ""
-            if content:
-                content_lines = content.split("\n")
-                for d in extraction.defs:
-                    kind = d.get("kind", "")
-                    if kind in ("heading", "pair", "key", "table", "target"):
-                        sl = d.get("start_line", 0)
-                        el = d.get("end_line", 0)
-                        if sl > 0 and el >= sl:
-                            body = "\n".join(content_lines[sl - 1 : el])
-                            if body:
-                                d["_body_text"] = body
-            self._def_embedding.stage_defs(extraction.file_path, extraction.defs)
-        elif not extraction.defs and self._file_embedding is not None:
-            self._file_embedding.stage_file(
-                extraction.file_path,
-                extraction.content_text,
-                defs=extraction.defs,
-                imports=extraction.imports,
-            )
-
-    def query_file_embeddings(self, text: str) -> list[tuple[str, float]]:
-        """File-level semantic search for non-code files.
-
-        Returns (relative_path, cosine_similarity) pairs ranked by similarity.
-        Only searches the non-code file embedding index (config, docs, build files).
-        All files with positive similarity are returned.
-        """
-        if self._file_embedding is None or self._file_embedding.count == 0:
-            return []
-        return self._file_embedding.query(text)
-
-    def query_def_embeddings(self, text: str) -> list[tuple[str, float]]:
-        """Per-DefFact semantic search for code objects.
-
-        Returns (def_uid, cosine_similarity) pairs ranked by similarity.
-        Searches the per-def embedding index (functions, classes, methods, etc.).
-        All defs with positive similarity are returned.
-        """
-        if self._def_embedding is None or self._def_embedding.count == 0:
-            return []
-        return self._def_embedding.query(text)
 
     def batch_get_defs(self, def_uids: list[str]) -> dict[str, DefFact]:
         """Get DefFacts by UID, using an in-memory cache.
@@ -2903,96 +2679,11 @@ class IndexCoordinatorEngine:
                 )
         return {uid: self._def_cache[uid] for uid in def_uids if uid in self._def_cache}
 
-    def _share_embedding_model(self) -> None:
-        """Share the ONNX model between file and def embedding indices.
-
-        Avoids loading the same ~67 MB model twice. Whichever index has
-        a loaded model shares it with the other.
-        """
-        fe = self._file_embedding
-        de = self._def_embedding
-        if fe is None or de is None:
-            return
-        if fe._model is not None and de._model is None:
-            de.set_shared_model(fe._model, fe._batch_size)
-        elif de._model is not None and fe._model is None:
-            fe._model = de._model
-            fe._batch_size = de._batch_size
-
-    def _commit_embeddings(
-        self,
-        on_progress: Callable[[int, int], None] | None = None,
-    ) -> int:
-        """Commit both embedding indices with model sharing.
-
-        Ensures the ONNX model is loaded only once across both indices.
-        Progress callback receives cumulative (done, grand_total) across
-        both indices — the total never changes mid-stream.
-
-        Returns total number of items embedded.
-        """
-        fe = self._file_embedding
-        de = self._def_embedding
-        fe_has = fe is not None and fe.has_staged_changes()
-        de_has = de is not None and de.has_staged_changes()
-
-        if not fe_has and not de_has:
-            return 0
-
-        # Compute grand total ONCE so progress never jumps
-        fe_count = len(fe._staged_files) if fe_has and fe is not None else 0
-        de_count = (
-            sum(len(v) for v in de._staged_defs.values())
-            if de_has and de is not None
-            else 0
-        )
-        grand_total = fe_count + de_count
-
-        embedded = 0
-        offset = 0
-
-        if fe_has:
-            assert fe is not None
-            if on_progress is not None:
-                _gt = grand_total
-                def _fe_progress(done: int, total: int) -> None:  # noqa: ARG001
-                    on_progress(done, _gt)
-                embedded += fe.commit_staged(on_progress=_fe_progress)
-            else:
-                embedded += fe.commit_staged()
-            offset = fe_count
-            # Share model with def embedding
-            if de is not None and fe._model is not None and de._model is None:
-                de.set_shared_model(fe._model, fe._batch_size)
-
-        if de_has:
-            assert de is not None
-            # If file embedding didn't run, share model the other way
-            if fe is not None and de._model is not None and fe._model is None:
-                fe._model = de._model
-                fe._batch_size = de._batch_size
-            if on_progress is not None:
-                _off = offset
-                _gt2 = grand_total
-                def _de_progress(done: int, total: int) -> None:  # noqa: ARG001
-                    on_progress(_off + done, _gt2)
-                embedded += de.commit_staged(on_progress=_de_progress)
-            else:
-                embedded += de.commit_staged()
-
-        return embedded
-
     def _clear_all_structural_facts(self) -> None:
         """Clear all structural facts from the database.
 
         Used before full reindex to avoid duplicate key violations.
         """
-        # Clear both embedding indices alongside structural facts
-        if self._file_embedding is not None:
-            self._file_embedding.clear()
-        if self._def_embedding is not None:
-            self._def_embedding.clear()
-
         with self.db.session() as session:
             # Clear all fact tables
             session.exec(text("DELETE FROM def_facts"))  # type: ignore[call-overload]

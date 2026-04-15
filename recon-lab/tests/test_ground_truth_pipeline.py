@@ -11,7 +11,7 @@ from cpl_lab.collect import _find_clone_dir
 from cpl_lab.collector import iter_task_json_files
 from cpl_lab.data_manifest import load_repo_manifest, write_repo_manifest
 from cpl_lab.github_models import _token_budget_field, response_text
-from cpl_lab.index import _ensure_recon_models, _find_recon_python, _recon_env, _recon_init_cmd
+from cpl_lab.index import _find_recon_python, _recon_env, _recon_init_cmd
 from cpl_lab.merge_signals import _align_to_merged
 from cpl_lab.patch_ground_truth import parse_unified_diff
 from cpl_lab.validate_ground_truth import validate_task
@@ -201,8 +201,6 @@ def test_align_to_merged_preserves_logical_repo_id() -> None:
             "has_parent_scope": [False],
             "hub_score": [1],
             "is_test": [False],
-            "emb_score": [0.5],
-            "emb_rank": [1.0],
             "term_match_count": [1.0],
             "term_total_matches": [1.0],
             "graph_edge_type": ["calls"],
@@ -292,10 +290,3 @@ def test_recon_init_cmd_supports_reindex_flag(tmp_path: Path, monkeypatch) -> No
     cmd, _ = _recon_init_cmd(tmp_path / "repo", reindex=True)
 
     assert cmd[-3:] == ["init", "-r", str(tmp_path / "repo")]
-
-
-def test_ensure_recon_models_raises_when_bootstrap_fails(monkeypatch) -> None:
-    monkeypatch.setattr("coderecon.cli.models.ensure_models", lambda interactive: False)
-
-    with pytest.raises(click.ClickException):
-        _ensure_recon_models()

@@ -6,7 +6,7 @@ consolidates ALL config:
 - File extension / filename detection
 - Symbol extraction queries (S-expression patterns + SymbolPattern mappings)
 - Scope types (data-driven scope walker config)
-- SEM_FACTS queries (body-evidence for embeddings)
+- SEM_FACTS queries (body-evidence)
 - Type extraction config (type annotations, type members, member accesses,
   interface implementations)
 - Module declaration handler name
@@ -494,6 +494,16 @@ _PYTHON_TYPES = TypeExtractionConfig(
     object: (identifier) @receiver
     attribute: (identifier) @member) @expr) @call
 """,
+    interface_impl_query="""
+(class_definition
+  name: (identifier) @implementor
+  superclasses: (argument_list
+    (identifier) @interface))
+(class_definition
+  name: (identifier) @implementor
+  superclasses: (argument_list
+    (attribute) @interface))
+""",
 )
 
 PYTHON_PACK = LanguagePack(
@@ -907,6 +917,25 @@ _GO_TYPES = TypeExtractionConfig(
   function: (selector_expression
     operand: (identifier) @receiver
     field: (field_identifier) @member) @expr) @call
+""",
+    interface_impl_query="""
+(type_declaration
+  (type_spec
+    name: (type_identifier) @implementor
+    type: (struct_type
+      (field_declaration_list
+        (field_declaration
+          type: (type_identifier) @interface
+          !name)))))
+(type_declaration
+  (type_spec
+    name: (type_identifier) @implementor
+    type: (struct_type
+      (field_declaration_list
+        (field_declaration
+          type: (qualified_type
+            name: (type_identifier) @interface)
+          !name)))))
 """,
 )
 
@@ -2013,6 +2042,16 @@ _RUBY_TYPES = TypeExtractionConfig(
   receiver: (identifier) @receiver
   method: (identifier) @member
   arguments: (argument_list) @args) @call
+""",
+    interface_impl_query="""
+(class
+  name: (constant) @implementor
+  superclass: (superclass
+    (constant) @interface))
+(class
+  name: (constant) @implementor
+  superclass: (superclass
+    (scope_resolution) @interface))
 """,
 )
 

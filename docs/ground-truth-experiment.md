@@ -68,6 +68,10 @@ defs survive budget pressure. **Keep both tiers.**
 
 ## Signal Quality Experiment
 
+> **Note:** Embeddings have been removed from the codebase. The results
+> below are historical and reference signals (EmbSep, Q_SEMANTIC) that
+> no longer exist in the pipeline.
+
 ### Question
 
 Do the retrieval signals actually separate relevant from irrelevant

@@ -47,10 +47,7 @@ def _recon_init_cmd(repo_dir: Path, *, reindex: bool = False) -> tuple[list[str]
 
 
 def _ensure_recon_models() -> None:
-    from coderecon.cli.models import ensure_models
-
-    if not ensure_models(interactive=False):
-        raise click.ClickException("Embedding models are required for recon init")
+    pass
 
 
 def _iter_clones(clones_dir: Path, repo_set: str) -> list[Path]:

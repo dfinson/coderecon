@@ -106,13 +106,13 @@ PYTHONPATH=/home/dave01/wsl-repos/coderecon/src \
 ### 3. `recon init` initially failed non-interactively because of model bootstrap
 
 The first remote indexing attempt failed because the CLI hit an
-interactive model-download confirmation for embeddings. The fix was to
-pre-prime the embedding model cache using the non-interactive helper path
+interactive model-download confirmation. The fix was to
+pre-prime the model cache using the non-interactive helper path
 before rerunning the batch.
 
 Practical implication for future agents:
 
-- If indexing is being run in a fresh environment, expect an embedding
+- If indexing is being run in a fresh environment, expect a
   model bootstrap step.
 - Prime that cache before launching a large unattended batch.
 
@@ -245,7 +245,7 @@ As of this handoff, the experiment state is:
 - Do not assume direct SSH restore from the VM will be reliable enough
   for the final artifact path.
 - Do not start a large unattended indexing batch in a fresh environment
-  without pre-priming the embedding model cache.
+  without pre-priming the model cache.
 - Do not let infrastructure details dominate the handoff. The real goal
   is to produce the lab artifacts that unblock generate, collect, merge,
   train, and eval.
