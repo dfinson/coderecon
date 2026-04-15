@@ -83,6 +83,7 @@ class RefactorResult:
     status: Literal["previewed", "applied", "cancelled", "divergence"]
     preview: RefactorPreview | None = None
     applied: MutationDelta | None = None
+    changed_paths: list[Path] = field(default_factory=list)
     divergence: RefactorDivergence | None = None
     warning: str | None = None  # Agent guidance (e.g., path:line:col format detected)
 
@@ -1281,6 +1282,7 @@ class RefactorOps:
             refactor_id=refactor_id,
             status="applied",
             applied=mutation_result.delta,
+            changed_paths=mutation_result.changed_paths,
         )
 
     async def cancel(self, refactor_id: str) -> RefactorResult:

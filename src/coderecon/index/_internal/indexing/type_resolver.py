@@ -21,6 +21,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from sqlalchemy import text
 from sqlmodel import col, select
 
 from coderecon.index.models import (
@@ -80,6 +81,8 @@ class TypeTracedResolver:
     ) -> TypeTracedStats:
         """Resolve all unresolved member accesses.
 
+        Pre-builds caches, resolves in parallel threads, batch-commits results.
+
         Args:
             limit: Maximum accesses to process in one batch
             on_progress: Optional callback(processed, total) for progress updates
@@ -90,42 +93,99 @@ class TypeTracedResolver:
         stats = TypeTracedStats()
 
         with self._db.session() as session:
-            # Find unresolved accesses (no final_target_def_uid)
-            stmt = (
-                select(MemberAccessFact)
-                .where(MemberAccessFact.final_target_def_uid == None)  # noqa: E711
-                .limit(limit)
-            )
-            unresolved = list(session.exec(stmt).all())
-            stats.accesses_processed = len(unresolved)
-            total = len(unresolved)
+            # Load unresolved accesses as lightweight tuples
+            rows = session.execute(
+                text(
+                    "SELECT access_id, receiver_name, receiver_declared_type, "
+                    "scope_id, member_chain, file_id, start_line "
+                    "FROM member_access_facts "
+                    "WHERE final_target_def_uid IS NULL "
+                    "LIMIT :lim"
+                ),
+                {"lim": limit},
+            ).fetchall()
+            stats.accesses_processed = len(rows)
+            total = len(rows)
 
-            if not unresolved:
+            if not rows:
                 return stats
 
-            # Build caches
             self._build_type_cache(session)
             self._build_member_cache(session)
 
-            # Resolve each access
-            for i, access in enumerate(unresolved):
-                result = self._resolve_access(session, access)
-                if result == "resolved":
-                    stats.accesses_resolved += 1
-                elif result == "partial":
-                    stats.accesses_partial += 1
-                else:
-                    stats.accesses_unresolved += 1
+        # Resolve in-memory — all lookups are dict operations, no DB needed
+        access_updates: list[dict] = []
+        ref_upgrades: list[dict] = []
 
-                # Report progress every 50 accesses
-                if on_progress and (i + 1) % 50 == 0:
-                    on_progress(i + 1, total)
+        for i, row in enumerate(rows):
+            access_id, receiver_name, receiver_declared_type, scope_id, member_chain, file_id, start_line = row
+            result = self._resolve_access_inmem(
+                receiver_name, receiver_declared_type, scope_id, member_chain
+            )
+            if result is None:
+                stats.accesses_unresolved += 1
+                continue
 
-            # Final progress update
-            if on_progress and total > 0:
-                on_progress(total, total)
+            type_path, final_def_uid, confidence, status = result
+            access_updates.append({
+                "access_id": access_id,
+                "resolved_type_path": type_path,
+                "final_target_def_uid": final_def_uid,
+                "resolution_method": "type_traced",
+                "resolution_confidence": confidence,
+            })
+            if status == "resolved":
+                stats.accesses_resolved += 1
+                chain_parts = member_chain.split(".")
+                ref_upgrades.append({
+                    "file_id": file_id,
+                    "start_line": start_line,
+                    "token": chain_parts[-1],
+                    "def_uid": final_def_uid,
+                })
+            else:
+                stats.accesses_partial += 1
 
-            session.commit()
+            if on_progress and (i + 1) % 50 == 0:
+                on_progress(i + 1, total)
+
+        # Batch-commit
+        if access_updates or ref_upgrades:
+            with self._db.session() as session:
+                if access_updates:
+                    session.execute(
+                        text(
+                            "UPDATE member_access_facts "
+                            "SET resolved_type_path = :resolved_type_path, "
+                            "final_target_def_uid = :final_target_def_uid, "
+                            "resolution_method = :resolution_method, "
+                            "resolution_confidence = :resolution_confidence "
+                            "WHERE access_id = :access_id"
+                        ),
+                        access_updates,
+                    )
+                for r in ref_upgrades:
+                    if r["def_uid"]:
+                        session.execute(
+                            text(
+                                "UPDATE ref_facts "
+                                "SET target_def_uid = :def_uid, ref_tier = :tier "
+                                "WHERE file_id = :file_id AND start_line = :start_line "
+                                "AND token_text = :token"
+                            ),
+                            {
+                                "def_uid": r["def_uid"],
+                                "tier": RefTier.PROVEN.value,
+                                "file_id": r["file_id"],
+                                "start_line": r["start_line"],
+                                "token": r["token"],
+                            },
+                        )
+                        stats.refs_upgraded += 1
+                session.commit()
+
+        if on_progress and total > 0:
+            on_progress(total, total)
 
         return stats
 
@@ -137,10 +197,6 @@ class TypeTracedResolver:
         """Resolve accesses only for specific files.
 
         Use for incremental updates after re-indexing.
-
-        Args:
-            file_ids: List of file IDs to resolve
-            on_progress: Optional callback(processed, total) for progress updates
         """
         stats = TypeTracedStats()
 
@@ -167,115 +223,104 @@ class TypeTracedResolver:
                     stats.accesses_partial += 1
                 else:
                     stats.accesses_unresolved += 1
-
-                # Report progress every 50 accesses
                 if on_progress and (i + 1) % 50 == 0:
                     on_progress(i + 1, total)
 
-            # Final progress update
             if on_progress and total > 0:
                 on_progress(total, total)
-
             session.commit()
 
         return stats
 
-    def _resolve_access(
-        self, session: object, access: MemberAccessFact
-    ) -> str:  # "resolved", "partial", "unresolved"
-        """Attempt to resolve a single member access chain."""
-        # Get receiver type
-        receiver_type = access.receiver_declared_type
+    def _resolve_access_inmem(
+        self,
+        receiver_name: str,
+        receiver_declared_type: str | None,
+        scope_id: int | None,
+        member_chain: str,
+    ) -> tuple[str, str | None, float, str] | None:
+        """Resolve a single member access chain in-memory.
+
+        Returns (type_path, final_def_uid, confidence, "resolved"|"partial") or None.
+        """
+        receiver_type = receiver_declared_type
         if not receiver_type:
-            # Try to look up from our cache
-            receiver_type = self._type_map.get((access.receiver_name, access.scope_id))
+            receiver_type = self._type_map.get((receiver_name, scope_id))
             if not receiver_type:
-                # Also try without scope (file-level)
-                receiver_type = self._type_map.get((access.receiver_name, None))
+                receiver_type = self._type_map.get((receiver_name, None))
 
         if not receiver_type:
-            return "unresolved"
+            return None
 
-        # Walk the chain
         current_type = receiver_type
-        chain_parts = access.member_chain.split(".")
+        chain_parts = member_chain.split(".")
         type_path = [receiver_type]
         resolved_depth = 0
 
         for i, member_name in enumerate(chain_parts):
-            member_key = (current_type, member_name)
-            member = self._member_map.get(member_key)
-
+            member = self._member_map.get((current_type, member_name))
             if not member:
-                # Can't continue - but we may have resolved part of the chain
                 break
 
             resolved_depth = i + 1
             type_path.append(member_name)
 
-            # Is this the final member?
             if i == len(chain_parts) - 1:
-                # Success! Update the access
-                access.resolved_type_path = ".".join(type_path)
-                access.final_target_def_uid = member.member_def_uid
-                access.resolution_method = "type_traced"
-                access.resolution_confidence = 1.0
-
-                # Upgrade the RefFact if we can find it
-                self._upgrade_ref(
-                    session,
-                    access.file_id,
-                    access.start_line,
-                    member_name,
+                return (
+                    ".".join(type_path),
                     member.member_def_uid,
+                    1.0,
+                    "resolved",
                 )
 
-                return "resolved"
-
-            # Get type for next iteration
             if member.base_type:
                 current_type = member.base_type
             elif member.member_kind in ("method", "static_method", "class_method"):
-                # Methods don't have a "type" to continue through
                 break
             else:
-                # Field without type annotation - can't continue
                 break
 
-        # Partial resolution - record what we did resolve
         if resolved_depth > 0:
-            access.resolved_type_path = ".".join(type_path[: resolved_depth + 1])
-            access.resolution_method = "type_traced"
-            access.resolution_confidence = resolved_depth / len(chain_parts)
-            return "partial"
+            return (
+                ".".join(type_path[: resolved_depth + 1]),
+                None,
+                resolved_depth / len(chain_parts),
+                "partial",
+            )
 
-        return "unresolved"
+        return None
 
-    def _upgrade_ref(
-        self,
-        session: object,
-        file_id: int,
-        line: int,
-        token: str,
-        target_def_uid: str | None,
-    ) -> bool:
-        """Upgrade a RefFact to PROVEN based on type-traced resolution."""
-        if not target_def_uid:
-            return False
-
-        stmt = select(RefFact).where(
-            RefFact.file_id == file_id,
-            RefFact.start_line == line,
-            RefFact.token_text == token,
+    def _resolve_access(
+        self, session: object, access: MemberAccessFact
+    ) -> str:
+        """ORM-based single access resolution (used by resolve_for_files)."""
+        result = self._resolve_access_inmem(
+            access.receiver_name,
+            access.receiver_declared_type,
+            access.scope_id,
+            access.member_chain,
         )
-        ref = session.exec(stmt).first()  # type: ignore[attr-defined]
+        if result is None:
+            return "unresolved"
 
-        if ref:
-            ref.target_def_uid = target_def_uid
-            ref.ref_tier = RefTier.PROVEN.value
-            return True
+        type_path, final_def_uid, confidence, status = result
+        access.resolved_type_path = type_path
+        access.final_target_def_uid = final_def_uid
+        access.resolution_method = "type_traced"
+        access.resolution_confidence = confidence
 
-        return False
+        if status == "resolved" and final_def_uid:
+            stmt = select(RefFact).where(
+                RefFact.file_id == access.file_id,
+                RefFact.start_line == access.start_line,
+                RefFact.token_text == access.member_chain.split(".")[-1],
+            )
+            ref = session.exec(stmt).first()  # type: ignore[attr-defined]
+            if ref:
+                ref.target_def_uid = final_def_uid
+                ref.ref_tier = RefTier.PROVEN.value
+
+        return status
 
     def _build_type_cache(self, session: object) -> None:
         """Build (name, scope_id) -> base_type mapping."""

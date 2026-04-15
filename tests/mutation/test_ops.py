@@ -364,40 +364,35 @@ class TestMutationOpsDryRun:
 
 
 class TestMutationOpsCallback:
-    """Tests for MutationOps reindex callback."""
+    """Tests for MutationOps changed_paths tracking."""
 
-    def test_callback_invoked_on_mutation(self, tmp_path: Path) -> None:
-        """on_mutation callback is invoked with changed paths."""
-        callback = MagicMock()
-        ops = MutationOps(tmp_path, on_mutation=callback)
+    def test_changed_paths_populated_on_mutation(self, tmp_path: Path) -> None:
+        """changed_paths is populated after mutation."""
+        ops = MutationOps(tmp_path)
 
-        ops.write_source([Edit(path="new.py", action="create", content="x")])
+        result = ops.write_source([Edit(path="new.py", action="create", content="x")])
 
-        callback.assert_called_once()
-        paths = callback.call_args[0][0]
-        assert len(paths) == 1
-        assert paths[0] == tmp_path / "new.py"
+        assert len(result.changed_paths) == 1
+        assert result.changed_paths[0] == tmp_path / "new.py"
 
-    def test_callback_not_invoked_on_dry_run(self, tmp_path: Path) -> None:
-        """on_mutation callback not invoked during dry run."""
-        callback = MagicMock()
-        ops = MutationOps(tmp_path, on_mutation=callback)
+    def test_changed_paths_empty_on_dry_run(self, tmp_path: Path) -> None:
+        """changed_paths is empty during dry run."""
+        ops = MutationOps(tmp_path)
 
-        ops.write_source(
+        result = ops.write_source(
             [Edit(path="new.py", action="create", content="x")],
             dry_run=True,
         )
 
-        callback.assert_not_called()
+        assert result.changed_paths == []
 
-    def test_callback_receives_multiple_paths(self, tmp_path: Path) -> None:
-        """on_mutation callback receives all changed paths."""
-        callback = MagicMock()
-        ops = MutationOps(tmp_path, on_mutation=callback)
+    def test_changed_paths_contains_multiple_paths(self, tmp_path: Path) -> None:
+        """changed_paths contains all changed paths."""
+        ops = MutationOps(tmp_path)
 
         (tmp_path / "existing.py").write_text("x")
 
-        ops.write_source(
+        result = ops.write_source(
             [
                 Edit(path="a.py", action="create", content="a"),
                 Edit(path="b.py", action="create", content="b"),
@@ -405,13 +400,11 @@ class TestMutationOpsCallback:
             ]
         )
 
-        callback.assert_called_once()
-        paths = callback.call_args[0][0]
-        assert len(paths) == 3
+        assert len(result.changed_paths) == 3
 
     def test_no_callback_if_not_set(self, tmp_path: Path) -> None:
         """Works without callback."""
-        ops = MutationOps(tmp_path)  # No callback
+        ops = MutationOps(tmp_path)
         result = ops.write_source([Edit(path="test.py", action="create", content="x")])
         assert result.applied is True
 

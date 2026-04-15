@@ -35,6 +35,10 @@ class TestAdditionalIndexes:
             "export_surfaces",
             "contexts",
             "anchor_groups",
+            "doc_cross_refs",
+            "endpoint_facts",
+            "lint_status_facts",
+            "test_coverage_facts",
         }
         found_tables = set()
         for sql in ADDITIONAL_INDEXES:

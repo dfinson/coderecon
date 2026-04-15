@@ -11,12 +11,17 @@ Tiered Architecture:
 - HARDCODED_DIRS: Always excluded, cannot be overridden (VCS, .recon)
 - DEFAULT_PRUNABLE_DIRS: Excluded by default, user can opt-in via !pattern
 - .reconignore patterns: User-configurable file/directory patterns
+
+Pattern matching uses ``pathspec`` (gitignore-spec compliant) instead of
+``fnmatch`` so that ``*``, ``**``, directory patterns, and negation all
+follow the real gitignore specification.
 """
 
 from __future__ import annotations
 
-import fnmatch
 from pathlib import Path
+
+import pathspec
 
 from coderecon.core.excludes import (
     DEFAULT_PRUNABLE_DIRS,
@@ -66,7 +71,8 @@ class IgnoreChecker:
         """
         instance = cls.__new__(cls)
         instance._root = root
-        instance._patterns = list(DEFAULT_PRUNABLE_DIRS)
+        instance._raw_lines = list(DEFAULT_PRUNABLE_DIRS)
+        instance._spec: pathspec.PathSpec | None = None
         instance._negated_dirs = set()
         instance._reconignore_paths = []
         return instance
@@ -96,15 +102,18 @@ class IgnoreChecker:
         respect_gitignore: bool = False,
     ) -> None:
         self._root = root
-        # Start with DEFAULT_PRUNABLE as base patterns (not HARDCODED - those are handled separately)
-        self._patterns: list[str] = list(DEFAULT_PRUNABLE_DIRS)
+        # Raw gitignore-syntax lines — compiled lazily into a PathSpec.
+        self._raw_lines: list[str] = list(DEFAULT_PRUNABLE_DIRS)
+        # Compiled pathspec (invalidated on new pattern loads).
+        self._spec: pathspec.PathSpec | None = None
         self._negated_dirs: set[str] = set()  # Track negated directory names for pruning override
         self._reconignore_paths: list[Path] = []  # Track all loaded .reconignore files
         self._load_reconignore_recursive(root)
         if respect_gitignore:
             self._load_gitignore_recursive(root)
         if extra_patterns:
-            self._patterns.extend(extra_patterns)
+            self._raw_lines.extend(extra_patterns)
+            self._spec = None
 
     @property
     def negated_dirs(self) -> frozenset[str]:
@@ -114,6 +123,13 @@ class IgnoreChecker:
         are in DEFAULT_PRUNABLE_DIRS.
         """
         return frozenset(self._negated_dirs)
+
+    @property
+    def _compiled(self) -> pathspec.PathSpec:
+        """Lazily compile raw lines into a pathspec.PathSpec."""
+        if self._spec is None:
+            self._spec = pathspec.PathSpec.from_lines("gitignore", self._raw_lines)
+        return self._spec
 
     def should_prune_dir(self, dirname: str) -> bool:
         """Check if a directory should be pruned during traversal.
@@ -166,29 +182,11 @@ class IgnoreChecker:
         if not rel_dir_path or rel_dir_path == ".":
             return False
 
-        # Check the directory path (with and without trailing /) against patterns
-        for pattern in self._patterns:
-            if pattern.startswith("!"):
-                if fnmatch.fnmatch(rel_dir_path, pattern[1:]) or fnmatch.fnmatch(
-                    rel_dir_path + "/", pattern[1:]
-                ):
-                    return False
-                continue
-
-            if fnmatch.fnmatch(rel_dir_path, pattern) or fnmatch.fnmatch(
-                rel_dir_path + "/", pattern
-            ):
-                return True
-
-            # Also check with trailing ** stripped (directory patterns expand to dir/**)
-            if pattern.endswith("**"):
-                dir_pattern = pattern[:-2]  # "ranking/clones/**" -> "ranking/clones/"
-                if rel_dir_path + "/" == dir_pattern or fnmatch.fnmatch(
-                    rel_dir_path + "/", dir_pattern
-                ):
-                    return True
-
-        return False
+        # pathspec match_file works on the path as-is; adding trailing /
+        # lets directory-only patterns (e.g. "build/") match correctly.
+        return self._compiled.match_file(rel_dir_path) or self._compiled.match_file(
+            rel_dir_path + "/"
+        )
 
     @property
     def reconignore_paths(self) -> list[Path]:
@@ -289,10 +287,11 @@ class IgnoreChecker:
                     if dir_name and "/" not in dir_name and "*" not in dir_name:
                         self._negated_dirs.add(dir_name)
 
-                # Directory patterns (ending in /) match all contents
-                pattern = f"{line}**" if line.endswith("/") else line
+                # Keep the pattern in gitignore-native format — pathspec
+                # handles trailing-/ (directory) and ** semantics correctly.
+                pattern = line
 
-                # Apply prefix for nested .gitignore
+                # Apply prefix for nested .gitignore / .reconignore
                 if prefix:
                     pattern = f"{prefix}/{pattern}"
 
@@ -300,7 +299,10 @@ class IgnoreChecker:
                 if is_negation:
                     pattern = f"!{pattern}"
 
-                self._patterns.append(pattern)
+                self._raw_lines.append(pattern)
+
+            # Invalidate compiled spec so it is rebuilt on next match.
+            self._spec = None
         except OSError:
             pass
 
@@ -313,50 +315,19 @@ class IgnoreChecker:
         # Normalize to POSIX-style separators for pattern matching on Windows
         rel_str = rel_path.as_posix()
 
-        for pattern in self._patterns:
-            if pattern.startswith("!"):
-                if fnmatch.fnmatch(rel_str, pattern[1:]):
-                    return False
-                continue
-
-            if fnmatch.fnmatch(rel_str, pattern):
-                return True
-
-            for parent in rel_path.parents:
-                if fnmatch.fnmatch(parent.as_posix(), pattern):
-                    return True
-
-        return False
+        return self._compiled.match_file(rel_str)
 
     def is_excluded_rel(self, rel_path: str) -> bool:
         # Normalize to POSIX-style separators for pattern matching on Windows
         rel_path_posix = rel_path.replace("\\", "/")
-        path_obj = Path(rel_path)
 
-        for pattern in self._patterns:
-            if pattern.startswith("!"):
-                if fnmatch.fnmatch(rel_path_posix, pattern[1:]):
-                    return False
-                continue
-
-            if fnmatch.fnmatch(rel_path_posix, pattern):
-                return True
-
-            for parent in path_obj.parents:
-                if parent != Path(".") and fnmatch.fnmatch(parent.as_posix(), pattern):
-                    return True
-
-        return False
+        return self._compiled.match_file(rel_path_posix)
 
 
 def matches_glob(rel_path: str, pattern: str) -> bool:
-    """Check if a path matches a glob pattern, with ** support."""
-    if fnmatch.fnmatch(rel_path, pattern):
-        return True
-    # Handle **/pattern for any-depth matching
-    if pattern.startswith("**/"):
-        return fnmatch.fnmatch(rel_path, pattern[3:])
-    return False
+    """Check if a path matches a glob pattern (gitignore-spec compliant)."""
+    spec = pathspec.PathSpec.from_lines("gitignore", [pattern])
+    return spec.match_file(rel_path)
 
 
 def _iter_reconignore_files(root: Path) -> list[tuple[Path, str]]:

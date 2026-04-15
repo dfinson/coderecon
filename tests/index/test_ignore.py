@@ -68,15 +68,16 @@ class TestIgnoreChecker:
         # This tests actual fnmatch behavior
 
     def test_is_excluded_rel_negation(self, tmp_path: Path) -> None:
-        """is_excluded_rel handles negation patterns (return False early)."""
+        """is_excluded_rel handles negation patterns (last match wins)."""
         reconignore = tmp_path / ".recon" / ".reconignore"
         reconignore.parent.mkdir(parents=True)
-        # Negation must come BEFORE the pattern it negates to work
-        reconignore.write_text("!important.txt\n*.txt\n")
+        # In gitignore, last matching pattern wins.
+        # Negation AFTER the include pattern opts the file back in.
+        reconignore.write_text("*.txt\n!important.txt\n")
 
         checker = IgnoreChecker(tmp_path)
         assert checker.is_excluded_rel("notes.txt")
-        # Negation returns False early for exact match
+        # Negation after *.txt re-includes important.txt
         assert not checker.is_excluded_rel("important.txt")
 
     def test_reconignore_read_error_handled(self, tmp_path: Path) -> None:

@@ -116,8 +116,8 @@ def snapshots_from_epoch(session: Session, epoch_id: int, file_path: str) -> lis
 
 
 def snapshots_from_blob(
-    repo: object,  # pygit2.Repository
-    commit: object,  # pygit2.Commit
+    access: object,  # RepoAccess
+    commit_sha: str,
     file_path: str,
 ) -> list[DefSnapshot]:
     """Parse a git blob with tree-sitter to extract DefSnapshots.
@@ -125,34 +125,31 @@ def snapshots_from_blob(
     This is used for the base side of a git diff when the index may not
     have the old state.
     """
-    import pygit2
+    import subprocess
 
     from coderecon.core.languages import detect_language_family, has_grammar
     from coderecon.index._internal.parsing.service import tree_sitter_service
 
-    assert isinstance(repo, pygit2.Repository)
-    assert isinstance(commit, pygit2.Commit)
-
+    # Read file contents at given commit using git show
     try:
-        tree_entry = commit.tree[file_path]
-    except KeyError:
-        return []
-
-    blob = repo[tree_entry.id]
-    if not isinstance(blob, pygit2.Blob):
+        result = subprocess.run(
+            ["git", "show", f"{commit_sha}:{file_path}"],
+            cwd=getattr(access, "_path", "."),
+            capture_output=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            return []
+        source = result.stdout
+    except Exception:
         return []
 
     lang = detect_language_family(file_path)
     if not lang or not has_grammar(lang):
         return []
 
-    source = blob.data
-    if isinstance(source, memoryview):
-        source = bytes(source)
-
     parser = tree_sitter_service.parser
     try:
-        # parse() takes a Path (for lang detection) and optional content as bytes
         from pathlib import Path as _Path
 
         result = parser.parse(_Path(file_path), content=source)

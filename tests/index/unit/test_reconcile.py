@@ -17,9 +17,11 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import pygit2
-import pytest
+import subprocess
+import time
 from sqlmodel import select
+
+import pytest
 
 from coderecon.index._internal.db import Database, Reconciler, ReconcileResult
 from coderecon.index.models import File, RepoState
@@ -38,19 +40,14 @@ def reconciler_setup(
     # Create repo
     repo_path = temp_dir / "repo"
     repo_path.mkdir()
-    pygit2.init_repository(str(repo_path))
-
-    repo = pygit2.Repository(str(repo_path))
-    repo.config["user.name"] = "Test"
-    repo.config["user.email"] = "test@test.com"
+    subprocess.run(["git", "init"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=repo_path, capture_output=True, check=True)
 
     # Create initial file and commit
     (repo_path / "initial.py").write_text("# initial\n")
-    repo.index.add("initial.py")
-    repo.index.write()
-    tree = repo.index.write_tree()
-    sig = pygit2.Signature("Test", "test@test.com")
-    repo.create_commit("HEAD", sig, sig, "Initial", tree, [])
+    subprocess.run(["git", "add", "initial.py"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "commit", "-m", "Initial"], cwd=repo_path, capture_output=True, check=True)
 
     # Create database
     db_path = temp_dir / "test.db"
@@ -164,10 +161,7 @@ class TestReconcilerIdempotency:
         # Create some files and add to git index so they are tracked
         (repo_path / "a.py").write_text("# a\n")
         (repo_path / "b.py").write_text("# b\n")
-        repo = pygit2.Repository(str(repo_path))
-        repo.index.add("a.py")
-        repo.index.add("b.py")
-        repo.index.write()
+        subprocess.run(["git", "add", "a.py", "b.py"], cwd=repo_path, capture_output=True, check=True)
 
         # First reconcile
         reconciler.reconcile()
@@ -246,14 +240,9 @@ class TestRepoStateManagement:
         head1 = result1.head_after
 
         # Make a new commit
-        repo = pygit2.Repository(str(repo_path))
         (repo_path / "newfile.py").write_text("# new\n")
-        repo.index.add("newfile.py")
-        repo.index.write()
-        tree = repo.index.write_tree()
-        sig = pygit2.Signature("Test", "test@test.com")
-        parent = repo.head.target
-        repo.create_commit("HEAD", sig, sig, "Second commit", tree, [parent])
+        subprocess.run(["git", "add", "newfile.py"], cwd=repo_path, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "Second commit"], cwd=repo_path, capture_output=True, check=True)
 
         # Second reconcile
         result2 = reconciler.reconcile()
@@ -272,19 +261,13 @@ class TestGetChangedFiles:
         """get_changed_files should return files changed since a commit."""
         repo_path, db, reconciler = reconciler_setup
 
-        repo = pygit2.Repository(str(repo_path))
-        head1 = str(repo.head.target)
+        head1 = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo_path, capture_output=True, text=True, check=True).stdout.strip()
 
         # Make changes and commit
         (repo_path / "changed1.py").write_text("# changed\n")
         (repo_path / "changed2.py").write_text("# also changed\n")
-        repo.index.add("changed1.py")
-        repo.index.add("changed2.py")
-        repo.index.write()
-        tree = repo.index.write_tree()
-        sig = pygit2.Signature("Test", "test@test.com")
-        parent = repo.head.target
-        repo.create_commit("HEAD", sig, sig, "Changes", tree, [parent])
+        subprocess.run(["git", "add", "changed1.py", "changed2.py"], cwd=repo_path, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "Changes"], cwd=repo_path, capture_output=True, check=True)
 
         # Get changed files since head1
         changed = reconciler.get_changed_files(since_head=head1)

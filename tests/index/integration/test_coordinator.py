@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import subprocess
+
 import pytest
 
 from coderecon.index.ops import (
@@ -358,14 +360,12 @@ class TestCoordinatorCplignore:
     @pytest.mark.asyncio
     async def test_reconignore_excludes_dependencies(self, tmp_path: Path) -> None:
         """Should not index files in dependency directories (node_modules, venv, etc)."""
-        import pygit2
-
         from coderecon.templates import get_reconignore_template
 
         # Create project with git repo
         repo_root = tmp_path / "repo"
         repo_root.mkdir()
-        pygit2.init_repository(str(repo_root))
+        subprocess.run(["git", "init"], cwd=repo_root, capture_output=True, check=True)
         (repo_root / "pyproject.toml").write_text('[project]\nname = "test"')
 
         # Create .recon/.reconignore (simulating recon init)
@@ -393,14 +393,10 @@ class TestCoordinatorCplignore:
         (pycache / "main.cpython-312.pyc").write_bytes(b"compiled")
 
         # Create initial commit
-        repo = pygit2.Repository(str(repo_root))
-        repo.config["user.name"] = "Test"
-        repo.config["user.email"] = "test@test.com"
-        repo.index.add_all()
-        repo.index.write()
-        tree = repo.index.write_tree()
-        sig = pygit2.Signature("Test", "test@test.com")
-        repo.create_commit("HEAD", sig, sig, "Initial commit", tree, [])
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=repo_root, capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=repo_root, capture_output=True, check=True)
+        subprocess.run(["git", "add", "-A"], cwd=repo_root, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_root, capture_output=True, check=True)
 
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
@@ -427,14 +423,12 @@ class TestCoordinatorCplignore:
     @pytest.mark.asyncio
     async def test_reconignore_excludes_build_outputs(self, tmp_path: Path) -> None:
         """Should not index build output directories (dist, build, target)."""
-        import pygit2
-
         from coderecon.templates import get_reconignore_template
 
         # Create project with git repo
         repo_root = tmp_path / "repo"
         repo_root.mkdir()
-        pygit2.init_repository(str(repo_root))
+        subprocess.run(["git", "init"], cwd=repo_root, capture_output=True, check=True)
         (repo_root / "pyproject.toml").write_text('[project]\nname = "test"')
 
         # Create .recon/.reconignore (simulating recon init)
@@ -458,14 +452,10 @@ class TestCoordinatorCplignore:
         (build / "output.py").write_text("BUILD_OUTPUT = True")
 
         # Create initial commit
-        repo = pygit2.Repository(str(repo_root))
-        repo.config["user.name"] = "Test"
-        repo.config["user.email"] = "test@test.com"
-        repo.index.add_all()
-        repo.index.write()
-        tree = repo.index.write_tree()
-        sig = pygit2.Signature("Test", "test@test.com")
-        repo.create_commit("HEAD", sig, sig, "Initial commit", tree, [])
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=repo_root, capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=repo_root, capture_output=True, check=True)
+        subprocess.run(["git", "add", "-A"], cwd=repo_root, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_root, capture_output=True, check=True)
 
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
@@ -491,14 +481,12 @@ class TestCoordinatorCplignore:
     @pytest.mark.asyncio
     async def test_coderecon_directory_always_excluded(self, tmp_path: Path) -> None:
         """Should never index .recon directory itself."""
-        import pygit2
-
         from coderecon.templates import get_reconignore_template
 
         # Create project with git repo
         repo_root = tmp_path / "repo"
         repo_root.mkdir()
-        pygit2.init_repository(str(repo_root))
+        subprocess.run(["git", "init"], cwd=repo_root, capture_output=True, check=True)
         (repo_root / "pyproject.toml").write_text('[project]\nname = "test"')
 
         # Create src directory
@@ -515,14 +503,10 @@ class TestCoordinatorCplignore:
         (coderecon / "index.db").write_bytes(b"database")
 
         # Create initial commit
-        repo = pygit2.Repository(str(repo_root))
-        repo.config["user.name"] = "Test"
-        repo.config["user.email"] = "test@test.com"
-        repo.index.add_all()
-        repo.index.write()
-        tree = repo.index.write_tree()
-        sig = pygit2.Signature("Test", "test@test.com")
-        repo.create_commit("HEAD", sig, sig, "Initial commit", tree, [])
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=repo_root, capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=repo_root, capture_output=True, check=True)
+        subprocess.run(["git", "add", "-A"], cwd=repo_root, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_root, capture_output=True, check=True)
 
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
@@ -663,17 +647,13 @@ class TestCoordinatorSearchFilterLanguages:
     @pytest.fixture
     def multilang_repo(self, tmp_path: Path) -> Path:
         """Create a repository with multiple language files."""
-        import pygit2
-
         from coderecon.templates import get_reconignore_template
 
         repo_path = tmp_path / "multilang_repo"
         repo_path.mkdir()
-        pygit2.init_repository(str(repo_path))
-
-        repo = pygit2.Repository(str(repo_path))
-        repo.config["user.name"] = "Test"
-        repo.config["user.email"] = "test@test.com"
+        subprocess.run(["git", "init"], cwd=repo_path, capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=repo_path, capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=repo_path, capture_output=True, check=True)
 
         # Create .recon/.reconignore
         coderecon_dir = repo_path / ".recon"
@@ -731,11 +711,8 @@ func SearchHandler() string {
         (repo_path / "go.mod").write_text("module test\n\ngo 1.21")
 
         # Commit
-        repo.index.add_all()
-        repo.index.write()
-        tree = repo.index.write_tree()
-        sig = pygit2.Signature("Test", "test@test.com")
-        repo.create_commit("HEAD", sig, sig, "Initial commit", tree, [])
+        subprocess.run(["git", "add", "-A"], cwd=repo_path, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_path, capture_output=True, check=True)
 
         return repo_path
 

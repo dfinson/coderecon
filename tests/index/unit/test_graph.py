@@ -25,16 +25,20 @@ from coderecon.index.models import (
     Certainty,
     Context,
     DefFact,
+    DocCrossRef,
+    EndpointFact,
     ExportEntry,
     ExportSurface,
     File,
     ImportFact,
+    InterfaceImplFact,
     LocalBindFact,
     RefFact,
     RefTier,
     Role,
     ScopeFact,
     ScopeKind,
+    TestCoverageFact,
 )
 
 
@@ -683,3 +687,196 @@ class TestBackwardsCompatibility:
     def test_symbol_graph_alias(self) -> None:
         """SymbolGraph should be an alias for FactQueries."""
         assert SymbolGraph is FactQueries
+
+
+# ===================================================================
+# Tests for new signal gap query methods
+# ===================================================================
+
+
+class TestInterfaceImplQueries:
+    """Tests for type hierarchy / InterfaceImplFact lookups."""
+
+    def test_list_implementors(self, seeded_db: Database) -> None:
+        """Should find types implementing a given interface."""
+        with seeded_db.session() as session:
+            # Add InterfaceImplFact
+            impl = InterfaceImplFact(
+                file_id=1,
+                unit_id=1,
+                implementor_def_uid="def_class_foo",
+                implementor_name="Foo",
+                interface_name="IHandler",
+                impl_style="explicit",
+                start_line=5,
+                start_col=0,
+            )
+            session.add(impl)
+            session.commit()
+
+            fq = FactQueries(session)
+            results = fq.list_implementors("IHandler")
+            assert len(results) == 1
+            assert results[0].implementor_name == "Foo"
+
+    def test_list_implementors_empty(self, seeded_db: Database) -> None:
+        with seeded_db.session() as session:
+            fq = FactQueries(session)
+            assert fq.list_implementors("NoSuchInterface") == []
+
+    def test_list_interfaces_of(self, seeded_db: Database) -> None:
+        with seeded_db.session() as session:
+            impl = InterfaceImplFact(
+                file_id=1,
+                unit_id=1,
+                implementor_def_uid="def_class_bar",
+                implementor_name="Bar",
+                interface_name="Serializable",
+                impl_style="structural",
+                start_line=10,
+                start_col=0,
+            )
+            session.add(impl)
+            session.commit()
+
+            fq = FactQueries(session)
+            results = fq.list_interfaces_of("def_class_bar")
+            assert len(results) == 1
+            assert results[0].interface_name == "Serializable"
+
+    def test_list_co_implementors(self, seeded_db: Database) -> None:
+        """Two types implementing the same interface should find each other."""
+        with seeded_db.session() as session:
+            for name, uid in [("Alpha", "def_alpha"), ("Beta", "def_beta")]:
+                session.add(InterfaceImplFact(
+                    file_id=1,
+                    unit_id=1,
+                    implementor_def_uid=uid,
+                    implementor_name=name,
+                    interface_name="Comparable",
+                    impl_style="explicit",
+                    start_line=1,
+                    start_col=0,
+                ))
+            session.commit()
+
+            fq = FactQueries(session)
+            co_impls = fq.list_co_implementors("def_alpha")
+            assert "def_beta" in co_impls
+            assert "def_alpha" not in co_impls
+
+
+class TestDocCrossRefQueries:
+    """Tests for DocCrossRef lookups."""
+
+    def test_list_doc_xrefs_from(self, seeded_db: Database) -> None:
+        with seeded_db.session() as session:
+            xref = DocCrossRef(
+                source_file_id=1,
+                source_def_uid="def_src",
+                source_line=15,
+                raw_text="See also TargetFunc",
+                target_def_uid="def_target",
+                confidence="high",
+            )
+            session.add(xref)
+            session.commit()
+
+            fq = FactQueries(session)
+            results = fq.list_doc_xrefs_from("def_src")
+            assert len(results) == 1
+            assert results[0].target_def_uid == "def_target"
+
+    def test_list_doc_xrefs_to(self, seeded_db: Database) -> None:
+        with seeded_db.session() as session:
+            xref = DocCrossRef(
+                source_file_id=1,
+                source_def_uid="def_src",
+                source_line=15,
+                raw_text="See also TargetFunc",
+                target_def_uid="def_target",
+                confidence="high",
+            )
+            session.add(xref)
+            session.commit()
+
+            fq = FactQueries(session)
+            results = fq.list_doc_xrefs_to("def_target")
+            assert len(results) == 1
+            assert results[0].source_def_uid == "def_src"
+
+    def test_list_doc_xrefs_empty(self, seeded_db: Database) -> None:
+        with seeded_db.session() as session:
+            fq = FactQueries(session)
+            assert fq.list_doc_xrefs_from("nonexistent") == []
+            assert fq.list_doc_xrefs_to("nonexistent") == []
+
+
+class TestEndpointQueries:
+    """Tests for EndpointFact batch lookup."""
+
+    def test_batch_get_endpoints(self, seeded_db: Database) -> None:
+        with seeded_db.session() as session:
+            ep = EndpointFact(
+                file_id=1,
+                kind="server",
+                http_method="GET",
+                url_pattern="/api/users",
+                handler_def_uid="def_get_users",
+                start_line=10,
+                end_line=20,
+                framework="flask",
+            )
+            session.add(ep)
+            session.commit()
+
+            fq = FactQueries(session)
+            result = fq.batch_get_endpoints(["def_get_users", "def_nonexistent"])
+            assert "def_get_users" in result
+            assert result["def_get_users"].url_pattern == "/api/users"
+            assert "def_nonexistent" not in result
+
+    def test_batch_get_endpoints_empty(self, seeded_db: Database) -> None:
+        with seeded_db.session() as session:
+            fq = FactQueries(session)
+            assert fq.batch_get_endpoints([]) == {}
+
+
+class TestCoverageQueries:
+    """Tests for TestCoverageFact batch lookup."""
+
+    def test_batch_count_test_coverage(self, seeded_db: Database) -> None:
+        with seeded_db.session() as session:
+            for test_name in ["test_a", "test_b"]:
+                session.add(TestCoverageFact(
+                    test_id=f"tests/{test_name}.py::{test_name}",
+                    target_def_uid="def_covered",
+                    target_file_path="src/module.py",
+                    covered_lines=10,
+                    total_lines=20,
+                    line_rate=0.5,
+                    epoch=1,
+                    stale=False,
+                ))
+            # One stale coverage — should not count
+            session.add(TestCoverageFact(
+                test_id="tests/test_stale.py::test_stale",
+                target_def_uid="def_covered",
+                target_file_path="src/module.py",
+                covered_lines=5,
+                total_lines=20,
+                line_rate=0.25,
+                epoch=0,
+                stale=True,
+            ))
+            session.commit()
+
+            fq = FactQueries(session)
+            result = fq.batch_count_test_coverage(["def_covered", "def_uncovered"])
+            assert result["def_covered"] == 2  # stale excluded
+            assert result["def_uncovered"] == 0
+
+    def test_batch_count_test_coverage_empty(self, seeded_db: Database) -> None:
+        with seeded_db.session() as session:
+            fq = FactQueries(session)
+            assert fq.batch_count_test_coverage([]) == {}

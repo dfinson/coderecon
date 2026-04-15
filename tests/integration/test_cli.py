@@ -6,7 +6,8 @@ import os
 from collections.abc import Generator
 from pathlib import Path
 
-import pygit2
+import subprocess
+
 import pytest
 import structlog
 from click.testing import CliRunner
@@ -50,20 +51,14 @@ def temp_repo(tmp_path: Path) -> Path:
     """Create a temporary git repository with initial commit."""
     repo_path = tmp_path / "repo"
     repo_path.mkdir()
-    pygit2.init_repository(str(repo_path))
-
-    # Configure and create initial commit (required for HEAD to exist)
-    repo = pygit2.Repository(str(repo_path))
-    repo.config["user.name"] = "Test"
-    repo.config["user.email"] = "test@test.com"
+    subprocess.run(["git", "init"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=repo_path, capture_output=True, check=True)
 
     # Create a file and commit
     (repo_path / "README.md").write_text("# Test repo")
-    repo.index.add("README.md")
-    repo.index.write()
-    tree = repo.index.write_tree()
-    sig = pygit2.Signature("Test", "test@test.com")
-    repo.create_commit("HEAD", sig, sig, "Initial commit", tree, [])
+    subprocess.run(["git", "add", "README.md"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_path, capture_output=True, check=True)
 
     return repo_path
 

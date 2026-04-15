@@ -39,7 +39,9 @@ from coderecon.index.models import (
     BindTargetKind,
     Certainty,
     DefFact,
+    DocCrossRef,
     DynamicAccessSite,
+    EndpointFact,
     File,
     ImportFact,
     InterfaceImplFact,
@@ -53,6 +55,12 @@ from coderecon.index.models import (
     TypeAnnotationFact,
     TypeMemberFact,
 )
+
+# Maximum file size for tree-sitter parsing (bytes).  Files above this are
+# still recorded in the file table for lexical search, but no structural
+# facts are extracted.  Prevents pathological parse times on huge generated /
+# data files.  1 MB covers >99.9 % of real source files.
+_MAX_FILE_BYTES = 1_000_000
 
 # ===================================================================
 # String literal discovery — grammar-metadata-driven (SPEC §16.5)
@@ -393,6 +401,18 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
         full_path = Path(repo_root) / file_path
         if not full_path.exists():
             result.error = "File not found"
+            return result
+
+        # Skip files that are too large for tree-sitter (data files, generated
+        # code, minified bundles etc.).  They still appear in the file table
+        # for lexical search but get no structural facts.
+        try:
+            file_size = full_path.stat().st_size
+        except OSError:
+            result.error = "Cannot stat file"
+            return result
+        if file_size > _MAX_FILE_BYTES:
+            result.error = f"Skipped: {file_size} bytes exceeds limit"
             return result
 
         content = full_path.read_bytes()
@@ -1007,8 +1027,11 @@ class StructuralIndexer:
                     MemberAccessFact,
                     InterfaceImplFact,
                     ReceiverShapeFact,
+                    EndpointFact,
                 ):
                     writer.delete_where(fact_model, "file_id = :fid", {"fid": file_id})
+                # DocCrossRef uses source_file_id, not file_id
+                writer.delete_where(DocCrossRef, "source_file_id = :fid", {"fid": file_id})
 
                 # Build local_scope_id -> db_scope_id mapping
                 scope_id_map: dict[int, int] = {}  # local_scope_id -> db scope_id
@@ -1105,6 +1128,69 @@ class StructuralIndexer:
                     writer.insert_many(ReceiverShapeFact, [shape_dict])
                     result.receiver_shapes_extracted += 1
 
+                # Detect and insert EndpointFacts
+                if extraction.content_text and extraction.language:
+                    from coderecon.index._internal.analysis.endpoint_detection import (
+                        detect_endpoints_in_source,
+                    )
+
+                    endpoints = detect_endpoints_in_source(
+                        extraction.content_text, extraction.language
+                    )
+                    if endpoints:
+                        # Build line→def_uid map for handler resolution
+                        func_defs = [
+                            d for d in extraction.defs
+                            if d.get("kind") in ("function", "method")
+                        ]
+                        for ep in endpoints:
+                            handler_uid = None
+                            for d in func_defs:
+                                if d["start_line"] <= ep.line <= d["end_line"]:
+                                    handler_uid = d["def_uid"]
+                            writer.insert_many(EndpointFact, [{
+                                "file_id": file_id,
+                                "kind": ep.kind,
+                                "http_method": ep.http_method,
+                                "url_pattern": ep.url_pattern,
+                                "handler_def_uid": handler_uid,
+                                "start_line": ep.line,
+                                "end_line": ep.line,
+                                "framework": ep.framework,
+                            }])
+
+                # Extract and insert DocCrossRefs from docstrings
+                if extraction.defs:
+                    from coderecon.index._internal.analysis.docstring_xref import (
+                        RawCrossRef,
+                        extract_cross_refs,
+                    )
+
+                    for def_dict in extraction.defs:
+                        docstring = def_dict.get("docstring")
+                        if not docstring:
+                            continue
+                        raw_refs = extract_cross_refs(
+                            docstring, start_line=def_dict["start_line"]
+                        )
+                        if not raw_refs:
+                            continue
+                        # Resolve targets against already-persisted defs
+                        # (cross-batch refs resolve on subsequent reindex)
+                        for ref in raw_refs:
+                            target_uid = self._resolve_xref_target(
+                                writer, ref.target_name
+                            )
+                            if target_uid:
+                                writer.insert_many(DocCrossRef, [{
+                                    "source_file_id": file_id,
+                                    "source_def_uid": def_dict.get("def_uid"),
+                                    "source_line": ref.source_line,
+                                    "raw_text": ref.raw_text,
+                                    "target_def_uid": target_uid,
+                                    "confidence": ref.confidence,
+                                }])
+
         result.duration_ms = int((time.monotonic() - start) * 1000)
         return result
 
@@ -1167,6 +1253,45 @@ class StructuralIndexer:
                 )
                 if resolved:
                     ex.declared_module = resolved
+
+        # Fallback: derive declared_module from file path for languages
+        # that don't have source-level module declarations (e.g. Python, JS/TS)
+        from coderecon.index._internal.indexing.module_mapping import path_to_module
+
+        for ex in extractions:
+            if ex.error or ex.skipped_no_grammar:
+                continue
+            if ex.declared_module is None:
+                ex.declared_module = path_to_module(ex.file_path)
+
+    def _resolve_xref_target(self, writer: Any, target_name: str) -> str | None:
+        """Resolve a cross-ref target name to a def_uid using the BulkWriter's connection."""
+        from sqlalchemy import text as sa_text
+
+        conn = writer.conn
+        # 1. Exact def_uid
+        row = conn.execute(
+            sa_text("SELECT def_uid FROM def_facts WHERE def_uid = :name LIMIT 1"),
+            {"name": target_name},
+        ).fetchone()
+        if row:
+            return row[0]
+        # 2. Name-only match
+        simple_name = target_name.rsplit(".", 1)[-1]
+        row = conn.execute(
+            sa_text("SELECT def_uid FROM def_facts WHERE name = :name LIMIT 1"),
+            {"name": simple_name},
+        ).fetchone()
+        if row:
+            return row[0]
+        # 3. Suffix match
+        row = conn.execute(
+            sa_text("SELECT def_uid FROM def_facts WHERE def_uid LIKE :suffix LIMIT 1"),
+            {"suffix": f"%.{target_name}"},
+        ).fetchone()
+        if row:
+            return row[0]
+        return None
 
     def _resolve_import_paths(self, extractions: list[ExtractionResult]) -> None:
         """Resolve every import's source_literal to a target file path.

@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Generator
 from pathlib import Path
 
-import pygit2
+import subprocess
+
 import pytest
 
 
@@ -14,11 +15,9 @@ def integration_repo(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a fully initialized git repository for integration tests."""
     repo_path = tmp_path / "integration_repo"
     repo_path.mkdir()
-    pygit2.init_repository(str(repo_path))
-
-    repo = pygit2.Repository(str(repo_path))
-    repo.config["user.name"] = "Integration Test"
-    repo.config["user.email"] = "integration@test.com"
+    subprocess.run(["git", "init"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.name", "Integration Test"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.email", "integration@test.com"], cwd=repo_path, capture_output=True, check=True)
 
     # Create Python package structure
     (repo_path / "src").mkdir()
@@ -75,11 +74,8 @@ def test_main():
 ''')
 
     # Commit everything
-    repo.index.add_all()
-    repo.index.write()
-    tree = repo.index.write_tree()
-    sig = pygit2.Signature("Integration Test", "integration@test.com")
-    repo.create_commit("HEAD", sig, sig, "Initial structure", tree, [])
+    subprocess.run(["git", "add", "-A"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "commit", "-m", "Initial structure"], cwd=repo_path, capture_output=True, check=True)
 
     yield repo_path
 
@@ -89,11 +85,9 @@ def integration_monorepo(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a monorepo structure for integration tests."""
     repo_path = tmp_path / "monorepo"
     repo_path.mkdir()
-    pygit2.init_repository(str(repo_path))
-
-    repo = pygit2.Repository(str(repo_path))
-    repo.config["user.name"] = "Monorepo Test"
-    repo.config["user.email"] = "monorepo@test.com"
+    subprocess.run(["git", "init"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.name", "Monorepo Test"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.email", "monorepo@test.com"], cwd=repo_path, capture_output=True, check=True)
 
     # Create pnpm-workspace.yaml
     (repo_path / "pnpm-workspace.yaml").write_text("""packages:
@@ -153,10 +147,7 @@ module.exports = { greet };
 """)
 
     # Commit everything
-    repo.index.add_all()
-    repo.index.write()
-    tree = repo.index.write_tree()
-    sig = pygit2.Signature("Monorepo Test", "monorepo@test.com")
-    repo.create_commit("HEAD", sig, sig, "Initial monorepo", tree, [])
+    subprocess.run(["git", "add", "-A"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "commit", "-m", "Initial monorepo"], cwd=repo_path, capture_output=True, check=True)
 
     yield repo_path

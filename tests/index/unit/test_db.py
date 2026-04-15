@@ -412,7 +412,7 @@ class TestBulkWriterAdvanced:
                 [
                     {"path": "new.py", "content_hash": "hash_new"},
                 ],
-                conflict_columns=["path"],
+                conflict_columns=["worktree_id", "path"],
                 update_columns=["content_hash"],
             )
 
@@ -440,7 +440,7 @@ class TestBulkWriterAdvanced:
             writer.upsert_many(
                 File,
                 [{"path": "exist.py", "content_hash": "new_hash"}],
-                conflict_columns=["path"],
+                conflict_columns=["worktree_id", "path"],
                 update_columns=["content_hash"],
             )
 
@@ -459,7 +459,7 @@ class TestBulkWriterAdvanced:
             count = writer.upsert_many(
                 File,
                 [],
-                conflict_columns=["path"],
+                conflict_columns=["worktree_id", "path"],
                 update_columns=["content_hash"],
             )
 

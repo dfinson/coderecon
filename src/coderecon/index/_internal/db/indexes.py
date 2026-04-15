@@ -36,6 +36,15 @@ ADDITIONAL_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_contexts_family_status ON contexts(language_family, probe_status)",
     # AnchorGroup queries by unit (not file)
     "CREATE INDEX IF NOT EXISTS idx_anchor_groups_unit ON anchor_groups(unit_id)",
+    # TestCoverageFact queries by target def and staleness
+    "CREATE INDEX IF NOT EXISTS idx_test_coverage_target_stale ON test_coverage_facts(target_def_uid, stale)",
+    "CREATE INDEX IF NOT EXISTS idx_test_coverage_test_id ON test_coverage_facts(test_id)",
+    # LintStatusFact queries by file and tool
+    "CREATE INDEX IF NOT EXISTS idx_lint_status_file_tool ON lint_status_facts(file_path, tool_id)",
+    # EndpointFact queries by url pattern and kind
+    "CREATE INDEX IF NOT EXISTS idx_endpoint_facts_url ON endpoint_facts(url_pattern, kind)",
+    # DocCrossRef queries by target
+    "CREATE INDEX IF NOT EXISTS idx_doc_cross_refs_target ON doc_cross_refs(target_def_uid)",
 ]
 
 

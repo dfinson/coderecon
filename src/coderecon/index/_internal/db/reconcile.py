@@ -189,7 +189,7 @@ class Reconciler:
                 writer.upsert_many(
                     File,
                     modified,
-                    conflict_columns=["path"],
+                    conflict_columns=["worktree_id", "path"],
                     update_columns=["content_hash", "indexed_at"],
                 )
 

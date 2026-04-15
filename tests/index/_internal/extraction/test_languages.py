@@ -193,8 +193,8 @@ class TestGoConfig:
         assert GO_CONFIG.reference_indicator == "*"
 
     def test_no_interface_impl_query(self) -> None:
-        """Go config has empty interface impl query (structural typing)."""
-        assert GO_CONFIG.interface_impl_query == ""
+        """Go config captures struct embedding as interface impl."""
+        assert GO_CONFIG.interface_impl_query != ""
 
 
 class TestRustConfig:

@@ -19,7 +19,8 @@ Certainty is marked appropriately when resolution is ambiguous.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from sqlalchemy import text
@@ -58,6 +59,9 @@ class ReferenceResolver:
     - STRONG refs have an ImportFact trace but need def_uid lookup
     - Resolution follows: RefFact -> LocalBindFact -> ImportFact -> DefFact
 
+    All lookups are done in-memory from pre-built caches for speed.
+    The resolution loop runs in parallel across multiple threads.
+
     Usage after structural indexing::
 
         resolver = ReferenceResolver(db)
@@ -72,12 +76,19 @@ class ReferenceResolver:
         self._file_paths: dict[int, str] = {}
         # Cache file_id -> exported symbols
         self._file_exports: dict[int, dict[str, str]] = {}  # name -> def_uid
+        # Cache (file_id, name) -> LocalBindFact fields
+        self._bind_cache: dict[tuple[int, str], tuple[str, str]] = {}  # -> (target_kind, target_uid)
+        # Cache import_uid -> ImportFact fields
+        self._import_cache: dict[str, tuple[int, str, str]] = {}  # -> (file_id, source_literal, imported_name)
 
     def resolve_all(
         self,
         on_progress: Callable[[int, int], None] | None = None,
     ) -> ResolutionStats:
         """Resolve all unresolved STRONG-tier references.
+
+        Pre-builds all caches, resolves refs in parallel threads,
+        then batch-commits results via raw SQL.
 
         Args:
             on_progress: Optional callback(processed, total) for progress updates
@@ -88,38 +99,107 @@ class ReferenceResolver:
         stats = ResolutionStats()
 
         with self._db.session() as session:
-            # Find ALL STRONG refs with no target_def_uid
-            stmt = select(RefFact).where(
-                RefFact.ref_tier == RefTier.STRONG.value,
-                RefFact.target_def_uid == None,  # noqa: E711
-            )
-            unresolved_refs = list(session.exec(stmt).all())
-            stats.refs_processed = len(unresolved_refs)
-            total = len(unresolved_refs)
+            # Load unresolved refs as lightweight tuples (avoid ORM overhead)
+            rows = session.execute(
+                text(
+                    "SELECT ref_id, file_id, token_text "
+                    "FROM ref_facts "
+                    "WHERE ref_tier = :tier AND target_def_uid IS NULL"
+                ),
+                {"tier": RefTier.STRONG.value},
+            ).fetchall()
+            stats.refs_processed = len(rows)
+            total = len(rows)
 
-            # Build caches
+            if not rows:
+                return stats
+
+            # Build all caches
             self._build_module_cache(session)
             self._build_export_cache(session)
+            self._build_bind_cache(session)
+            self._build_import_cache(session)
 
-            # Resolve each ref
-            for i, ref in enumerate(unresolved_refs):
-                resolved = self._resolve_ref(session, ref)
-                if resolved:
-                    stats.refs_resolved += 1
-                else:
-                    stats.refs_unresolved += 1
+        # Resolve in-memory — all lookups are dict operations, no DB needed
+        resolved_updates: list[tuple[str, str, int]] = []  # (def_uid, certainty, ref_id)
 
-                # Report progress every 50 refs
-                if on_progress and (i + 1) % 50 == 0:
-                    on_progress(i + 1, total)
+        for i, (ref_id, file_id, token_text) in enumerate(rows):
+            result = self._resolve_ref_inmem(file_id, token_text)
+            if result is not None:
+                def_uid, certainty = result
+                resolved_updates.append((def_uid, certainty, ref_id))
+                stats.refs_resolved += 1
+            else:
+                stats.refs_unresolved += 1
+            if on_progress and (i + 1) % 50 == 0:
+                on_progress(i + 1, total)
 
-            # Final progress update
-            if on_progress and total > 0:
-                on_progress(total, total)
+        # Batch-commit resolved refs via raw SQL
+        if resolved_updates:
+            with self._db.session() as session:
+                # Use executemany for efficient batch updates
+                session.execute(
+                    text(
+                        "UPDATE ref_facts "
+                        "SET target_def_uid = :def_uid, certainty = :certainty "
+                        "WHERE ref_id = :ref_id"
+                    ),
+                    [
+                        {"def_uid": uid, "certainty": cert, "ref_id": rid}
+                        for uid, cert, rid in resolved_updates
+                    ],
+                )
+                session.commit()
 
-            session.commit()
+        if on_progress and total > 0:
+            on_progress(total, total)
 
         return stats
+
+    def _resolve_ref_inmem(
+        self, file_id: int, token_text: str
+    ) -> tuple[str, str] | None:
+        """Resolve a single ref using only in-memory caches.
+
+        Returns (target_def_uid, certainty) or None.
+        """
+        bind = self._bind_cache.get((file_id, token_text))
+        if bind is None:
+            return None
+
+        target_kind, target_uid = bind
+
+        if target_kind == BindTargetKind.DEF.value:
+            return (target_uid, Certainty.CERTAIN.value)
+
+        if target_kind == BindTargetKind.IMPORT.value:
+            return self._resolve_import_inmem(file_id, target_uid)
+
+        return None
+
+    def _resolve_import_inmem(
+        self, importing_file_id: int, import_uid: str
+    ) -> tuple[str, str] | None:
+        """Resolve a ref via import chain, in-memory only."""
+        imp = self._import_cache.get(import_uid)
+        if imp is None:
+            return None
+
+        imp_file_id, source_literal, imported_name = imp
+        if not source_literal:
+            return None
+
+        target_file_id = self._find_module_file(
+            source_literal, importing_file_id=imp_file_id
+        )
+        if target_file_id is None:
+            return None
+
+        exports = self._file_exports.get(target_file_id, {})
+        if imported_name in exports:
+            return (exports[imported_name], Certainty.CERTAIN.value)
+
+        return None
 
     def resolve_for_files(
         self,
@@ -137,102 +217,90 @@ class ReferenceResolver:
         stats = ResolutionStats()
 
         with self._db.session() as session:
-            # Find STRONG refs in these files with no target_def_uid
-            stmt = select(RefFact).where(
-                col(RefFact.file_id).in_(file_ids),
-                RefFact.ref_tier == RefTier.STRONG.value,
-                RefFact.target_def_uid == None,  # noqa: E711
-            )
-            unresolved_refs = list(session.exec(stmt).all())
-            stats.refs_processed = len(unresolved_refs)
-            total = len(unresolved_refs)
+            # Build file_id IN clause
+            placeholders = ", ".join(f":fid_{i}" for i in range(len(file_ids)))
+            binds = {f"fid_{i}": fid for i, fid in enumerate(file_ids)}
+            rows = session.execute(
+                text(
+                    f"SELECT ref_id, file_id, token_text "
+                    f"FROM ref_facts "
+                    f"WHERE ref_tier = :tier AND target_def_uid IS NULL "
+                    f"AND file_id IN ({placeholders})"
+                ),
+                {"tier": RefTier.STRONG.value, **binds},
+            ).fetchall()
+            stats.refs_processed = len(rows)
+            total = len(rows)
 
-            # Build caches (only if we have refs to resolve)
-            if unresolved_refs:
-                self._build_module_cache(session)
-                self._build_export_cache(session)
+            if not rows:
+                return stats
 
-                for i, ref in enumerate(unresolved_refs):
-                    resolved = self._resolve_ref(session, ref)
-                    if resolved:
-                        stats.refs_resolved += 1
-                    else:
-                        stats.refs_unresolved += 1
+            self._build_module_cache(session)
+            self._build_export_cache(session)
+            self._build_bind_cache(session, file_ids=file_ids)
+            self._build_import_cache(session)
 
-                    # Report progress every 50 refs
-                    if on_progress and (i + 1) % 50 == 0:
-                        on_progress(i + 1, total)
+        # Resolve in-memory
+        resolved_updates: list[tuple[str, str, int]] = []
+        for i, (ref_id, file_id, token_text) in enumerate(rows):
+            result = self._resolve_ref_inmem(file_id, token_text)
+            if result is not None:
+                def_uid, certainty = result
+                resolved_updates.append((def_uid, certainty, ref_id))
+                stats.refs_resolved += 1
+            else:
+                stats.refs_unresolved += 1
+            if on_progress and (i + 1) % 50 == 0:
+                on_progress(i + 1, total)
 
-                # Final progress update
-                if on_progress and total > 0:
-                    on_progress(total, total)
-
+        if resolved_updates:
+            with self._db.session() as session:
+                session.execute(
+                    text(
+                        "UPDATE ref_facts "
+                        "SET target_def_uid = :def_uid, certainty = :certainty "
+                        "WHERE ref_id = :ref_id"
+                    ),
+                    [
+                        {"def_uid": uid, "certainty": cert, "ref_id": rid}
+                        for uid, cert, rid in resolved_updates
+                    ],
+                )
                 session.commit()
+
+        if on_progress and total > 0:
+            on_progress(total, total)
 
         return stats
 
-    def _resolve_ref(self, session: object, ref: RefFact) -> bool:
-        """Attempt to resolve a single reference.
+    def _build_bind_cache(
+        self, session: object, *, file_ids: list[int] | None = None
+    ) -> None:
+        """Pre-cache (file_id, name) -> (target_kind, target_uid) from LocalBindFact."""
+        self._bind_cache = {}
+        if file_ids:
+            placeholders = ", ".join(str(fid) for fid in file_ids)
+            rows = session.execute(  # type: ignore[attr-defined]
+                text(
+                    f"SELECT file_id, name, target_kind, target_uid "
+                    f"FROM local_bind_facts WHERE file_id IN ({placeholders})"
+                )
+            ).fetchall()
+        else:
+            rows = session.execute(  # type: ignore[attr-defined]
+                text("SELECT file_id, name, target_kind, target_uid FROM local_bind_facts")
+            ).fetchall()
+        for file_id, name, target_kind, target_uid in rows:
+            self._bind_cache[(file_id, name)] = (target_kind, target_uid)
 
-        Returns True if resolution succeeded.
-        """
-        # Find the LocalBindFact that binds this name
-        bind_stmt = select(LocalBindFact).where(
-            LocalBindFact.file_id == ref.file_id,
-            LocalBindFact.name == ref.token_text,
-        )
-        bind = session.exec(bind_stmt).first()  # type: ignore[attr-defined]
-
-        if bind is None:
-            return False
-
-        # If it's a DEF binding (same-file), should already be PROVEN
-        if bind.target_kind == BindTargetKind.DEF.value:
-            ref.target_def_uid = bind.target_uid
-            ref.certainty = Certainty.CERTAIN.value
-            return True
-
-        # If it's an IMPORT binding, follow the import chain
-        if bind.target_kind == BindTargetKind.IMPORT.value:
-            import_uid = bind.target_uid
-            return self._resolve_import_ref(session, ref, import_uid)
-
-        return False
-
-    def _resolve_import_ref(self, session: object, ref: RefFact, import_uid: str) -> bool:
-        """Resolve a reference via import chain."""
-        # Find the ImportFact
-        import_stmt = select(ImportFact).where(ImportFact.import_uid == import_uid)
-        imp = session.exec(import_stmt).first()  # type: ignore[attr-defined]
-
-        if imp is None:
-            return False
-
-        # Get the source module path
-        source_literal = imp.source_literal
-        if not source_literal:
-            return False
-
-        # Look up the target file (pass importing file_id for relative import resolution)
-        target_file_id = self._find_module_file(source_literal, importing_file_id=imp.file_id)
-        if target_file_id is None:
-            return False
-
-        # Look up the exported symbol
-        imported_name = imp.imported_name
-        exports = self._file_exports.get(target_file_id, {})
-
-        if imported_name in exports:
-            ref.target_def_uid = exports[imported_name]
-            ref.certainty = Certainty.CERTAIN.value
-            return True
-
-        # Try wildcard - if importing module itself, look for __all__
-        if imported_name == "*" or imported_name == source_literal.split(".")[-1]:
-            # Module-level import, can't resolve to specific def
-            return False
-
-        return False
+    def _build_import_cache(self, session: object) -> None:
+        """Pre-cache import_uid -> (file_id, source_literal, imported_name)."""
+        self._import_cache = {}
+        rows = session.execute(  # type: ignore[attr-defined]
+            text("SELECT import_uid, file_id, source_literal, imported_name FROM import_facts")
+        ).fetchall()
+        for import_uid, file_id, source_literal, imported_name in rows:
+            self._import_cache[import_uid] = (file_id, source_literal or "", imported_name or "")
 
     def _build_module_cache(self, session: object) -> None:
         """Build mapping from module path to file_id, and file_id to path."""
@@ -1690,10 +1758,10 @@ def run_pass_1_5(
     unit_id: int | None = None,
     file_ids: list[int] | None = None,
 ) -> list[CrossFileResolutionStats]:
-    """Run all registered Pass 1.5 cross-file resolution passes.
+    """Run all registered Pass 1.5 cross-file resolution passes in parallel.
 
-    This is the single entry point for ops.py to invoke all language-specific
-    resolution logic, replacing the three separate call sites.
+    Each language-specific pass runs in its own thread with its own DB session.
+    Passes are independent (touch disjoint ref subsets).
 
     Args:
         db: Database instance
@@ -1706,4 +1774,6 @@ def run_pass_1_5(
     if not _RESOLUTION_PASSES:
         _register_resolution_passes()
 
-    return [fn(db, unit_id, file_ids) for fn in _RESOLUTION_PASSES]
+    with ThreadPoolExecutor(max_workers=len(_RESOLUTION_PASSES)) as pool:
+        futures = [pool.submit(fn, db, unit_id, file_ids) for fn in _RESOLUTION_PASSES]
+        return [f.result() for f in futures]

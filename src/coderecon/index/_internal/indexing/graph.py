@@ -15,14 +15,18 @@ from sqlmodel import col, select
 from coderecon.index.models import (
     AnchorGroup,
     DefFact,
+    DocCrossRef,
+    EndpointFact,
     ExportEntry,
     ExportSurface,
     File,
     ImportFact,
+    InterfaceImplFact,
     LocalBindFact,
     RefFact,
     RefTier,
     ScopeFact,
+    TestCoverageFact,
 )
 
 if TYPE_CHECKING:
@@ -409,6 +413,135 @@ class FactQueries:
         pattern = f"%{term}%"
         stmt = select(File).where(col(File.path).ilike(pattern)).order_by(File.path).limit(limit)
         return list(self._session.exec(stmt).all())
+
+    # -------------------------------------------------------------------------
+    # Interface / type hierarchy lookups (Tier 2)
+    # -------------------------------------------------------------------------
+
+    def list_implementors(
+        self, interface_name: str, *, limit: int = 100
+    ) -> list[InterfaceImplFact]:
+        """List all types implementing a given interface/trait name."""
+        stmt = (
+            select(InterfaceImplFact)
+            .where(InterfaceImplFact.interface_name == interface_name)
+            .limit(limit)
+        )
+        return list(self._session.exec(stmt).all())
+
+    def list_interfaces_of(
+        self, implementor_def_uid: str, *, limit: int = 50
+    ) -> list[InterfaceImplFact]:
+        """List all interfaces/traits implemented by a given type."""
+        stmt = (
+            select(InterfaceImplFact)
+            .where(InterfaceImplFact.implementor_def_uid == implementor_def_uid)
+            .limit(limit)
+        )
+        return list(self._session.exec(stmt).all())
+
+    def list_co_implementors(
+        self, def_uid: str, *, limit: int = 100
+    ) -> list[str]:
+        """Find other types that implement the same interfaces as *def_uid*.
+
+        Returns a list of implementor def_uids (deduplicated, excluding *def_uid*).
+        """
+        ifaces = self.list_interfaces_of(def_uid)
+        if not ifaces:
+            return []
+        iface_names = [i.interface_name for i in ifaces]
+        stmt = (
+            select(InterfaceImplFact.implementor_def_uid)
+            .where(col(InterfaceImplFact.interface_name).in_(iface_names))
+            .where(InterfaceImplFact.implementor_def_uid != def_uid)
+            .distinct()
+            .limit(limit)
+        )
+        return list(self._session.exec(stmt).all())
+
+    # -------------------------------------------------------------------------
+    # DocCrossRef lookups
+    # -------------------------------------------------------------------------
+
+    def list_doc_xrefs_from(
+        self, source_def_uid: str, *, limit: int = 50
+    ) -> list[DocCrossRef]:
+        """List cross-references originating from a def's docstring."""
+        stmt = (
+            select(DocCrossRef)
+            .where(DocCrossRef.source_def_uid == source_def_uid)
+            .limit(limit)
+        )
+        return list(self._session.exec(stmt).all())
+
+    def list_doc_xrefs_to(
+        self, target_def_uid: str, *, limit: int = 50
+    ) -> list[DocCrossRef]:
+        """List cross-references pointing TO a def."""
+        stmt = (
+            select(DocCrossRef)
+            .where(DocCrossRef.target_def_uid == target_def_uid)
+            .limit(limit)
+        )
+        return list(self._session.exec(stmt).all())
+
+    # -------------------------------------------------------------------------
+    # Endpoint lookups
+    # -------------------------------------------------------------------------
+
+    def batch_get_endpoints(
+        self, handler_def_uids: list[str]
+    ) -> dict[str, EndpointFact]:
+        """Get endpoint facts for multiple handler def_uids in one query.
+
+        Returns a dict mapping handler_def_uid → EndpointFact (first match).
+        """
+        if not handler_def_uids:
+            return {}
+        stmt = (
+            select(EndpointFact)
+            .where(col(EndpointFact.handler_def_uid).in_(handler_def_uids))
+        )
+        results = list(self._session.exec(stmt).all())
+        out: dict[str, EndpointFact] = {}
+        for ep in results:
+            if ep.handler_def_uid and ep.handler_def_uid not in out:
+                out[ep.handler_def_uid] = ep
+        return out
+
+    # -------------------------------------------------------------------------
+    # Test coverage lookups
+    # -------------------------------------------------------------------------
+
+    def batch_count_test_coverage(
+        self, def_uids: list[str]
+    ) -> dict[str, int]:
+        """Count distinct tests covering each def_uid.
+
+        Returns a dict mapping def_uid → test count.  UIDs with zero
+        coverage are included with count 0.
+        """
+        if not def_uids:
+            return {}
+        from sqlalchemy import func
+
+        stmt = (
+            select(
+                TestCoverageFact.target_def_uid,
+                func.count(func.distinct(TestCoverageFact.test_id)),
+            )
+            .where(
+                col(TestCoverageFact.target_def_uid).in_(def_uids),
+                TestCoverageFact.stale == False,  # noqa: E712
+            )
+            .group_by(TestCoverageFact.target_def_uid)
+        )
+        rows = list(self._session.exec(stmt).all())
+        result = {uid: 0 for uid in def_uids}
+        for uid, count in rows:
+            result[uid] = int(count)
+        return result
 
 
 # Re-export for backwards compatibility during migration

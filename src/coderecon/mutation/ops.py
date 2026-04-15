@@ -2,15 +2,12 @@
 
 Atomic file edits with structured delta response.
 Per SPEC.md §23.7 write_source tool specification.
-
-Triggers reindex after mutation via callback.
 """
 
 from __future__ import annotations
 
 import hashlib
 import uuid
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -60,6 +57,7 @@ class MutationResult:
     applied: bool
     dry_run: bool
     delta: MutationDelta
+    changed_paths: list[Path] = field(default_factory=list)
     affected_symbols: list[str] | None = None
     affected_tests: list[str] | None = None
     repo_fingerprint: str = ""
@@ -69,29 +67,18 @@ class MutationOps:
     """Mutation operations for the write_source tool.
 
     Handles atomic file edits with rollback support.
-    Triggers reindex callback after successful mutation.
     """
 
     def __init__(
         self,
         repo_root: Path,
-        *,
-        on_mutation: Callable[[list[Path]], None] | None = None,
     ) -> None:
         """Initialize mutation ops.
 
         Args:
             repo_root: Repository root path
-            on_mutation: Callback invoked with changed paths after mutation.
-                         Typically triggers IndexCoordinatorEngine.reindex_incremental().
         """
         self._repo_root = repo_root
-        self._on_mutation = on_mutation
-
-    def notify_mutation(self, paths: list[Path]) -> None:
-        """Notify that files were mutated, triggering reindex if configured."""
-        if self._on_mutation:
-            self._on_mutation(paths)
 
     def write_source(
         self,
@@ -183,12 +170,11 @@ class MutationOps:
             total_deletions += deletions
 
         # Trigger reindex callback
-        if not dry_run and self._on_mutation and changed_paths:
-            self._on_mutation(changed_paths)
 
         return MutationResult(
             applied=not dry_run,
             dry_run=dry_run,
+            changed_paths=changed_paths if not dry_run else [],
             delta=MutationDelta(
                 mutation_id=mutation_id,
                 files_changed=len(file_deltas),

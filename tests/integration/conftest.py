@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Generator
 from pathlib import Path
 
-import pygit2
+import subprocess
+
 import pytest
 
 from coderecon.templates import get_reconignore_template
@@ -23,11 +24,9 @@ def integration_repo(tmp_path: Path) -> Generator[Path, None, None]:
     """
     repo_path = tmp_path / "integration_repo"
     repo_path.mkdir()
-    pygit2.init_repository(str(repo_path))
-
-    repo = pygit2.Repository(str(repo_path))
-    repo.config["user.name"] = "Integration Test"
-    repo.config["user.email"] = "integration@test.com"
+    subprocess.run(["git", "init"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.name", "Integration Test"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.email", "integration@test.com"], cwd=repo_path, capture_output=True, check=True)
 
     # Create Python package structure
     (repo_path / "src").mkdir()
@@ -150,11 +149,8 @@ class TestCalculator:
 ''')
 
     # Commit everything
-    repo.index.add_all()
-    repo.index.write()
-    tree = repo.index.write_tree()
-    sig = pygit2.Signature("Integration Test", "integration@test.com")
-    repo.create_commit("HEAD", sig, sig, "Initial structure", tree, [])
+    subprocess.run(["git", "add", "-A"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "commit", "-m", "Initial structure"], cwd=repo_path, capture_output=True, check=True)
 
     yield repo_path
 
@@ -164,11 +160,9 @@ def integration_repo_with_errors(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a repo with intentional errors for testing error handling."""
     repo_path = tmp_path / "error_repo"
     repo_path.mkdir()
-    pygit2.init_repository(str(repo_path))
-
-    repo = pygit2.Repository(str(repo_path))
-    repo.config["user.name"] = "Error Test"
-    repo.config["user.email"] = "error@test.com"
+    subprocess.run(["git", "init"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.name", "Error Test"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.email", "error@test.com"], cwd=repo_path, capture_output=True, check=True)
 
     # Create file with syntax error
     (repo_path / "broken.py").write_text('''"""Broken module."""
@@ -216,10 +210,7 @@ testpaths = ["tests"]
     (coderecon_dir / ".reconignore").write_text(get_reconignore_template())
 
     # Commit
-    repo.index.add_all()
-    repo.index.write()
-    tree = repo.index.write_tree()
-    sig = pygit2.Signature("Error Test", "error@test.com")
-    repo.create_commit("HEAD", sig, sig, "Initial with errors", tree, [])
+    subprocess.run(["git", "add", "-A"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "commit", "-m", "Initial with errors"], cwd=repo_path, capture_output=True, check=True)
 
     yield repo_path

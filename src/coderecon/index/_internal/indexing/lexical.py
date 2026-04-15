@@ -10,7 +10,9 @@ a fast Rust-based search engine. It supports:
 
 from __future__ import annotations
 
+import json
 import re
+import shutil
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,6 +22,11 @@ import tantivy
 
 if TYPE_CHECKING:
     pass
+
+# Bump when the Tantivy schema changes — triggers automatic index rebuild.
+# 1 → 2: added ``worktree`` field and made ``path_exact`` a compound
+#         ``{worktree}:{path}`` key for per-worktree deletion.
+SCHEMA_VERSION = 2
 
 
 @dataclass
@@ -88,29 +95,49 @@ class LexicalIndex:
         self._initialized = False
         # Staging buffer for atomic epoch commits
         self._staged_adds: list[dict[str, Any]] = []
-        self._staged_removes: list[str] = []
+        # Each entry is (worktree, path) — both needed for compound-key deletion.
+        self._staged_removes: list[tuple[str, str]] = []
 
     def _ensure_initialized(self) -> None:
         """Lazily initialize the Tantivy index."""
         if self._initialized:
             return
 
+        # Schema-version migration: if the on-disk version differs, wipe and
+        # rebuild so we don't silently return stale or mis-keyed results.
+        version_file = self.index_path / "schema_version.json"
+        if self.index_path.exists() and version_file.exists():
+            try:
+                stored = json.loads(version_file.read_text())["version"]
+            except (OSError, KeyError, ValueError):
+                stored = 0
+            if stored != SCHEMA_VERSION:
+                shutil.rmtree(self.index_path, ignore_errors=True)
+        elif self.index_path.exists() and any(self.index_path.iterdir()):
+            # Non-empty directory without a version file is a v1 index.
+            shutil.rmtree(self.index_path, ignore_errors=True)
+
         # Build schema
         schema_builder = tantivy.SchemaBuilder()
         # Use default tokenizer for path to allow partial matching (e.g., "utils" matches "src/utils.py")
         schema_builder.add_text_field("path", stored=True, tokenizer_name="default")
-        # Use raw tokenizer for exact path matching (used for deletion)
+        # Compound deletion key: "{worktree}:{path}" — raw so we match exactly.
         schema_builder.add_text_field("path_exact", stored=False, tokenizer_name="raw")
         schema_builder.add_text_field("content", stored=True, tokenizer_name="default")
         schema_builder.add_text_field("symbols", stored=True, tokenizer_name="default")
         schema_builder.add_integer_field("context_id", stored=True, indexed=True)
         schema_builder.add_integer_field("file_id", stored=True, indexed=True)
+        # Per-worktree discriminator — raw tokenizer for exact filter queries.
+        schema_builder.add_text_field("worktree", stored=True, tokenizer_name="raw")
         self._schema = schema_builder.build()
 
         # Create or open index
         self.index_path.mkdir(parents=True, exist_ok=True)
         self._index = tantivy.Index(self._schema, path=str(self.index_path))
         self._initialized = True
+
+        # Persist the schema version so future startups detect upgrades.
+        version_file.write_text(json.dumps({"version": SCHEMA_VERSION}))
 
     def add_file(
         self,
@@ -119,6 +146,7 @@ class LexicalIndex:
         context_id: int,
         file_id: int = 0,
         symbols: list[str] | None = None,
+        worktree: str = "main",
     ) -> None:
         """
         Add or update a file in the index.
@@ -129,22 +157,25 @@ class LexicalIndex:
             context_id: Context this file belongs to
             file_id: Database file ID
             symbols: List of symbol names in this file
+            worktree: Worktree this file belongs to (default "main")
         """
         self._ensure_initialized()
 
         writer = self._index.writer()
         try:
-            # Delete existing document for this path (use path_exact for exact matching)
-            writer.delete_documents("path_exact", file_path)
+            # Delete the existing document for this (worktree, path) pair.
+            _key = f"{worktree}:{file_path}"
+            writer.delete_documents("path_exact", _key)
 
             # Add new document
             doc = tantivy.Document()
             doc.add_text("path", file_path)
-            doc.add_text("path_exact", file_path)  # For exact match deletion
+            doc.add_text("path_exact", _key)        # compound key for deletion
             doc.add_text("content", content)
             doc.add_text("symbols", " ".join(symbols) if symbols else "")
             doc.add_integer("context_id", context_id)
             doc.add_integer("file_id", file_id)
+            doc.add_text("worktree", worktree)
             writer.add_document(doc)
             writer.commit()
         finally:
@@ -158,7 +189,8 @@ class LexicalIndex:
         Add multiple files in a batch.
 
         Args:
-            files: List of dicts with keys: path, content, context_id, file_id, symbols
+            files: List of dicts with keys: path, content, context_id, file_id, symbols,
+                   and optionally ``worktree`` (default ``"main"``)
 
         Returns:
             Number of files indexed.
@@ -169,17 +201,20 @@ class LexicalIndex:
         count = 0
         try:
             for f in files:
-                # Delete existing (use path_exact for exact matching)
-                writer.delete_documents("path_exact", f["path"])
+                wt = f.get("worktree", "main")
+                _key = f"{wt}:{f['path']}"
+                # Delete existing entry for this (worktree, path).
+                writer.delete_documents("path_exact", _key)
 
                 # Add new
                 doc = tantivy.Document()
                 doc.add_text("path", f["path"])
-                doc.add_text("path_exact", f["path"])  # For exact match deletion
+                doc.add_text("path_exact", _key)        # compound deletion key
                 doc.add_text("content", f.get("content", ""))
                 doc.add_text("symbols", " ".join(f.get("symbols", [])))
                 doc.add_integer("context_id", f.get("context_id", 0))
                 doc.add_integer("file_id", f.get("file_id", 0))
+                doc.add_text("worktree", wt)
                 writer.add_document(doc)
                 count += 1
             writer.commit()
@@ -188,14 +223,13 @@ class LexicalIndex:
 
         return count
 
-    def remove_file(self, file_path: str) -> bool:
+    def remove_file(self, file_path: str, worktree: str = "main") -> bool:
         """Remove a file from the index (immediate commit)."""
         self._ensure_initialized()
 
         writer = self._index.writer()
         try:
-            # Use path_exact field for exact matching
-            deleted = writer.delete_documents("path_exact", file_path)
+            deleted = writer.delete_documents("path_exact", f"{worktree}:{file_path}")
             writer.commit()
             return bool(deleted > 0)
         finally:
@@ -212,6 +246,7 @@ class LexicalIndex:
         context_id: int,
         file_id: int = 0,
         symbols: list[str] | None = None,
+        worktree: str = "main",
     ) -> None:
         """
         Stage a file for later atomic commit.
@@ -226,6 +261,7 @@ class LexicalIndex:
             context_id: Context this file belongs to
             file_id: Database file ID
             symbols: List of symbol names in this file
+            worktree: Worktree this file belongs to (default "main")
         """
         self._staged_adds.append(
             {
@@ -234,17 +270,22 @@ class LexicalIndex:
                 "context_id": context_id,
                 "file_id": file_id,
                 "symbols": symbols or [],
+                "worktree": worktree,
             }
         )
 
-    def stage_remove(self, file_path: str) -> None:
+    def stage_remove(self, file_path: str, worktree: str = "main") -> None:
         """
         Stage a file removal for later atomic commit.
 
+        Only removes the entry for the given *worktree*; entries for other
+        worktrees are unaffected.
+
         Args:
             file_path: Relative file path to remove
+            worktree: Worktree whose entry to remove (default "main")
         """
-        self._staged_removes.append(file_path)
+        self._staged_removes.append((worktree, file_path))
 
     def has_staged_changes(self) -> bool:
         """Return True if there are uncommitted staged changes."""
@@ -272,24 +313,27 @@ class LexicalIndex:
         writer = self._index.writer()
         count = 0
         try:
-            # Process removals first
-            for file_path in self._staged_removes:
-                writer.delete_documents("path_exact", file_path)
+            # Process removals first — each entry is (worktree, path).
+            for wt_rm, file_path in self._staged_removes:
+                writer.delete_documents("path_exact", f"{wt_rm}:{file_path}")
                 count += 1
 
-            # Process additions (which also delete existing)
+            # Process additions (which also delete the existing entry for this
+            # worktree+path pair before inserting the new one).
             for f in self._staged_adds:
-                # Delete existing document
-                writer.delete_documents("path_exact", f["path"])
+                wt = f.get("worktree", "main")
+                _key = f"{wt}:{f['path']}"
+                writer.delete_documents("path_exact", _key)
 
                 # Add new document
                 doc = tantivy.Document()
                 doc.add_text("path", f["path"])
-                doc.add_text("path_exact", f["path"])
+                doc.add_text("path_exact", _key)        # compound deletion key
                 doc.add_text("content", f.get("content", ""))
                 doc.add_text("symbols", " ".join(f.get("symbols", [])))
                 doc.add_integer("context_id", f.get("context_id", 0))
                 doc.add_integer("file_id", f.get("file_id", 0))
+                doc.add_text("worktree", wt)
                 writer.add_document(doc)
                 count += 1
 
@@ -395,6 +439,7 @@ class LexicalIndex:
         context_lines: int = 1,
         *,
         content_query: str | None = None,
+        worktrees: list[str] | None = None,
     ) -> SearchResults:
         """
         Search the index.
@@ -409,6 +454,11 @@ class LexicalIndex:
             content_query: Optional override for line-level content matching.
                 When set, _extract_all_snippets uses this instead of `query`.
                 Used by search_symbols to pass the original unprefixed terms.
+            worktrees: Ordered list of worktrees to search.  Results from the
+                first worktree take priority; subsequent entries act as fallback
+                overlays (e.g. ``["feature-x", "main"]`` uses feature-x's
+                version of a file when present, otherwise falls back to main).
+                ``None`` / ``["main"]`` both default to main-only search.
 
         Returns:
             SearchResults with matching lines (one result per line occurrence),
@@ -423,12 +473,28 @@ class LexicalIndex:
         fallback_reason: str | None = None
         literal_fallback = False
 
-        # Build query with AND semantics for unquoted multi-term queries
+        effective_worktrees: list[str] = worktrees if worktrees else ["main"]
+        # Worktree priority map: lower index = higher priority (used for dedup).
+        wt_priority: dict[str, int] = {wt: i for i, wt in enumerate(effective_worktrees)}
+
+        # Build the base query with AND semantics.
         tantivy_query = self._build_tantivy_query(query)
+
+        # Prepend worktree filter: (worktree:A OR worktree:B OR ...).
+        # Use phrase syntax (worktree:"value") so the raw tokenizer matches
+        # the stored value verbatim for any character including / . -
+        # (escaped-term syntax fails for / because the stored token is `feat/slash`
+        # but the escaped query term becomes `feat\/slash` — no match).
+        wt_filter = " OR ".join(
+            'worktree:"{}"'.format(wt.replace("\\", "\\\\").replace('"', '\\"'))
+            for wt in effective_worktrees
+        )
+        base_with_wt = f"({wt_filter}) AND ({tantivy_query})"
+
         full_query = (
-            f"({tantivy_query}) AND context_id:{context_id}"
+            f"({base_with_wt}) AND context_id:{context_id}"
             if context_id is not None
-            else tantivy_query
+            else base_with_wt
         )
 
         searcher = self._index.searcher()
@@ -437,28 +503,24 @@ class LexicalIndex:
         try:
             parsed = self._index.parse_query(full_query, ["content", "symbols", "path"])
         except ValueError as e:
-            # Tantivy raises ValueError on syntax errors
             error_msg = str(e)
             fallback_reason = f"query syntax error: {error_msg[:50]}"
 
             # Escape the original query and retry
             escaped_query = self._escape_query(query)
+            base_escaped = f"({wt_filter}) AND ({escaped_query})"
             escaped_full = (
-                f"({escaped_query}) AND context_id:{context_id}"
+                f"({base_escaped}) AND context_id:{context_id}"
                 if context_id is not None
-                else escaped_query
+                else base_escaped
             )
             try:
                 parsed = self._index.parse_query(escaped_full, ["content", "symbols", "path"])
             except ValueError:
-                # Even escaped query failed - return empty results
                 results.query_time_ms = int((time.monotonic() - start) * 1000)
                 results.fallback_reason = "query could not be parsed even after escaping"
                 return results
 
-            # Fallback succeeded — use the original raw query as a literal
-            # content query so _extract_search_terms treats every token
-            # as a plain content term (no operator/field interpretation).
             if content_query is None:
                 content_query = query
             literal_fallback = True
@@ -470,30 +532,47 @@ class LexicalIndex:
         top_docs = searcher.search(parsed, limit=doc_limit).hits
         results.total_hits = len(top_docs)
 
+        # Collect raw (worktree_priority, file_path, line_num, snippet, ctx_id).
+        # We deduplicate by (path, line) keeping the highest-priority worktree
+        # so that feature-branch versions shadow main-branch versions.
+        raw: list[tuple[int, str, int, str, int | None]] = []
         for _score, doc_addr in top_docs:
             doc = searcher.doc(doc_addr)
             file_path = doc.get_first("path") or ""
             content = doc.get_first("content") or ""
             ctx_id = doc.get_first("context_id")
+            doc_wt = doc.get_first("worktree") or "main"
+            prio = wt_priority.get(doc_wt, len(effective_worktrees))
 
-            # Extract ALL matching lines from this file
             snippet_query = content_query if content_query is not None else query
             for snippet, line_num in self._extract_all_snippets(
                 content, snippet_query, context_lines, literal=literal_fallback
             ):
-                results.results.append(
-                    SearchResult(
-                        file_path=file_path,
-                        line=line_num,
-                        column=0,
-                        snippet=snippet,
-                        score=1.0,
-                        context_id=ctx_id,
-                    )
-                )
+                raw.append((prio, file_path, line_num, snippet, ctx_id))
 
-        # Sort by (path, line_number) for deterministic ordering
-        results.results.sort(key=lambda r: (r.file_path, r.line))
+        # Dedup: for each (path, line) keep the entry from the highest-priority
+        # worktree (lowest priority index = first in the overlay list).
+        # Use a dict keyed by (path, line) storing the best seen entry.
+        best: dict[tuple[str, int], tuple[int, str, int, str, int | None]] = {}
+        for entry in raw:
+            prio, fp, ln, snippet, ctx_id = entry
+            key = (fp, ln)
+            if key not in best or prio < best[key][0]:
+                best[key] = entry
+        # Sort by (path, line) for deterministic ordering
+        kept = sorted(best.values(), key=lambda e: (e[1], e[2]))
+
+        results.results = [
+            SearchResult(
+                file_path=fp,
+                line=ln,
+                column=0,
+                snippet=snippet,
+                score=1.0,
+                context_id=ctx_id,
+            )
+            for _prio, fp, ln, snippet, ctx_id in kept
+        ]
 
         results.query_time_ms = int((time.monotonic() - start) * 1000)
         results.fallback_reason = fallback_reason
@@ -505,6 +584,7 @@ class LexicalIndex:
         limit: int = 20,
         context_id: int | None = None,
         context_lines: int = 1,
+        worktrees: list[str] | None = None,
     ) -> SearchResults:
         """Search only in symbol names."""
         self._ensure_initialized()
@@ -519,7 +599,10 @@ class LexicalIndex:
             else:
                 prefixed.append(f"symbols:{t}")
         symbol_query = " ".join(prefixed)
-        return self.search(symbol_query, limit, context_id, context_lines, content_query=query)
+        return self.search(
+            symbol_query, limit, context_id, context_lines,
+            content_query=query, worktrees=worktrees,
+        )
 
     def search_path(
         self,
@@ -527,6 +610,7 @@ class LexicalIndex:
         limit: int = 20,
         context_id: int | None = None,
         context_lines: int = 1,
+        worktrees: list[str] | None = None,
     ) -> SearchResults:
         """Search in file paths."""
         self._ensure_initialized()
@@ -535,7 +619,10 @@ class LexicalIndex:
         # Path searches match by file path, not content. Pass empty content_query
         # so _extract_all_snippets returns a document-level match at line 1
         # instead of trying (and failing) to match path terms in file content.
-        return self.search(path_query, limit, context_id, context_lines, content_query="")
+        return self.search(
+            path_query, limit, context_id, context_lines,
+            content_query="", worktrees=worktrees,
+        )
 
     def _extract_search_terms(
         self, query: str, *, literal: bool = False
@@ -748,6 +835,7 @@ class LexicalIndex:
         query: str,
         context_id: int | None = None,
         limit: int = 500,
+        worktrees: list[str] | None = None,
     ) -> dict[str, float]:
         """Score files by BM25 relevance to *query* using Tantivy.
 
@@ -819,8 +907,20 @@ class LexicalIndex:
 
         # OR-join so any token contributes score (unlike search() which AND-joins)
         or_query = " OR ".join(parts)
+
+        # Prepend worktree filter so BM25 scores only cover the relevant worktrees.
+        effective_wt = worktrees if worktrees else ["main"]
+        # Use phrase syntax so the raw tokenizer matches verbatim (see search() for rationale).
+        wt_filter = " OR ".join(
+            'worktree:"{}"'.format(wt.replace("\\", "\\\\").replace('"', '\\"'))
+            for wt in effective_wt
+        )
+        content_expr = f"({wt_filter}) AND ({or_query})"
+
         full_query = (
-            f"({or_query}) AND context_id:{context_id}" if context_id is not None else or_query
+            f"({content_expr}) AND context_id:{context_id}"
+            if context_id is not None
+            else content_expr
         )
 
         searcher = self._index.searcher()
@@ -830,8 +930,11 @@ class LexicalIndex:
         except ValueError:
             # Bad syntax — try escaping the whole thing
             escaped = self._escape_query(query)
+            content_esc = f"({wt_filter}) AND ({escaped})"
             full_esc = (
-                f"({escaped}) AND context_id:{context_id}" if context_id is not None else escaped
+                f"({content_esc}) AND context_id:{context_id}"
+                if context_id is not None
+                else content_esc
             )
             try:
                 parsed = self._index.parse_query(full_esc, ["content", "symbols", "path"])
@@ -840,16 +943,22 @@ class LexicalIndex:
 
         top_docs = searcher.search(parsed, limit=limit).hits
 
+        # For the overlay case, prefer the first (higher-priority) worktree's
+        # score when a path appears under multiple worktrees.
+        wt_priority: dict[str, int] = {wt: i for i, wt in enumerate(effective_wt)}
         scores: dict[str, float] = {}
+        path_wt: dict[str, int] = {}  # path -> best worktree priority so far
         for bm25_score, doc_addr in top_docs:
             doc = searcher.doc(doc_addr)
             file_path = doc.get_first("path") or ""
             if not file_path:
                 continue
-            # Keep max score per file (a file may appear once per doc, but
-            # defensive in case of duplicates)
-            if file_path not in scores or bm25_score > scores[file_path]:
+            doc_wt = doc.get_first("worktree") or "main"
+            prio = wt_priority.get(doc_wt, len(effective_wt))
+            prev_prio = path_wt.get(file_path, len(effective_wt) + 1)
+            if prio < prev_prio or (prio == prev_prio and float(bm25_score) > scores.get(file_path, 0.0)):
                 scores[file_path] = float(bm25_score)
+                path_wt[file_path] = prio
 
         return scores
 

@@ -15,7 +15,7 @@ import json
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Column, ForeignKey, Integer
+from sqlalchemy import Column, ForeignKey, Integer, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
@@ -428,13 +428,29 @@ class ImplStyle(StrEnum):
 # ============================================================================
 
 
+class Worktree(SQLModel, table=True):
+    """A worktree (or main checkout) tracked in this repo's index."""
+
+    __tablename__ = "worktrees"
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(unique=True, index=True)
+    root_path: str = Field(unique=True, index=True)
+    branch: str | None = None
+    is_main: bool = Field(default=False)
+
+
 class File(SQLModel, table=True):
     """Tracked file in the repository."""
 
     __tablename__ = "files"
+    __table_args__ = (
+        UniqueConstraint("worktree_id", "path", name="uq_files_wt_path"),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
-    path: str = Field(unique=True, index=True)
+    worktree_id: int = Field(default=0, index=True, sa_column_kwargs={"server_default": "0"})
+    path: str = Field(index=True)
     language_family: str | None = None
     content_hash: str | None = None
     line_count: int | None = None
@@ -1067,6 +1083,99 @@ class DefSnapshotRecord(SQLModel, table=True):
     display_name: str | None = None
     start_line: int | None = None
     end_line: int | None = None
+
+
+# ============================================================================
+# TIER 3: BEHAVIORAL FACTS (coverage, lint — populated from tool execution)
+# ============================================================================
+
+
+class TestCoverageFact(SQLModel, table=True):
+    """Coverage link between a test and a definition.
+
+    Populated by joining coverage reports (line hit counts) against
+    DefFact line ranges.  Each row records "test T covers definition D
+    at line_rate R".
+
+    Coverage facts are written at initial full-suite ingestion and
+    updated incrementally by the background test pipeline on file save.
+    """
+
+    __tablename__ = "test_coverage_facts"
+
+    id: int | None = Field(default=None, primary_key=True)
+    test_id: str = Field(index=True)  # e.g. "tests/test_auth.py::test_login_valid"
+    target_def_uid: str = Field(index=True)  # DefFact.def_uid being covered
+    target_file_path: str = Field(index=True)  # Denormalized for fast queries
+    covered_lines: int  # Lines within def range that were hit
+    total_lines: int  # Total lines in def range
+    line_rate: float  # covered_lines / total_lines
+    branch_rate: float | None = None  # Branch coverage within def range if available
+    epoch: int = Field(index=True)  # Epoch when this measurement was taken
+    stale: bool = Field(default=False)  # True if def body changed since measurement
+
+
+class LintStatusFact(SQLModel, table=True):
+    """Persisted lint/type-check status for a file.
+
+    Written by the background tier-1 pipeline on file save and at
+    checkpoint time.  Diagnostic counts are aggregated per tool.
+    """
+
+    __tablename__ = "lint_status_facts"
+
+    id: int | None = Field(default=None, primary_key=True)
+    file_path: str = Field(index=True)
+    tool_id: str = Field(index=True)  # "python.ruff", "js.eslint", etc.
+    category: str = Field(index=True)  # "lint", "format", "type_check", "security"
+    error_count: int = Field(default=0)
+    warning_count: int = Field(default=0)
+    info_count: int = Field(default=0)
+    clean: bool = Field(default=True)  # True when all counts are zero
+    epoch: int = Field(index=True)
+
+
+class EndpointFact(SQLModel, table=True):
+    """HTTP/RPC endpoint declaration or call site.
+
+    Server-side: extracted from route decorators (@app.route, @Get, etc.)
+    Client-side: extracted from HTTP client calls (fetch, requests.get, etc.)
+    Matching server↔client by url_pattern creates cross-language edges.
+    """
+
+    __tablename__ = "endpoint_facts"
+
+    id: int | None = Field(default=None, primary_key=True)
+    file_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
+    )
+    kind: str = Field(index=True)  # "server" or "client"
+    http_method: str | None = None  # GET, POST, PUT, DELETE, PATCH, *
+    url_pattern: str = Field(index=True)  # "/api/users", "/api/users/:id"
+    handler_def_uid: str | None = Field(default=None, index=True)  # DefFact for handler/caller
+    start_line: int | None = None
+    end_line: int | None = None
+    framework: str | None = None  # "flask", "fastapi", "express", "gin", etc.
+
+
+class DocCrossRef(SQLModel, table=True):
+    """Cross-reference from a docstring/comment to a DefFact.
+
+    Extracted by regex-parsing structured references like
+    ``See also FooClass``, ``:func:`module.func```, or ``[BarClass](...)``.
+    """
+
+    __tablename__ = "doc_cross_refs"
+
+    id: int | None = Field(default=None, primary_key=True)
+    source_file_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
+    )
+    source_def_uid: str | None = Field(default=None, index=True)  # Def containing the docstring
+    source_line: int  # Line of the cross-reference
+    raw_text: str  # Original reference text ("See also FooClass")
+    target_def_uid: str = Field(index=True)  # Resolved DefFact.def_uid
+    confidence: str = Field(default="high")  # "high", "medium", "low"
 
 
 # ============================================================================

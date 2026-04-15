@@ -35,24 +35,20 @@ def temp_db(temp_dir: Path) -> Generator[Database, None, None]:
 @pytest.fixture
 def temp_repo(temp_dir: Path) -> Generator[Path, None, None]:
     """Create a temporary git repository."""
-    import pygit2
+    import subprocess
 
     repo_path = temp_dir / "repo"
     repo_path.mkdir()
-    pygit2.init_repository(str(repo_path))
+    subprocess.run(["git", "init"], cwd=repo_path, capture_output=True, check=True)
 
     # Configure git user for commits
-    repo = pygit2.Repository(str(repo_path))
-    repo.config["user.name"] = "Test User"
-    repo.config["user.email"] = "test@example.com"
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_path, capture_output=True, check=True)
 
     # Create initial commit
     (repo_path / "README.md").write_text("# Test Repo\n")
-    repo.index.add("README.md")
-    repo.index.write()
-    tree = repo.index.write_tree()
-    sig = pygit2.Signature("Test User", "test@example.com")
-    repo.create_commit("HEAD", sig, sig, "Initial commit", tree, [])
+    subprocess.run(["git", "add", "README.md"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_path, capture_output=True, check=True)
 
     yield repo_path
 
