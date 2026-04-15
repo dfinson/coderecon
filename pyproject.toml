@@ -33,11 +33,10 @@ dependencies = [
     # Index
     "sqlmodel>=0.0.24",
     "tantivy>=0.25.0",
-    "fastembed>=0.5.0",
+    # Embedding via OpenAI-compatible API (Azure or direct)
+    "openai>=1.82.0",
     # Tree-sitter core runtime only - grammars installed dynamically per-repo
     "tree-sitter>=0.24.0",
-    # Git
-    "pygit2>=1.19.0",
     # Logging
     "structlog>=25.5.0",
     "sqlalchemy[mypy]>=2.0.46",
@@ -47,9 +46,12 @@ dependencies = [
     "questionary>=2.0.0",
     # File watching
     "watchfiles>=1.0.0",
+    # Ignore pattern matching (gitignore-spec compliant)
+    "pathspec>=0.12.0",
     # Retry logic for network operations
     "tenacity>=8.2.0",
-    "onnxruntime>=1.24.2",
+    # Graph algorithms (PageRank, SCC, Louvain)
+    "networkx>=3.2",
 ]
 
 [project.optional-dependencies]
@@ -154,7 +156,6 @@ plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
 [[tool.mypy.overrides]]
 module = [
     "tantivy.*",
-    "pygit2.*",
     "structlog.*",
     "tree_sitter.*",
     "tree_sitter_python.*",

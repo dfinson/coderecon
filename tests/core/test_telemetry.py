@@ -346,27 +346,27 @@ class TestTracedDecorator:
         with pytest.raises(ValueError, match="test error"):
             my_func()
 
-    @pytest.mark.asyncio
-    async def test_async_function_returns_result(self) -> None:
+    def test_async_function_returns_result(self) -> None:
         """Traced async function returns correct result."""
+        import asyncio
 
         @traced("test_operation")
         async def my_async_func(x: int) -> int:
             return x * 2
 
-        result = await my_async_func(5)
+        result = asyncio.run(my_async_func(5))
         assert result == 10
 
-    @pytest.mark.asyncio
-    async def test_async_function_preserves_exception(self) -> None:
+    def test_async_function_preserves_exception(self) -> None:
         """Traced async function re-raises exceptions."""
+        import asyncio
 
         @traced("test_operation")
         async def my_async_func() -> None:
             raise RuntimeError("async error")
 
         with pytest.raises(RuntimeError, match="async error"):
-            await my_async_func()
+            asyncio.run(my_async_func())
 
     def test_uses_function_name_as_default_span_name(self) -> None:
         """When no name provided, uses function's qualified name."""

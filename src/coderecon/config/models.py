@@ -324,6 +324,100 @@ class DebugConfig(BaseModel):
     )
 
 
+class GovernancePolicyRule(BaseModel):
+    """A single governance policy rule.
+
+    Each rule defines a condition that must hold at checkpoint time.
+    Violations can block commits (level="error") or warn (level="warning").
+    """
+
+    enabled: bool = Field(default=True, description="Whether this rule is active.")
+    level: str = Field(
+        default="warning",
+        description="Severity: 'error' (blocks commit), 'warning' (advisory), 'info' (log only).",
+    )
+    threshold: float | None = Field(
+        default=None,
+        description="Numeric threshold (e.g., minimum coverage %, max cycle count).",
+    )
+    message: str = Field(
+        default="",
+        description="Custom message shown when rule fires.",
+    )
+
+
+class GovernanceConfig(BaseModel):
+    """Governance policies for checkpoint gating.
+
+    Defines rules that are evaluated at checkpoint time. Failed rules can
+    block commit (error level) or warn (warning level).
+
+    Env vars:
+        CODEPLANE__GOVERNANCE__COVERAGE_FLOOR: Minimum test coverage %
+        CODEPLANE__GOVERNANCE__LINT_CLEAN: Require lint-clean before commit
+    """
+
+    coverage_floor: GovernancePolicyRule = Field(
+        default_factory=lambda: GovernancePolicyRule(
+            enabled=False,
+            level="warning",
+            threshold=80.0,
+            message="Test coverage below {threshold}%.",
+        ),
+        description="Minimum test coverage percentage.",
+    )
+    lint_clean: GovernancePolicyRule = Field(
+        default_factory=lambda: GovernancePolicyRule(
+            enabled=False,
+            level="error",
+            message="Lint errors must be resolved before commit.",
+        ),
+        description="Require all changed files to be lint-clean.",
+    )
+    no_new_cycles: GovernancePolicyRule = Field(
+        default_factory=lambda: GovernancePolicyRule(
+            enabled=False,
+            level="warning",
+            message="New circular dependencies detected.",
+        ),
+        description="Block introduction of new dependency cycles.",
+    )
+    test_debt: GovernancePolicyRule = Field(
+        default_factory=lambda: GovernancePolicyRule(
+            enabled=True,
+            level="warning",
+            message="Source files changed without updating corresponding tests.",
+        ),
+        description="Warn when source files change without test updates.",
+    )
+    coverage_regression: GovernancePolicyRule = Field(
+        default_factory=lambda: GovernancePolicyRule(
+            enabled=False,
+            level="warning",
+            threshold=0.0,
+            message="Coverage decreased by more than {threshold}%.",
+        ),
+        description="Block coverage regressions beyond threshold.",
+    )
+    module_boundary: GovernancePolicyRule = Field(
+        default_factory=lambda: GovernancePolicyRule(
+            enabled=False,
+            level="info",
+            message="Cross-community import detected.",
+        ),
+        description="Warn on imports crossing community boundaries.",
+    )
+    centrality_impact: GovernancePolicyRule = Field(
+        default_factory=lambda: GovernancePolicyRule(
+            enabled=False,
+            level="info",
+            threshold=0.8,
+            message="Change affects a high-centrality symbol (top {threshold}).",
+        ),
+        description="Warn when changes affect high-PageRank symbols.",
+    )
+
+
 class CodeReconConfig(BaseModel):
     """Root configuration for CodeRecon.
 
@@ -345,3 +439,4 @@ class CodeReconConfig(BaseModel):
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     debug: DebugConfig = Field(default_factory=DebugConfig)
+    governance: GovernanceConfig = Field(default_factory=GovernanceConfig)
