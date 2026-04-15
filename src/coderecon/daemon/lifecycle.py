@@ -13,6 +13,7 @@ import structlog
 import uvicorn
 
 from coderecon.config.models import CodeReconConfig, IndexerConfig, ServerConfig, TimeoutsConfig
+from coderecon.daemon.concurrency import FreshnessGate
 from coderecon.daemon.indexer import BackgroundIndexer
 from coderecon.daemon.watcher import FileWatcher
 
@@ -29,12 +30,13 @@ PORT_FILE = "daemon.port"
 @dataclass
 class ServerController:
     """
-    Orchestrates daemon components.
+    Orchestrates daemon components for single-repo mode.
 
     Components:
     - IndexCoordinatorEngine: Database and search operations
     - BackgroundIndexer: Thread pool for CPU-bound indexing
     - FileWatcher: Async filesystem monitoring
+    - FreshnessGate: Per-worktree staleness tracking
     """
 
     repo_root: Path
@@ -42,6 +44,7 @@ class ServerController:
     server_config: ServerConfig
     timeouts_config: TimeoutsConfig = field(default_factory=TimeoutsConfig)
     indexer_config: IndexerConfig = field(default_factory=IndexerConfig)
+    gate: FreshnessGate = field(default_factory=FreshnessGate)
 
     indexer: BackgroundIndexer = field(init=False)
     watcher: FileWatcher = field(init=False)
@@ -49,16 +52,17 @@ class ServerController:
 
     def __post_init__(self) -> None:
         """Initialize components."""
-        # Create indexer with config
+        # Create indexer with config and gate
         self.indexer = BackgroundIndexer(
             coordinator=self.coordinator,
+            gate=self.gate,
             config=self.indexer_config,
         )
 
-        # Create watcher with configurable poll interval
+        # Create watcher — routes changes through indexer tagged as "main" worktree
         self.watcher = FileWatcher(
             repo_root=self.repo_root,
-            on_change=self.indexer.queue_paths,
+            on_change=lambda paths: self.indexer.queue_paths("main", paths),
             poll_interval=self.server_config.poll_interval_sec,
         )
 
@@ -173,7 +177,16 @@ async def run_server(
     from coderecon.daemon.app import create_app
 
     # Ensure index is up-to-date (silent - this is internal housekeeping)
-    await coordinator.reindex_full()
+    # Run in background after server starts to avoid blocking startup
+    import asyncio
+
+    async def _bg_reindex() -> None:
+        try:
+            await coordinator.reindex_full()
+        except Exception:
+            pass  # Non-fatal; server still usable with stale index
+
+    asyncio.get_event_loop().call_soon(lambda: asyncio.ensure_future(_bg_reindex()))
 
     # Print banner with logo
     from coderecon.cli.up import _print_banner

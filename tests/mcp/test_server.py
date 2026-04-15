@@ -49,7 +49,6 @@ class TestCreateMcpServer:
 
         tool_names = set(get_tools_sync(mcp).keys())
         assert "recon" in tool_names
-        assert "refactor_edit" in tool_names
         assert "checkpoint" in tool_names
         assert "describe" in tool_names
 

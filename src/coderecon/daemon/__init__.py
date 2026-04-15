@@ -1,13 +1,16 @@
-"""CodeRecon daemon - HTTP server with file watching and background indexing."""
+"""CodeRecon daemon - global multi-repo HTTP server with file watching and background indexing."""
 
-from coderecon.daemon.app import create_app
+from coderecon.daemon.concurrency import FreshnessGate, MutationRouter
+from coderecon.daemon.global_app import GlobalDaemon, RepoSlot, WorktreeSlot
 from coderecon.daemon.indexer import BackgroundIndexer
-from coderecon.daemon.lifecycle import ServerController
 from coderecon.daemon.watcher import FileWatcher
 
 __all__ = [
     "BackgroundIndexer",
-    "ServerController",
+    "FreshnessGate",
+    "GlobalDaemon",
+    "MutationRouter",
+    "RepoSlot",
     "FileWatcher",
-    "create_app",
+    "WorktreeSlot",
 ]

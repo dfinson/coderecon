@@ -43,7 +43,7 @@ class TestCreateRoutes:
         """Returns a list of Route objects."""
         routes = create_routes(mock_controller)
         assert isinstance(routes, list)
-        assert len(routes) == 2
+        assert len(routes) == 3
 
     def test_health_route_exists(self, mock_controller: MagicMock) -> None:
         """Health route is defined."""

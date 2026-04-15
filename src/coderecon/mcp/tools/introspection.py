@@ -47,14 +47,6 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
         code: str | None = Field(
             None, description="Error code to describe (required for action='error')"
         ),
-        gate_token: str | None = Field(
-            None,
-            description="Gate confirmation token from a previous gate block.",
-        ),
-        gate_reason: str | None = Field(
-            None,
-            description="Justification for passing the gate (min chars per gate spec).",
-        ),
     ) -> dict[str, Any]:
         """Introspection: describe tool parameters or error codes.
 

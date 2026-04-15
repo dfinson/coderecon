@@ -20,9 +20,12 @@ class TestAppContext:
         """AppContext has all required fields."""
         field_names = {f.name for f in fields(AppContext)}
         expected = {
+            "worktree_name",
             "repo_root",
             "git_ops",
             "coordinator",
+            "gate",
+            "router",
             "file_ops",
             "mutation_ops",
             "refactor_ops",
@@ -35,9 +38,12 @@ class TestAppContext:
     def test_manual_construction(self, tmp_path: Path) -> None:
         """Can construct AppContext manually."""
         ctx = AppContext(
+            worktree_name="main",
             repo_root=tmp_path,
             git_ops=MagicMock(),
             coordinator=MagicMock(),
+            gate=MagicMock(),
+            router=MagicMock(),
             file_ops=MagicMock(),
             mutation_ops=MagicMock(),
             refactor_ops=MagicMock(),
@@ -46,26 +52,4 @@ class TestAppContext:
             session_manager=MagicMock(),
         )
         assert ctx.repo_root == tmp_path
-
-
-class TestAppContextCreate:
-    """Tests for AppContext.create factory."""
-
-    def test_create_signature(self) -> None:
-        """create has expected signature."""
-        import inspect
-
-        sig = inspect.signature(AppContext.create)
-        params = list(sig.parameters.keys())
-        assert "repo_root" in params
-        assert "db_path" in params
-        assert "tantivy_path" in params
-        assert "coordinator" in params
-
-    def test_create_coordinator_optional(self) -> None:
-        """coordinator parameter is optional."""
-        import inspect
-
-        sig = inspect.signature(AppContext.create)
-        param = sig.parameters["coordinator"]
-        assert param.default is None
+        assert ctx.worktree_name == "main"

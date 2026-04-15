@@ -1,7 +1,10 @@
-"""Recon pipeline — ML-based context retrieval + tool registration.
+"""Recon pipeline — context retrieval + tool registration.
 
-Composes: raw_signals pipeline → gate → ranker → cutoff → output.
-Returns ranked semantic spans with code snippets + query metrics.
+Two ranking paths:
+  - **Model path** (when LightGBM models present): gate → file ranker →
+    def ranker → cutoff.
+  - **Heuristic path** (fallback): RRF fusion → file prune → elbow cutoff.
+
 Also registers the ``recon``, ``recon_map``, and optionally
 ``recon_raw_signals`` MCP tools.
 """
@@ -86,7 +89,6 @@ def _build_query_metrics(diagnostics: dict, candidates: list, seeds: list | None
     metrics = {
         "total_candidates_scored": total,
         "retriever_coverage": {
-            "embedding": diagnostics.get("emb_hits", 0),
             "term_match": diagnostics.get("term_hits", 0),
             "lexical": diagnostics.get("lex_hits", 0),
             "graph": diagnostics.get("graph_hits", 0),
@@ -153,27 +155,27 @@ def _build_hints(metrics: dict, gate_label: str) -> list[str]:
     return hints
 
 
+def _models_available() -> bool:
+    """Return True if all four ranking models are present on disk."""
+    data_dir = Path(__file__).resolve().parents[3] / "ranking" / "data"
+    return all(
+        (data_dir / name).exists()
+        for name in ("gate.lgbm", "file_ranker.lgbm", "ranker.lgbm", "cutoff.lgbm")
+    )
+
+
 async def recon_pipeline(
     app_ctx: AppContext,
     task: str,
     seeds: list[str] | None = None,
     pins: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Run the full recon pipeline: retrieve → gate → rank → cut → snippets.
+    """Run the full recon pipeline: retrieve → rank → cut → snippets.
 
-    Returns a dict with gate_label, ranked candidates with code snippets,
-    query metrics, hints, and diagnostics.
+    If LightGBM models are present: gate → file_ranker → ranker → cutoff.
+    Otherwise: RRF fusion → file prune → elbow cutoff (model-free).
     """
     from coderecon.mcp.tools.recon.raw_signals import raw_signals_pipeline
-    from coderecon.ranking.cutoff import load_cutoff
-    from coderecon.ranking.features import (
-        extract_cutoff_features,
-        extract_gate_features,
-        extract_ranker_features,
-    )
-    from coderecon.ranking.gate import load_gate
-    from coderecon.ranking.models import GateLabel
-    from coderecon.ranking.ranker import load_ranker
 
     t0 = time.monotonic()
     repo_root = app_ctx.coordinator.repo_root
@@ -185,7 +187,43 @@ async def recon_pipeline(
     repo_features = raw.get("repo_features", {})
     diagnostics = raw.get("diagnostics", {})
 
-    # 2. Gate
+    if _models_available():
+        return await _pipeline_model(
+            candidates, query_features, repo_features, diagnostics,
+            repo_root=repo_root, seeds=seeds, pins=pins, t0=t0,
+        )
+    log.info("ranking.heuristic_mode", reason="models_unavailable")
+    return _pipeline_heuristic(
+        candidates, diagnostics,
+        repo_root=repo_root, seeds=seeds, pins=pins, t0=t0,
+    )
+
+
+async def _pipeline_model(
+    candidates: list[dict[str, Any]],
+    query_features: dict[str, Any],
+    repo_features: dict[str, Any],
+    diagnostics: dict[str, Any],
+    *,
+    repo_root: Path,
+    seeds: list[str] | None,
+    pins: list[str] | None,
+    t0: float,
+) -> dict[str, Any]:
+    """Model path: gate → file ranker → def ranker → cutoff."""
+    from coderecon.ranking.cutoff import load_cutoff
+    from coderecon.ranking.features import (
+        extract_cutoff_features,
+        extract_file_ranker_features,
+        extract_gate_features,
+        extract_ranker_features,
+    )
+    from coderecon.ranking.file_ranker import load_file_ranker
+    from coderecon.ranking.gate import load_gate
+    from coderecon.ranking.models import GateLabel
+    from coderecon.ranking.ranker import load_ranker
+
+    # Gate
     gate = load_gate()
     gate_features = extract_gate_features(candidates, query_features, repo_features)
     gate_label = gate.classify(gate_features)
@@ -194,7 +232,6 @@ async def recon_pipeline(
         elapsed = round((time.monotonic() - t0) * 1000)
         metrics = {
             "scored": len(candidates),
-            "emb": diagnostics.get("emb_hits", 0),
             "term": diagnostics.get("term_hits", 0),
             "lex": diagnostics.get("lex_hits", 0),
             "graph": diagnostics.get("graph_hits", 0),
@@ -213,15 +250,29 @@ async def recon_pipeline(
             "hints": hints,
         }
 
-    # 3. Rank
+    # File Ranking (Stage 1) — prune to top files
+    file_ranker = load_file_ranker()
+    file_features, file_to_candidates = extract_file_ranker_features(
+        candidates, query_features,
+    )
+    file_scores = file_ranker.score(file_features)
+    scored_files = sorted(
+        zip(file_features, file_scores), key=lambda x: -x[1],
+    )
+    max_files = min(20, len(scored_files))
+    top_file_paths = {ff["_path"] for ff, _ in scored_files[:max_files]}
+    for c in candidates:
+        if c.get("symbol_source") in ("pin", "agent_seed"):
+            top_file_paths.add(c.get("path", ""))
+    filtered_candidates = [c for c in candidates if c.get("path", "") in top_file_paths]
+
+    # Def Ranking (Stage 2)
     ranker = load_ranker()
-    ranker_features = extract_ranker_features(candidates, query_features)
+    ranker_features = extract_ranker_features(filtered_candidates, query_features)
     scores = ranker.score(ranker_features)
+    scored = sorted(zip(filtered_candidates, scores), key=lambda x: -x[1])
 
-    # Pair candidates with scores and sort descending
-    scored = sorted(zip(candidates, scores), key=lambda x: -x[1])
-
-    # 4. Cutoff
+    # Cutoff
     cutoff = load_cutoff()
     ranked_for_cutoff = [{**c, "ranker_score": s} for c, s in scored]
     cutoff_features = extract_cutoff_features(
@@ -229,8 +280,67 @@ async def recon_pipeline(
     )
     predicted_n = cutoff.predict(cutoff_features)
 
-    # 5. Build output with snippets
-    # Top half: full snippet. Bottom half: signature only.
+    # Build output
+    return _build_output(
+        scored, predicted_n,
+        candidates=candidates, diagnostics=diagnostics,
+        repo_root=repo_root, seeds=seeds, pins=pins,
+        gate_label=gate_label.value, t0=t0,
+        extra_metrics={"files_scored": len(file_features), "files_kept": len(top_file_paths),
+                       "defs_ranked": len(filtered_candidates)},
+    )
+
+
+def _pipeline_heuristic(
+    candidates: list[dict[str, Any]],
+    diagnostics: dict[str, Any],
+    *,
+    repo_root: Path,
+    seeds: list[str] | None,
+    pins: list[str] | None,
+    t0: float,
+) -> dict[str, Any]:
+    """Heuristic path: RRF fusion → file prune → elbow cutoff."""
+    from coderecon.ranking.elbow import elbow_cut
+    from coderecon.ranking.rrf import rrf_file_prune, rrf_fuse
+
+    # Fuse harvester lists via RRF
+    fused = rrf_fuse(candidates)
+
+    # File-level prune
+    pinned_paths = set(pins) if pins else set()
+    pruned = rrf_file_prune(fused, pinned_paths=pinned_paths)
+
+    # Elbow cutoff on RRF scores
+    rrf_scores = [c["rrf_score"] for c in pruned]
+    predicted_n = elbow_cut(rrf_scores)
+
+    # Build (candidate, score) pairs for output builder
+    scored = [(c, c["rrf_score"]) for c in pruned]
+
+    return _build_output(
+        scored, predicted_n,
+        candidates=candidates, diagnostics=diagnostics,
+        repo_root=repo_root, seeds=seeds, pins=pins,
+        gate_label="OK", t0=t0,
+        extra_metrics={"strategy": "heuristic"},
+    )
+
+
+def _build_output(
+    scored: list[tuple[dict[str, Any], float]],
+    predicted_n: int,
+    *,
+    candidates: list[dict[str, Any]],
+    diagnostics: dict[str, Any],
+    repo_root: Path,
+    seeds: list[str] | None,
+    pins: list[str] | None,
+    gate_label: str,
+    t0: float,
+    extra_metrics: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the final output dict shared by both pipeline paths."""
     top_n = scored[:predicted_n]
     full_snippet_count = max(1, predicted_n // 2)
 
@@ -251,24 +361,25 @@ async def recon_pipeline(
 
         result_candidates.append(entry)
 
-    # 6. Compact metrics + hints
     elapsed = round((time.monotonic() - t0) * 1000)
-    metrics = {
+    metrics: dict[str, Any] = {
         "scored": len(candidates),
-        "emb": diagnostics.get("emb_hits", 0),
         "term": diagnostics.get("term_hits", 0),
         "lex": diagnostics.get("lex_hits", 0),
         "graph": diagnostics.get("graph_hits", 0),
         "sym": diagnostics.get("symbol_hits", 0),
         "ms": elapsed,
     }
+    if extra_metrics:
+        metrics.update(extra_metrics)
+
     hints = _build_hints(
         _build_query_metrics(diagnostics, result_candidates, seeds, pins),
-        gate_label.value,
-    )[:3]  # max 3 hints
+        gate_label,
+    )[:3]
 
     return {
-        "gate": gate_label.value,
+        "gate": gate_label,
         "results": result_candidates,
         "n": predicted_n,
         "metrics": metrics,
@@ -411,6 +522,41 @@ def register_tools(mcp: FastMCP, app_ctx: AppContext, *, dev_mode: bool = False)
                 "overview": _build_overview(map_result),
                 **_map_repo_sections_to_text(map_result),
             }
+
+            # Inject PageRank top symbols + files
+            try:
+                from coderecon.index._internal.analysis.code_graph import (
+                    build_def_graph,
+                    build_file_graph,
+                    compute_file_pagerank,
+                    compute_pagerank,
+                )
+
+                engine = app_ctx.coordinator.db.engine
+                fg = build_file_graph(engine)
+                if fg.number_of_nodes() > 0:
+                    top_files = compute_file_pagerank(fg, top_k=10)
+                    repo_map["pagerank_files"] = [
+                        {"path": path, "score": round(score, 6)}
+                        for path, score in top_files
+                    ]
+
+                dg = build_def_graph(engine)
+                if dg.number_of_nodes() > 0:
+                    top_defs = compute_pagerank(dg, top_k=10)
+                    repo_map["pagerank_defs"] = [
+                        {
+                            "def_uid": s.def_uid,
+                            "name": s.name,
+                            "kind": s.kind,
+                            "file": s.file_path,
+                            "score": round(s.pagerank, 6),
+                        }
+                        for s in top_defs
+                    ]
+            except Exception:  # noqa: BLE001
+                log.debug("recon_map.pagerank_skipped", exc_info=True)
+
         except Exception:  # noqa: BLE001
             log.warning("recon_map.failed", exc_info=True)
             repo_map = {"error": "Failed to build repo map"}

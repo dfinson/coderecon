@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from coderecon.config.models import IndexerConfig
+from coderecon.daemon.concurrency import FreshnessGate
 from coderecon.daemon.indexer import BackgroundIndexer, IndexerState
 
 
@@ -17,7 +18,7 @@ class TestBackgroundIndexer:
         """Indexer starts in idle state."""
         # Given
         coordinator = MagicMock()
-        indexer = BackgroundIndexer(coordinator=coordinator)
+        indexer = BackgroundIndexer(coordinator=coordinator, gate=FreshnessGate())
 
         # When
         indexer.start()
@@ -37,12 +38,12 @@ class TestBackgroundIndexer:
         # Given
         coordinator = MagicMock()
         indexer = BackgroundIndexer(
-            coordinator=coordinator, config=IndexerConfig(debounce_sec=10.0)
+            coordinator=coordinator, gate=FreshnessGate(), config=IndexerConfig(debounce_sec=10.0)
         )
         indexer.start()
 
         # When
-        indexer.queue_paths([Path("a.py"), Path("b.py")])
+        indexer.queue_paths("main", [Path("a.py"), Path("b.py")])
         # Allow async task scheduling to complete
         await asyncio.sleep(0)
 
@@ -56,7 +57,7 @@ class TestBackgroundIndexer:
         """Status returns current indexer state."""
         # Given
         coordinator = MagicMock()
-        indexer = BackgroundIndexer(coordinator=coordinator)
+        indexer = BackgroundIndexer(coordinator=coordinator, gate=FreshnessGate())
 
         # When
         status = indexer.status
@@ -72,7 +73,7 @@ class TestBackgroundIndexer:
         """Stopping indexer transitions to stopped state."""
         # Given
         coordinator = MagicMock()
-        indexer = BackgroundIndexer(coordinator=coordinator)
+        indexer = BackgroundIndexer(coordinator=coordinator, gate=FreshnessGate())
         indexer.start()
 
         # When
@@ -85,7 +86,7 @@ class TestBackgroundIndexer:
     def test_given_indexer_when_start_twice_then_noop(self) -> None:
         """Starting indexer twice is a no-op."""
         coordinator = MagicMock()
-        indexer = BackgroundIndexer(coordinator=coordinator)
+        indexer = BackgroundIndexer(coordinator=coordinator, gate=FreshnessGate())
 
         indexer.start()
         executor = indexer._executor
@@ -102,7 +103,7 @@ class TestBackgroundIndexer:
     async def test_given_stopped_indexer_when_stop_again_then_noop(self) -> None:
         """Stopping stopped indexer is a no-op."""
         coordinator = MagicMock()
-        indexer = BackgroundIndexer(coordinator=coordinator)
+        indexer = BackgroundIndexer(coordinator=coordinator, gate=FreshnessGate())
         indexer.start()
         await indexer.stop()
 
@@ -111,23 +112,23 @@ class TestBackgroundIndexer:
 
         assert indexer.status.state == IndexerState.STOPPED
 
-    def test_given_indexer_when_set_on_complete_then_callback_stored(self) -> None:
-        """set_on_complete stores the callback."""
+    def test_given_indexer_when_add_on_complete_then_callback_stored(self) -> None:
+        """add_on_complete appends the callback to the list."""
         coordinator = MagicMock()
-        indexer = BackgroundIndexer(coordinator=coordinator)
+        indexer = BackgroundIndexer(coordinator=coordinator, gate=FreshnessGate())
 
         async def callback(stats: object) -> None:
             pass
 
-        indexer.set_on_complete(callback)
+        indexer.add_on_complete(callback)
 
-        assert indexer._on_complete is callback
+        assert callback in indexer._on_complete_callbacks
 
     @pytest.mark.asyncio
     async def test_given_empty_queue_when_flush_then_noop(self) -> None:
         """Flushing empty queue does nothing."""
         coordinator = MagicMock()
-        indexer = BackgroundIndexer(coordinator=coordinator)
+        indexer = BackgroundIndexer(coordinator=coordinator, gate=FreshnessGate())
         indexer.start()
 
         await indexer._flush()
@@ -156,9 +157,9 @@ class TestBackgroundIndexer:
         )
         coordinator.reindex_incremental = AsyncMock(return_value=stats)
 
-        indexer = BackgroundIndexer(coordinator=coordinator)
+        indexer = BackgroundIndexer(coordinator=coordinator, gate=FreshnessGate())
         indexer.start()
-        indexer.queue_paths([Path("test.py")])
+        indexer.queue_paths("main", [Path("test.py")])
 
         # Flush and check no status output
         with patch("coderecon.daemon.indexer.status") as mock_status:
@@ -187,9 +188,9 @@ class TestBackgroundIndexer:
         )
         coordinator.reindex_incremental = AsyncMock(return_value=stats)
 
-        indexer = BackgroundIndexer(coordinator=coordinator)
+        indexer = BackgroundIndexer(coordinator=coordinator, gate=FreshnessGate())
         indexer.start()
-        indexer.queue_paths([Path("test.py")])
+        indexer.queue_paths("main", [Path("test.py")])
 
         with patch("coderecon.daemon.indexer.status") as mock_status:
             await indexer._flush()
@@ -206,7 +207,7 @@ class TestBackgroundIndexer:
         from coderecon.daemon.indexer import IndexerState
 
         coordinator = MagicMock()
-        indexer = BackgroundIndexer(coordinator=coordinator)
+        indexer = BackgroundIndexer(coordinator=coordinator, gate=FreshnessGate())
         indexer.start()
         indexer._state = IndexerState.STOPPING
 
@@ -1001,10 +1002,11 @@ class TestDaemonRoutes:
 
         routes = create_routes(controller)
 
-        assert len(routes) == 2
+        assert len(routes) == 3
         paths = {r.path for r in routes}
         assert "/health" in paths
         assert "/status" in paths
+        assert "/reindex" in paths
 
     def test_given_routes_when_health_called_then_returns_status(self, tmp_path: Path) -> None:
         """Health endpoint returns daemon info."""
@@ -1089,8 +1091,8 @@ class TestDaemonApp:
         app = create_app(controller, tmp_path, coordinator)
 
         assert isinstance(app, Starlette)
-        # 2 routes (health, status) + MCP mount
-        assert len(app.routes) == 3
+        # 3 routes (health, status, reindex) + MCP mount
+        assert len(app.routes) == 4
 
     def test_given_app_when_startup_then_controller_started(self, tmp_path: Path) -> None:
         """App startup triggers MCP lifespan (controller start/stop handled separately)."""

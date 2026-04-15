@@ -119,7 +119,15 @@ def create_routes(controller: ServerController) -> list[Route]:
 
         return JSONResponse(response)
 
+    async def reindex(request: Request) -> Response:
+        """Trigger a full reindex. Used by git hooks after checkout/merge."""
+        _ = request  # unused
+        # Queue the repo root for reindexing
+        controller.indexer.queue_paths([controller.repo_root])
+        return Response(status_code=202)
+
     return [
         Route("/health", health, methods=["GET"]),
         Route("/status", status, methods=["GET"]),
+        Route("/reindex", reindex, methods=["POST"]),
     ]

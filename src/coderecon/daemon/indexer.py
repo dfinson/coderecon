@@ -1,5 +1,8 @@
 """Background indexer using thread pool for CPU-bound work.
 
+Worktree-aware: changes are tagged with the source worktree so that
+FreshnessGate can mark only the affected worktree as stale/fresh.
+
 Improved logging:
 - Uses spinner with log suppression to prevent line collision (Issue #5)
 - Grammatically correct result summaries (Issue #4)
@@ -23,6 +26,7 @@ from coderecon.config.models import IndexerConfig
 from coderecon.core.progress import pluralize, spinner, status
 
 if TYPE_CHECKING:
+    from coderecon.daemon.concurrency import FreshnessGate
     from coderecon.index.ops import IndexCoordinatorEngine, IndexStats
 
 logger = structlog.get_logger()
@@ -57,19 +61,21 @@ class BackgroundIndexer:
     - Indexing work is submitted to ThreadPoolExecutor
     - Queue batches rapid changes with debouncing
     - IndexCoordinatorEngine locks ensure thread safety
+    - Changes are tagged with source worktree for per-worktree freshness
     """
 
     coordinator: IndexCoordinatorEngine
+    gate: FreshnessGate
     config: IndexerConfig = field(default_factory=IndexerConfig)
 
     _state: IndexerState = field(default=IndexerState.IDLE, init=False)
     _executor: ThreadPoolExecutor | None = field(default=None, init=False)
-    _pending_paths: set[Path] = field(default_factory=set, init=False)
+    _pending: dict[str, set[Path]] = field(default_factory=dict, init=False)
     _pending_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
     _debounce_task: asyncio.Task[None] | None = field(default=None, init=False)
     _last_stats: IndexStats | None = field(default=None, init=False)
     _last_error: str | None = field(default=None, init=False)
-    _on_complete: Callable[[IndexStats], Awaitable[None]] | None = field(default=None, init=False)
+    _on_complete_callbacks: list[Callable[[IndexStats, list[Path]], Awaitable[None]]] = field(default_factory=list, init=False)
 
     def start(self) -> None:
         """Start the background indexer."""
@@ -100,13 +106,14 @@ class BackgroundIndexer:
         self._state = IndexerState.STOPPED
         logger.info("background_indexer_stopped")
 
-    def queue_paths(self, paths: list[Path]) -> None:
-        """Queue paths for indexing with debouncing."""
+    def queue_paths(self, worktree: str, paths: list[Path]) -> None:
+        """Queue paths for indexing with debouncing, tagged by worktree."""
         with self._pending_lock:
-            self._pending_paths.update(paths)
-            count = len(self._pending_paths)
+            bucket = self._pending.setdefault(worktree, set())
+            bucket.update(paths)
+            count = sum(len(s) for s in self._pending.values())
 
-        logger.debug("paths_queued", new_paths=len(paths), total_pending=count)
+        logger.debug("paths_queued", worktree=worktree, new_paths=len(paths), total_pending=count)
 
         # Schedule debounced flush
         self._schedule_flush()
@@ -136,27 +143,41 @@ class BackgroundIndexer:
 
         # Atomically grab and clear pending paths
         with self._pending_lock:
-            if not self._pending_paths:
+            if not self._pending:
                 return
-            paths = list(self._pending_paths)
-            self._pending_paths.clear()
+            snapshot = {wt: list(ps) for wt, ps in self._pending.items() if ps}
+            self._pending.clear()
+
+        if not snapshot:
+            return
+
+        # Each worktree's changed files must be indexed under its own worktree
+        # tag so the lexical/vector indexes can discriminate by worktree.
+        affected_worktrees = list(snapshot.keys())
+
+        # Mark all affected worktrees stale BEFORE indexing
+        for wt in affected_worktrees:
+            self.gate.mark_stale(wt)
 
         self._state = IndexerState.INDEXING
 
         try:
-            # Build spinner message with grammatical correctness
-            spinner_msg = f"Reindexing {pluralize(len(paths), 'file')}"
+            # Calculate total file count across all worktrees for the spinner.
+            total_files = sum(len(paths) for paths in snapshot.values())
+            spinner_msg = f"Reindexing {pluralize(total_files, 'file')}"
 
             # Use spinner with log suppression (Issue #5)
             with spinner(spinner_msg):
-                # Run indexing in thread pool
+                # Index each worktree's files separately so documents are tagged
+                # with the correct worktree in Tantivy/vector stores.
                 loop = asyncio.get_event_loop()
                 stats = await loop.run_in_executor(
                     self._executor,
                     self._index_sync,
-                    paths,
+                    snapshot,
                 )
 
+            all_paths = [p for ps in snapshot.values() for p in ps]
             self._last_stats = stats
             self._last_error = None
 
@@ -176,31 +197,64 @@ class BackgroundIndexer:
                     f"{summary} ({stats.duration_seconds:.1f}s)", style="success", source="indexer"
                 )
 
-            # Notify completion callback
-            if self._on_complete is not None:
-                await self._on_complete(stats)
+            # Notify completion callbacks
+            for cb in self._on_complete_callbacks:
+                await cb(stats, all_paths)
 
         except Exception as e:
             self._last_error = str(e)
             logger.error("indexing_failed", error=str(e))
 
         finally:
+            # Mark all affected worktrees fresh
+            for wt in affected_worktrees:
+                self.gate.mark_fresh(wt)
             self._state = IndexerState.IDLE
 
-    def _index_sync(self, paths: list[Path]) -> IndexStats:
-        """Synchronous indexing - runs in thread pool."""
-        # Run async method in new event loop for thread
-        return asyncio.run(self.coordinator.reindex_incremental(paths))
+    def _index_sync(self, snapshot: dict[str, list[Path]]) -> IndexStats:
+        """Synchronous indexing - runs in thread pool.
 
-    def set_on_complete(self, callback: Callable[[IndexStats], Awaitable[None]]) -> None:
-        """Set callback to invoke after successful indexing."""
-        self._on_complete = callback
+        Iterates over each worktree's changed files and calls
+        ``reindex_incremental`` with the correct worktree tag so that
+        documents end up in the right column partition of the shared index.
+        """
+        from coderecon.index.ops import IndexStats as _IndexStats
+
+        combined = _IndexStats(
+            files_processed=0,
+            files_added=0,
+            files_updated=0,
+            files_removed=0,
+            symbols_indexed=0,
+            duration_seconds=0.0,
+        )
+        for wt, paths in snapshot.items():
+            if not paths:
+                continue
+            partial = asyncio.run(
+                self.coordinator.reindex_incremental(paths, worktree=wt)
+            )
+            combined.files_processed += partial.files_processed
+            combined.files_added += partial.files_added
+            combined.files_updated += partial.files_updated
+            combined.files_removed += partial.files_removed
+            combined.symbols_indexed += partial.symbols_indexed
+            combined.duration_seconds += partial.duration_seconds
+        return combined
+
+    def add_on_complete(self, callback: Callable[[IndexStats, list[Path]], Awaitable[None]]) -> None:
+        """Register a callback to invoke after successful indexing.
+
+        Multiple callbacks are supported (one per worktree). The callback
+        receives both the stats and the list of paths that were just reindexed.
+        """
+        self._on_complete_callbacks.append(callback)
 
     @property
     def status(self) -> IndexerStatus:
         """Get current indexer status."""
         with self._pending_lock:
-            queue_size = len(self._pending_paths)
+            queue_size = sum(len(s) for s in self._pending.values())
         return IndexerStatus(
             state=self._state,
             queue_size=queue_size,

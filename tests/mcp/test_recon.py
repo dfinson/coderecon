@@ -240,17 +240,6 @@ class TestReconRegistration:
         # Verify mcp.tool was called (to register the recon function)
         assert mcp_mock.tool.called
 
-
-class TestReconInGate:
-    """Tests for recon in TOOL_CATEGORIES."""
-
-    def test_recon_category(self) -> None:
-        from coderecon.mcp.gate import TOOL_CATEGORIES
-
-        assert "recon" in TOOL_CATEGORIES
-        assert TOOL_CATEGORIES["recon"] == "search"
-
-
 class TestReconInToolsInit:
     """Tests for recon in tools __init__."""
 
@@ -335,8 +324,8 @@ class TestEvidenceRecord:
     """Tests for EvidenceRecord dataclass."""
 
     def test_creation(self) -> None:
-        e = EvidenceRecord(category="embedding", detail="semantic similarity 0.850", score=0.85)
-        assert e.category == "embedding"
+        e = EvidenceRecord(category="term_match", detail="name matches term 'parse'", score=0.85)
+        assert e.category == "term_match"
         assert e.score == 0.85
 
     def test_default_score(self) -> None:
@@ -365,12 +354,12 @@ class TestHarvestCandidateNew:
         c = HarvestCandidate(
             def_uid="test::func",
             evidence=[
-                EvidenceRecord(category="embedding", detail="sim 0.9", score=0.9),
-                EvidenceRecord(category="term_match", detail="name match", score=0.5),
+                EvidenceRecord(category="term_match", detail="name match", score=0.9),
+                EvidenceRecord(category="explicit", detail="agent seed", score=0.5),
             ],
         )
         assert len(c.evidence) == 2
-        assert c.evidence[0].category == "embedding"
+        assert c.evidence[0].category == "term_match"
 
     def test_evidence_axes_unchanged(self) -> None:
         c = HarvestCandidate(def_uid="test::func", from_term_match=True, from_explicit=True)

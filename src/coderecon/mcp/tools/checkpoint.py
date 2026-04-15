@@ -1021,14 +1021,6 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
             False,
             description="Push to origin after auto-commit (only used with commit_message).",
         ),
-        gate_token: str | None = Field(
-            None,
-            description="Gate confirmation token from a previous gate block.",
-        ),
-        gate_reason: str | None = Field(
-            None,
-            description="Justification for passing the gate (min chars per gate spec).",
-        ),
     ) -> dict[str, Any]:
         """Lint, test, and optionally commit+push in one call.
 
@@ -1037,10 +1029,6 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
         2. discover + run tests affected by changed_files (via import graph)
         3. (optional) if commit_message is set and all checks pass:
            stage changed_files → pre-commit hooks → commit → push → lean semantic diff
-
-        On failure: returns a fix_plan with pre-minted edit tickets.
-        Budget resets automatically — call refactor_edit directly with
-        the fix_plan tickets (no new refactor_plan needed), then retry.
 
         Returns combined results with pass/fail verdict.
         """
@@ -1075,7 +1063,6 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
 
             # ── Reset session state so next task starts clean ──
             session.mutation_ctx.clear()
-            session.pattern_detector.clear()
             app_ctx.refactor_ops.clear_pending()
 
             from coderecon.mcp.delivery import wrap_response
@@ -1098,63 +1085,108 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
 
         # --- Phase 1: Lint ---
         if lint:
-            mode = "auto-fix" if autofix else "check-only"
-            await ctx.report_progress(phase, total_phases, f"Linting ({mode})")
-            lint_result = await app_ctx.lint_ops.check(
-                paths=changed_files or None,  # scope to changeset; None = full repo fallback
-                tools=None,
-                categories=None,
-                dry_run=not autofix,
-            )
-            lint_status = lint_result.status
-            lint_diagnostics = lint_result.total_diagnostics
-            phase += 1
+            # Fast-path: read cached lint facts if background pipeline already ran
+            cached_lint = None
+            if not autofix and changed_files:
+                try:
+                    from coderecon.mcp.tools._checkpoint_cache import try_read_lint_facts
 
-            if lint_status == "clean":
-                await ctx.info("Lint: clean")
-            else:
-                await ctx.info(
-                    f"Lint: {lint_diagnostics} issue(s), "
-                    f"{lint_result.total_files_modified} file(s) modified"
-                )
+                    cached_lint = try_read_lint_facts(
+                        engine=app_ctx.coordinator.db.engine,
+                        changed_files=changed_files,
+                        current_epoch=app_ctx.coordinator.get_current_epoch(),
+                    )
+                except Exception:  # noqa: BLE001
+                    cached_lint = None
 
-            # Build compact lint result: structured outer keys, text for issues
-            issue_lines: list[str] = []
-            for t in lint_result.tools_run:
-                for d in t.diagnostics:
-                    # Strip repo root prefix for brevity
-                    rel_path = d.path
-                    if "/" in rel_path:
-                        # Keep just the relative-looking portion
-                        for prefix in (str(app_ctx.repo_root) + "/",):
-                            if rel_path.startswith(prefix):
-                                rel_path = rel_path[len(prefix) :]
-                                break
-                    sev = d.severity.value[0].upper()  # W/E/I
-                    issue_lines.append(f"{rel_path}:{d.line}:{d.column} {sev} {d.code} {d.message}")
+            if cached_lint is not None:
+                # Use cached facts — near-instant
+                lint_status = "clean" if cached_lint.clean else "dirty"
+                lint_diagnostics = cached_lint.total_errors + cached_lint.total_warnings
+                phase += 1
 
-            result["lint"] = {
-                "status": lint_result.status,
-                "diagnostics": lint_result.total_diagnostics,
-                "fixed_files": lint_result.total_files_modified,
-                "duration": round(lint_result.duration_seconds, 2),
-            }
-            if issue_lines:
-                result["lint"]["issues"] = issue_lines
+                if cached_lint.clean:
+                    await ctx.info("Lint: clean (cached)")
+                else:
+                    await ctx.info(f"Lint: {lint_diagnostics} issue(s) (cached)")
 
-            if lint_result.agentic_hint:
-                result["lint"]["agentic_hint"] = lint_result.agentic_hint
-
-            # Fail-fast: skip tests if lint has issues
-            if lint_diagnostics > 0 and lint_status != "clean":
-                test_status = "skipped"
-                result["tests"] = {
-                    "status": "skipped",
-                    "reason": "lint failed — fix lint issues first",
+                result["lint"] = {
+                    "status": lint_status,
+                    "diagnostics": lint_diagnostics,
+                    "fixed_files": 0,
+                    "duration": 0.0,
+                    "cached": True,
                 }
-                # Don't return early — fall through to the unified failure
-                # block which handles fix_plan generation and wrap_response.
-                tests = False  # skip test phase
+                if cached_lint.issues:
+                    result["lint"]["issues"] = [
+                        f"{i['file']} {i['tool']} E:{i['errors']} W:{i['warnings']}"
+                        for i in cached_lint.issues
+                    ]
+
+                if lint_diagnostics > 0 and lint_status != "clean":
+                    test_status = "skipped"
+                    result["tests"] = {
+                        "status": "skipped",
+                        "reason": "lint failed — fix lint issues first",
+                    }
+                    tests = False
+            else:
+                # Live lint
+                mode = "auto-fix" if autofix else "check-only"
+                await ctx.report_progress(phase, total_phases, f"Linting ({mode})")
+                lint_result = await app_ctx.lint_ops.check(
+                    paths=changed_files or None,
+                    tools=None,
+                    categories=None,
+                    dry_run=not autofix,
+                )
+                lint_status = lint_result.status
+                lint_diagnostics = lint_result.total_diagnostics
+                phase += 1
+
+                if lint_status == "clean":
+                    await ctx.info("Lint: clean")
+                else:
+                    await ctx.info(
+                        f"Lint: {lint_diagnostics} issue(s), "
+                        f"{lint_result.total_files_modified} file(s) modified"
+                    )
+
+                # Build compact lint result: structured outer keys, text for issues
+                issue_lines: list[str] = []
+                for t in lint_result.tools_run:
+                    for d in t.diagnostics:
+                        # Strip repo root prefix for brevity
+                        rel_path = d.path
+                        if "/" in rel_path:
+                            # Keep just the relative-looking portion
+                            for prefix in (str(app_ctx.repo_root) + "/",):
+                                if rel_path.startswith(prefix):
+                                    rel_path = rel_path[len(prefix) :]
+                                    break
+                        sev = d.severity.value[0].upper()  # W/E/I
+                        issue_lines.append(f"{rel_path}:{d.line}:{d.column} {sev} {d.code} {d.message}")
+
+                result["lint"] = {
+                    "status": lint_result.status,
+                    "diagnostics": lint_result.total_diagnostics,
+                    "fixed_files": lint_result.total_files_modified,
+                    "duration": round(lint_result.duration_seconds, 2),
+                }
+                if issue_lines:
+                    result["lint"]["issues"] = issue_lines
+
+                if lint_result.agentic_hint:
+                    result["lint"]["agentic_hint"] = lint_result.agentic_hint
+
+                # Fail-fast: skip tests if lint has issues
+                if lint_diagnostics > 0 and lint_status != "clean":
+                    test_status = "skipped"
+                    result["tests"] = {
+                        "status": "skipped",
+                        "reason": "lint failed — fix lint issues first",
+                    }
+                    tests = False
 
         # --- Phase 2: Tests ---
         if tests:
@@ -1247,12 +1279,6 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
                     elif test_passed > 0:
                         await ctx.info(f"Tests: {test_passed} passed")
 
-                    # Track scoped test for pattern detection
-                    session = app_ctx.session_manager.get_or_create(ctx.session_id)
-                    session.pattern_detector.record(
-                        tool_name="checkpoint",
-                        category_override="test_scoped",
-                    )
             else:
                 test_status = "skipped"
                 if not all_targets:
@@ -1303,16 +1329,11 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
                 "Fix ALL issues before proceeding."
             )
 
-            # ── Gap 5: Regenerate resolve cache + edit tickets on failure ──
+            # ── Build failure-focused enrichment ──
             # Re-read changed files from disk with scaffolds so the agent
-            # has current content + sha256 + table of contents to make
-            # corrections without extra resolves.  Pre-mint edit tickets
-            # so the agent can call refactor_edit directly.
+            # has current content + table of contents to make corrections.
             try:
                 import hashlib
-                import uuid as _uuid
-
-                from coderecon.mcp.session import EditTicket
 
                 chk_session = app_ctx.session_manager.get_or_create(ctx.session_id)
                 repo_root = app_ctx.coordinator.repo_root
@@ -1333,7 +1354,6 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
                             "line_count": content_str.count("\n") + 1,
                             "file_sha256": sha,
                         }
-                        # Build scaffold (table of contents with symbol line ranges)
                         try:
                             from coderecon.mcp.tools.files import _build_scaffold
 
@@ -1346,71 +1366,9 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
                         continue
 
                 if refreshed:
-                    # ── Pre-mint edit tickets ──
-                    # Clear old mutation state, create fresh plan + tickets
                     chk_session.mutation_ctx.clear()
-                    chk_session.pattern_detector.clear()
                     app_ctx.refactor_ops.clear_pending()
 
-                    plan_id = f"fix_{_uuid.uuid4().hex[:12]}"
-                    minted_tickets: dict[str, EditTicket] = {}
-                    ticket_list: list[dict[str, str]] = []
-                    # Build candidate_id mapping from existing recon data
-                    id_to_path: dict[str, str] = {}
-                    for cmap in chk_session.candidate_maps.values():
-                        id_to_path.update(cmap)
-                    path_to_id = {v: k for k, v in id_to_path.items()}
-
-                    for r in refreshed:
-                        path = r["path"]
-                        sha = r["file_sha256"]
-                        cid = path_to_id.get(path, f"fix:{path}")
-                        ticket_id = f"{cid}:{sha[:8]}"
-                        ticket = EditTicket(
-                            ticket_id=ticket_id,
-                            path=path,
-                            sha256=sha,
-                            candidate_id=cid,
-                            issued_by="checkpoint_fix",
-                        )
-                        minted_tickets[ticket_id] = ticket
-                        ticket_list.append(
-                            {
-                                "candidate_id": cid,
-                                "path": path,
-                                "edit_ticket": ticket_id,
-                            }
-                        )
-
-                    # Store plan and tickets on session
-                    from coderecon.mcp.session import RefactorPlan
-
-                    fix_plan = RefactorPlan(
-                        plan_id=plan_id,
-                        recon_id=chk_session.last_recon_id or "fix",
-                        description="Fix lint/test failures from checkpoint",
-                        expected_edit_calls=1,
-                        edit_targets={
-                            path_to_id.get(r["path"], f"fix:{r['path']}"): r["path"]
-                            for r in refreshed
-                        },
-                        edit_tickets=minted_tickets,
-                    )
-                    chk_session.mutation_ctx.plan = fix_plan
-                    chk_session.mutation_ctx.edit_tickets.update(minted_tickets)
-
-                    # Build fix_plan response for inline + cache
-                    fix_plan_data: dict[str, Any] = {
-                        "plan_id": plan_id,
-                        "edit_tickets": ticket_list,
-                        "expected_edit_calls": 1,
-                    }
-                    result["fix_plan"] = fix_plan_data
-
-                    # ── Build failure-focused enrichment ──
-                    # Instead of caching full file content (which can be
-                    # 100KB+), extract focused snippets around failure
-                    # locations so the agent sees exactly what broke.
                     file_contents = {r["path"]: r["content"] for r in refreshed}
 
                     # Extract failure list from test results
@@ -1446,7 +1404,6 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
                         if isinstance(raw_scaffold, dict):
                             failure_scaffolds[r["path"]] = _render_scaffold(raw_scaffold)
 
-                    # File manifest (path + sha256 for edit tickets)
                     file_manifest = [
                         {
                             "path": r["path"],
@@ -1456,42 +1413,58 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
                         for r in refreshed
                     ]
 
-                    # Merge enrichment into checkpoint result —
-                    # everything in one cache, no separate resolve_refresh
                     result["failure_snippets"] = failure_snippets
                     result["failure_scaffolds"] = failure_scaffolds
                     result["file_manifest"] = file_manifest
 
-                    hints.append(
-                        f"\n\nFIX PLAN (plan_id={plan_id}, "
-                        f"{len(ticket_list)} ticket(s)):\n"
-                        "Edit tickets are pre-minted — call refactor_edit "
-                        "directly (skip refactor_plan).\n"
-                        "Mutation budget is RESET — you have fresh batches.\n"
-                        "Batch ALL fix edits (source + tests) into ONE call."
-                    )
-
             except Exception:  # noqa: BLE001
-                log.debug("checkpoint_failure_cache_failed", exc_info=True)
-                # Fallback: still clear mutation state
-                try:
-                    chk_session = app_ctx.session_manager.get_or_create(ctx.session_id)
-                    chk_session.mutation_ctx.clear()
-                    chk_session.pattern_detector.clear()
-                    app_ctx.refactor_ops.clear_pending()
-                except Exception:  # noqa: BLE001
-                    pass
+                log.debug("checkpoint_failure_enrichment_failed", exc_info=True)
 
             result["agentic_hint"] = " ".join(hints)
         else:
             result["passed"] = True
             await ctx.report_progress(total_phases, total_phases, "Checks passed")
 
-            # ── Reset mutation state and batch counter ──
+            # ── Governance gate evaluation ──
+            gate_hints: list[str] = []
+            try:
+                from coderecon.config.loader import load_config
+
+                from coderecon.index._internal.analysis.gate_engine import evaluate_gates
+
+                config = load_config(repo_root=app_ctx.repo_root)
+                gate_result = evaluate_gates(
+                    governance=config.governance,
+                    engine=app_ctx.coordinator.db.engine,
+                    changed_files=changed_files,
+                    lint_clean=lint_status == "clean",
+                    lint_diagnostics=lint_diagnostics,
+                    test_debt_info=_detect_test_debt(changed_files, app_ctx.repo_root)
+                    if changed_files
+                    else None,
+                )
+
+                if gate_result.violations:
+                    result["governance"] = gate_result.to_dict()
+                    for v in gate_result.errors:
+                        gate_hints.append(f"[GATE ERROR] {v.rule}: {v.message}")
+                    for v in gate_result.warnings:
+                        gate_hints.append(f"[GATE WARNING] {v.rule}: {v.message}")
+
+                    if not gate_result.passed:
+                        result["passed"] = False
+                        result["agentic_hint"] = " ".join(gate_hints)
+                        await ctx.warning(
+                            f"Governance: {len(gate_result.errors)} error(s), "
+                            f"{len(gate_result.warnings)} warning(s)"
+                        )
+            except Exception:  # noqa: BLE001
+                log.debug("checkpoint.governance.failed", exc_info=True)
+
+            # ── Reset mutation state ──
             try:
                 chk_session = app_ctx.session_manager.get_or_create(ctx.session_id)
                 chk_session.mutation_ctx.clear()
-                chk_session.pattern_detector.clear()
                 app_ctx.refactor_ops.clear_pending()
             except Exception:  # noqa: BLE001
                 pass
@@ -1499,7 +1472,7 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
             # --- Optional: Auto-commit ---
             if commit_message:
                 _validate_commit_message(commit_message)
-                repo_path = Path(app_ctx.git_ops.repo.workdir)
+                repo_path = Path(app_ctx.git_ops.path)
 
                 await ctx.report_progress(total_phases, total_phases + 2, "Staging changes")
                 if changed_files:

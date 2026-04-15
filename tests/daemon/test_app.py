@@ -8,7 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pygit2
+import subprocess
+
 import pytest
 from starlette.applications import Starlette
 from starlette.routing import Mount, Route
@@ -20,7 +21,7 @@ from coderecon.daemon.app import create_app
 def temp_repo(tmp_path: Path) -> Path:
     """Create a temporary repository structure with git initialized."""
     # Initialize git repo
-    pygit2.init_repository(str(tmp_path))
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
     (tmp_path / ".recon").mkdir()
     return tmp_path
 

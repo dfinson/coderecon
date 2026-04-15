@@ -103,7 +103,7 @@ def create_mcp_server(context: "AppContext", *, dev_mode: bool = False) -> "Fast
     from coderecon.mcp.tools import (
         checkpoint,
         diff,
-        edit,
+        graph,
         introspection,
         recon,
         refactor,
@@ -130,7 +130,7 @@ def create_mcp_server(context: "AppContext", *, dev_mode: bool = False) -> "Fast
     # Register all tools using native FastMCP decorators
     checkpoint.register_tools(mcp, context)
     diff.register_tools(mcp, context)
-    edit.register_tools(mcp, context)
+    graph.register_tools(mcp, context)
     recon.register_tools(mcp, context, dev_mode=dev_mode)
     refactor.register_tools(mcp, context)
     introspection.register_tools(mcp, context)
@@ -148,7 +148,16 @@ def run_server(repo_root: Path, db_path: Path, tantivy_path: Path) -> None:
     """Create and run the MCP server."""
     from coderecon.config.models import LoggingConfig, LogOutputConfig
     from coderecon.core.logging import configure_logging
+    from coderecon.daemon.concurrency import FreshnessGate, MutationRouter
+    from coderecon.files.ops import FileOps
+    from coderecon.git.ops import GitOps
+    from coderecon.index.ops import IndexCoordinatorEngine
+    from coderecon.lint.ops import LintOps
     from coderecon.mcp.context import AppContext
+    from coderecon.mcp.session import SessionManager
+    from coderecon.mutation.ops import MutationOps
+    from coderecon.refactor.ops import RefactorOps
+    from coderecon.testing.ops import TestOps
 
     # Generate session ID and log file path
     # Format: .recon/logs/YYYY-MM-DD/HHMMSS-<6-digit-hash>.log
@@ -180,7 +189,25 @@ def run_server(repo_root: Path, db_path: Path, tantivy_path: Path) -> None:
         session_id=session_id,
     )
 
-    context = AppContext.create(repo_root, db_path, tantivy_path)
+    coordinator = IndexCoordinatorEngine(repo_root, db_path, tantivy_path)
+    gate = FreshnessGate()
+    router = MutationRouter(coordinator, gate)
+    coordinator.set_freshness_gate(gate, "main")
+
+    context = AppContext(
+        worktree_name="main",
+        repo_root=repo_root,
+        git_ops=GitOps(repo_root),
+        coordinator=coordinator,
+        gate=gate,
+        router=router,
+        file_ops=FileOps(repo_root),
+        mutation_ops=MutationOps(repo_root),
+        refactor_ops=RefactorOps(repo_root, coordinator),
+        test_ops=TestOps(repo_root, coordinator),
+        lint_ops=LintOps(repo_root, coordinator),
+        session_manager=SessionManager(),
+    )
     mcp = create_mcp_server(context)
 
     log.info("mcp_server_running")

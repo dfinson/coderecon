@@ -4,7 +4,6 @@ Provides:
 - Structured error handling (catches exceptions, returns structured responses)
 - Console UX (spinner during execution, summary output after)
 - Logging with timing and result summaries
-- No tracebacks printed to console (exception log pointers instead)
 """
 
 from __future__ import annotations
@@ -29,20 +28,6 @@ log = structlog.get_logger(__name__)
 
 # Source tag for agent output - escaped for Rich markup
 _AGENT_TAG = "\\[agent] "
-
-
-# Periodic tool-preference reminders (ambient, not corrective).
-# Weighted rotation: A appears twice, B once per cycle.
-_REJOINDER_INTERVAL = 5
-_REJOINDERS = (
-    "REJOINDER: recon replaces grep/rg/find/ag/wc/ls. Read files via terminal (cat/head).",
-    "REJOINDER: checkpoint replaces direct test runner and linter invocation.",
-)
-_REJOINDER_ROTATION = (0, 1, 0)
-
-# How often to include the full suggested_workflow dict in pattern hints.
-# First detection always includes it; subsequent detections include it every Nth.
-_WORKFLOW_HINT_INTERVAL = 3
 
 
 def _timestamp() -> str:
@@ -104,10 +89,8 @@ class ToolMiddleware(Middleware):
         # tool call on the same session until the exclusive tool completes.
         # For regular tools, the lock is acquired and released quickly.
 
-        short = self._strip_tool_prefix(tool_name)
-
         if session:
-            async with session.exclusive(short):
+            async with session.exclusive(tool_name):
                 return await self._run_tool(
                     context,
                     call_next,
@@ -140,51 +123,6 @@ class ToolMiddleware(Middleware):
     ) -> Any:
         """Execute a tool call with structured error handling and UX."""
 
-        # ── Gap 2: Pre-call pattern violation gate ──
-        # If any pattern has been detected 3+ times, block the tool
-        # call entirely (short-circuit — tool never executes).
-        if context.fastmcp_context and self._session_manager:
-            session = self._session_manager.get_or_create(
-                context.fastmcp_context.session_id,
-            )
-            short = self._strip_tool_prefix(tool_name)
-            # Check if calling this tool would trigger a 3rd+ pattern detection
-            pre_match = session.pattern_detector.evaluate(current_tool=short)
-            if pre_match and pre_match.severity == "warn":
-                pk = f"pattern_{pre_match.pattern_name}_count"
-                count = session.counters.get(pk, 0)
-                if count >= 3:
-                    from coderecon.mcp.gate import build_pattern_hint
-
-                    hard_hint = build_pattern_hint(pre_match)
-                    duration_ms = (time.perf_counter() - start_time) * 1000
-                    log.warning(
-                        "tool_blocked_pattern",
-                        tool=tool_name,
-                        pattern=pre_match.pattern_name,
-                        count=count,
-                        duration_ms=round(duration_ms, 1),
-                    )
-                    return ToolResult(
-                        structured_content={
-                            "error": {
-                                "code": "PATTERN_VIOLATION",
-                                "message": (
-                                    f"Repeated pattern "
-                                    f"'{pre_match.pattern_name}' "
-                                    f"detected {count} times. "
-                                    "Tool execution blocked."
-                                ),
-                            },
-                            "agentic_hint": hard_hint.get(
-                                "agentic_hint",
-                                "Follow the suggested workflow.",
-                            ),
-                            "suggested_workflow": hard_hint.get("suggested_workflow"),
-                            "summary": (f"error: pattern violation ({pre_match.pattern_name})"),
-                        }
-                    )
-
         try:
             result = await call_next(context)
 
@@ -209,68 +147,6 @@ class ToolMiddleware(Middleware):
                     style="green",
                     highlight=False,
                 )
-
-            # Tick gate expiry, record call, and evaluate bypass patterns
-            bypass_match = self._post_call_bookkeeping(context, tool_name, arguments, result)
-
-            # --- Hint injection (pattern hints + periodic rejoinders) ---
-            # Both can coexist in the same response.  We accumulate changes
-            # into result_dict and repack into a new ToolResult at the end.
-            result_dict: dict[str, Any] | None = None
-            needs_repack = False
-
-            if bypass_match:
-                result_dict = self._extract_result_dict(result)
-                if result_dict is not None:
-                    from coderecon.mcp.gate import build_pattern_hint
-
-                    hint_fields = build_pattern_hint(bypass_match)
-
-                    # Track per-pattern count and escalate severity
-                    pattern_count = 1
-                    if context.fastmcp_context and self._session_manager:
-                        session = self._session_manager.get_or_create(
-                            context.fastmcp_context.session_id,
-                        )
-                        pk = f"pattern_{bypass_match.pattern_name}_count"
-                        pattern_count = session.counters.get(pk, 0) + 1
-                        session.counters[pk] = pattern_count
-
-                        n = session.counters.get("pattern_detections", 0) + 1
-                        session.counters["pattern_detections"] = n
-                        if n > 1 and n % _WORKFLOW_HINT_INTERVAL != 1:
-                            hint_fields.pop("suggested_workflow", None)
-
-                    # Escalation tiers by per-pattern repeat count
-                    # Tier 3+ is now a pre-call hard block (see _run_tool).
-                    # Tier 2: warn in response hint.
-                    base_hint = hint_fields["agentic_hint"]
-                    if pattern_count >= 2:
-                        hint_fields["agentic_hint"] = "⚠️ REPEATED WARNING: " + base_hint
-
-                    existing_hint = result_dict.get("agentic_hint")
-                    if existing_hint:
-                        hint_fields["agentic_hint"] = (
-                            existing_hint + "\n\n" + hint_fields["agentic_hint"]
-                        )
-
-                    result_dict.update(hint_fields)
-                    needs_repack = True
-
-            rejoinder = self._maybe_get_rejoinder(context)
-            if rejoinder:
-                if result_dict is None:
-                    result_dict = self._extract_result_dict(result)
-                if result_dict is not None:
-                    existing = result_dict.get("agentic_hint", "")
-                    if existing:
-                        result_dict["agentic_hint"] = existing + "\n\n" + rejoinder
-                    else:
-                        result_dict["agentic_hint"] = rejoinder
-                    needs_repack = True
-
-            if needs_repack and result_dict is not None:
-                return ToolResult(structured_content=result_dict)
 
             return result
 
@@ -481,104 +357,6 @@ class ToolMiddleware(Middleware):
         except Exception:
             # Don't let schema extraction failure break error handling
             return None
-
-    def _post_call_bookkeeping(
-        self,
-        context: MiddlewareContext[mt.CallToolRequest],
-        tool_name: str,
-        arguments: dict[str, Any],
-        result: Any,
-    ) -> Any:
-        """Gate tick + pattern recording after a successful tool call.
-
-        Returns the detected PatternMatch if a warn-severity bypass
-        pattern was found, or None.
-        """
-        if not context.fastmcp_context or not self._session_manager:
-            return
-
-        session = self._session_manager.get_or_create(context.fastmcp_context.session_id)
-
-        # 2. Record call in pattern detector
-        #    Strip MCP prefix (e.g. "coderecon-copy3_search" -> "search")
-        short_name = self._strip_tool_prefix(tool_name)
-
-        # Extract file paths from arguments or result for pattern tracking
-        files: list[str] = []
-        if "paths" in arguments:
-            files = arguments["paths"] if isinstance(arguments["paths"], list) else []
-        elif "targets" in arguments and isinstance(arguments["targets"], list):
-            files = [t.get("path", "") for t in arguments["targets"] if isinstance(t, dict)]
-
-        # Extract hit count from search results.
-        # Result may be CallToolResult (content items) or a dict.
-        result_dict = self._extract_result_dict(result)
-        hit_count = 0
-        if result_dict:
-            results_list = result_dict.get("results", [])
-            if isinstance(results_list, list):
-                hit_count = len(results_list)
-        # 3. Evaluate patterns BEFORE recording (recording may clear the window)
-        #    Return match so caller can replace the MCP result with a hint-injected one.
-        pattern_match = session.pattern_detector.evaluate(current_tool=short_name)
-
-        # 4. Record call in pattern detector (may clear window for action categories).
-        #    Checkpoint only clears when lint actually auto-fixed files (conditional mutation).
-        lint_mutated = False
-        if short_name == "checkpoint" and result_dict is not None:
-            lint_section = result_dict.get("lint")
-            if isinstance(lint_section, dict):
-                lint_mutated = lint_section.get("total_files_modified", 0) > 0
-        session.pattern_detector.record(
-            tool_name=short_name,
-            files=files,
-            hit_count=hit_count,
-            clears_window=lint_mutated,
-        )
-
-        if pattern_match and pattern_match.severity == "warn":
-            return pattern_match
-        return None
-
-    def _maybe_get_rejoinder(
-        self,
-        context: MiddlewareContext[mt.CallToolRequest],
-    ) -> str | None:
-        """Return a periodic tool-preference rejoinder, or ``None``.
-
-        Fires every ``_REJOINDER_INTERVAL`` successful tool calls using
-        a weighted rotation (A twice, B once per 3-slot cycle).
-        """
-        if not context.fastmcp_context or not self._session_manager:
-            return None
-
-        session = self._session_manager.get_or_create(
-            context.fastmcp_context.session_id,
-        )
-        count = session.counters.get("rejoinder_calls", 0) + 1
-        session.counters["rejoinder_calls"] = count
-
-        if count % _REJOINDER_INTERVAL != 0:
-            return None
-
-        slot = (count // _REJOINDER_INTERVAL - 1) % len(_REJOINDER_ROTATION)
-        return _REJOINDERS[_REJOINDER_ROTATION[slot]]
-
-    @staticmethod
-    def _strip_tool_prefix(tool_name: str) -> str:
-        """Strip MCP server prefix from tool name.
-
-        e.g. 'coderecon-copy3_search' -> 'search'
-        The prefix is everything up to the last underscore-separated
-        known tool name.
-        """
-        from coderecon.mcp.gate import TOOL_CATEGORIES
-
-        # Try matching from the longest suffix
-        for known in TOOL_CATEGORIES:
-            if tool_name.endswith(known):
-                return known
-        return tool_name
 
     def _extract_log_params(self, _tool_name: str, kwargs: dict[str, Any]) -> dict[str, Any]:
         """Extract relevant parameters for logging.

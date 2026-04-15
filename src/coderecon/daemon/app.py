@@ -1,4 +1,4 @@
-"""Starlette application factory."""
+"""Starlette application factory for single-repo daemon."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from starlette.applications import Starlette
 from starlette.routing import BaseRoute, Mount
 
+from coderecon.daemon.concurrency import FreshnessGate, MutationRouter
 from coderecon.daemon.middleware import RepoHeaderMiddleware
 from coderecon.daemon.routes import create_routes
 
@@ -26,22 +27,62 @@ def create_app(
     dev_mode: bool = False,
 ) -> Starlette:
     """Create the Starlette application with MCP server mounted."""
+    from coderecon.daemon.indexer import BackgroundIndexer
+    from coderecon.files.ops import FileOps
+    from coderecon.git.ops import GitOps
+    from coderecon.lint.ops import LintOps
     from coderecon.mcp.context import AppContext
     from coderecon.mcp.server import create_mcp_server
+    from coderecon.mcp.session import SessionManager
+    from coderecon.mutation.ops import MutationOps
+    from coderecon.refactor.ops import RefactorOps
+    from coderecon.testing.ops import TestOps
 
     routes: list[BaseRoute] = list(create_routes(controller))
 
     coderecon_dir = repo_root / ".recon"
 
-    context = AppContext.create(
+    # Single-repo mode: one worktree named "main"
+    gate = FreshnessGate()
+    router = MutationRouter(coordinator, gate)
+    coordinator.set_freshness_gate(gate, "main")
+
+    git_ops = GitOps(repo_root)
+    file_ops = FileOps(repo_root)
+    mutation_ops = MutationOps(repo_root)
+    refactor_ops = RefactorOps(repo_root, coordinator)
+    test_ops = TestOps(repo_root, coordinator)
+    lint_ops = LintOps(repo_root, coordinator)
+    session_manager = SessionManager()
+
+    context = AppContext(
+        worktree_name="main",
         repo_root=repo_root,
-        db_path=coderecon_dir / "index.db",
-        tantivy_path=coderecon_dir / "tantivy",
+        git_ops=git_ops,
         coordinator=coordinator,
+        gate=gate,
+        router=router,
+        file_ops=file_ops,
+        mutation_ops=mutation_ops,
+        refactor_ops=refactor_ops,
+        test_ops=test_ops,
+        lint_ops=lint_ops,
+        session_manager=session_manager,
     )
     mcp = create_mcp_server(context, dev_mode=dev_mode)
     mcp_app = mcp.http_app(path="/mcp", transport="streamable-http")
     routes.append(Mount("/", app=mcp_app))
+
+    # Wire background analysis pipeline (tier 1 lint + tier 2 tests)
+    from coderecon.daemon.analysis_pipeline import AnalysisPipeline
+
+    pipeline = AnalysisPipeline(
+        coordinator=coordinator,
+        lint_ops=context.lint_ops,
+        test_ops=context.test_ops,
+        repo_root=repo_root,
+    )
+    controller.indexer.add_on_complete(pipeline.on_index_complete)
 
     @asynccontextmanager
     async def lifespan(_app: Starlette) -> AsyncIterator[None]:

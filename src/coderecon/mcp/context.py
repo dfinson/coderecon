@@ -1,6 +1,7 @@
 """Application context for MCP handlers.
 
 Single object passed to all tool handlers with access to ops classes.
+Constructed per-worktree by the daemon layer.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from coderecon.daemon.concurrency import FreshnessGate, MutationRouter
     from coderecon.files.ops import FileOps
     from coderecon.git.ops import GitOps
     from coderecon.index.ops import IndexCoordinatorEngine
@@ -25,11 +27,15 @@ class AppContext:
     """Context object passed to all MCP tool handlers.
 
     Provides access to all ops classes and shared state.
+    One instance per worktree — constructed by the daemon layer.
     """
 
+    worktree_name: str
     repo_root: Path
     git_ops: GitOps
     coordinator: IndexCoordinatorEngine
+    gate: FreshnessGate
+    router: MutationRouter
     file_ops: FileOps
     mutation_ops: MutationOps
     refactor_ops: RefactorOps
@@ -38,61 +44,45 @@ class AppContext:
     session_manager: SessionManager
 
     @classmethod
-    def create(
+    def standalone(
         cls,
         repo_root: Path,
         db_path: Path,
         tantivy_path: Path,
-        coordinator: IndexCoordinatorEngine | None = None,
+        *,
+        worktree_name: str = "main",
     ) -> AppContext:
-        """Factory to create context with all ops wired together.
+        """Construct a self-contained context for scripts and lab code.
 
-        Args:
-            repo_root: Repository root path
-            db_path: Path to SQLite database
-            tantivy_path: Path to Tantivy index directory
-            coordinator: Optional existing IndexCoordinatorEngine (reuses if provided)
+        Creates all ops classes and concurrency primitives from scratch.
+        Not for use inside the daemon — the daemon builds these per-worktree.
         """
+        from coderecon.daemon.concurrency import FreshnessGate, MutationRouter
         from coderecon.files.ops import FileOps
         from coderecon.git.ops import GitOps
-        from coderecon.index.ops import IndexCoordinatorEngine as IC
+        from coderecon.index.ops import IndexCoordinatorEngine
         from coderecon.lint.ops import LintOps
         from coderecon.mcp.session import SessionManager
         from coderecon.mutation.ops import MutationOps
         from coderecon.refactor.ops import RefactorOps
         from coderecon.testing.ops import TestOps
 
-        git_ops = GitOps(repo_root)
-
-        # Reuse existing coordinator or create new one
-        if coordinator is None:
-            coordinator = IC(repo_root, db_path, tantivy_path)
-
-        file_ops = FileOps(repo_root)
-
-        # MutationOps triggers reindex on mutation
-        def on_mutation(paths: list[Path]) -> None:
-            import asyncio
-
-            # Mark stale SYNCHRONOUSLY before scheduling async reindex
-            # This prevents race where search runs before reindex task starts
-            coordinator.mark_stale()
-            asyncio.create_task(coordinator.reindex_incremental(paths))
-
-        mutation_ops = MutationOps(repo_root, on_mutation=on_mutation)
-        refactor_ops = RefactorOps(repo_root, coordinator)
-        test_ops = TestOps(repo_root, coordinator)
-        lint_ops = LintOps(repo_root, coordinator)
-        session_manager = SessionManager()
+        coordinator = IndexCoordinatorEngine(repo_root, db_path, tantivy_path)
+        gate = FreshnessGate()
+        router = MutationRouter(coordinator, gate)
+        coordinator.set_freshness_gate(gate, worktree_name)
 
         return cls(
+            worktree_name=worktree_name,
             repo_root=repo_root,
-            git_ops=git_ops,
+            git_ops=GitOps(repo_root),
             coordinator=coordinator,
-            file_ops=file_ops,
-            mutation_ops=mutation_ops,
-            refactor_ops=refactor_ops,
-            test_ops=test_ops,
-            lint_ops=lint_ops,
-            session_manager=session_manager,
+            gate=gate,
+            router=router,
+            file_ops=FileOps(repo_root),
+            mutation_ops=MutationOps(repo_root),
+            refactor_ops=RefactorOps(repo_root, coordinator),
+            test_ops=TestOps(repo_root, coordinator),
+            lint_ops=LintOps(repo_root, coordinator),
+            session_manager=SessionManager(),
         )

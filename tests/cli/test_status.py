@@ -7,7 +7,8 @@ from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pygit2
+import subprocess
+
 import pytest
 from click.testing import CliRunner
 
@@ -21,18 +22,13 @@ def temp_git_repo(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a temporary git repository with initial commit."""
     repo_path = tmp_path / "repo"
     repo_path.mkdir()
-    pygit2.init_repository(str(repo_path))
-
-    repo = pygit2.Repository(str(repo_path))
-    repo.config["user.name"] = "Test"
-    repo.config["user.email"] = "test@test.com"
+    subprocess.run(["git", "init"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=repo_path, capture_output=True, check=True)
 
     (repo_path / "README.md").write_text("# Test repo")
-    repo.index.add("README.md")
-    repo.index.write()
-    tree = repo.index.write_tree()
-    sig = pygit2.Signature("Test", "test@test.com")
-    repo.create_commit("HEAD", sig, sig, "Initial commit", tree, [])
+    subprocess.run(["git", "add", "README.md"], cwd=repo_path, capture_output=True, check=True)
+    subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_path, capture_output=True, check=True)
 
     yield repo_path
 
@@ -89,7 +85,7 @@ class TestStatusCommand:
         data = json.loads(result.output)
         assert data["initialized"] is False
 
-    @patch("coderecon.cli.status.is_server_running")
+    @patch("coderecon.cli.status.is_global_server_running")
     def test_given_initialized_repo_not_running_when_status_then_reports_not_running(
         self, mock_is_running: MagicMock, initialized_repo: Path
     ) -> None:
@@ -100,7 +96,7 @@ class TestStatusCommand:
         assert result.exit_code == 0
         assert "not running" in result.output.lower()
 
-    @patch("coderecon.cli.status.is_server_running")
+    @patch("coderecon.cli.status.is_global_server_running")
     def test_given_initialized_repo_not_running_when_status_json_then_returns_running_false(
         self, mock_is_running: MagicMock, initialized_repo: Path
     ) -> None:
@@ -114,8 +110,8 @@ class TestStatusCommand:
         assert data["running"] is False
 
     @patch("coderecon.cli.status.httpx.get")
-    @patch("coderecon.cli.status.read_server_info")
-    @patch("coderecon.cli.status.is_server_running")
+    @patch("coderecon.cli.status.read_global_server_info")
+    @patch("coderecon.cli.status.is_global_server_running")
     def test_given_running_daemon_when_status_then_reports_running(
         self,
         mock_is_running: MagicMock,
@@ -127,7 +123,7 @@ class TestStatusCommand:
         mock_is_running.return_value = True
         mock_read_info.return_value = (12345, 8765)
         mock_httpx_get.return_value = MagicMock(
-            json=lambda: {"indexer": {"state": "idle"}, "watcher": {"running": True}}
+            json=lambda: {"active_repos": ["repo"], "indexer": {"state": "idle"}, "worktrees": {}}
         )
 
         result = runner.invoke(cli, ["status", str(initialized_repo)])
@@ -137,8 +133,8 @@ class TestStatusCommand:
         assert "8765" in result.output
 
     @patch("coderecon.cli.status.httpx.get")
-    @patch("coderecon.cli.status.read_server_info")
-    @patch("coderecon.cli.status.is_server_running")
+    @patch("coderecon.cli.status.read_global_server_info")
+    @patch("coderecon.cli.status.is_global_server_running")
     def test_given_running_daemon_when_status_json_then_returns_full_status(
         self,
         mock_is_running: MagicMock,
@@ -150,7 +146,7 @@ class TestStatusCommand:
         mock_is_running.return_value = True
         mock_read_info.return_value = (12345, 8765)
         mock_httpx_get.return_value = MagicMock(
-            json=lambda: {"indexer": {"state": "idle"}, "watcher": {"running": True}}
+            json=lambda: {"active_repos": ["repo"], "indexer": {"state": "idle"}, "worktrees": {}}
         )
 
         result = runner.invoke(cli, ["status", "--json", str(initialized_repo)])
@@ -160,11 +156,9 @@ class TestStatusCommand:
         assert data["running"] is True
         assert data["pid"] == 12345
         assert data["port"] == 8765
-        assert "indexer" in data
-        assert "watcher" in data
 
-    @patch("coderecon.cli.status.read_server_info")
-    @patch("coderecon.cli.status.is_server_running")
+    @patch("coderecon.cli.status.read_global_server_info")
+    @patch("coderecon.cli.status.is_global_server_running")
     def test_given_stale_pid_file_when_status_then_reports_stale(
         self,
         mock_is_running: MagicMock,
@@ -180,8 +174,8 @@ class TestStatusCommand:
         assert "stale" in result.output.lower() or "not running" in result.output.lower()
 
     @patch("coderecon.cli.status.httpx.get")
-    @patch("coderecon.cli.status.read_server_info")
-    @patch("coderecon.cli.status.is_server_running")
+    @patch("coderecon.cli.status.read_global_server_info")
+    @patch("coderecon.cli.status.is_global_server_running")
     def test_given_daemon_http_error_when_status_then_reports_unavailable(
         self,
         mock_is_running: MagicMock,

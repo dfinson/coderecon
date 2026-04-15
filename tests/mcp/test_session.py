@@ -2,7 +2,6 @@
 
 Covers:
 - SessionState dataclass and touch()
-- EditTicket dataclass
 - SessionManager.get_or_create()
 - SessionManager.get()
 - SessionManager.close()
@@ -364,97 +363,30 @@ class TestExclusiveLock:
         assert "map_repo" not in EXCLUSIVE_TOOLS
 
 
-class TestEditTicket:
-    """Tests for EditTicket dataclass."""
-
-    def test_create(self) -> None:
-        from coderecon.mcp.session import EditTicket
-
-        t = EditTicket(
-            ticket_id="abc:0:deadbeef",
-            path="src/foo.py",
-            sha256="deadbeef" * 8,
-            candidate_id="abc:0",
-            issued_by="resolve",
-        )
-        assert t.ticket_id == "abc:0:deadbeef"
-        assert t.path == "src/foo.py"
-        assert t.used is False
-
-    def test_used_flag(self) -> None:
-        from coderecon.mcp.session import EditTicket
-
-        t = EditTicket(
-            ticket_id="abc:0:deadbeef",
-            path="src/foo.py",
-            sha256="deadbeef" * 8,
-            candidate_id="abc:0",
-            issued_by="resolve",
-        )
-        assert t.used is False
-        t.used = True
-        assert t.used is True
-
-
-class TestSessionStateEditTickets:
-    """Tests for edit ticket fields on SessionState."""
-
-    def test_defaults(self) -> None:
-        s = SessionState(session_id="s", created_at=0, last_active=0)
-        assert s.edit_tickets == {}
-        assert s.edits_since_checkpoint == 0
-
-    def test_ticket_storage(self) -> None:
-        from coderecon.mcp.session import EditTicket
-
-        s = SessionState(session_id="s", created_at=0, last_active=0)
-        t = EditTicket(
-            ticket_id="r:0:abcd1234",
-            path="foo.py",
-            sha256="abcd1234" * 8,
-            candidate_id="r:0",
-            issued_by="resolve",
-        )
-        s.edit_tickets[t.ticket_id] = t
-        assert "r:0:abcd1234" in s.edit_tickets
-
-    def test_max_edit_batches_constant(self) -> None:
-        from coderecon.mcp.session import _MAX_EDIT_BATCHES
-
-        assert _MAX_EDIT_BATCHES == 4
+class TestLastReconId:
+    """Tests for last_recon_id on SessionState."""
 
     def test_last_recon_id_default(self) -> None:
-        """Gap 4: last_recon_id defaults to None."""
+        """last_recon_id defaults to None."""
         s = SessionState(session_id="s", created_at=0, last_active=0)
         assert s.last_recon_id is None
 
     def test_last_recon_id_set(self) -> None:
-        """Gap 4: last_recon_id can be set."""
+        """last_recon_id can be set."""
         s = SessionState(session_id="s", created_at=0, last_active=0)
         s.last_recon_id = "recon_abc123"
         assert s.last_recon_id == "recon_abc123"
 
 
 class TestMutationContext:
-    """Tests for MutationContext unified lifecycle tracker."""
+    """Tests for MutationContext lifecycle tracker."""
 
     def test_defaults(self) -> None:
         from coderecon.mcp.session import MutationContext
 
         ctx = MutationContext()
-        assert ctx.plan is None
-        assert ctx.edit_tickets == {}
         assert ctx.pending_refactors == {}
-        assert ctx.mutations_since_checkpoint == 0
         assert ctx.context_id  # auto-generated
-
-    def test_has_plan(self) -> None:
-        from coderecon.mcp.session import MutationContext, RefactorPlan
-
-        ctx = MutationContext()
-        assert not ctx.has_plan
-        ctx.plan = RefactorPlan(plan_id="p1", recon_id="r1", description="test")
-        assert ctx.has_plan
 
     def test_has_pending_refactors(self) -> None:
         from coderecon.mcp.session import MutationContext
@@ -465,83 +397,21 @@ class TestMutationContext:
         assert ctx.has_pending_refactors
 
     def test_is_empty(self) -> None:
-        from coderecon.mcp.session import MutationContext, RefactorPlan
+        from coderecon.mcp.session import MutationContext
 
         ctx = MutationContext()
         assert ctx.is_empty
-        ctx.plan = RefactorPlan(plan_id="p1", recon_id="r1", description="test")
-        assert not ctx.is_empty
-        ctx.plan = None
         ctx.pending_refactors["ref1"] = "rename"
         assert not ctx.is_empty
 
     def test_clear(self) -> None:
-        from coderecon.mcp.session import EditTicket, MutationContext, RefactorPlan
+        from coderecon.mcp.session import MutationContext
 
         ctx = MutationContext()
-        ctx.plan = RefactorPlan(plan_id="p1", recon_id="r1", description="test")
-        ctx.edit_tickets["t1"] = EditTicket(
-            ticket_id="t1",
-            path="a.py",
-            sha256="abc",
-            candidate_id="c1",
-            issued_by="resolve",
-        )
         ctx.pending_refactors["ref1"] = "rename"
-        ctx.mutations_since_checkpoint = 3
 
         ctx.clear()
 
-        assert ctx.plan is None
-        assert ctx.edit_tickets == {}
         assert ctx.pending_refactors == {}
-        assert ctx.mutations_since_checkpoint == 0
 
 
-class TestBackwardCompatProperties:
-    """Tests that SessionState backward-compat properties delegate to mutation_ctx."""
-
-    def test_active_plan_getter(self) -> None:
-        from coderecon.mcp.session import RefactorPlan
-
-        s = SessionState(session_id="s", created_at=0, last_active=0)
-        assert s.active_plan is None
-        plan = RefactorPlan(plan_id="p1", recon_id="r1", description="test")
-        s.mutation_ctx.plan = plan
-        assert s.active_plan is plan
-
-    def test_active_plan_setter(self) -> None:
-        from coderecon.mcp.session import RefactorPlan
-
-        s = SessionState(session_id="s", created_at=0, last_active=0)
-        plan = RefactorPlan(plan_id="p1", recon_id="r1", description="test")
-        s.active_plan = plan
-        assert s.mutation_ctx.plan is plan
-        s.active_plan = None
-        assert s.mutation_ctx.plan is None
-
-    def test_edit_tickets_delegates(self) -> None:
-        from coderecon.mcp.session import EditTicket
-
-        s = SessionState(session_id="s", created_at=0, last_active=0)
-        ticket = EditTicket(
-            ticket_id="t1",
-            path="a.py",
-            sha256="abc",
-            candidate_id="c1",
-            issued_by="resolve",
-        )
-        s.mutation_ctx.edit_tickets["t1"] = ticket
-        assert s.edit_tickets["t1"] is ticket
-        assert s.edit_tickets is s.mutation_ctx.edit_tickets
-
-    def test_edits_since_checkpoint_getter(self) -> None:
-        s = SessionState(session_id="s", created_at=0, last_active=0)
-        assert s.edits_since_checkpoint == 0
-        s.mutation_ctx.mutations_since_checkpoint = 5
-        assert s.edits_since_checkpoint == 5
-
-    def test_edits_since_checkpoint_setter(self) -> None:
-        s = SessionState(session_id="s", created_at=0, last_active=0)
-        s.edits_since_checkpoint = 3
-        assert s.mutation_ctx.mutations_since_checkpoint == 3

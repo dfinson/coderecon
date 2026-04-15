@@ -100,13 +100,11 @@ TOOL_DOCS: dict[str, ToolDocumentation] = {
             "Understanding what files are relevant to a task",
             "Getting scaffolds (imports + signatures) for key files",
         ],
-        when_not_to_use=[
-            "Already called recon this task (hard-gated to 1 call per task)",
-        ],
+        when_not_to_use=[],
         hints_before=None,
         hints_after="Read files via terminal (cat, head) using paths from scaffolds.",
         commonly_preceded_by=[],
-        commonly_followed_by=["refactor_plan", "refactor_rename"],
+        commonly_followed_by=["refactor_rename"],
         behavior=BehaviorFlags(idempotent=False, has_side_effects=True),
         possible_errors=[],
         examples=[
@@ -120,67 +118,6 @@ TOOL_DOCS: dict[str, ToolDocumentation] = {
                     "task": "Rename UserService to AccountService",
                     "seeds": ["UserService"],
                     "read_only": False,
-                },
-            },
-        ],
-    ),
-    "refactor_plan": ToolDocumentation(
-        name="refactor_plan",
-        description="Declare edit targets, get plan_id + edit_tickets with SHA256 locks.",
-        category=ToolCategory.MUTATION,
-        when_to_use=[
-            "Before editing files — declare what you intend to change",
-            "Getting SHA256-locked edit tickets for safe concurrent editing",
-        ],
-        when_not_to_use=[
-            "For symbol renames across files — use refactor_rename",
-            "For file moves — use refactor_move",
-        ],
-        hints_before="Call recon first to discover candidate files.",
-        hints_after="Use refactor_edit with the returned edit_tickets.",
-        commonly_preceded_by=["recon"],
-        commonly_followed_by=["refactor_edit"],
-        behavior=BehaviorFlags(has_side_effects=True),
-        possible_errors=[],
-        examples=[
-            {
-                "description": "Plan edits to specific files",
-                "params": {"edit_targets": ["candidate_id_1", "candidate_id_2"]},
-            },
-        ],
-    ),
-    "refactor_edit": ToolDocumentation(
-        name="refactor_edit",
-        description="Find-and-replace edits with SHA256 locking. One call can edit multiple files.",
-        category=ToolCategory.MUTATION,
-        when_to_use=[
-            "Making precise code changes after refactor_plan",
-            "Batch editing multiple files in one call",
-        ],
-        when_not_to_use=[
-            "Renaming symbols across files — use refactor_rename",
-            "Without a plan — call refactor_plan first",
-        ],
-        hints_before="Get edit_tickets from refactor_plan first.",
-        hints_after="Call checkpoint to lint, test, and commit your changes.",
-        commonly_preceded_by=["refactor_plan"],
-        commonly_followed_by=["checkpoint"],
-        behavior=BehaviorFlags(has_side_effects=True, atomic=True),
-        possible_errors=["HASH_MISMATCH"],
-        examples=[
-            {
-                "description": "Edit a file",
-                "params": {
-                    "plan_id": "...",
-                    "edits": [
-                        {
-                            "edit_ticket": "...",
-                            "path": "src/foo.py",
-                            "old_content": "old code",
-                            "new_content": "new code",
-                            "expected_file_sha256": "...",
-                        }
-                    ],
                 },
             },
         ],
@@ -200,8 +137,8 @@ TOOL_DOCS: dict[str, ToolDocumentation] = {
         ],
         when_not_to_use=[],
         hints_before=None,
-        hints_after="On failure, budget resets and fix_plan with pre-minted tickets is returned.",
-        commonly_preceded_by=["refactor_edit"],
+        hints_after="On failure, returns failure snippets and scaffolds for affected files.",
+        commonly_preceded_by=[],
         commonly_followed_by=[],
         behavior=BehaviorFlags(has_side_effects=True, may_be_slow=True),
         possible_errors=["HOOK_FAILED", "HOOK_FAILED_AFTER_RETRY"],
@@ -227,7 +164,7 @@ TOOL_DOCS: dict[str, ToolDocumentation] = {
         when_not_to_use=[],
         hints_before=None,
         hints_after="Read changed files via terminal for full context.",
-        commonly_preceded_by=["refactor_edit"],
+        commonly_preceded_by=[],
         commonly_followed_by=["checkpoint"],
         behavior=BehaviorFlags(idempotent=True, has_side_effects=False),
         possible_errors=[],
@@ -303,7 +240,7 @@ TOOL_DOCS: dict[str, ToolDocumentation] = {
         hints_before=None,
         hints_after="Read affected files via terminal.",
         commonly_preceded_by=["recon"],
-        commonly_followed_by=["refactor_plan"],
+        commonly_followed_by=["refactor_rename"],
         behavior=BehaviorFlags(idempotent=True, has_side_effects=False),
         possible_errors=[],
         examples=[
@@ -420,7 +357,7 @@ def get_common_workflows() -> list[dict[str, Any]]:
         {
             "name": "modification",
             "description": "Making code changes",
-            "tools": ["recon", "refactor_plan", "refactor_edit", "checkpoint"],
+            "tools": ["recon", "refactor_rename", "refactor_commit", "checkpoint"],
         },
         {
             "name": "refactoring",

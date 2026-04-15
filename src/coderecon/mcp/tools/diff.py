@@ -57,14 +57,6 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
         target: str | None = Field(None, description="Target ref (None = working tree)"),
         paths: list[str] | None = Field(None, description="Limit to specific paths"),
         scope_id: str | None = Field(None, description="Scope ID for budget tracking"),
-        gate_token: str | None = Field(
-            None,
-            description="Gate confirmation token from a previous gate block.",
-        ),
-        gate_reason: str | None = Field(
-            None,
-            description="Justification for passing the gate (min chars per gate spec).",
-        ),
     ) -> dict[str, Any]:
         """Structural change summary from index facts.
 
@@ -87,19 +79,9 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
 
         result_dict = _result_to_text(result)
 
-        # Track scope usage
-        scope_usage = None
-        if scope_id:
-            from coderecon.mcp.tools.files import _scope_manager
-
-            budget = _scope_manager.get_or_create(scope_id)
-            scope_usage = budget.to_usage_dict()
-
         return wrap_response(
             result_dict,
             resource_kind="semantic_diff",
-            scope_id=scope_id,
-            scope_usage=scope_usage,
         )
 
 
@@ -110,48 +92,56 @@ def _run_git_diff(
     paths: list[str] | None,
 ) -> SemanticDiffResult:
     """Run semantic diff in git mode."""
+    import re
+
     from coderecon.git._internal.planners import DiffPlanner
 
     git_ops = app_ctx.git_ops
-    repo = git_ops._access.repo
     planner = DiffPlanner(git_ops._access)
 
     plan = planner.plan(base=base, target=target, staged=False)
-    pygit2_diff = planner.execute(plan)
+    diff_result = planner.execute(plan)
 
-    # Extract changed files and hunks
+    # Extract changed files from numstat
     changed_files: list[ChangedFile] = []
     hunks: dict[str, list[tuple[int, int]]] = {}
 
-    for patch in pygit2_diff:
-        file_path = patch.delta.new_file.path or patch.delta.old_file.path  # type: ignore[union-attr]
+    for status_char, adds, dels, file_path in diff_result.numstat:
         if paths and file_path not in paths:
             continue
 
-        status = _DELTA_STATUS_MAP.get(patch.delta.status, "modified")  # type: ignore[union-attr]
+        status = _DELTA_STATUS_MAP.get(status_char, "modified")
 
         lang = detect_language_family(file_path)
         file_has_grammar = bool(lang and has_grammar(lang))
 
         changed_files.append(ChangedFile(file_path, status, file_has_grammar, language=lang))
 
-        # Extract hunks
-        file_hunks: list[tuple[int, int]] = []
-        for hunk in patch.hunks:  # type: ignore[union-attr]
-            start = hunk.new_start
-            end = start + hunk.new_lines - 1
-            if end >= start:
-                file_hunks.append((start, end))
-        hunks[file_path] = file_hunks
+    # Extract hunks from unified diff text
+    _HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", re.MULTILINE)
+    current_file: str | None = None
+    for line in diff_result.diff_text.splitlines():
+        if line.startswith("+++ b/"):
+            current_file = line[6:]
+            if current_file not in hunks:
+                hunks[current_file] = []
+        elif line.startswith("+++ /dev/null"):
+            current_file = None
+        elif current_file:
+            m = _HUNK_RE.match(line)
+            if m:
+                start = int(m.group(1))
+                count = int(m.group(2)) if m.group(2) else 1
+                end = start + count - 1
+                if end >= start:
+                    hunks[current_file].append((start, end))
 
     # Build snapshots for each file
     base_facts: dict[str, list[DefSnapshot]] = {}
     target_facts: dict[str, list[DefSnapshot]] = {}
 
-    # Resolve base commit for blob parsing
-    base_commit = None
-    if plan.base_oid:
-        base_commit = repo[plan.base_oid]
+    # Resolve base ref for blob parsing
+    base_sha = plan.base_sha
 
     coordinator = app_ctx.coordinator
     db = coordinator.db
@@ -166,8 +156,8 @@ def _run_git_diff(
             target_facts[cf.path] = snapshots_from_index(session, cf.path)
 
             # Base: parse from git blob (CPU, no DB)
-            if base_commit and cf.status != "added":
-                base_facts[cf.path] = snapshots_from_blob(repo, base_commit, cf.path)
+            if base_sha and cf.status != "added":
+                base_facts[cf.path] = snapshots_from_blob(git_ops._access, base_sha, cf.path)
             else:
                 base_facts[cf.path] = []
 
@@ -178,7 +168,7 @@ def _run_git_diff(
         result = enrich_diff(raw, session, app_ctx.repo_root)
 
     # Annotate with change previews from the actual patch lines
-    _annotate_change_previews(result, pygit2_diff)
+    _annotate_change_previews(result, diff_result.diff_text)
 
     result.base_description = base or "HEAD"
     result.target_description = target or "working tree"
@@ -192,11 +182,11 @@ def _run_git_diff(
     worktree_dirty: bool | None = None
     if target is None:
         with contextlib.suppress(Exception):
-            worktree_dirty = repo.status() != {}
+            worktree_dirty = git_ops.status() != {}
 
     result.scope = AnalysisScope(
-        base_sha=str(plan.base_oid) if plan.base_oid else None,
-        target_sha=str(plan.target_oid) if plan.target_oid else None,
+        base_sha=plan.base_sha,
+        target_sha=plan.target_sha,
         worktree_dirty=worktree_dirty,
         mode="git",
         entity_id_scheme="def_uid_v1",
@@ -339,33 +329,48 @@ _PREVIEW_MAX_LINES = 5  # Max changed lines to include in preview
 
 
 def _extract_patch_lines(
-    pygit2_diff: object,
+    diff_text: str,
 ) -> dict[str, list[tuple[str, int, str]]]:
-    """Extract per-file patch lines from a pygit2 diff.
+    """Extract per-file patch lines from unified diff text.
 
     Returns a dict mapping file_path -> list of (origin, line_number, content)
     where origin is '+' for additions, '-' for deletions.
     """
-    import pygit2
-
-    assert isinstance(pygit2_diff, pygit2.Diff)
+    import re
 
     result: dict[str, list[tuple[str, int, str]]] = {}
-    for patch in pygit2_diff:
-        file_path = patch.delta.new_file.path or patch.delta.old_file.path  # type: ignore[union-attr]
-        lines: list[tuple[str, int, str]] = []
-        for hunk in patch.hunks:  # type: ignore[union-attr]
-            for line in hunk.lines:
-                if line.origin in ("+", "-"):
-                    lineno = line.new_lineno if line.origin == "+" else line.old_lineno
-                    lines.append((line.origin, lineno, line.content.rstrip("\n")))
-        result[file_path] = lines
+    current_file: str | None = None
+    hunk_re = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+    old_lineno = 0
+    new_lineno = 0
+
+    for line in diff_text.splitlines():
+        if line.startswith("+++ b/"):
+            current_file = line[6:]
+            if current_file not in result:
+                result[current_file] = []
+        elif line.startswith("+++ /dev/null"):
+            current_file = None
+        elif current_file:
+            m = hunk_re.match(line)
+            if m:
+                old_lineno = int(m.group(1))
+                new_lineno = int(m.group(2))
+            elif line.startswith("+"):
+                result[current_file].append(("+", new_lineno, line[1:]))
+                new_lineno += 1
+            elif line.startswith("-"):
+                result[current_file].append(("-", old_lineno, line[1:]))
+                old_lineno += 1
+            elif line.startswith(" "):
+                old_lineno += 1
+                new_lineno += 1
     return result
 
 
 def _annotate_change_previews(
     result: SemanticDiffResult,
-    pygit2_diff: object,
+    diff_text: str,
 ) -> None:
     """Annotate structural changes with a text preview of what changed.
 
@@ -373,7 +378,7 @@ def _annotate_change_previews(
     Patches each StructuralChange.change_preview in place.
     """
     try:
-        patch_lines = _extract_patch_lines(pygit2_diff)
+        patch_lines = _extract_patch_lines(diff_text)
     except Exception:
         log.debug("patch_line_extraction_failed", exc_info=True)
         return
