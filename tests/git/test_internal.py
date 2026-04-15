@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
-import pygit2
 import pytest
 
 from coderecon.git._internal.errors import ErrorMapper, git_operation
@@ -114,18 +114,18 @@ class TestErrorMapper:
 
     def test_guard_maps_git_error(self) -> None:
         with pytest.raises(GitError, match="test error"), ErrorMapper.guard("test"):
-            raise pygit2.GitError("test error")
+            raise GitError("test error")
 
     def test_guard_maps_auth_error_with_remote(self) -> None:
         with (
             pytest.raises(AuthenticationError),
             ErrorMapper.guard("fetch", remote="origin"),
         ):
-            raise pygit2.GitError("authentication failed")
+            raise GitError("authentication failed")
 
     def test_guard_maps_remote_error(self) -> None:
         with pytest.raises(RemoteError), ErrorMapper.guard("push", remote="origin"):
-            raise pygit2.GitError("connection refused")
+            raise GitError("connection refused")
 
 
 class TestGitOperationDecorator:
@@ -143,70 +143,71 @@ class TestGitOperationDecorator:
 class TestRequireNotUnborn:
     def test_raises_on_unborn(self, tmp_path: Path) -> None:
         # Create empty repo with no commits
-        pygit2.init_repository(tmp_path)
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
         ops = GitOps(tmp_path)
         with pytest.raises(GitError, match="no commits yet"):
             require_not_unborn(ops._access, "merge")
 
-    def test_passes_with_commit(self, temp_repo: pygit2.Repository) -> None:
-        ops = GitOps(temp_repo.workdir)
+    def test_passes_with_commit(self, temp_repo: Path) -> None:
+        ops = GitOps(temp_repo)
         require_not_unborn(ops._access, "merge")  # Should not raise
 
 
 class TestRequireCurrentBranch:
-    def test_returns_branch_name(self, temp_repo: pygit2.Repository) -> None:
-        ops = GitOps(temp_repo.workdir)
+    def test_returns_branch_name(self, temp_repo: Path) -> None:
+        ops = GitOps(temp_repo)
         branch = require_current_branch(ops._access, "push")
         assert branch == "main"
 
-    def test_raises_on_detached(self, temp_repo: pygit2.Repository) -> None:
-        ops = GitOps(temp_repo.workdir)
-        # Detach HEAD
-        ops._access.repo.set_head(ops._access.repo.head.target)
+    def test_raises_on_detached(self, temp_repo: Path) -> None:
+        ops = GitOps(temp_repo)
+        # Detach HEAD by checking out a SHA
+        head_sha = ops.head_commit().sha
+        ops.checkout(head_sha)
         with pytest.raises(DetachedHeadError):
             require_current_branch(ops._access, "push")
 
 
 class TestRequireNotCurrentBranch:
-    def test_passes_for_different_branch(self, temp_repo: pygit2.Repository) -> None:
-        ops = GitOps(temp_repo.workdir)
+    def test_passes_for_different_branch(self, temp_repo: Path) -> None:
+        ops = GitOps(temp_repo)
         ops.create_branch("other")
         require_not_current_branch(ops._access, "other")  # Should not raise
 
-    def test_raises_for_current_branch(self, temp_repo: pygit2.Repository) -> None:
-        ops = GitOps(temp_repo.workdir)
+    def test_raises_for_current_branch(self, temp_repo: Path) -> None:
+        ops = GitOps(temp_repo)
         with pytest.raises(GitError, match="Cannot delete current branch"):
             require_not_current_branch(ops._access, "main")
 
 
 class TestRequireBranchExists:
-    def test_passes_for_existing_branch(self, temp_repo: pygit2.Repository) -> None:
-        ops = GitOps(temp_repo.workdir)
+    def test_passes_for_existing_branch(self, temp_repo: Path) -> None:
+        ops = GitOps(temp_repo)
         require_branch_exists(ops._access, "main")  # Should not raise
 
-    def test_raises_for_nonexistent_branch(self, temp_repo: pygit2.Repository) -> None:
-        ops = GitOps(temp_repo.workdir)
+    def test_raises_for_nonexistent_branch(self, temp_repo: Path) -> None:
+        ops = GitOps(temp_repo)
         with pytest.raises(BranchNotFoundError):
             require_branch_exists(ops._access, "nonexistent")
 
 
 class TestCheckNothingToCommit:
-    def test_passes_when_allow_empty(self, temp_repo: pygit2.Repository) -> None:
-        ops = GitOps(temp_repo.workdir)
+    def test_passes_when_allow_empty(self, temp_repo: Path) -> None:
+        ops = GitOps(temp_repo)
         check_nothing_to_commit(ops._access, allow_empty=True)  # Should not raise
 
-    def test_raises_when_nothing_to_commit(self, temp_repo: pygit2.Repository) -> None:
-        ops = GitOps(temp_repo.workdir)
+    def test_raises_when_nothing_to_commit(self, temp_repo: Path) -> None:
+        ops = GitOps(temp_repo)
         with pytest.raises(NothingToCommitError):
             check_nothing_to_commit(ops._access, allow_empty=False)
 
-    def test_passes_when_staged_changes(self, repo_with_uncommitted: pygit2.Repository) -> None:
-        ops = GitOps(repo_with_uncommitted.workdir)
+    def test_passes_when_staged_changes(self, repo_with_uncommitted: Path) -> None:
+        ops = GitOps(repo_with_uncommitted)
         check_nothing_to_commit(ops._access, allow_empty=False)  # Should not raise
 
     def test_raises_on_unborn_empty_index(self, tmp_path: Path) -> None:
         # Create empty repo with no commits
-        pygit2.init_repository(tmp_path)
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
         ops = GitOps(tmp_path)
         with pytest.raises(NothingToCommitError):
             check_nothing_to_commit(ops._access, allow_empty=False)

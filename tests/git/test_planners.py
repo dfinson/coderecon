@@ -5,7 +5,6 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-import pygit2
 import pytest
 
 from coderecon.git import DiffInfo, GitOps, RefNotFoundError
@@ -14,17 +13,17 @@ from coderecon.git import DiffInfo, GitOps, RefNotFoundError
 class TestDiffPlanner:
     """Tests for diff planning edge cases."""
 
-    def test_diff_staged_normal(self, repo_with_uncommitted: pygit2.Repository) -> None:
+    def test_diff_staged_normal(self, repo_with_uncommitted: Path) -> None:
         """Staged diff on normal repo should work."""
-        ops = GitOps(repo_with_uncommitted.workdir)
+        ops = GitOps(repo_with_uncommitted)
 
         diff = ops.diff(staged=True)
 
         assert isinstance(diff, DiffInfo)
 
-    def test_diff_ref_to_working(self, repo_with_uncommitted: pygit2.Repository) -> None:
+    def test_diff_ref_to_working(self, repo_with_uncommitted: Path) -> None:
         """Diff from ref to working tree should work."""
-        ops = GitOps(repo_with_uncommitted.workdir)
+        ops = GitOps(repo_with_uncommitted)
 
         diff = ops.diff(base="HEAD")
 
@@ -59,9 +58,9 @@ class TestDiffPlanner:
 class TestCheckoutPlanner:
     """Tests for checkout planning edge cases."""
 
-    def test_checkout_detached_by_sha(self, temp_repo: pygit2.Repository) -> None:
+    def test_checkout_detached_by_sha(self, temp_repo: Path) -> None:
         """Checking out by SHA should result in detached HEAD."""
-        ops = GitOps(temp_repo.workdir)
+        ops = GitOps(temp_repo)
         head_commit = ops.head_commit()
         assert head_commit is not None
         head_sha = head_commit.sha
@@ -71,9 +70,9 @@ class TestCheckoutPlanner:
         # Verify detached
         assert ops.current_branch() is None
 
-    def test_checkout_local_branch(self, repo_with_branches: pygit2.Repository) -> None:
+    def test_checkout_local_branch(self, repo_with_branches: Path) -> None:
         """Checking out local branch should work."""
-        ops = GitOps(repo_with_branches.workdir)
+        ops = GitOps(repo_with_branches)
 
         ops.checkout("feature")
 
@@ -106,18 +105,18 @@ class TestRebasePlanner:
 class TestCommitRangeParsing:
     """Tests for commit range in diff."""
 
-    def test_diff_with_base_and_target(self, repo_with_history: pygit2.Repository) -> None:
+    def test_diff_with_base_and_target(self, repo_with_history: Path) -> None:
         """Diff with base and target should work."""
-        ops = GitOps(repo_with_history.workdir)
+        ops = GitOps(repo_with_history)
         log = ops.log(limit=3)
 
         diff = ops.diff(base=log[2].sha, target=log[0].sha)
 
         assert isinstance(diff, DiffInfo)
 
-    def test_diff_single_base(self, repo_with_history: pygit2.Repository) -> None:
+    def test_diff_single_base(self, repo_with_history: Path) -> None:
         """Diff from single base to working tree."""
-        ops = GitOps(repo_with_history.workdir)
+        ops = GitOps(repo_with_history)
         log = ops.log(limit=2)
 
         diff = ops.diff(base=log[1].sha)

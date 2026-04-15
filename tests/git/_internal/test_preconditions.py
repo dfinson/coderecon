@@ -177,13 +177,7 @@ class TestCheckNothingToCommit:
         """Raises NothingToCommitError when diff shows no changes."""
         access = MagicMock()
         access.is_unborn = False
-
-        tree = MagicMock()
-        access.must_head_tree.return_value = tree
-
-        diff = MagicMock()
-        diff.stats.files_changed = 0
-        access.index.diff_to_tree.return_value = diff
+        access.diff_numstat.return_value = []  # No staged changes
 
         with pytest.raises(NothingToCommitError):
             check_nothing_to_commit(access, allow_empty=False)
@@ -192,13 +186,7 @@ class TestCheckNothingToCommit:
         """Does not raise when diff shows changes."""
         access = MagicMock()
         access.is_unborn = False
-
-        tree = MagicMock()
-        access.must_head_tree.return_value = tree
-
-        diff = MagicMock()
-        diff.stats.files_changed = 3  # Has changes
-        access.index.diff_to_tree.return_value = diff
+        access.diff_numstat.return_value = [("file.py", 3, 1, "file.py")]  # Has staged changes
 
         # Should not raise
         check_nothing_to_commit(access, allow_empty=False)

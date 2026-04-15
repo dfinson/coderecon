@@ -1,11 +1,11 @@
-"""Test fixtures for git module."""
+"""Test fixtures for git module - subprocess-based (no pygit2)."""
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import pygit2
 import pytest
 
 from coderecon.git import GitOps
@@ -14,198 +14,156 @@ if TYPE_CHECKING:
     from collections.abc import Generator
 
 
+def _run_git(cwd: Path, *args: str, input: str | None = None) -> subprocess.CompletedProcess[str]:
+    """Run a git command in a directory."""
+    return subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        input=input,
+    )
+
+
+def _init_repo(path: Path, branch: str = "main") -> Path:
+    """Initialize a git repo with basic config."""
+    path.mkdir(exist_ok=True)
+    _run_git(path, "init", "-b", branch)
+    _run_git(path, "config", "user.name", "Test User")
+    _run_git(path, "config", "user.email", "test@example.com")
+    return path
+
+
+def _make_commit(path: Path, files: dict[str, str], message: str) -> str:
+    """Create files and commit. Returns commit SHA."""
+    for name, content in files.items():
+        f = path / name
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(content)
+        _run_git(path, "add", name)
+    result = _run_git(path, "commit", "-m", message)
+    sha_result = _run_git(path, "rev-parse", "HEAD")
+    return sha_result.stdout.strip()
+
+
 @pytest.fixture
-def temp_repo(tmp_path: Path) -> Generator[pygit2.Repository, None, None]:
-    """Create a temporary git repository with initial commit."""
+def temp_repo(tmp_path: Path) -> Generator[Path, None, None]:
+    """Create a temporary git repository with initial commit. Returns repo path."""
     repo_path = tmp_path / "repo"
-    repo_path.mkdir()
-
-    repo = pygit2.init_repository(str(repo_path), initial_head="main")
-
-    # Configure user
-    repo.config["user.name"] = "Test User"
-    repo.config["user.email"] = "test@example.com"
-
-    # Create initial commit
-    (repo_path / "README.md").write_text("# Test Repo\n")
-    repo.index.add("README.md")
-    repo.index.write()
-    tree = repo.index.write_tree()
-    sig = pygit2.Signature("Test User", "test@example.com")
-    repo.create_commit("refs/heads/main", sig, sig, "Initial commit", tree, [])
-
-    # Set HEAD to main
-    repo.set_head("refs/heads/main")
-
-    yield repo
+    _init_repo(repo_path)
+    _make_commit(repo_path, {"README.md": "# Test Repo\n"}, "Initial commit")
+    yield repo_path
 
 
 @pytest.fixture
-def bare_repo(tmp_path: Path) -> Generator[pygit2.Repository, None, None]:
+def bare_repo(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a bare repository for remote testing."""
     bare_path = tmp_path / "bare.git"
-    yield pygit2.init_repository(str(bare_path), bare=True)
+    bare_path.mkdir()
+    _run_git(bare_path, "init", "--bare")
+    yield bare_path
 
 
 @pytest.fixture
 def repo_with_remote(
-    temp_repo: pygit2.Repository,
-    bare_repo: pygit2.Repository,
-) -> pygit2.Repository:
+    temp_repo: Path,
+    bare_repo: Path,
+) -> Path:
     """Repository with a configured remote."""
-    temp_repo.remotes.create("origin", str(Path(bare_repo.path).resolve()))
-
-    # Push initial commit
-    remote = temp_repo.remotes["origin"]
-    remote.push(["refs/heads/main:refs/heads/main"])
-
+    _run_git(temp_repo, "remote", "add", "origin", str(bare_repo.resolve()))
+    _run_git(temp_repo, "push", "origin", "main")
+    # Ensure bare repo HEAD points to main so clones check out the right branch
+    _run_git(bare_repo, "symbolic-ref", "HEAD", "refs/heads/main")
     return temp_repo
 
 
 @pytest.fixture
 def repo_with_remote_branch(
-    temp_repo: pygit2.Repository,
-    bare_repo: pygit2.Repository,
-) -> pygit2.Repository:
+    temp_repo: Path,
+    bare_repo: Path,
+) -> Path:
     """Repository with a remote tracking branch that doesn't exist locally."""
-    workdir = Path(temp_repo.workdir)
-    sig = temp_repo.default_signature
+    # Add remote and push main
+    _run_git(temp_repo, "remote", "add", "origin", str(bare_repo.resolve()))
+    _run_git(temp_repo, "push", "origin", "main")
 
-    # Add remote
-    temp_repo.remotes.create("origin", str(Path(bare_repo.path).resolve()))
+    # Create branch, add commit, push it
+    _run_git(temp_repo, "checkout", "-b", "remote-only")
+    _make_commit(temp_repo, {"remote-only.txt": "remote only content\n"}, "Commit on remote-only branch")
+    _run_git(temp_repo, "push", "origin", "remote-only")
 
-    # Push main
-    remote = temp_repo.remotes["origin"]
-    remote.push(["refs/heads/main:refs/heads/main"])
-
-    # Create a branch locally, push it, then delete it locally
-    head_commit = temp_repo.head.peel(pygit2.Commit)
-    temp_repo.branches.local.create("remote-only", head_commit)
-
-    # Add a commit on this branch
-    temp_repo.checkout(temp_repo.branches.local["remote-only"])
-    (workdir / "remote-only.txt").write_text("remote only content\n")
-    temp_repo.index.add("remote-only.txt")
-    temp_repo.index.write()
-    tree = temp_repo.index.write_tree()
-    temp_repo.create_commit(
-        "HEAD", sig, sig, "Commit on remote-only branch", tree, [temp_repo.head.target]
-    )
-
-    # Push the branch
-    remote.push(["refs/heads/remote-only:refs/heads/remote-only"])
-
-    # Go back to main and delete the local branch
-    temp_repo.checkout(temp_repo.branches.local["main"])
-    temp_repo.branches.local["remote-only"].delete()
+    # Go back to main and delete local branch
+    _run_git(temp_repo, "checkout", "main")
+    _run_git(temp_repo, "branch", "-D", "remote-only")
 
     # Fetch to get remote tracking ref
-    remote.fetch()
+    _run_git(temp_repo, "fetch", "origin")
 
     return temp_repo
 
 
 @pytest.fixture
-def repo_with_branches(temp_repo: pygit2.Repository) -> pygit2.Repository:
+def repo_with_branches(temp_repo: Path) -> Path:
     """Repository with multiple branches."""
-    workdir = Path(temp_repo.workdir)
-
-    # Create feature branch
-    head_commit = temp_repo.head.peel(pygit2.Commit)
-    temp_repo.branches.local.create("feature", head_commit)
+    # Create feature branch at current HEAD
+    _run_git(temp_repo, "branch", "feature")
 
     # Add commit on main
-    (workdir / "main.txt").write_text("main branch\n")
-    temp_repo.index.add("main.txt")
-    temp_repo.index.write()
-    tree = temp_repo.index.write_tree()
-    sig = temp_repo.default_signature
-    temp_repo.create_commit("HEAD", sig, sig, "Commit on main", tree, [temp_repo.head.target])
+    _make_commit(temp_repo, {"main.txt": "main branch\n"}, "Commit on main")
 
     # Checkout feature and add commit
-    feature = temp_repo.branches.local["feature"]
-    temp_repo.checkout(feature)
-    (workdir / "feature.txt").write_text("feature branch\n")
-    temp_repo.index.add("feature.txt")
-    temp_repo.index.write()
-    tree = temp_repo.index.write_tree()
-    temp_repo.create_commit("HEAD", sig, sig, "Commit on feature", tree, [temp_repo.head.target])
+    _run_git(temp_repo, "checkout", "feature")
+    _make_commit(temp_repo, {"feature.txt": "feature branch\n"}, "Commit on feature")
 
     # Back to main
-    temp_repo.checkout(temp_repo.branches.local["main"])
+    _run_git(temp_repo, "checkout", "main")
 
     return temp_repo
 
 
 @pytest.fixture
-def repo_with_uncommitted(temp_repo: pygit2.Repository) -> pygit2.Repository:
+def repo_with_uncommitted(temp_repo: Path) -> Path:
     """Repository with uncommitted changes."""
-    workdir = Path(temp_repo.workdir)
-
     # Staged change
-    (workdir / "staged.txt").write_text("staged content\n")
-    temp_repo.index.add("staged.txt")
-    temp_repo.index.write()
+    (temp_repo / "staged.txt").write_text("staged content\n")
+    _run_git(temp_repo, "add", "staged.txt")
 
     # Modified (unstaged)
-    (workdir / "README.md").write_text("# Modified\n")
+    (temp_repo / "README.md").write_text("# Modified\n")
 
     # Untracked
-    (workdir / "untracked.txt").write_text("untracked\n")
+    (temp_repo / "untracked.txt").write_text("untracked\n")
 
     return temp_repo
 
 
 @pytest.fixture
 def repo_with_conflict(
-    temp_repo: pygit2.Repository,
-) -> tuple[pygit2.Repository, str]:
-    """Repository with a merge conflict."""
-    workdir = Path(temp_repo.workdir)
-    sig = temp_repo.default_signature
-
-    # Create branch from initial commit
-    head_commit = temp_repo.head.peel(pygit2.Commit)
-    temp_repo.branches.local.create("conflict-branch", head_commit)
+    temp_repo: Path,
+) -> tuple[Path, str]:
+    """Repository with a merge conflict setup."""
+    # Create branch
+    _run_git(temp_repo, "branch", "conflict-branch")
 
     # Modify on main
-    (workdir / "conflict.txt").write_text("main content\n")
-    temp_repo.index.add("conflict.txt")
-    temp_repo.index.write()
-    tree = temp_repo.index.write_tree()
-    temp_repo.create_commit(
-        "HEAD", sig, sig, "Add conflict.txt on main", tree, [temp_repo.head.target]
-    )
+    _make_commit(temp_repo, {"conflict.txt": "main content\n"}, "Add conflict.txt on main")
 
     # Checkout branch and create conflicting change
-    temp_repo.checkout(temp_repo.branches.local["conflict-branch"])
-    (workdir / "conflict.txt").write_text("branch content\n")
-    temp_repo.index.add("conflict.txt")
-    temp_repo.index.write()
-    tree = temp_repo.index.write_tree()
-    temp_repo.create_commit(
-        "HEAD", sig, sig, "Add conflict.txt on branch", tree, [temp_repo.head.target]
-    )
+    _run_git(temp_repo, "checkout", "conflict-branch")
+    _make_commit(temp_repo, {"conflict.txt": "branch content\n"}, "Add conflict.txt on branch")
 
     # Back to main
-    temp_repo.checkout(temp_repo.branches.local["main"])
+    _run_git(temp_repo, "checkout", "main")
 
     return temp_repo, "conflict-branch"
 
 
 @pytest.fixture
-def repo_with_history(temp_repo: pygit2.Repository) -> pygit2.Repository:
+def repo_with_history(temp_repo: Path) -> Path:
     """Repository with multiple commits."""
-    workdir = Path(temp_repo.workdir)
-    sig = temp_repo.default_signature
-
     for i in range(5):
-        (workdir / f"file{i}.txt").write_text(f"content {i}\n")
-        temp_repo.index.add(f"file{i}.txt")
-        temp_repo.index.write()
-        tree = temp_repo.index.write_tree()
-        temp_repo.create_commit("HEAD", sig, sig, f"Commit {i}", tree, [temp_repo.head.target])
-
+        _make_commit(temp_repo, {f"file{i}.txt": f"content {i}\n"}, f"Commit {i}")
     return temp_repo
 
 
@@ -216,19 +174,8 @@ def repo_with_history(temp_repo: pygit2.Repository) -> pygit2.Repository:
 def git_repo(tmp_path: Path) -> Generator[tuple[Path, GitOps], None, None]:
     """GitOps wrapper around a fresh repository with initial commit."""
     repo_path = tmp_path / "repo"
-    repo_path.mkdir()
-    repo = pygit2.init_repository(repo_path)
-
-    # Configure user for default_signature
-    repo.config["user.name"] = "Test User"
-    repo.config["user.email"] = "test@example.com"
-
-    sig = pygit2.Signature("Test User", "test@example.com")
-    (repo_path / "README.md").write_text("# Test\n")
-    repo.index.add("README.md")
-    repo.index.write()
-    tree = repo.index.write_tree()
-    repo.create_commit("HEAD", sig, sig, "Initial commit", tree, [])
+    _init_repo(repo_path)
+    _make_commit(repo_path, {"README.md": "# Test\n"}, "Initial commit")
     yield repo_path, GitOps(repo_path)
 
 
@@ -259,7 +206,6 @@ def git_repo_with_commits(git_repo: tuple[Path, GitOps]) -> tuple[Path, GitOps, 
 def git_repo_with_branch(git_repo: tuple[Path, GitOps]) -> tuple[Path, GitOps, str]:
     """GitOps repo with a feature branch diverged from default branch."""
     repo_path, ops = git_repo
-    # Get current branch name (could be master or main depending on git config)
     default_branch = ops.current_branch()
     assert default_branch is not None
 
@@ -270,7 +216,7 @@ def git_repo_with_branch(git_repo: tuple[Path, GitOps]) -> tuple[Path, GitOps, s
     default_head = ops.head()
 
     # Create feature branch from initial commit
-    initial_sha = ops.log()[1].sha  # second commit is initial
+    initial_sha = ops.log()[1].sha
     ops.create_branch("feature", initial_sha)
     ops.checkout("feature")
 
@@ -290,39 +236,19 @@ def git_repo_pair(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[tuple[tuple[Path, GitOps], tuple[Path, GitOps]], None, None]:
-    """Two separate repos for testing operations requiring multiple repositories.
-
-    Note: Enables file:// protocol for submodule tests via environment.
-    """
-    # Enable file:// protocol for submodule operations via git config env vars
-    # This affects all git subprocess calls in this test
+    """Two separate repos for testing operations requiring multiple repositories."""
     monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
     monkeypatch.setenv("GIT_CONFIG_KEY_0", "protocol.file.allow")
     monkeypatch.setenv("GIT_CONFIG_VALUE_0", "always")
 
     # First repo (main)
     main_path = tmp_path / "main_repo"
-    main_path.mkdir()
-    main_repo = pygit2.init_repository(main_path)
-    main_repo.config["user.name"] = "Test User"
-    main_repo.config["user.email"] = "test@example.com"
-    sig = pygit2.Signature("Test User", "test@example.com")
-    (main_path / "README.md").write_text("# Main Repo\n")
-    main_repo.index.add("README.md")
-    main_repo.index.write()
-    tree = main_repo.index.write_tree()
-    main_repo.create_commit("HEAD", sig, sig, "Initial commit", tree, [])
+    _init_repo(main_path)
+    _make_commit(main_path, {"README.md": "# Main Repo\n"}, "Initial commit")
 
-    # Second repo (to be used as submodule source)
+    # Second repo (submodule source)
     sub_path = tmp_path / "sub_repo"
-    sub_path.mkdir()
-    sub_repo = pygit2.init_repository(sub_path)
-    sub_repo.config["user.name"] = "Test User"
-    sub_repo.config["user.email"] = "test@example.com"
-    (sub_path / "lib.py").write_text("# Library\n")
-    sub_repo.index.add("lib.py")
-    sub_repo.index.write()
-    tree = sub_repo.index.write_tree()
-    sub_repo.create_commit("HEAD", sig, sig, "Initial lib commit", tree, [])
+    _init_repo(sub_path)
+    _make_commit(sub_path, {"lib.py": "# Library\n"}, "Initial lib commit")
 
     yield (main_path, GitOps(main_path)), (sub_path, GitOps(sub_path))

@@ -5,8 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum, auto
 
-import pygit2
-
 from coderecon.git._internal.access import RepoAccess
 from coderecon.git.errors import GitError, RefNotFoundError
 
@@ -26,8 +24,16 @@ class DiffPlan:
     """Plan for executing a diff operation."""
 
     diff_type: DiffType
-    base_oid: pygit2.Oid | None = None
-    target_oid: pygit2.Oid | None = None
+    base_sha: str | None = None
+    target_sha: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DiffResult:
+    """Result of a diff execution - raw diff text and parsed stats."""
+
+    diff_text: str
+    numstat: list[tuple[str, int, int, str]]  # (status, adds, dels, path)
 
 
 class DiffPlanner:
@@ -55,34 +61,42 @@ class DiffPlanner:
         if base is None and self._access.is_unborn:
             raise RefNotFoundError("HEAD (unborn)")
 
-        base_oid = (
-            self._access.resolve_commit(base).id if base else self._access.must_head_commit().id
+        base_sha = (
+            self._access.resolve_commit(base).sha if base else self._access.must_head_commit().sha
         )
 
         if target is None:
-            return DiffPlan(DiffType.REF_TO_WORKING, base_oid=base_oid)
+            return DiffPlan(DiffType.REF_TO_WORKING, base_sha=base_sha)
 
-        target_oid = self._access.resolve_commit(target).id
-        return DiffPlan(DiffType.REF_TO_REF, base_oid=base_oid, target_oid=target_oid)
+        target_sha = self._access.resolve_commit(target).sha
+        return DiffPlan(DiffType.REF_TO_REF, base_sha=base_sha, target_sha=target_sha)
 
-    def execute(self, plan: DiffPlan) -> pygit2.Diff:
-        """Execute a diff plan. All validation done at plan time."""
+    def execute(self, plan: DiffPlan) -> DiffResult:
+        """Execute a diff plan. Returns DiffResult with raw text and stats."""
         if plan.diff_type == DiffType.WORKING_TREE:
-            return self._access.diff_working_tree()
+            diff_text = self._access.diff_working_tree()
+            numstat = self._access.diff_numstat()
+            return DiffResult(diff_text, numstat)
 
         if plan.diff_type == DiffType.STAGED_UNBORN:
-            # For unborn repos, diff staged against empty tree
-            empty_tree = self._access.get_empty_tree()
-            return empty_tree.diff_to_index(self._access.index)
+            diff_text = self._access.diff_staged()
+            numstat = self._access.diff_numstat("--cached")
+            return DiffResult(diff_text, numstat)
 
         if plan.diff_type == DiffType.STAGED_NORMAL:
-            return self._access.index.diff_to_tree(self._access.must_head_tree())
+            diff_text = self._access.diff_staged()
+            numstat = self._access.diff_numstat("--cached")
+            return DiffResult(diff_text, numstat)
 
         if plan.diff_type == DiffType.REF_TO_WORKING:
-            return self._access.diff_refs(plan.base_oid)  # type: ignore[arg-type]
+            diff_text = self._access.diff_refs(plan.base_sha)  # type: ignore[arg-type]
+            numstat = self._access.diff_numstat(plan.base_sha)  # type: ignore[arg-type]
+            return DiffResult(diff_text, numstat)
 
         # REF_TO_REF
-        return self._access.diff_refs(plan.base_oid, plan.target_oid)  # type: ignore[arg-type]
+        diff_text = self._access.diff_refs(plan.base_sha, plan.target_sha)  # type: ignore[arg-type]
+        numstat = self._access.diff_numstat(plan.base_sha, plan.target_sha)  # type: ignore[arg-type]
+        return DiffResult(diff_text, numstat)
 
 
 class CheckoutType(Enum):
@@ -123,31 +137,21 @@ class CheckoutPlanner:
         return CheckoutPlan(CheckoutType.DETACHED, ref)
 
     def execute(self, plan: CheckoutPlan) -> None:
-        """Execute a checkout plan linearly - no recursion."""
+        """Execute a checkout plan."""
         if plan.checkout_type == CheckoutType.LOCAL_BRANCH:
-            branch = self._access.must_local_branch(plan.ref)
-            self._access.checkout_branch(branch)
+            self._access.checkout_branch(plan.ref)
 
         elif plan.checkout_type == CheckoutType.REMOTE_BRANCH_NEW_LOCAL:
-            remote = self._access.must_remote_branch(plan.ref)
-            # Remote branches are direct refs, but handle symbolic just in case
-            remote_target = remote.target
-            if isinstance(remote_target, str):
-                remote_target = self._access.resolve_ref_oid(remote_target)
-            obj = self._access.get_object(remote_target)
-            target = obj.peel(pygit2.Commit) if obj else None
-            if not isinstance(target, pygit2.Commit):
-                raise GitError(f"Remote branch {plan.ref!r} does not point to a commit")
-            assert plan.local_name is not None  # CheckoutType guarantees this
-            self._access.create_local_branch(plan.local_name, target)
-            local = self._access.must_local_branch(plan.local_name)
-            self._access.checkout_branch(local)
+            # Create local branch tracking remote and checkout
+            remote_sha = self._access.resolve_ref_oid(f"refs/remotes/{plan.ref}")
+            assert plan.local_name is not None
+            self._access.create_local_branch(plan.local_name, remote_sha)
+            self._access.checkout_branch(plan.local_name)
 
         elif plan.checkout_type == CheckoutType.REMOTE_BRANCH_EXISTING_LOCAL:
-            assert plan.local_name is not None  # CheckoutType guarantees this
-            local = self._access.must_local_branch(plan.local_name)
-            self._access.checkout_branch(local)
+            assert plan.local_name is not None
+            self._access.checkout_branch(plan.local_name)
 
         else:  # DETACHED
-            oid = self._access.resolve_ref_oid(plan.ref)
-            self._access.checkout_detached(oid)
+            sha = self._access.resolve_ref_oid(plan.ref)
+            self._access.checkout_detached(sha)

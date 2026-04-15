@@ -1,12 +1,12 @@
-"""Git operations via pygit2 - returns serializable data models."""
+"""Git operations via subprocess - returns serializable data models."""
 
 from __future__ import annotations
 
+import subprocess
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
-import pygit2
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from coderecon.git._internal import (
@@ -31,12 +31,10 @@ from coderecon.git._internal.constants import (
     RESET_HARD,
     RESET_MIXED,
     RESET_SOFT,
-    SORT_TIME,
     STATUS_WT_DELETED,
     STATUS_WT_MODIFIED,
     STATUS_WT_NEW,
 )
-from coderecon.git.credentials import SystemCredentialCallback, get_default_callbacks
 from coderecon.git.errors import (
     BranchExistsError,
     BranchNotFoundError,
@@ -77,7 +75,7 @@ from coderecon.git.models import (
 
 
 class GitOps:
-    """Thin wrapper around pygit2.Repository with cleaner error handling."""
+    """Git operations via subprocess with serializable data models."""
 
     def __init__(self, repo_path: Path | str) -> None:
         self._access = RepoAccess(repo_path)
@@ -87,19 +85,9 @@ class GitOps:
         self._rebase_planner = RebasePlanner(self._access)
         self._rebase_flow = RebaseFlow(self._access)
 
-    def _head_oid(self) -> pygit2.Oid:
-        """Get HEAD target Oid, raising if unborn."""
+    def _head_sha(self) -> str:
+        """Get HEAD target SHA, raising if unborn."""
         return self._access.must_head_target()
-
-    @property
-    def repo(self) -> pygit2.Repository:
-        """
-        Direct access to underlying pygit2 Repository.
-
-        Escape hatch for advanced consumers. Bypasses GitOps error mapping
-        and domain model conversion. Use with caution.
-        """
-        return self._access.repo
 
     @property
     def path(self) -> Path:
@@ -111,7 +99,7 @@ class GitOps:
     # =========================================================================
 
     def status(self) -> dict[str, int]:
-        """Get status flags by path. Use pygit2.GIT_STATUS_* to interpret."""
+        """Get status flags by path. Use STATUS_* constants to interpret."""
         return self._access.status()
 
     def head(self) -> RefInfo:
@@ -119,7 +107,7 @@ class GitOps:
         ref = self._access.head_ref
         return RefInfo(
             name=ref.name,
-            target_sha=str(ref.target),
+            target_sha=ref.target,
             shorthand=ref.shorthand,
             is_detached=self._access.is_detached,
         )
@@ -127,7 +115,7 @@ class GitOps:
     def head_commit(self) -> CommitInfo | None:
         """Get HEAD commit, or None if unborn."""
         commit = self._access.head_commit()
-        return CommitInfo.from_pygit2(commit) if commit else None
+        return CommitInfo.from_git(commit) if commit else None
 
     def diff(
         self,
@@ -138,8 +126,32 @@ class GitOps:
     ) -> DiffInfo:
         """Generate diff."""
         plan = self._diff_planner.plan(base, target, staged)
-        raw = self._diff_planner.execute(plan)
-        return DiffInfo.from_pygit2(raw, include_patch)
+        result = self._diff_planner.execute(plan)
+        return DiffInfo.from_diff_text(result.diff_text, result.numstat, include_patch=include_patch)
+
+    def files_changed_vs(self, base_ref: str) -> list[str]:
+        """Return repo-relative paths that differ between *base_ref* and HEAD.
+
+        Uses ``git diff --name-only base_ref...HEAD`` (three-dot form, which
+        finds the merge-base automatically).  Returns an empty list if the
+        command fails or there are no differences.
+        """
+        import subprocess
+
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(self._access.repo_root), "diff", "--name-only",
+                 f"{base_ref}...HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+            if result.returncode != 0:
+                return []
+            return [line for line in result.stdout.splitlines() if line]
+        except Exception:  # noqa: BLE001
+            return []
 
     def diff_summary(
         self,
@@ -150,18 +162,12 @@ class GitOps:
         include_per_file: bool = False,
         include_word_count: bool = False,
     ) -> DiffSummary:
-        """
-        Get diff statistics with progressive detail levels.
-
-        Cost tiers (use minimal detail needed):
-        - Default: diff.stats only (fast, no iteration)
-        - include_per_file: per-file adds/dels (iterates patches)
-        - include_word_count: word counts for token estimation (parses patch text)
-        """
+        """Get diff statistics with progressive detail levels."""
         plan = self._diff_planner.plan(base, target, staged)
-        raw = self._diff_planner.execute(plan)
-        return DiffSummary.from_pygit2(
-            raw, include_per_file=include_per_file, include_word_count=include_word_count
+        result = self._diff_planner.execute(plan)
+        return DiffSummary.from_diff_text(
+            result.diff_text, result.numstat,
+            include_per_file=include_per_file, include_word_count=include_word_count,
         )
 
     def blame(
@@ -173,7 +179,8 @@ class GitOps:
             kwargs["min_line"] = min_line
         if max_line is not None:
             kwargs["max_line"] = max_line
-        return BlameInfo.from_pygit2(path, self._access.blame(path, **kwargs))
+        blame_hunks = self._access.blame(path, **kwargs)
+        return BlameInfo.from_blame_data(path, blame_hunks)
 
     def log(
         self,
@@ -185,80 +192,72 @@ class GitOps:
     ) -> list[CommitInfo]:
         """Get commit history."""
         try:
-            start = self._access.resolve_ref_oid(ref)
+            start_sha = self._access.resolve_ref_oid(ref)
         except RefNotFoundError as e:
-            # Invalid ref - raise to caller so they can distinguish from empty history
             raise RefNotFoundError(ref) from e
 
-        # Parse timestamps
-        since_ts = datetime.fromisoformat(since).timestamp() if since else None
-        until_ts = datetime.fromisoformat(until).timestamp() if until else None
+        # Build git log command
+        cmd = ["log", f"--max-count={limit}", "--format=%H%n%T%n%P%n%an%n%ae%n%at%n%cn%n%ce%n%ct%n%B%x00"]
+        if since:
+            cmd.append(f"--since={since}")
+        if until:
+            cmd.append(f"--until={until}")
+        cmd.append(start_sha)
+        if paths:
+            cmd.append("--")
+            cmd.extend(paths)
 
-        result: list[CommitInfo] = []
-        for commit in self._access.walk_commits(start, SORT_TIME):
-            # Time filtering
-            if until_ts is not None and commit.commit_time > until_ts:
-                continue
-            if since_ts is not None and commit.commit_time < since_ts:
-                break
-
-            # Path filtering
-            if paths:
-                parent = commit.parents[0] if commit.parents else None
-                # Diff parent -> commit
-                diff = self._access.repo.diff(parent, commit)
-                match = False
-                for delta in diff.deltas:
-                    if any(delta.new_file.path.startswith(p) for p in paths):
-                        match = True
-                        break
-                if not match:
-                    continue
-
-            result.append(CommitInfo.from_pygit2(commit))
-            if len(result) >= limit:
-                break
-        return result
+        result = self._access.git.run(*cmd)
+        commits_data = self._access._parse_log_output(result.stdout)
+        return [CommitInfo.from_git(c) for c in commits_data]
 
     def show(self, ref: str = "HEAD") -> CommitInfo:
         """Get commit info."""
-        return CommitInfo.from_pygit2(self._access.resolve_commit(ref))
+        return CommitInfo.from_git(self._access.resolve_commit(ref))
 
     def branches(self, include_remote: bool = True) -> list[BranchInfo]:
         """List branches."""
-        result = [
-            BranchInfo.from_pygit2(self._access.branches.local[n])
-            for n in self._access.branches.local
-        ]
+        result: list[BranchInfo] = []
+        for name in self._access.branches.local:
+            branch_data = self._access.branches.local[name]
+            result.append(BranchInfo.from_git(branch_data))
         if include_remote:
-            for n in self._access.branches.remote:
-                branch = self._access.branches.remote[n]
-                # Skip symbolic refs like origin/HEAD (target is str, not Oid)
-                if isinstance(branch.target, str):
+            for name in self._access.branches.remote:
+                branch_data = self._access.branches.remote[name]
+                # Skip symbolic refs like origin/HEAD
+                if branch_data.target == "":
                     continue
-                result.append(BranchInfo.from_pygit2(branch))
+                result.append(BranchInfo.from_git(branch_data))
         return result
 
     def tags(self) -> list[TagInfo]:
         """List tags."""
         result: list[TagInfo] = []
-        for name, target_oid, tag_obj in self._access.iter_tags():
-            if tag_obj:
-                tagger = Signature.from_pygit2(tag_obj.tagger) if tag_obj.tagger else None
-                result.append(TagInfo(name, str(tag_obj.target), True, tag_obj.message, tagger))
+        for tag_data in self._access.iter_tags():
+            if tag_data.is_annotated:
+                tagger = (
+                    Signature(
+                        name=tag_data.tagger.name,
+                        email=tag_data.tagger.email,
+                        time=datetime.fromtimestamp(tag_data.tagger.time, tz=datetime.now().astimezone().tzinfo),
+                    )
+                    if tag_data.tagger
+                    else None
+                )
+                result.append(TagInfo(tag_data.name, tag_data.target_sha, True, tag_data.message, tagger))
             else:
-                result.append(TagInfo(name, str(target_oid), False))
+                result.append(TagInfo(tag_data.name, tag_data.target_sha, False))
         return result
 
     def remotes(self) -> list[RemoteInfo]:
         """List remotes."""
         return [
-            RemoteInfo(r.name or "", r.url or "", getattr(r, "push_url", None))
-            for r in self._access.remotes
+            RemoteInfo(name, url, push_url)
+            for name, url, push_url in self._access.remotes
         ]
 
     def state(self) -> int:
-        """Repository state. Compare with pygit2.GIT_REPOSITORY_STATE_*."""
+        """Repository state."""
         return self._access.state()
 
     def current_branch(self) -> str | None:
@@ -267,9 +266,8 @@ class GitOps:
 
     def tracked_files(self) -> list[str]:
         """List all files tracked in the git index."""
-        index = self._access.index
-        index.read()
-        return [entry.path for entry in index]
+        result = self._access.git.run("ls-files")
+        return [line for line in result.stdout.strip().splitlines() if line]
 
     # =========================================================================
     # Write Operations
@@ -277,30 +275,26 @@ class GitOps:
 
     def stage(self, paths: Sequence[str | Path]) -> None:
         """Stage files."""
-        index = self._access.index
         status = self._access.status()
         for path in paths:
             p = self._access.normalize_path(path)
             flags = status.get(p, 0)
             if flags & (STATUS_WT_NEW | STATUS_WT_MODIFIED):
-                index.add(p)
+                self._access.index.add(p)
             elif flags & STATUS_WT_DELETED:
-                index.remove(p)
-        index.write()
+                self._access.index.remove(p)
 
     def stage_all(self) -> list[str]:
         """Stage all changed files. Returns list of staged paths."""
-        index = self._access.index
         status = self._access.status()
         staged: list[str] = []
         for path, flags in status.items():
             if flags & (STATUS_WT_NEW | STATUS_WT_MODIFIED):
-                index.add(path)
+                self._access.index.add(path)
                 staged.append(path)
             elif flags & STATUS_WT_DELETED:
-                index.remove(path)
+                self._access.index.remove(path)
                 staged.append(path)
-        index.write()
         return staged
 
     def unstage(self, paths: Sequence[str | Path]) -> None:
@@ -310,24 +304,18 @@ class GitOps:
             self._access.best_effort_index_remove(normalized)
             return
 
-        head_tree = self._access.must_head_tree()
+        head_tree_sha = self._access.must_head_tree()
         for p in paths:
-            self._access.index_reset_entry(self._access.normalize_path(p), head_tree)
-        self._access.index.write()
+            self._access.index_reset_entry(self._access.normalize_path(p), head_tree_sha)
 
     def discard(self, paths: Sequence[str | Path]) -> None:
         """Discard working tree changes, restoring files to index state."""
-        repo = self._access.repo
         for p in paths:
             norm = self._access.normalize_path(p)
             full_path = self._access.path / norm
             if norm in self._access.index:
-                # Restore from index
-                entry = self._access.index[norm]
-                blob = repo[entry.id]
-                if isinstance(blob, pygit2.Blob):
-                    full_path.parent.mkdir(parents=True, exist_ok=True)
-                    full_path.write_bytes(blob.data)
+                # Restore from index using git checkout-index
+                self._access.git.run("checkout-index", "--force", "--", norm)
             elif full_path.exists():
                 # Untracked file not in index - delete it
                 full_path.unlink()
@@ -341,27 +329,27 @@ class GitOps:
         """Amend the most recent commit. Returns commit sha."""
         require_not_unborn(self._access, "amend")
         head_commit = self._access.must_head_commit()
-        tree_id = self._access.index.write_tree()
+        tree_sha = self._access.index.write_tree()
         new_message = message if message is not None else head_commit.message
-        # Don't update ref - create orphan commit with same parents
+        # Create orphan commit with same parents, then soft-reset HEAD to it
         oid = self._access.create_commit(
             None,
             head_commit.author,
             self._access.default_signature,
             new_message,
-            tree_id,
-            list(head_commit.parent_ids),
+            tree_sha,
+            list(head_commit.parent_shas),
         )
-        # Reset HEAD to new commit
-        self._access.reset(oid, pygit2.GIT_RESET_SOFT)
-        return str(oid)
+        self._access.reset(oid, RESET_SOFT)
+        return oid
 
     def create_branch(self, name: str, ref: str = "HEAD") -> BranchInfo:
         """Create branch."""
         if self._access.has_local_branch(name):
             raise BranchExistsError(name)
-        branch = self._access.create_local_branch(name, self._access.resolve_commit(ref))
-        return BranchInfo.from_pygit2(branch)
+        target_sha = self._access.resolve_ref_oid(ref)
+        branch_data = self._access.create_local_branch(name, target_sha)
+        return BranchInfo.from_git(branch_data)
 
     def checkout(self, ref: str, create: bool = False) -> None:
         """Checkout branch or ref."""
@@ -375,11 +363,10 @@ class GitOps:
         require_branch_exists(self._access, name)
         require_not_current_branch(self._access, name)
 
-        branch = self._access.must_local_branch(name)
-        branch_oid = self._access.branch_target_oid(branch)
-        if not force and not self._access.descendant_of(self._head_oid(), branch_oid):
+        branch_sha = self._access.resolve_ref_oid(f"refs/heads/{name}")
+        if not force and not self._access.descendant_of(self._head_sha(), branch_sha):
             raise UnmergedBranchError(name)
-        branch.delete()
+        self._access.delete_branch(name)
 
     def rename_branch(self, old_name: str, new_name: str) -> BranchInfo:
         """Rename a branch."""
@@ -387,9 +374,9 @@ class GitOps:
         if self._access.has_local_branch(new_name):
             raise BranchExistsError(new_name)
 
-        branch = self._access.must_local_branch(old_name)
-        branch.rename(new_name)
-        return BranchInfo.from_pygit2(self._access.must_local_branch(new_name))
+        self._access.git.run("branch", "-m", old_name, new_name)
+        branch_data = self._access.must_local_branch(new_name)
+        return BranchInfo.from_git(branch_data)
 
     def reset(self, ref: str, mode: str = "mixed") -> None:
         """Reset HEAD. mode: 'soft', 'mixed', or 'hard'."""
@@ -398,45 +385,45 @@ class GitOps:
             raise ValueError(
                 f"Invalid reset mode {mode!r}. Expected one of: {', '.join(sorted(modes))}"
             )
-        self._access.reset(self._access.resolve_ref_oid(ref), modes[mode])
+        sha = self._access.resolve_ref_oid(ref)
+        self._access.reset(sha, modes[mode])
 
     def merge(self, ref: str) -> MergeResult:
         """Merge ref. Returns MergeResult with success, commit_sha, conflict_paths."""
-        their_oid = self._access.resolve_ref_oid(ref)
-        analysis, _ = self._access.merge_analysis(their_oid)
+        their_sha = self._access.resolve_ref_oid(ref)
+        analysis = self._access.merge_analysis(their_sha)
 
         if analysis & MERGE_UP_TO_DATE:
             return MergeResult(True, None)
 
         if analysis & MERGE_FASTFORWARD:
-            current = self._access.current_branch_name()  # Capture BEFORE detach
-            self._access.checkout_detached(their_oid)
+            current = self._access.current_branch_name()
+            self._access.checkout_detached(their_sha)
             if current:
-                branch = self._access.must_local_branch(current)
-                self._access.set_branch_target(branch, their_oid)
-                self._access.set_head(f"refs/heads/{current}")  # Reattach to branch
-            return MergeResult(True, str(their_oid))
+                self._access.set_branch_target(current, their_sha)
+                self._access.set_head(f"refs/heads/{current}")
+            return MergeResult(True, their_sha)
 
-        # Non-fastforward merge with guaranteed cleanup
-        head_oid = self._head_oid()
+        # Non-fastforward merge
+        head_sha = self._head_sha()
         with self._flows.stateful_op():
-            self._access.merge(their_oid)
+            self._access.merge(their_sha)
             conflicts = self._flows.check_conflicts()
             if conflicts.has_conflicts:
                 return MergeResult(False, None, conflicts.conflict_paths)
 
-            sha = self._flows.write_tree_and_commit(f"Merge {ref}", [head_oid, their_oid])
+            sha = self._flows.write_tree_and_commit(f"Merge {ref}", [head_sha, their_sha])
             return MergeResult(True, sha)
 
     def abort_merge(self) -> None:
         """Abort in-progress merge."""
         self._access.state_cleanup()
-        self._access.reset(self._head_oid(), RESET_HARD)
+        self._access.reset(self._head_sha(), RESET_HARD)
 
     def merge_analysis(self, ref: str) -> MergeAnalysis:
         """Analyze potential merge."""
-        their_oid = self._access.resolve_ref_oid(ref)
-        analysis, _ = self._access.merge_analysis(their_oid)
+        their_sha = self._access.resolve_ref_oid(ref)
+        analysis = self._access.merge_analysis(their_sha)
         return MergeAnalysis(
             up_to_date=bool(analysis & MERGE_UP_TO_DATE),
             fastforward_possible=bool(analysis & MERGE_FASTFORWARD),
@@ -446,39 +433,35 @@ class GitOps:
     def cherrypick(self, ref: str) -> OperationResult:
         """Cherry-pick a commit."""
         commit = self._access.resolve_commit(ref)
-        head_oid = self._head_oid()
+        head_sha = self._head_sha()
 
         with self._flows.stateful_op():
-            self._access.cherrypick(commit.id)
+            self._access.cherrypick(commit.sha)
             conflicts = self._flows.check_conflicts()
             if conflicts.has_conflicts:
                 return OperationResult(False, conflicts.conflict_paths)
 
-            self._flows.write_tree_and_commit(commit.message, [head_oid], author=commit.author)
+            self._flows.write_tree_and_commit(commit.message, [head_sha], author=commit.author)
             return OperationResult(True)
 
     def revert(self, ref: str) -> OperationResult:
         """Revert a commit."""
         commit = self._access.resolve_commit(ref)
-        head_commit = self._access.must_head_commit()
-        head_oid = self._head_oid()
+        head_sha = self._head_sha()
 
         with self._flows.stateful_op():
-            self._access.revert_commit(commit, head_commit)
+            self._access.revert_commit(commit.sha)
             conflicts = self._flows.check_conflicts()
             if conflicts.has_conflicts:
                 return OperationResult(False, conflicts.conflict_paths)
 
             message = f'Revert "{first_line(commit.message)}"'
-            self._flows.write_tree_and_commit(message, [head_oid])
+            self._flows.write_tree_and_commit(message, [head_sha])
             return OperationResult(True)
 
     def stash_push(self, message: str | None = None, include_untracked: bool = False) -> str:
         """Stash changes. Returns stash commit sha."""
-        oid = self._access.stash(
-            self._access.default_signature, message, include_untracked=include_untracked
-        )
-        return str(oid)
+        return self._access.stash(message, include_untracked=include_untracked)
 
     def stash_pop(self, index: int = 0) -> None:
         """Pop stash entry."""
@@ -491,28 +474,18 @@ class GitOps:
     def stash_list(self) -> list[StashEntry]:
         """List stash entries."""
         return [
-            StashEntry(i, s.message, str(s.commit_id))
+            StashEntry(i, s.message, s.commit_id)
             for i, s in enumerate(self._access.listall_stashes())
         ]
 
     def create_tag(self, name: str, ref: str = "HEAD", message: str | None = None) -> str:
         """Create tag. Returns target sha."""
-        target_oid = self._access.resolve_ref_oid(ref)
+        target_sha = self._access.resolve_ref_oid(ref)
         if message:
-            # Resolve target object to get correct type (commit, tree, blob, or tag)
-            target_obj = self._access.repo.get(target_oid)
-            if target_obj is None:
-                raise RefNotFoundError(ref)
-            oid = self._access.create_tag(
-                name,
-                target_oid,
-                pygit2.enums.ObjectType(target_obj.type),
-                self._access.default_signature,
-                message,
-            )
-            return str(oid)
-        self._access.create_reference(make_tag_ref(name), target_oid)
-        return str(target_oid)
+            self._access.create_tag(name, target_sha, message)
+            return target_sha
+        self._access.create_reference(make_tag_ref(name), target_sha)
+        return target_sha
 
     def delete_tag(self, name: str) -> None:
         """Delete tag."""
@@ -521,92 +494,63 @@ class GitOps:
             raise RefNotFoundError(name)
         self._access.delete_reference(ref)
 
-    def fetch(
-        self, remote: str = "origin", callbacks: SystemCredentialCallback | None = None
-    ) -> None:
+    def fetch(self, remote: str = "origin", callbacks: object | None = None) -> None:
         """Fetch from remote with retry for transient network failures."""
-        cbs = callbacks or get_default_callbacks()
-        self._fetch_with_retry(remote, cbs)
+        self._fetch_with_retry(remote)
 
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
         reraise=True,
     )
-    def _fetch_with_retry(self, remote: str, callbacks: SystemCredentialCallback) -> None:
+    def _fetch_with_retry(self, remote: str) -> None:
         """Internal fetch with retry decorator."""
-        # Use lambda to avoid pygit2 version differences in keyword arg names
-        self._access.run_remote_operation(remote, "fetch", lambda r: r.fetch(callbacks=callbacks))
+        self._access.run_remote_operation(
+            remote, "fetch", ["fetch", remote], timeout=300
+        )
 
     def push(
         self,
         remote: str = "origin",
         force: bool = False,
-        callbacks: SystemCredentialCallback | None = None,
+        callbacks: object | None = None,
     ) -> None:
-        """
-        Push current branch to remote with retry for transient network failures.
-
-        Note:
-            Always pushes the current local branch to the same-named branch
-            on the remote. Does not resolve upstream tracking configuration.
-            For tracking-aware push, use git CLI directly.
-        """
+        """Push current branch to remote with retry."""
         branch = require_current_branch(self._access, "push")
-        prefix = "+" if force else ""
-        refspec = f"{prefix}refs/heads/{branch}:refs/heads/{branch}"
-        cbs = callbacks or get_default_callbacks()
-        self._push_with_retry(remote, refspec, cbs)
+        self._push_with_retry(remote, branch, force)
 
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
         reraise=True,
     )
-    def _push_with_retry(
-        self, remote: str, refspec: str, callbacks: SystemCredentialCallback
-    ) -> None:
+    def _push_with_retry(self, remote: str, branch: str, force: bool) -> None:
         """Internal push with retry decorator."""
-        # Use lambda to avoid pygit2 version differences in keyword arg names
-        self._access.run_remote_operation(
-            remote, "push", lambda r: r.push([refspec], callbacks=callbacks)
-        )
+        cmd = ["push", remote, f"refs/heads/{branch}:refs/heads/{branch}"]
+        if force:
+            cmd.insert(1, "--force")
+        self._access.run_remote_operation(remote, "push", cmd, timeout=300)
 
     def pull(
         self,
         remote: str = "origin",
         branch: str | None = None,
-        callbacks: SystemCredentialCallback | None = None,
+        callbacks: object | None = None,
     ) -> PullResult:
-        """
-        Fetch from remote and merge into current branch.
+        """Fetch from remote and merge into current branch."""
+        self.fetch(remote)
 
-        Args:
-            remote: Remote name to pull from.
-            branch: Remote branch to merge. Defaults to current branch name.
-            callbacks: Credential callbacks for authentication.
-
-        Returns:
-            PullResult with success status, commit sha, and any conflicts.
-        """
-        # Fetch first
-        self.fetch(remote, callbacks)
-
-        # Determine which branch to merge
         current = require_current_branch(self._access, "pull")
         merge_branch = branch or current
         remote_ref = f"{remote}/{merge_branch}"
 
-        # Check if remote ref exists
         if not self._access.has_reference(f"refs/remotes/{remote_ref}"):
             raise RefNotFoundError(remote_ref)
 
-        # Analyze merge
         analysis = self.merge_analysis(remote_ref)
         if analysis.up_to_date:
             return PullResult(success=True, commit_sha=None, up_to_date=True)
 
-        # Merge
         result = self.merge(remote_ref)
         return PullResult(
             success=result.success,
@@ -620,156 +564,111 @@ class GitOps:
     # =========================================================================
 
     def worktrees(self) -> list[WorktreeInfo]:
-        """
-        List all worktrees including main working directory.
-
-        Note:
-            Lock status detection is best-effort (checks .git/worktrees/<name>/locked).
-            For unusual gitdir layouts, lock status may be incorrectly reported as False.
-        """
+        """List all worktrees including main working directory."""
         result: list[WorktreeInfo] = []
 
-        # Main working directory
-        main_path = self._access.workdir
-        if main_path:
-            head = self._access.head_ref
+        # Parse git worktree list --porcelain for complete info
+        wt_output = self._access.git.run("worktree", "list", "--porcelain")
+        entries: list[dict[str, str]] = []
+        current: dict[str, str] = {}
+        for line in wt_output.stdout.splitlines():
+            if not line:
+                if current:
+                    entries.append(current)
+                    current = {}
+                continue
+            if line.startswith("worktree "):
+                current["path"] = line[len("worktree "):]
+            elif line.startswith("HEAD "):
+                current["head"] = line[len("HEAD "):]
+            elif line.startswith("branch "):
+                current["branch"] = line[len("branch "):]
+            elif line == "bare":
+                current["bare"] = "true"
+            elif line == "detached":
+                current["detached"] = "true"
+        if current:
+            entries.append(current)
+
+        for i, entry in enumerate(entries):
+            is_main = i == 0
+            wt_path = entry.get("path", "")
+            head_sha = entry.get("head", "")
+            branch_ref = entry.get("branch", "")
+            is_detached = "detached" in entry
+            is_bare = "bare" in entry
+
+            if branch_ref:
+                head_ref_name = branch_ref.removeprefix("refs/heads/")
+            elif is_detached:
+                head_ref_name = "HEAD"
+            else:
+                head_ref_name = ""
+
+            name = "main" if is_main else Path(wt_path).name
+
+            # Check lock status
+            is_locked = False
+            lock_reason = None
+            if not is_main and name:
+                lock_file = self._access.worktree_gitdir(name) / "locked"
+                if lock_file.exists():
+                    is_locked = True
+                    lock_reason = lock_file.read_text().strip() or None
+
+            is_prunable = not is_main and wt_path and not Path(wt_path).exists()
+
             result.append(
                 WorktreeInfo(
-                    name="main",
-                    path=Path(main_path).as_posix(),
-                    head_ref=head.shorthand if not self._access.is_detached else "HEAD",
-                    head_sha=str(self._access.head_target) if not self._access.is_unborn else "",
-                    is_main=True,
-                    is_bare=False,
-                    is_locked=False,
-                    lock_reason=None,
-                    is_prunable=False,
+                    name=name,
+                    path=wt_path,
+                    head_ref=head_ref_name,
+                    head_sha=head_sha,
+                    is_main=is_main,
+                    is_bare=is_bare,
+                    is_locked=is_locked,
+                    lock_reason=lock_reason,
+                    is_prunable=is_prunable,
                 )
             )
-
-        # Additional worktrees
-        for name in self._access.list_worktrees():
-            try:
-                wt = self._access.lookup_worktree(name)
-                # pygit2.Repository() handles worktree .git file resolution
-                # (worktree dirs contain a .git file pointing to the real gitdir)
-                wt_path = wt.path
-                wt_repo = pygit2.Repository(wt_path)
-                head_sha = str(wt_repo.head.target) if not wt_repo.head_is_unborn else ""
-                head_ref = wt_repo.head.shorthand if not wt_repo.head_is_detached else "HEAD"
-
-                # Check lock status via .git/worktrees/<name>/locked file
-                git_dir = Path(self._access.repo.path)
-                lock_file = git_dir / "worktrees" / name / "locked"
-                is_locked = lock_file.exists()
-                lock_reason = lock_file.read_text().strip() if is_locked else None
-
-                result.append(
-                    WorktreeInfo(
-                        name=name,
-                        path=wt_path,
-                        head_ref=head_ref,
-                        head_sha=head_sha,
-                        is_main=False,
-                        is_bare=False,
-                        is_locked=is_locked,
-                        lock_reason=lock_reason or None,
-                        is_prunable=wt.is_prunable,
-                    )
-                )
-            except (pygit2.GitError, OSError):
-                # Worktree dir missing/corrupt - return placeholder so it shows as prunable
-                result.append(
-                    WorktreeInfo(
-                        name=name,
-                        path="",
-                        head_ref="",
-                        head_sha="",
-                        is_main=False,
-                        is_bare=False,
-                        is_locked=False,
-                        lock_reason=None,
-                        is_prunable=True,
-                    )
-                )
 
         return result
 
     def worktree_add(self, path: Path, ref: str, checkout: bool = True) -> GitOps:  # noqa: ARG002
-        """
-        Add worktree at path for ref. Returns GitOps for new worktree.
-
-        Args:
-            path: Directory path for the new worktree. Must not exist.
-            ref: Local branch name to checkout. Must be an existing local branch.
-            checkout: Ignored (pygit2 always checks out). Kept for API compatibility.
-
-        Raises:
-            BranchNotFoundError: If ref is not an existing local branch.
-            WorktreeExistsError: If a worktree with the same name already exists.
-            WorktreeError: If path already exists or is used by another worktree.
-
-        Note:
-            The worktree name (used internally by git) is derived from path.name.
-            This is consistent with git's behavior when no explicit --name is given.
-            To create a worktree from a commit SHA or tag, first create a branch.
-        """
-        # Enforce: ref must be a local branch (not a SHA, tag, or remote branch)
+        """Add worktree at path for ref. Returns GitOps for new worktree."""
         if not self._access.has_local_branch(ref):
             raise BranchNotFoundError(ref)
-
-        # Enforce: path must not exist
         if path.exists():
             raise WorktreeError(f"Path already exists: {path}")
 
-        # Git worktree name is derived from path basename
         name = path.name
         existing_names = self._access.list_worktrees()
         if name in existing_names:
             raise WorktreeExistsError(name)
 
-        # Also check that path isn't already used by another worktree
         for wt_name in existing_names:
             try:
-                wt = self._access.lookup_worktree(wt_name)
-                if Path(wt.path).resolve() == path.resolve():
+                wt_path = self._access.worktree_path(wt_name)
+                if Path(wt_path).resolve() == path.resolve():
                     raise WorktreeError(f"Path already in use by worktree '{wt_name}'")
-            except pygit2.GitError:
-                pass  # Worktree corrupt/missing - safe to ignore for path collision check
+            except GitError:
+                pass
 
-        refname = f"refs/heads/{ref}"
-        if refname not in self._access.repo.references:
-            raise BranchNotFoundError(ref)
-        branch_ref = self._access.repo.references[refname]
-        self._access.add_worktree(name, str(path), branch_ref)
-
+        self._access.add_worktree(name, str(path), ref)
         return GitOps(path)
 
     def worktree_open(self, name: str) -> GitOps:
         """Get GitOps instance for existing worktree by name."""
         if name not in self._access.list_worktrees():
             raise WorktreeNotFoundError(name)
-
-        wt = self._access.lookup_worktree(name)
-        return GitOps(wt.path)
+        wt_path = self._access.worktree_path(name)
+        return GitOps(wt_path)
 
     def worktree_remove(self, name: str, force: bool = False) -> None:
-        """
-        Remove worktree.
-
-        Args:
-            name: Worktree name (as returned by worktrees()).
-            force: If True, removes even if dirty or locked.
-
-        Note:
-            Uses `git worktree remove` subprocess for correctness.
-            This ensures git metadata is always consistent, even if
-            directory removal fails (e.g., file locks on Windows).
-        """
+        """Remove worktree."""
         if name not in self._access.list_worktrees():
             raise WorktreeNotFoundError(name)
 
-        # Check lock status via file system (for better error message)
         lock_file = self._access.worktree_gitdir(name) / "locked"
         if lock_file.exists() and not force:
             raise WorktreeLockedError(name)
@@ -777,7 +676,6 @@ class GitOps:
         try:
             self._access.remove_worktree(name, force)
         except Exception as e:
-            # Map generic errors to domain error
             raise WorktreeError(f"Failed to remove worktree '{name}': {e}") from e
 
     def worktree_lock(self, name: str, reason: str | None = None) -> None:
@@ -785,7 +683,6 @@ class GitOps:
         if name not in self._access.list_worktrees():
             raise WorktreeNotFoundError(name)
 
-        # Use worktree's actual admin dir
         gitdir = self._access.worktree_gitdir(name)
         if not gitdir.exists():
             raise WorktreeError(f"Invalid worktree gitdir (missing): {gitdir}")
@@ -812,13 +709,10 @@ class GitOps:
         """Remove stale worktree entries. Returns pruned names."""
         pruned = []
         for name in self._access.list_worktrees():
-            try:
-                wt = self._access.lookup_worktree(name)
-                if wt.is_prunable:
-                    wt.prune(False)
-                    pruned.append(name)
-            except pygit2.GitError:
-                pass  # Worktree already gone or corrupt - nothing to prune
+            if self._access.worktree_is_prunable(name):
+                self._access.git.run("worktree", "prune")
+                pruned.append(name)
+                break  # Prune removes all stale at once
         return pruned
 
     def is_worktree(self) -> bool:
@@ -826,26 +720,19 @@ class GitOps:
         return self._access.is_worktree()
 
     def worktree_info(self) -> WorktreeInfo | None:
-        """
-        Get info about this worktree, or None if main working directory.
-
-        Note:
-            The returned name is the directory basename (self._access.path.name),
-            which may differ from the git worktree ID in edge cases.
-            For operations requiring the git ID, use worktrees() on the main repo.
-        """
+        """Get info about this worktree, or None if main working directory."""
         if not self.is_worktree():
             return None
 
-        head = self._access.head_ref
+        ref = self._access.head_ref
         return WorktreeInfo(
             name=self._access.path.name,
             path=str(self._access.path),
-            head_ref=head.shorthand if not self._access.is_detached else "HEAD",
-            head_sha=str(self._access.head_target) if not self._access.is_unborn else "",
+            head_ref=ref.shorthand if not self._access.is_detached else "HEAD",
+            head_sha=self._access.head_target if not self._access.is_unborn else "",
             is_main=False,
             is_bare=False,
-            is_locked=False,  # Can't easily determine from inside worktree
+            is_locked=False,
             lock_reason=None,
             is_prunable=False,
         )
@@ -861,23 +748,17 @@ class GitOps:
             try:
                 sm = self._access.lookup_submodule(name)
                 status = self._determine_submodule_status(sm)
-                # Branch property throws RuntimeError when NULL
-                try:
-                    branch = sm.branch
-                except RuntimeError:
-                    branch = None
                 result.append(
                     SubmoduleInfo(
-                        name=sm.name,
-                        path=sm.path,
-                        url=sm.url or "",
-                        branch=branch,
-                        head_sha=str(sm.head_id) if sm.head_id else None,
+                        name=sm["name"],
+                        path=sm["path"],
+                        url=sm.get("url", ""),
+                        branch=sm.get("branch"),
+                        head_sha=sm.get("head_id"),
                         status=status,
                     )
                 )
-            except pygit2.GitError:
-                # Submodule config exists but repo is missing/corrupt - report as missing
+            except GitError:
                 result.append(
                     SubmoduleInfo(
                         name=name,
@@ -890,73 +771,55 @@ class GitOps:
                 )
         return result
 
-    def _determine_submodule_status(self, sm: object) -> SubmoduleState:
-        """
-        Determine submodule status from pygit2.Submodule.
-
-        Note: "dirty" includes any working tree changes OR untracked files.
-        """
-        # Check if workdir exists
-        sm_path = Path(self._access.path) / getattr(sm, "path", "")
+    def _determine_submodule_status(self, sm: dict) -> SubmoduleState:
+        """Determine submodule status."""
+        sm_path = self._access.path / sm["path"]
         if not sm_path.exists():
             return "uninitialized"
-
-        # Check if .git exists in submodule (can be file or directory)
         if not (sm_path / ".git").exists():
             return "uninitialized"
 
         try:
-            sm_repo = pygit2.Repository(str(sm_path))
-            # Check if dirty
-            if sm_repo.status():
+            # Check status using git -C
+            result = subprocess.run(
+                ["git", "-C", str(sm_path), "status", "--porcelain"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.stdout.strip():
                 return "dirty"
 
             # Check if at recorded commit
-            head_id = getattr(sm, "head_id", None)
-            if head_id and not sm_repo.head_is_unborn and sm_repo.head.target != head_id:
+            head_result = subprocess.run(
+                ["git", "-C", str(sm_path), "rev-parse", "HEAD"],
+                capture_output=True, text=True, timeout=10,
+            )
+            actual_sha = head_result.stdout.strip()
+            recorded_sha = sm.get("head_id")
+            if recorded_sha and actual_sha != recorded_sha:
                 return "outdated"
 
             return "clean"
-        except pygit2.GitError:
+        except (subprocess.SubprocessError, OSError):
             return "missing"
 
     def submodule_status(self, path: str) -> SubmoduleStatus:
-        """
-        Detailed status for one submodule.
-
-        Args:
-            path: The submodule path (relative to repo root).
-        """
+        """Detailed status for one submodule."""
         try:
             sm = self._access.lookup_submodule_by_path(path)
-        except (pygit2.GitError, KeyError, GitError):
+        except GitError:
             raise SubmoduleNotFoundError(path) from None
 
-        # Build SubmoduleInfo for this submodule
         status = self._determine_submodule_status(sm)
-
-        # Handle NULL fields in pygit2 (raises RuntimeError if accessed when NULL)
-        try:
-            url = sm.url or ""
-        except RuntimeError:
-            url = ""
-
-        try:
-            branch = sm.branch
-        except RuntimeError:
-            branch = None
-
         info = SubmoduleInfo(
-            name=sm.name,
-            path=sm.path,
-            url=url,
-            branch=branch,
-            head_sha=str(sm.head_id) if sm.head_id else None,
+            name=sm["name"],
+            path=sm["path"],
+            url=sm.get("url", ""),
+            branch=sm.get("branch"),
+            head_sha=sm.get("head_id"),
             status=status,
         )
 
-        # Get detailed status
-        sm_path = Path(self._access.path) / path
+        sm_path = self._access.path / path
         workdir_dirty = False
         index_dirty = False
         untracked_count = 0
@@ -964,55 +827,52 @@ class GitOps:
 
         if sm_path.exists():
             try:
-                sm_repo = pygit2.Repository(str(sm_path))
-                actual_sha = str(sm_repo.head.target) if not sm_repo.head_is_unborn else None
-                repo_status = sm_repo.status()
-                for flags in repo_status.values():
-                    if flags & (pygit2.GIT_STATUS_WT_MODIFIED | pygit2.GIT_STATUS_WT_DELETED):
+                head_result = subprocess.run(
+                    ["git", "-C", str(sm_path), "rev-parse", "HEAD"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                if head_result.returncode == 0:
+                    actual_sha = head_result.stdout.strip()
+
+                status_result = subprocess.run(
+                    ["git", "-C", str(sm_path), "status", "--porcelain=v1"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                for line in status_result.stdout.splitlines():
+                    if len(line) < 4:
+                        continue
+                    x, y = line[0], line[1]
+                    if y in ("M", "D"):
                         workdir_dirty = True
-                    if flags & (
-                        pygit2.GIT_STATUS_INDEX_MODIFIED
-                        | pygit2.GIT_STATUS_INDEX_DELETED
-                        | pygit2.GIT_STATUS_INDEX_NEW
-                    ):
+                    if x in ("A", "M", "D"):
                         index_dirty = True
-                    if flags & pygit2.GIT_STATUS_WT_NEW:
+                    if x == "?" and y == "?":
                         untracked_count += 1
-            except pygit2.GitError:
-                pass  # Can't open submodule repo - dirty state unknown, defaults apply
+            except (subprocess.SubprocessError, OSError):
+                pass
 
         return SubmoduleStatus(
             info=info,
             workdir_dirty=workdir_dirty,
             index_dirty=index_dirty,
             untracked_count=untracked_count,
-            recorded_sha=str(sm.head_id) if sm.head_id else "",
+            recorded_sha=sm.get("head_id", ""),
             actual_sha=actual_sha,
         )
 
     def submodule_init(self, paths: Sequence[str] | None = None) -> list[str]:
-        """
-        Initialize submodules.
-
-        Args:
-            paths: Submodule paths to initialize. If None, initializes all.
-
-        Returns:
-            List of successfully initialized submodule paths.
-        """
+        """Initialize submodules."""
         initialized = []
 
         if paths is None:
-            # Initialize all submodules
             for name in self._access.listall_submodules():
                 try:
                     self._access.init_submodule(name)
                     sm = self._access.lookup_submodule(name)
-                    initialized.append(sm.path)
-                except pygit2.GitError:
-                    pass  # Already initialized or config corrupt - skip silently
+                    initialized.append(sm["path"])
+                except GitError:
+                    pass
         else:
-            # Initialize specific submodules by path
             for path in paths:
                 sm_name = self._access.submodule_name_for_path(path)
                 if sm_name is None:
@@ -1020,8 +880,8 @@ class GitOps:
                 try:
                     self._access.init_submodule(sm_name)
                     initialized.append(path)
-                except pygit2.GitError:
-                    pass  # Already initialized or config corrupt - skip silently
+                except GitError:
+                    pass
 
         return initialized
 
@@ -1031,19 +891,7 @@ class GitOps:
         recursive: bool = False,
         init: bool = True,
     ) -> SubmoduleUpdateResult:
-        """
-        Update submodules to recorded commits.
-
-        Uses subprocess for full credential and recursive support.
-
-        Note:
-            Result parsing is best-effort based on git output format.
-            - `updated`: paths successfully updated (parsed from stdout)
-            - `failed`: ("*", error_message) on failure (not path-specific)
-            - `already_current`: always empty (git doesn't report this separately)
-        """
-        import subprocess
-
+        """Update submodules to recorded commits."""
         cmd = ["git", "submodule", "update"]
         if init:
             cmd.append("--init")
@@ -1063,11 +911,9 @@ class GitOps:
             )
 
             if result.returncode == 0:
-                # Parse output to determine what was updated
                 updated = []
                 for line in result.stdout.splitlines():
                     if line.startswith("Submodule path"):
-                        # Extract path from "Submodule path 'foo': checked out 'abc123'"
                         parts = line.split("'")
                         if len(parts) >= 2:
                             updated.append(parts[1])
@@ -1091,8 +937,6 @@ class GitOps:
 
     def submodule_sync(self, paths: Sequence[str] | None = None) -> None:
         """Sync submodule URLs from .gitmodules to .git/config."""
-        import subprocess
-
         cmd = ["git", "submodule", "sync"]
         if paths:
             cmd.append("--")
@@ -1113,8 +957,6 @@ class GitOps:
 
     def submodule_add(self, url: str, path: str, branch: str | None = None) -> SubmoduleInfo:
         """Add new submodule."""
-        import subprocess
-
         cmd = ["git", "submodule", "add"]
         if branch:
             cmd.extend(["-b", branch])
@@ -1131,21 +973,18 @@ class GitOps:
         if result.returncode != 0:
             raise SubmoduleError(f"Failed to add submodule: {result.stderr.strip()}")
 
-        # Lookup by path (name may differ from path in some configurations)
         sm = self._access.lookup_submodule_by_path(path)
         return SubmoduleInfo(
-            name=sm.name,
-            path=sm.path,
-            url=sm.url or url,
+            name=sm["name"],
+            path=sm["path"],
+            url=sm.get("url", url),
             branch=branch,
-            head_sha=str(sm.head_id) if sm.head_id else None,
+            head_sha=sm.get("head_id"),
             status="clean",
         )
 
     def submodule_deinit(self, path: str, force: bool = False) -> None:
-        """Deinitialize submodule (remove from working tree)."""
-        import subprocess
-
+        """Deinitialize submodule."""
         cmd = ["git", "submodule", "deinit"]
         if force:
             cmd.append("--force")
@@ -1163,19 +1002,15 @@ class GitOps:
             raise SubmoduleError(f"Failed to deinit submodule: {result.stderr.strip()}")
 
     def submodule_remove(self, path: str) -> None:
-        """Fully remove submodule (deinit + remove from .gitmodules + delete dir)."""
+        """Fully remove submodule."""
         import shutil
-        import subprocess
 
-        # Resolve submodule name (may differ from path)
         name = self._access.submodule_name_for_path(path)
         if name is None:
             raise SubmoduleNotFoundError(path)
 
-        # Deinit first (uses path)
         self.submodule_deinit(path, force=True)
 
-        # Remove from .gitmodules (use name for section key)
         result = subprocess.run(
             ["git", "config", "--file", ".gitmodules", "--remove-section", f"submodule.{name}"],
             cwd=str(self._access.path),
@@ -1183,19 +1018,15 @@ class GitOps:
             text=True,
             timeout=30,
         )
-        # returncode 128 = "no such section" (already removed by deinit or never existed)
         if result.returncode not in (0, 128):
             raise SubmoduleError(
                 f"Failed to remove submodule from .gitmodules: {result.stderr.strip()}"
             )
 
-        # Stage .gitmodules change
-        gitmodules_path = Path(self._access.path) / ".gitmodules"
+        gitmodules_path = self._access.path / ".gitmodules"
         if gitmodules_path.exists():
             self._access.index.add(".gitmodules")
-            self._access.index.write()
 
-        # Remove from .git/config (use name for section key)
         result = subprocess.run(
             ["git", "config", "--remove-section", f"submodule.{name}"],
             cwd=str(self._access.path),
@@ -1203,26 +1034,19 @@ class GitOps:
             text=True,
             timeout=30,
         )
-        # returncode 128 = "no such section" (already removed by deinit or never existed)
         if result.returncode not in (0, 128):
             raise SubmoduleError(
                 f"Failed to remove submodule from .git/config: {result.stderr.strip()}"
             )
 
-        # Remove from index (use path)
-        try:
-            self._access.index.remove(path)
-            self._access.index.write()
-        except pygit2.GitError:
-            pass  # Not in index - already removed or never added
+        # Remove from index
+        self._access.git.run_raw("rm", "--cached", "--ignore-unmatch", "--", path)
 
-        # Remove directory (use path)
-        sm_path = Path(self._access.path) / path
+        sm_path = self._access.path / path
         if sm_path.exists():
             shutil.rmtree(sm_path)
 
-        # Remove .git/modules/<name> (name is used for module storage)
-        modules_path = Path(self._access.repo.path) / "modules" / name
+        modules_path = self._access.git_dir / "modules" / name
         if modules_path.exists():
             shutil.rmtree(modules_path)
 
@@ -1231,11 +1055,11 @@ class GitOps:
     # =========================================================================
 
     def rebase_plan(self, upstream: str, onto: str | None = None) -> RebasePlan:
-        """Generate default rebase plan (all picks). Agent can modify before execute."""
+        """Generate default rebase plan."""
         return self._rebase_planner.plan(upstream, onto)
 
     def rebase_execute(self, plan: RebasePlan) -> RebaseResult:
-        """Execute rebase plan. On conflict or edit-pause, returns partial result."""
+        """Execute rebase plan."""
         return self._rebase_flow.execute(plan)
 
     def rebase_continue(self) -> RebaseResult:

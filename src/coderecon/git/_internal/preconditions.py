@@ -55,7 +55,7 @@ def check_nothing_to_commit(access: RepoAccess, allow_empty: bool) -> None:
         if len(access.index) == 0:
             raise NothingToCommitError
     else:
-        tree = access.must_head_tree()
-        diff = access.index.diff_to_tree(tree)
-        if diff.stats.files_changed == 0:
+        # Check staged diff via numstat (faster than parsing full diff text)
+        numstat = access.diff_numstat("--cached")
+        if len(numstat) == 0:
             raise NothingToCommitError

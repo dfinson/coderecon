@@ -1,6 +1,5 @@
 """Git operations module."""
 
-from coderecon.git.credentials import SystemCredentialCallback, get_default_callbacks
 from coderecon.git.errors import (
     AuthenticationError,
     BranchExistsError,
@@ -93,9 +92,6 @@ __all__ = [
     "RebaseStep",
     "RebaseResult",
     "RebaseResultState",
-    # Credentials
-    "SystemCredentialCallback",
-    "get_default_callbacks",
     # Errors
     "GitError",
     "NotARepositoryError",

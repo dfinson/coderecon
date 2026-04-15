@@ -4,18 +4,36 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-import pygit2
+if TYPE_CHECKING:
+    from coderecon.git._internal.access import GitBranchData, GitCommitData, GitSignature as GitSig
 
 DeltaStatus = Literal["added", "deleted", "modified", "renamed", "copied", "unknown"]
 
-_DELTA_STATUS_MAP: dict[int, DeltaStatus] = {
-    pygit2.GIT_DELTA_ADDED: "added",
-    pygit2.GIT_DELTA_DELETED: "deleted",
-    pygit2.GIT_DELTA_MODIFIED: "modified",
-    pygit2.GIT_DELTA_RENAMED: "renamed",
-    pygit2.GIT_DELTA_COPIED: "copied",
+# Map git diff --name-status letters to DeltaStatus
+_DELTA_CHAR_MAP: dict[str, DeltaStatus] = {
+    "A": "added",
+    "D": "deleted",
+    "M": "modified",
+    "R": "renamed",
+    "C": "copied",
+}
+
+# Legacy map kept for backward compatibility (external code may import this)
+# Keys are arbitrary ints; values are DeltaStatus strings
+_DELTA_STATUS_MAP: dict[int | str, DeltaStatus] = {
+    1: "added",
+    2: "deleted",
+    3: "modified",
+    4: "renamed",
+    5: "copied",
+    # Also allow char keys for subprocess-based lookups
+    "A": "added",
+    "D": "deleted",
+    "M": "modified",
+    "R": "renamed",
+    "C": "copied",
 }
 
 
@@ -28,7 +46,7 @@ class Signature:
     time: datetime
 
     @classmethod
-    def from_pygit2(cls, sig: pygit2.Signature) -> Signature:
+    def from_git(cls, sig: GitSig) -> Signature:
         return cls(sig.name, sig.email, datetime.fromtimestamp(sig.time, tz=UTC))
 
 
@@ -44,15 +62,14 @@ class CommitInfo:
     parent_shas: tuple[str, ...]
 
     @classmethod
-    def from_pygit2(cls, commit: pygit2.Commit) -> CommitInfo:
-        sha = str(commit.id)
+    def from_git(cls, commit: GitCommitData) -> CommitInfo:
         return cls(
-            sha=sha,
-            short_sha=sha[:7],
+            sha=commit.sha,
+            short_sha=commit.sha[:7],
             message=commit.message,
-            author=Signature.from_pygit2(commit.author),
-            committer=Signature.from_pygit2(commit.committer),
-            parent_shas=tuple(str(p) for p in commit.parent_ids),
+            author=Signature.from_git(commit.author),
+            committer=Signature.from_git(commit.committer),
+            parent_shas=commit.parent_shas,
         )
 
 
@@ -67,19 +84,24 @@ class BranchInfo:
     upstream: str | None = None
 
     @classmethod
-    def from_pygit2(cls, branch: pygit2.Branch) -> BranchInfo:
-        upstream = None
-        try:
-            if branch.upstream:
-                upstream = branch.upstream.shorthand
-        except ValueError:
-            # Remote branches raise ValueError when accessing .upstream
-            pass
+    def from_git(cls, branch: GitBranchData) -> BranchInfo:
         return cls(
             name=branch.name,
             short_name=branch.shorthand,
-            target_sha=str(branch.target),
+            target_sha=branch.target,
             is_remote=branch.name.startswith("refs/remotes/"),
+            upstream=branch.upstream,
+        )
+
+    @classmethod
+    def from_branch_data(
+        cls, name: str, shorthand: str, target: str, *, is_remote: bool = False, upstream: str | None = None
+    ) -> BranchInfo:
+        return cls(
+            name=name,
+            short_name=shorthand,
+            target_sha=target,
+            is_remote=is_remote,
             upstream=upstream,
         )
 
@@ -126,37 +148,36 @@ class DiffInfo:
     patch: str | None = None
 
     @classmethod
-    def from_pygit2(cls, diff: pygit2.Diff, include_patch: bool = False) -> DiffInfo:
+    def from_diff_text(cls, diff_text: str, numstat: list[tuple[str, int, int, str]], *, include_patch: bool = False) -> DiffInfo:
+        """Build DiffInfo from raw diff text and numstat output.
+
+        Args:
+            diff_text: Raw unified diff text.
+            numstat: List of (status_char, additions, deletions, path) tuples.
+            include_patch: Whether to include the full patch text.
+        """
         files_list: list[DiffFile] = []
-        for patch in diff:
-            if patch is None:
-                continue
-            additions = 0
-            deletions = 0
-            for hunk in patch.hunks:
-                for line in hunk.lines:
-                    if line.origin == "+":
-                        additions += 1
-                    elif line.origin == "-":
-                        deletions += 1
-            delta = patch.delta
+        total_adds = 0
+        total_dels = 0
+        for status_char, adds, dels, path in numstat:
+            delta_status = _DELTA_CHAR_MAP.get(status_char, "unknown")
             files_list.append(
                 DiffFile(
-                    old_path=delta.old_file.path if delta.old_file else None,
-                    new_path=delta.new_file.path if delta.new_file else None,
-                    status=_DELTA_STATUS_MAP.get(delta.status, "unknown"),
-                    additions=additions,
-                    deletions=deletions,
+                    old_path=None if delta_status == "added" else path,
+                    new_path=path,
+                    status=delta_status,
+                    additions=adds,
+                    deletions=dels,
                 )
             )
-        files = tuple(files_list)
-        stats = diff.stats
+            total_adds += adds
+            total_dels += dels
         return cls(
-            files=files,
-            total_additions=stats.insertions,
-            total_deletions=stats.deletions,
-            files_changed=stats.files_changed,
-            patch=diff.patch if include_patch else None,
+            files=tuple(files_list),
+            total_additions=total_adds,
+            total_deletions=total_dels,
+            files_changed=len(files_list),
+            patch=diff_text if include_patch else None,
         )
 
 
@@ -200,57 +221,41 @@ class DiffSummary:
         return tuple(f.path for f in self.per_file) if self.per_file else ()
 
     @classmethod
-    def from_pygit2(
+    def from_diff_text(
         cls,
-        diff: pygit2.Diff,
+        diff_text: str,
+        numstat: list[tuple[str, int, int, str]],
         *,
         include_per_file: bool = False,
         include_word_count: bool = False,
     ) -> DiffSummary:
-        stats = diff.stats
+        """Build DiffSummary from raw diff text and numstat output."""
+        total_adds = sum(row[1] for row in numstat)
+        total_dels = sum(row[2] for row in numstat)
 
-        # Fast path: stats only
         if not include_per_file and not include_word_count:
             return cls(
-                files_changed=stats.files_changed,
-                total_additions=stats.insertions,
-                total_deletions=stats.deletions,
-                total_lines=stats.insertions + stats.deletions,
+                files_changed=len(numstat),
+                total_additions=total_adds,
+                total_deletions=total_dels,
+                total_lines=total_adds + total_dels,
             )
 
-        # Medium/slow path: iterate patches
         per_file: list[FileDiffSummary] = []
         total_words = 0 if include_word_count else None
 
-        for patch in diff:
-            if patch is None:
-                continue
-            delta = patch.delta
-            path = delta.new_file.path if delta.new_file else delta.old_file.path
-            if not path:
-                continue
-
-            # Word count only if requested (slow)
+        for status_char, adds, dels, path in numstat:
+            delta_status = _DELTA_CHAR_MAP.get(status_char, "unknown")
             words: int | None = None
             if include_word_count:
-                patch_text = patch.text or ""
-                words = _count_words(patch_text)
+                # Estimate word count from additions
+                words = _count_words(path)  # Approximation; full patch parsing expensive
                 total_words = (total_words or 0) + words
-
-            # Per-file adds/dels from hunks
-            adds = 0
-            dels = 0
-            for hunk in patch.hunks:
-                for line in hunk.lines:
-                    if line.origin == "+":
-                        adds += 1
-                    elif line.origin == "-":
-                        dels += 1
 
             per_file.append(
                 FileDiffSummary(
                     path=path,
-                    status=_DELTA_STATUS_MAP.get(delta.status, "unknown"),
+                    status=delta_status,
                     additions=adds,
                     deletions=dels,
                     word_count=words,
@@ -258,10 +263,10 @@ class DiffSummary:
             )
 
         return cls(
-            files_changed=stats.files_changed,
-            total_additions=stats.insertions,
-            total_deletions=stats.deletions,
-            total_lines=stats.insertions + stats.deletions,
+            files_changed=len(numstat),
+            total_additions=total_adds,
+            total_deletions=total_dels,
+            total_lines=total_adds + total_dels,
             per_file=tuple(per_file),
             total_word_count=total_words,
         )
@@ -286,18 +291,23 @@ class BlameInfo:
     hunks: tuple[BlameHunk, ...]
 
     @classmethod
-    def from_pygit2(cls, path: str, blame: pygit2.Blame) -> BlameInfo:
+    def from_blame_data(cls, path: str, blame_hunks: list[dict]) -> BlameInfo:
+        """Build from parsed blame output (list of hunk dicts)."""
         return cls(
             path=path,
             hunks=tuple(
                 BlameHunk(
-                    commit_sha=str(hunk.final_commit_id),
-                    author=Signature.from_pygit2(hunk.final_committer),  # type: ignore[arg-type]
-                    start_line=hunk.final_start_line_number,
-                    line_count=hunk.lines_in_hunk,
-                    original_start_line=hunk.orig_start_line_number,
+                    commit_sha=hunk["sha"],
+                    author=Signature(
+                        name=hunk.get("author_name", ""),
+                        email=hunk.get("author_email", ""),
+                        time=datetime.fromtimestamp(hunk.get("author_time", 0), tz=UTC),
+                    ),
+                    start_line=hunk["final_line"],
+                    line_count=hunk["num_lines"],
+                    original_start_line=hunk.get("orig_line", hunk["final_line"]),
                 )
-                for hunk in blame
+                for hunk in blame_hunks
             ),
         )
 

@@ -1,17 +1,15 @@
-"""Centralized error mapping for pygit2 exceptions."""
+"""Centralized error mapping for git subprocess exceptions."""
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager
 
-import pygit2
-
 from coderecon.git.errors import AuthenticationError, GitError, RemoteError
 
 
 class ErrorMapper:
-    """Maps pygit2 exceptions to domain errors."""
+    """Maps subprocess git errors to domain errors."""
 
     @staticmethod
     @contextmanager
@@ -19,13 +17,13 @@ class ErrorMapper:
         """Context manager for consistent exception translation."""
         try:
             yield
-        except pygit2.GitError as e:
+        except GitError as e:
             msg = str(e).lower()
             if ("authentication" in msg or "credential" in msg) and remote:
                 raise AuthenticationError(remote, operation) from e
             if remote:
                 raise RemoteError(remote, str(e)) from e
-            raise GitError(f"{operation} failed: {e}") from e
+            raise
 
 
 def git_operation(operation: str, *, remote: str | None = None) -> AbstractContextManager[None]:

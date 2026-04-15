@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-import pygit2
-
-from coderecon.git._internal.access import RepoAccess
+from coderecon.git._internal.access import GitSignature, RepoAccess
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,16 +36,7 @@ class WriteFlows:
         return tuple(sorted(paths))
 
     def check_conflicts(self) -> ConflictCheckResult:
-        """
-        Check if index has conflicts and extract paths.
-
-        Returns:
-            ConflictCheckResult with:
-            - has_conflicts: True if any conflicts exist
-            - conflict_paths: Sorted tuple of unique paths with conflicts
-
-        Contract: Non-destructive read. Does not modify index or resolve conflicts.
-        """
+        """Check if index has conflicts and extract paths."""
         if self._access.index.conflicts:
             return ConflictCheckResult(True, self.extract_conflict_paths())
         return ConflictCheckResult(False, ())
@@ -55,27 +44,22 @@ class WriteFlows:
     def write_tree_and_commit(
         self,
         message: str,
-        parents: list[pygit2.Oid],
+        parents: list[str],
         *,
-        author: pygit2.Signature | None = None,
+        author: GitSignature | None = None,
     ) -> str:
-        """
-        Write index tree and create commit. Returns sha.
-
-        Contract: Uses passed parents verbatim - does NOT re-read HEAD.
-        Caller is responsible for capturing HEAD oid before any mutations.
-        """
-        tree_id = self._access.index.write_tree()
+        """Write index tree and create commit. Returns sha."""
+        tree_sha = self._access.index.write_tree()
         sig = self._access.default_signature
         oid = self._access.create_commit(
             "HEAD",
             author or sig,
             sig,
             message,
-            tree_id,
+            tree_sha,
             parents,
         )
-        return str(oid)
+        return oid
 
     def commit_from_index(self, message: str) -> str:
         """Create commit from current index state. Returns sha."""
@@ -84,13 +68,7 @@ class WriteFlows:
 
     @contextmanager
     def stateful_op(self) -> Iterator[None]:
-        """
-        Context manager that guarantees state cleanup after stateful operations.
-
-        IMPORTANT: This only calls state_cleanup() which clears merge/cherrypick/revert
-        state files (MERGE_HEAD, CHERRY_PICK_HEAD, etc). It does NOT reset the index
-        or working tree. For abort semantics, callers must explicitly reset after cleanup.
-        """
+        """Context manager that guarantees state cleanup after stateful operations."""
         try:
             yield
         finally:
@@ -98,14 +76,13 @@ class WriteFlows:
 
     def run_merge_like_operation(
         self,
-        operation_fn: Callable[[], None],
+        operation_fn: callable,
         message: str,
-        parents: list[pygit2.Oid],
+        parents: list[str],
         *,
-        author: pygit2.Signature | None = None,
+        author: GitSignature | None = None,
     ) -> tuple[bool, str | None, tuple[str, ...]]:
-        """
-        Run merge-like operation with guaranteed cleanup.
+        """Run merge-like operation with guaranteed cleanup.
 
         Returns (success, commit_sha_or_none, conflict_paths).
         """
