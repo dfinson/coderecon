@@ -1,0 +1,26 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+
+name: recon_lab_swebench_resolve
+display_name: "SWE-bench Resolve"
+version: "1"
+description: "Phase 2: Map defs + LLM filter (needs coderecon index)."
+
+inputs:
+  workspace:
+    type: uri_folder
+    description: "Mounted workspace root (blob datastore)."
+  repo_set:
+    type: string
+    default: "all"
+
+environment:
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04
+  conda_file: ../environments/conda-pipeline.yml
+
+code: ../../src
+
+command: >-
+  export PYTHONPATH=.:$PYTHONPATH &&
+  recon-lab swebench-resolve
+  --workspace ${{inputs.workspace}}
+  --set ${{inputs.repo_set}}

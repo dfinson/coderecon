@@ -165,7 +165,7 @@ def validate_non_ok(data: dict, file_path: str) -> list[str]:
 
 def validate_repo(data_dir: Path) -> list[str]:
     """Validate all ground truth files for a repo."""
-    from cpl_lab.collector import iter_task_json_files
+    from cpl_lab.data_manifest import iter_task_json_files
 
     errors: list[str] = []
 

@@ -1,0 +1,122 @@
+# Recon Lab — Task Runner
+#
+# Usage:
+#   just              # show available tasks
+#   just pipeline     # run full DVC pipeline
+#   just train        # train all models
+#   just eval         # run Inspect AI evaluation
+#
+# Requirements: just (https://github.com/casey/just)
+
+set dotenv-load
+
+default:
+    @just --list
+
+# ── Infrastructure ───────────────────────────────────────────────
+
+# Provision Azure Foundry (gpt-4.1-mini for query generation)
+infra-plan:
+    cd ../infra && terraform init && terraform plan
+
+infra-apply:
+    cd ../infra && terraform init && terraform apply
+
+infra-output:
+    cd ../infra && terraform output
+
+# ── Pipeline (DVC) ───────────────────────────────────────────────
+
+# Run full pipeline end-to-end
+pipeline:
+    dvc repro
+
+# Run pipeline up to a specific stage
+pipeline-to stage:
+    dvc repro {{stage}}
+
+# Show pipeline DAG
+pipeline-dag:
+    dvc dag
+
+# Show what's changed since last run
+pipeline-status:
+    dvc status
+
+# ── Individual Stages ────────────────────────────────────────────
+
+clone set="all":
+    recon-lab clone --set {{set}}
+
+index set="all":
+    recon-lab index --set {{set}}
+
+swebench set="all" *ARGS="":
+    recon-lab swebench --set {{set}} {{ARGS}}
+
+swebench-import set="all" *ARGS="":
+    recon-lab swebench-import --set {{set}} {{ARGS}}
+
+swebench-resolve set="all" *ARGS="":
+    recon-lab swebench-resolve --set {{set}} {{ARGS}}
+
+collect set="all":
+    recon-lab collect --set {{set}}
+
+merge what="all":
+    recon-lab merge --what {{what}}
+
+train model="all":
+    recon-lab train --model {{model}}
+
+eval experiment="":
+    recon-lab eval {{ if experiment != "" { "--experiment " + experiment } else { "" } }}
+
+validate set="all":
+    recon-lab validate --set {{set}}
+
+status:
+    recon-lab status
+
+# ── Development ──────────────────────────────────────────────────
+
+test *ARGS="":
+    pytest {{ARGS}}
+
+lint:
+    ruff check src/ tests/
+
+fmt:
+    ruff format src/ tests/
+
+# ── Utilities ────────────────────────────────────────────────────
+
+# Show eval results (Inspect AI logs)
+eval-results:
+    @ls -lt ~/.recon/recon-lab/eval/logs/ 2>/dev/null || echo "No eval results yet. Run: just eval"
+
+# Compare two DVC experiments
+diff rev1 rev2:
+    dvc diff {{rev1}} {{rev2}}
+
+# ── Azure ML Pipeline ───────────────────────────────────────────
+
+# Submit full AML pipeline (clone → train → eval)
+aml-pipeline set="all":
+    python -m aml.pipeline --repo-set {{set}}
+
+# Submit train-only AML pipeline (re-train on existing merged data)
+aml-train:
+    python -m aml.pipeline --stage train
+
+# Submit collect→train AML pipeline (new signals, same GT)
+aml-collect-to-train set="all":
+    python -m aml.pipeline --stage collect-to-train --repo-set {{set}}
+
+# Dry-run: show AML pipeline config without submitting
+aml-dry-run set="all":
+    python -m aml.pipeline --dry-run --repo-set {{set}}
+
+# Submit standalone train job (legacy, no pipeline)
+aml-train-job:
+    az ml job create -f aml/train-job.yml --workspace-name mlw-coderecon-lab

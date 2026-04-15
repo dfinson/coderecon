@@ -84,6 +84,7 @@ def get_config(cli_override: str | None = None) -> dict:
                 "eval_dataset", "princeton-nlp/SWE-bench_Verified"
             ),
             "eval_split": swebench_cfg.get("eval_split", "test"),
+            "supplemental_datasets": swebench_cfg.get("supplemental_datasets", []),
             "llm_model": swebench_cfg.get("llm_model", "openai/gpt-4.1-mini"),
             "filter_model": swebench_cfg.get("filter_model", "openai/gpt-4.1-mini"),
             "max_instances": swebench_cfg.get("max_instances", 0),

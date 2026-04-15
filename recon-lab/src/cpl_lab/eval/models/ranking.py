@@ -1,17 +1,17 @@
-"""In-process ranking model — runs the full pipeline without a daemon.
+"""In-process ranking solver — runs the full pipeline without a daemon.
 
-Registered as ``@model("cpl-ranking")`` for EVEE evaluation.
+Inspect AI solver that wraps the ranking pipeline.
 
 Supports two modes:
 
-- **baseline** — no learned models; uses ``emb_score`` for ranking,
+- **baseline** — no learned models; uses RRF heuristic for ranking,
   always predicts ``GateLabel.OK``, and returns a fixed cutoff of 20.
 - **ranking** — loads trained LightGBM models (gate, ranker, cutoff)
   from *models_dir* and applies the full inference pipeline.
 
 Loads each repo's index in-process via ``AppContext``, then runs
 raw_signals → gate → ranker → cutoff.  Caches one ``AppContext`` at a
-time (repos are processed sequentially via ``max_workers: 1``).
+time (repos are processed sequentially).
 """
 
 from __future__ import annotations
@@ -20,8 +20,9 @@ import asyncio
 import gc
 import logging
 from pathlib import Path
+from typing import Any
 
-from evee import model
+from inspect_ai.solver import Solver, TaskState, solver
 
 
 def _def_key(c: dict) -> str:
@@ -29,41 +30,34 @@ def _def_key(c: dict) -> str:
     return f"{c.get('path', '')}:{c.get('kind', '')}:{c.get('name', '')}:{c.get('start_line', 0)}"
 
 
-@model("cpl-ranking")
-class RankingModel:
-    """In-process ranking pipeline for EVEE evaluation.
-
-    Args:
-        clone_dir: Root directory containing cloned eval repos.
-        mode: ``"baseline"`` (emb_score fallbacks) or ``"ranking"``
-            (trained LightGBM models).
-        models_dir: Path to directory containing ``{gate,ranker,cutoff}.lgbm``.
-            Only used when *mode* is ``"ranking"``.
-    """
+class _RankingPipeline:
+    """Shared state for the ranking pipeline across samples."""
 
     def __init__(
         self,
-        clone_dir: str = "~/.recon/recon-lab/clones",
-        mode: str = "baseline",
-        models_dir: str = "~/.recon/recon-lab/models",
-        **kwargs: object,
+        clone_dir: str,
+        mode: str,
+        models_dir: str,
+        variant: str,
     ) -> None:
-        self._clone_root = Path(clone_dir).expanduser()
+        self._instances_dir = Path(clone_dir).expanduser()
         self._mode = mode
         self._models_dir = Path(models_dir).expanduser()
+        self._variant = variant
         self._cached_repo: str | None = None
-        self._ctx = None
+        self._ctx: Any = None
         self._loop: asyncio.AbstractEventLoop | None = None
-        self._gate = None
-        self._ranker = None
-        self._cutoff = None
+        self._gate: Any = None
+        self._ranker: Any = None
+        self._cutoff: Any = None
 
-    def _ensure_context(self, repo_id: str) -> None:
-        """Load (or re-use cached) AppContext for *repo_id*."""
-        if self._cached_repo == repo_id and self._ctx is not None:
+    def _workspace_id(self, instance_id: str) -> str:
+        return "".join(c if c.isalnum() else "_" for c in instance_id)
+
+    def _ensure_context(self, instance_id: str) -> None:
+        if self._cached_repo == instance_id and self._ctx is not None:
             return
 
-        # Release previous context to free memory (tantivy, sqlite, embeddings)
         if self._ctx is not None:
             self._ctx.coordinator.close()
             self._ctx = None
@@ -71,21 +65,17 @@ class RankingModel:
             gc.collect()
 
         from coderecon.mcp.context import AppContext
-        from cpl_lab.clone import REPO_MANIFEST
 
-        info = REPO_MANIFEST.get(repo_id)
-        if info is None:
-            msg = f"Unknown repo_id: {repo_id}"
-            raise ValueError(msg)
-        clone_dir = self._clone_root / info["set"] / info["clone_name"]
+        wid = self._workspace_id(instance_id)
+        clone_dir = self._instances_dir / wid
         cp = clone_dir / ".recon"
         if not cp.exists():
-            msg = f"No coderecon index at {cp}"
+            msg = f"No coderecon index at {cp} (instance {instance_id!r})"
             raise FileNotFoundError(msg)
 
         logging.disable(logging.WARNING)
 
-        self._ctx = AppContext.create(
+        self._ctx = AppContext.standalone(
             repo_root=clone_dir,
             db_path=cp / "index.db",
             tantivy_path=cp / "tantivy",
@@ -96,41 +86,42 @@ class RankingModel:
             asyncio.set_event_loop(self._loop)
 
         self._loop.run_until_complete(self._ctx.coordinator.load_existing())
-        self._cached_repo = repo_id
+        self._cached_repo = instance_id
 
-        # Load models based on mode
         from coderecon.ranking.cutoff import load_cutoff
         from coderecon.ranking.gate import load_gate
         from coderecon.ranking.ranker import load_ranker
 
         if self._mode == "ranking":
-            self._gate = load_gate(self._models_dir / "gate.lgbm")
-            self._ranker = load_ranker(self._models_dir / "ranker.lgbm")
-            self._cutoff = load_cutoff(self._models_dir / "cutoff.lgbm")
+            v = self._variant
+            gate_path = self._models_dir / f"gate_{v}.lgbm"
+            ranker_path = self._models_dir / f"def_ranker_{v}.lgbm"
+            cutoff_path = self._models_dir / f"cutoff_{v}.lgbm"
+            if not gate_path.exists():
+                gate_path = self._models_dir / "gate.lgbm"
+            if not ranker_path.exists():
+                ranker_path = self._models_dir / "ranker.lgbm"
+            if not cutoff_path.exists():
+                cutoff_path = self._models_dir / "cutoff.lgbm"
+            self._gate = load_gate(gate_path)
+            self._ranker = load_ranker(ranker_path)
+            self._cutoff = load_cutoff(cutoff_path)
         else:
-            # Baseline: pass a non-existent path so load_* returns fallback
             _dummy = Path("/dev/null/no_model.lgbm")
             self._gate = load_gate(_dummy)
             self._ranker = load_ranker(_dummy)
             self._cutoff = load_cutoff(_dummy)
 
-    def infer(self, input: dict) -> dict:  # noqa: A002
-        """Run the full pipeline for a single query record.
+    def infer(self, meta: dict) -> dict:
+        """Run the full pipeline for a single query record."""
+        instance_id = meta.get("task_id") or meta["repo_id"]
+        query = meta.get("problem_statement") or meta["query_text"]
+        seeds = meta.get("seeds") or None
+        pins = meta.get("pins") or None
 
-        Expects keys from the dataset: ``repo_id``, ``query_text``,
-        ``seeds``, ``pins``.
-
-        Returns ``ranked_candidate_keys``, ``predicted_relevances``,
-        ``predicted_n``, ``predicted_gate``.
-        """
-        repo_id = input["repo_id"]
-        query = input["query_text"]
-        seeds = input.get("seeds") or None
-        pins = input.get("pins") or None
-
-        self._ensure_context(repo_id)
-        assert self._ctx is not None  # noqa: S101
-        assert self._loop is not None  # noqa: S101
+        self._ensure_context(instance_id)
+        assert self._ctx is not None
+        assert self._loop is not None
 
         from coderecon.mcp.tools.recon.raw_signals import raw_signals_pipeline
         from coderecon.ranking.features import (
@@ -140,7 +131,6 @@ class RankingModel:
         )
         from coderecon.ranking.models import GateLabel
 
-        # 1. Raw signals
         raw = self._loop.run_until_complete(
             raw_signals_pipeline(self._ctx, query, seeds=seeds, pins=pins),
         )
@@ -148,7 +138,6 @@ class RankingModel:
         query_features = raw.get("query_features", {})
         repo_features = raw.get("repo_features", {})
 
-        # 2. Gate
         gate_features = extract_gate_features(candidates, query_features, repo_features)
         gate_label = self._gate.classify(gate_features)
 
@@ -160,19 +149,16 @@ class RankingModel:
                 "predicted_gate": gate_label.value,
             }
 
-        # 3. Rank
         ranker_features = extract_ranker_features(candidates, query_features)
         scores = self._ranker.score(ranker_features)
-        scored = sorted(zip(candidates, scores), key=lambda x: -x[1])
+        scored = sorted(zip(candidates, scores, strict=False), key=lambda x: -x[1])
 
-        # 4. Cutoff
         ranked_for_cutoff = [{**c, "ranker_score": s} for c, s in scored]
         cutoff_features = extract_cutoff_features(
             ranked_for_cutoff, query_features, repo_features,
         )
         predicted_n = self._cutoff.predict(cutoff_features)
 
-        # 5. Build output in ground-truth key format
         ranked_candidate_keys = [_def_key(c) for c, _ in scored]
         predicted_relevances = [round(s, 4) for _, s in scored]
 
@@ -182,3 +168,31 @@ class RankingModel:
             "predicted_n": predicted_n,
             "predicted_gate": gate_label.value,
         }
+
+
+@solver
+def ranking_solver(
+    clone_dir: str = "~/.recon/recon-lab/clones/instances",
+    mode: str = "baseline",
+    models_dir: str = "~/.recon/recon-lab/models",
+    variant: str = "structural",
+) -> Solver:
+    """Inspect AI solver that runs the in-process ranking pipeline."""
+    pipeline = _RankingPipeline(
+        clone_dir=clone_dir,
+        mode=mode,
+        models_dir=models_dir,
+        variant=variant,
+    )
+
+    async def solve(state: TaskState, generate: Any) -> TaskState:
+        meta = state.metadata
+        result = pipeline.infer(meta)
+        state.store.set("ranked_candidate_keys", result["ranked_candidate_keys"])
+        state.store.set("predicted_relevances", result["predicted_relevances"])
+        state.store.set("predicted_n", result["predicted_n"])
+        state.store.set("predicted_gate", result["predicted_gate"])
+        return state
+
+    return solve
+

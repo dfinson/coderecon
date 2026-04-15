@@ -21,7 +21,8 @@ dependencies = [
     "rich>=14.0",
     "tomli>=2.0; python_version < '3.12'",
     "coderecon",
-    "evee-ms-core",
+    "inspect-ai>=0.3.59",
+    "dvc>=3.50",
 ]
 
 [project.scripts]
@@ -32,13 +33,16 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.4",
 ]
+aml = [
+    "azure-ai-ml>=1.15",
+    "azure-identity>=1.16",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cpl_lab"]
 
 [tool.uv.sources]
 coderecon = { path = "..", editable = true }
-evee-ms-core = { path = "../assets/evee_wheels/evee_ms_core-0.4.0-py3-none-any.whl" }
 
 [tool.ruff]
 target-version = "py311"

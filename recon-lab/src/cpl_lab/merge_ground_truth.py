@@ -2,9 +2,9 @@
 
 Two phases:
   1. **Post-process**: For each repo with per-task JSONs but no JSONL
-     tables, run ``collector.collect_ground_truth()`` to resolve defs
-     against the coderecon index and produce ``runs.jsonl``,
-     ``touched_objects.jsonl``, ``queries.jsonl``.
+     tables, run ``collect_ground_truth()`` to resolve defs against the
+     coderecon index and produce ``runs.jsonl``, ``touched_objects.jsonl``,
+     ``queries.jsonl``.
   2. **Merge**: Concatenate across repos into ``data/merged/*.parquet``,
      adding a ``repo_set`` column from ``REPO_MANIFEST``.
 
@@ -25,7 +25,206 @@ from typing import Any
 import click
 import pandas as pd
 
-from cpl_lab.data_manifest import clone_dir_for_dir, iter_repo_data_dirs, load_repo_manifest
+from cpl_lab.data_manifest import (
+    clone_dir_for_dir,
+    iter_repo_data_dirs,
+    iter_task_json_files,
+    load_repo_manifest,
+)
+
+
+# ── Ground truth post-processing (from collector.py) ────────────
+
+
+def _resolve_end_line(
+    cursor: sqlite3.Cursor,
+    path: str,
+    name: str,
+    kind: str,
+    start_line: int,
+) -> int | None:
+    """Look up end_line for a def in the index by (path, name, kind, start_line)."""
+    row = cursor.execute(
+        """
+        SELECT d.end_line
+        FROM def_facts d
+        JOIN files f ON d.file_id = f.id
+        WHERE f.path = ? AND d.name = ? AND d.kind = ?
+          AND d.start_line = ?
+        LIMIT 1
+        """,
+        (path, name, kind, start_line),
+    ).fetchone()
+    if row is not None:
+        return row[0]
+
+    row = cursor.execute(
+        """
+        SELECT d.end_line
+        FROM def_facts d
+        JOIN files f ON d.file_id = f.id
+        WHERE f.path = ? AND d.name = ? AND d.kind = ?
+          AND ABS(d.start_line - ?) <= 5
+        ORDER BY ABS(d.start_line - ?)
+        LIMIT 1
+        """,
+        (path, name, kind, start_line, start_line),
+    ).fetchone()
+    if row is not None:
+        return row[0]
+
+    return None
+
+
+def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    """Write rows as newline-delimited JSON."""
+    with open(path, "w") as f:
+        for row in rows:
+            f.write(json.dumps(row) + "\n")
+
+
+def collect_ground_truth(
+    repo_id: str,
+    data_dir: Path,
+    index_db: Path,
+) -> dict[str, Any]:
+    """Post-process agent JSON output into JSONL tables.
+
+    Reads per-task JSON files from ``data/{repo_id}/ground_truth/``,
+    resolves defs against the coderecon index, and assembles
+    ``runs.jsonl``, ``touched_objects.jsonl``, and ``queries.jsonl``.
+    """
+    gt_dir = data_dir / "ground_truth"
+    task_files = iter_task_json_files(gt_dir)
+    if not task_files:
+        raise FileNotFoundError(f"No ground truth JSON files in {gt_dir}")
+
+    con = sqlite3.connect(str(index_db))
+    cur = con.cursor()
+
+    runs: list[dict[str, Any]] = []
+    touched: list[dict[str, Any]] = []
+    queries: list[dict[str, Any]] = []
+    audit_records: list[dict[str, Any]] = []
+    unmatched: list[dict[str, str]] = []
+
+    for tf in task_files:
+        task = json.loads(tf.read_text())
+        raw_task_id = task["task_id"]
+        task_id = raw_task_id.split("/")[-1] if "/" in raw_task_id else raw_task_id
+        run_id = f"{repo_id}_{task_id}"
+
+        runs.append({
+            "run_id": run_id,
+            "repo_id": repo_id,
+            "task_id": task_id,
+            "task_text": task["task_text"],
+        })
+
+        for tier_key, tier_label in [
+            ("minimum_sufficient_defs", "minimum"),
+            ("thrash_preventing_defs", "thrash_preventing"),
+        ]:
+            for rd in task.get(tier_key, []):
+                end_line = _resolve_end_line(
+                    cur, rd["path"], rd["name"], rd["kind"],
+                    start_line=rd["start_line"],
+                )
+                if end_line is None:
+                    unmatched.append({
+                        "task_id": task_id,
+                        "tier": tier_label,
+                        "path": rd["path"],
+                        "name": rd["name"],
+                        "kind": rd["kind"],
+                    })
+                touched.append({
+                    "run_id": run_id,
+                    "candidate_key": f"{rd['path']}:{rd['kind']}:{rd['name']}:{rd['start_line']}",
+                    "path": rd["path"],
+                    "kind": rd["kind"],
+                    "name": rd["name"],
+                    "start_line": rd["start_line"],
+                    "end_line": end_line if end_line is not None else rd["start_line"],
+                    "tier": tier_label,
+                })
+
+        audit_records.append({
+            "run_id": run_id,
+            "task_id": task_id,
+            "diff": task.get("diff", ""),
+            "solve_notes": task.get("solve_notes", ""),
+            "confidence": task.get("confidence", "unknown"),
+            "excluded_defs": task.get("excluded_defs", []),
+            "justifications": {
+                tier_key: [
+                    {"path": d["path"], "name": d["name"], "reason": d.get("reason", "")}
+                    for d in task.get(tier_key, [])
+                ]
+                for tier_key in ("minimum_sufficient_defs", "thrash_preventing_defs")
+            },
+        })
+
+        for qi, q in enumerate(task.get("queries", [])):
+            query_type = q["query_type"]
+            label = "OK" if query_type.startswith("Q_") else query_type
+            queries.append({
+                "run_id": run_id,
+                "query_id": f"{run_id}_q{qi}",
+                "query_text": q["query_text"],
+                "query_type": query_type,
+                "seeds": q.get("seeds", []),
+                "pins": q.get("pins", []),
+                "label_gate": label,
+            })
+
+    con.close()
+
+    non_ok_path = gt_dir / "non_ok_queries.json"
+    if non_ok_path.exists():
+        non_ok = json.loads(non_ok_path.read_text())
+        non_ok_run_id = f"{repo_id}__non_ok"
+        for qi, q in enumerate(non_ok.get("non_ok_queries", [])):
+            query_type = q["query_type"]
+            queries.append({
+                "run_id": non_ok_run_id,
+                "query_id": f"{non_ok_run_id}_q{qi}",
+                "query_text": q["query_text"],
+                "query_type": query_type,
+                "seeds": q.get("seeds", []),
+                "pins": q.get("pins", []),
+                "label_gate": query_type,
+            })
+
+    out_dir = data_dir / "ground_truth"
+    _write_jsonl(out_dir / "runs.jsonl", runs)
+    _write_jsonl(out_dir / "touched_objects.jsonl", touched)
+    _write_jsonl(out_dir / "queries.jsonl", queries)
+
+    audit_dir = data_dir / "audit"
+    audit_dir.mkdir(parents=True, exist_ok=True)
+    _write_jsonl(audit_dir / "audit_records.jsonl", audit_records)
+
+    n_minimum = sum(1 for t in touched if t["tier"] == "minimum")
+    n_thrash = sum(1 for t in touched if t["tier"] == "thrash_preventing")
+
+    summary = {
+        "repo_id": repo_id,
+        "tasks": len(runs),
+        "relevant_defs_total": len(touched),
+        "minimum_sufficient": n_minimum,
+        "thrash_preventing": n_thrash,
+        "queries": len(queries),
+        "unmatched": len(unmatched),
+        "unmatched_rate": len(unmatched) / max(len(touched) + len(unmatched), 1),
+        "unmatched_details": unmatched,
+    }
+
+    (out_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+    return summary
+
+
+# ── Post-process + merge pipeline ───────────────────────────────
 
 
 def _postprocess_repos(
@@ -33,12 +232,7 @@ def _postprocess_repos(
     clones_dir: Path,
     verbose: bool = False,
 ) -> dict[str, Any]:
-    """Run collector on repos that have per-task JSONs but no JSONL tables.
-
-    Returns summary with counts of processed / skipped / failed repos.
-    """
-    from cpl_lab.collector import collect_ground_truth, iter_task_json_files
-
+    """Run collector on repos that have per-task JSONs but no JSONL tables."""
     processed = skipped = failed = 0
     details: list[dict[str, Any]] = []
 

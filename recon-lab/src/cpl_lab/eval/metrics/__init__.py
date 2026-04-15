@@ -1,2 +1,2 @@
-from .gate import GateMetric  # noqa: F401
-from .ranking import RankingMetric  # noqa: F401
+from .gate import gate_scorer  # noqa: F401
+from .ranking import ranking_scorer  # noqa: F401

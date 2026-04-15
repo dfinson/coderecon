@@ -1,0 +1,32 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+
+name: recon_lab_eval
+display_name: "Evaluate Models"
+version: "1"
+description: "Run Inspect AI evaluation on the trained models."
+
+inputs:
+  workspace:
+    type: uri_folder
+    description: "Mounted workspace root (blob datastore)."
+  models:
+    type: uri_folder
+    description: "Trained models directory from train step."
+
+outputs:
+  metrics:
+    type: uri_folder
+    description: "Evaluation metrics + plots."
+
+environment:
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04
+  conda_file: ../environments/conda-pipeline.yml
+
+code: ../../src
+
+command: >-
+  export PYTHONPATH=.:$PYTHONPATH &&
+  cp ${{inputs.models}}/*.lgbm ${{inputs.workspace}}/models/ &&
+  recon-lab eval
+  --workspace ${{inputs.workspace}} &&
+  cp -r ${{inputs.workspace}}/eval/* ${{outputs.metrics}}/

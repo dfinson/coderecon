@@ -20,8 +20,7 @@ console = Console()
 
 def _iter_repos(data_dir: Path, repo_set: str) -> list[str]:
     """List repo-instance IDs for signal collection."""
-    from cpl_lab.collector import iter_task_json_files
-    from cpl_lab.data_manifest import iter_repo_data_dirs, repo_set_for_dir
+    from cpl_lab.data_manifest import iter_repo_data_dirs, iter_task_json_files, repo_set_for_dir
 
     train_sets = {"ranker-gate", "cutoff"}
     allowed = {repo_set} if repo_set != "all" else train_sets
@@ -44,7 +43,8 @@ def _find_clone_dir(clones_dir: Path, repo_dir: Path) -> Path | None:
 
 def _ensure_ground_truth_tables(repo_id: str, repo_dir: Path, clone_dir: Path) -> None:
     """Post-process raw task JSONs into JSONL tables when needed."""
-    from cpl_lab.collector import collect_ground_truth, iter_task_json_files
+    from cpl_lab.data_manifest import iter_task_json_files
+    from cpl_lab.merge_ground_truth import collect_ground_truth
 
     gt_dir = repo_dir / "ground_truth"
     if (gt_dir / "queries.jsonl").exists() and (gt_dir / "touched_objects.jsonl").exists():

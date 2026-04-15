@@ -10,6 +10,22 @@ from typing import Any
 SPECIAL_DATA_DIRS = frozenset({"merged", "logs", "index_logs"})
 MANIFEST_FILE = "manifest.json"
 
+_SPECIAL_GT_JSON_FILES = frozenset({
+    "non_ok_queries.json",
+    "summary.json",
+})
+
+
+def iter_task_json_files(gt_dir: Path) -> list[Path]:
+    """Return per-task ground-truth JSON files, excluding derived artifacts."""
+    if not gt_dir.is_dir():
+        return []
+    return sorted(
+        path
+        for path in gt_dir.glob("*.json")
+        if path.name not in _SPECIAL_GT_JSON_FILES
+    )
+
 
 def iter_repo_data_dirs(data_dir: Path) -> list[Path]:
     """Return all concrete repo-instance directories under *data_dir*."""

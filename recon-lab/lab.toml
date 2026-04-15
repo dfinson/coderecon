@@ -15,11 +15,16 @@ timeout = 1800  # 30 minutes per repo
 
 [swebench]
 training_dataset = "princeton-nlp/SWE-bench"
-training_split = "dev"
+training_split = "test"
 eval_dataset = "princeton-nlp/SWE-bench_Verified"
 eval_split = "test"
-llm_model = "openai/gpt-4.1-mini"
-filter_model = "openai/gpt-4.1-mini"
+supplemental_datasets = [
+    "princeton-nlp/SWE-bench:dev",
+    "r1v3r/multi_SWE_Bench_Rust:train",
+    "Daoguang/Multi-SWE-bench:java_verified",
+]
+llm_model = "openai/gpt-4-1-nano"
+filter_model = "openai/gpt-4-1-nano"
 max_instances = 0
 cutoff_mod = 5
 cutoff_remainder = 4

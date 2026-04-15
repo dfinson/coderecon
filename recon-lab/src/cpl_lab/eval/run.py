@@ -1,37 +1,65 @@
 #!/usr/bin/env python3
-"""Run EVEE evaluation — imports components and invokes evaluator.
+"""Run Inspect AI evaluation — loads tasks and invokes eval().
 
 Usage (standalone):
     cd recon-lab/src/cpl_lab/eval
-    python run.py experiments/eval_pipeline.yaml
+    python run.py                        # ranking pipeline tasks
+    python run.py llm                    # llm reranker tasks
 
-Or via the CLI:
-    cpl-lab eval experiments/eval_pipeline.yaml
+Via Inspect CLI:
+    inspect eval cpl_lab/eval/tasks.py@ranking_baseline --model mockllm/model
+    inspect eval cpl_lab/eval/tasks.py@ranking_trained --model mockllm/model
+
+Or via the recon-lab CLI:
+    recon-lab eval
+    recon-lab eval --experiment llm
 """
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
-# Ensure eval package root is importable
-_pkg_root = str(Path(__file__).resolve().parent)
-if _pkg_root not in sys.path:
-    sys.path.insert(0, _pkg_root)
+from inspect_ai import eval as inspect_eval
 
-from evee.evaluation.evaluate import main
+from cpl_lab.eval.tasks import (
+    llm_reranker_azure,
+    llm_reranker_baseline,
+    llm_reranker_local,
+    ranking_baseline,
+    ranking_trained,
+)
 
 
-def run(config: str | None = None, *, tracking_enabled: bool = False) -> None:
-    """Entry point callable from cpl-lab CLI."""
-    if config is None:
-        config = str(Path(__file__).resolve().parent / "experiments" / "eval_pipeline.yaml")
-    # chdir into eval package so EVEE's decorator discovery resolves modules correctly
-    os.chdir(_pkg_root)
-    main(config, tracking_enabled=tracking_enabled)
+def run(experiment: str | None = None) -> None:
+    """Entry point callable from cpl-lab CLI.
+
+    Args:
+        experiment: Which experiment set to run.
+            None or "ranking" → ranking pipeline (baseline + trained).
+            "llm" → LLM reranker tasks (baseline + azure + local).
+    """
+    log_dir = str(Path("~/.recon/recon-lab/eval/logs").expanduser())
+
+    if experiment is None or experiment == "ranking":
+        tasks = [ranking_baseline(), ranking_trained()]
+    elif experiment == "llm":
+        tasks = [llm_reranker_baseline(), llm_reranker_azure(), llm_reranker_local()]
+    else:
+        raise ValueError(
+            f"Unknown experiment: {experiment!r}. "
+            "Use 'ranking' (default) or 'llm'."
+        )
+
+    inspect_eval(
+        tasks,
+        model="mockllm/model",
+        log_dir=log_dir,
+        max_messages=1,
+    )
 
 
 if __name__ == "__main__":
-    cfg = sys.argv[1] if len(sys.argv) > 1 else None
-    run(cfg)
+    exp = sys.argv[1] if len(sys.argv) > 1 else None
+    run(exp)
+

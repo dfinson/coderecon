@@ -1,6 +1,6 @@
-"""Ranking metrics — NDCG, Hit@K, Cutoff F1/Precision/Recall.
+"""Ranking scorer — NDCG, Hit@K, Cutoff F1/Precision/Recall.
 
-Registered as ``@metric("cpl-ranking")`` for EVEE evaluation.
+Inspect AI scorer for the ranking pipeline evaluation.
 
 Evaluates the ranker's ranked list quality and the cutoff model's
 set-selection quality against def-level ground truth.
@@ -10,14 +10,19 @@ from __future__ import annotations
 
 import math
 import statistics
-from numbers import Number
-from typing import Any
 
-from evee import metric
+from inspect_ai.scorer import (
+    Metric,
+    Score,
+    Scorer,
+    Target,
+    metric,
+    scorer,
+)
+from inspect_ai.solver import TaskState
 
 
 def _dcg(relevances: list[float], k: int | None = None) -> float:
-    """Discounted cumulative gain."""
     if k is not None:
         relevances = relevances[:k]
     return sum(rel / math.log2(i + 2) for i, rel in enumerate(relevances))
@@ -26,7 +31,6 @@ def _dcg(relevances: list[float], k: int | None = None) -> float:
 def _ndcg(
     predicted_relevances: list[float], ideal_relevances: list[float], k: int | None = None
 ) -> float:
-    """Normalized DCG."""
     ideal = _dcg(sorted(ideal_relevances, reverse=True), k)
     if ideal == 0:
         return 0.0
@@ -34,7 +38,6 @@ def _ndcg(
 
 
 def _prf(returned: set[str], gt: set[str]) -> dict[str, float]:
-    """Precision, recall, F1."""
     tp = len(returned & gt)
     p = tp / len(returned) if returned else 0.0
     r = tp / len(gt) if gt else 0.0
@@ -42,20 +45,111 @@ def _prf(returned: set[str], gt: set[str]) -> dict[str, float]:
     return {"precision": round(p, 4), "recall": round(r, 4), "f1": round(f1, 4)}
 
 
-@metric("cpl-ranking")
-class RankingMetric:
+# ── Custom metrics for aggregation ────────────────────────────────────────
+# Defined before the scorer so they can be referenced in @scorer(metrics=[...])
+
+
+def _avg_metadata_field(scores: list[Score], field: str) -> float:
+    values = [s.metadata[field] for s in scores if s.metadata and field in s.metadata]
+    return round(statistics.mean(values), 4) if values else 0.0
+
+
+@metric
+def metric_avg_ndcg_10() -> Metric:
+    def compute(scores: list[Score]) -> float:
+        return _avg_metadata_field(scores, "ndcg_10")
+    return compute
+
+
+@metric
+def metric_avg_ndcg_5() -> Metric:
+    def compute(scores: list[Score]) -> float:
+        return _avg_metadata_field(scores, "ndcg_5")
+    return compute
+
+
+@metric
+def metric_avg_ndcg_20() -> Metric:
+    def compute(scores: list[Score]) -> float:
+        return _avg_metadata_field(scores, "ndcg_20")
+    return compute
+
+
+@metric
+def metric_avg_hit_5() -> Metric:
+    def compute(scores: list[Score]) -> float:
+        return _avg_metadata_field(scores, "hit_5")
+    return compute
+
+
+@metric
+def metric_avg_hit_10() -> Metric:
+    def compute(scores: list[Score]) -> float:
+        return _avg_metadata_field(scores, "hit_10")
+    return compute
+
+
+@metric
+def metric_avg_cutoff_f1() -> Metric:
+    def compute(scores: list[Score]) -> float:
+        return _avg_metadata_field(scores, "cutoff_f1")
+    return compute
+
+
+@metric
+def metric_avg_cutoff_precision() -> Metric:
+    def compute(scores: list[Score]) -> float:
+        return _avg_metadata_field(scores, "cutoff_precision")
+    return compute
+
+
+@metric
+def metric_avg_cutoff_recall() -> Metric:
+    def compute(scores: list[Score]) -> float:
+        return _avg_metadata_field(scores, "cutoff_recall")
+    return compute
+
+
+@metric
+def metric_p95_latency() -> Metric:
+    def compute(scores: list[Score]) -> float:
+        latencies = sorted(
+            s.metadata["latency_sec"] for s in scores
+            if s.metadata and "latency_sec" in s.metadata
+        )
+        if not latencies:
+            return 0.0
+        p95_idx = max(0, math.ceil(0.95 * len(latencies)) - 1)
+        return round(latencies[p95_idx], 3)
+    return compute
+
+
+# ── Scorer ────────────────────────────────────────────────────────────────
+
+
+@scorer(metrics=[
+    metric_avg_ndcg_5(),
+    metric_avg_ndcg_10(),
+    metric_avg_ndcg_20(),
+    metric_avg_hit_5(),
+    metric_avg_hit_10(),
+    metric_avg_cutoff_f1(),
+    metric_avg_cutoff_precision(),
+    metric_avg_cutoff_recall(),
+    metric_p95_latency(),
+])
+def ranking_scorer() -> Scorer:
     """NDCG, Hit@K, and cutoff F1/P/R for def-level ranking evaluation."""
 
-    def compute(
-        self,
-        ranked_candidate_keys: list[str],
-        predicted_relevances: list[float],
-        predicted_n: int,
-        gt_edited: list[str],
-        gt_read_necessary: list[str],
-        query_type: str = "UNKNOWN",
-    ) -> dict[str, Any]:
-        """Compute ranking metrics for a single query."""
+    async def score(state: TaskState, target: Target) -> Score:
+        meta = state.metadata
+        ranked_candidate_keys = state.store.get("ranked_candidate_keys", [])
+        predicted_n = state.store.get("predicted_n", 0)
+        gt_edited = meta.get("gt_edited", meta.get("gt_edited_keys", []))
+        gt_read_necessary = meta.get("gt_read_necessary", meta.get("gt_read_keys", []))
+        query_type = meta.get("query_type", "UNKNOWN")
+        latency_sec = state.store.get("latency_sec", 0.0)
+
         edited_set = set(gt_edited)
         read_set = set(gt_read_necessary)
         all_gt = edited_set | read_set
@@ -84,58 +178,26 @@ class RankingMetric:
         returned = set(ranked_candidate_keys[:predicted_n])
         cutoff_prf = _prf(returned, all_gt)
 
-        return {
-            "ndcg_5": round(ndcg_5, 4),
-            "ndcg_10": round(ndcg_10, 4),
-            "ndcg_20": round(ndcg_20, 4),
-            "ndcg_full": round(ndcg_full, 4),
-            "hit_5": hit_5,
-            "hit_10": hit_10,
-            "cutoff_precision": cutoff_prf["precision"],
-            "cutoff_recall": cutoff_prf["recall"],
-            "cutoff_f1": cutoff_prf["f1"],
-            "predicted_n": predicted_n,
-            "gt_edited_count": len(edited_set),
-            "gt_read_count": len(read_set),
-            "query_type": query_type,
-        }
-
-    def aggregate(self, scores: list[dict[str, Any]]) -> dict[str, Number]:
-        """Aggregate ranking metrics across all queries."""
-        if not scores:
-            return {}
-
-        metric_keys = (
-            "ndcg_5",
-            "ndcg_10",
-            "ndcg_20",
-            "ndcg_full",
-            "hit_5",
-            "hit_10",
-            "cutoff_precision",
-            "cutoff_recall",
-            "cutoff_f1",
+        return Score(
+            value=round(ndcg_10, 4),
+            answer=str(ranked_candidate_keys[:10]),
+            metadata={
+                "ndcg_5": round(ndcg_5, 4),
+                "ndcg_10": round(ndcg_10, 4),
+                "ndcg_20": round(ndcg_20, 4),
+                "ndcg_full": round(ndcg_full, 4),
+                "hit_5": hit_5,
+                "hit_10": hit_10,
+                "cutoff_precision": cutoff_prf["precision"],
+                "cutoff_recall": cutoff_prf["recall"],
+                "cutoff_f1": cutoff_prf["f1"],
+                "predicted_n": predicted_n,
+                "latency_sec": latency_sec,
+                "gt_edited_count": len(edited_set),
+                "gt_read_count": len(read_set),
+                "query_type": query_type,
+            },
         )
 
-        result: dict[str, Number] = {}
-        for key in metric_keys:
-            values = [s[key] for s in scores]
-            result[f"avg_{key}"] = round(statistics.mean(values), 4)
+    return score
 
-        result["avg_predicted_n"] = round(statistics.mean(s["predicted_n"] for s in scores), 1)
-        result["total_queries"] = len(scores)
-
-        # Per-query-type breakdown
-        by_type: dict[str, list[dict[str, Any]]] = {}
-        for s in scores:
-            qt = s.get("query_type", "UNKNOWN")
-            by_type.setdefault(qt, []).append(s)
-
-        for qt, type_scores in sorted(by_type.items()):
-            prefix = f"qt_{qt.lower()}"
-            for key in metric_keys:
-                vals = [s[key] for s in type_scores]
-                result[f"{prefix}/avg_{key}"] = round(statistics.mean(vals), 4)
-            result[f"{prefix}/count"] = len(type_scores)
-
-        return result

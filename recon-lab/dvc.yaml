@@ -1,0 +1,120 @@
+# Recon Lab — DVC Pipeline
+#
+# Stages map 1:1 to CLI commands. Run the full pipeline:
+#   dvc repro
+#
+# Run a single stage:
+#   dvc repro train
+#
+# Pipeline DAG:
+#   clone ─┬─→ swebench-import ──→ swebench-resolve ──→ collect ──→ merge ──→ train ──→ eval
+#          └─→ index ─────────────────────↗
+
+stages:
+  clone:
+    cmd: recon-lab clone --set all
+    deps:
+      - src/cpl_lab/clone.py
+    outs:
+      - ${workspace}/clones:
+          persist: true    # don't delete on repro
+          cache: false     # too large to cache
+
+  # Phase 1: raw GT + LLM queries (no coderecon needed)
+  swebench-import:
+    cmd: recon-lab swebench-import --set all
+    deps:
+      - src/cpl_lab/swebench.py
+      - src/cpl_lab/swebench_llm.py
+      - src/cpl_lab/patch_ground_truth.py
+      - ${workspace}/clones
+    params:
+      - lab.toml:
+          - swebench
+    outs:
+      - ${workspace}/data/import.stamp:
+          cache: false
+
+  # Index repos (needs coderecon)
+  index:
+    cmd: recon-lab index --set all && date -Iseconds > ${workspace}/index.stamp
+    deps:
+      - src/cpl_lab/index.py
+      - ${workspace}/clones
+    outs:
+      - ${workspace}/index.stamp:
+          cache: false
+
+  # Phase 2: def resolution + LLM filter (needs coderecon index)
+  swebench-resolve:
+    cmd: recon-lab swebench-resolve --set all
+    deps:
+      - src/cpl_lab/swebench.py
+      - src/cpl_lab/llm_filter.py
+      - src/cpl_lab/patch_ground_truth.py
+      - ${workspace}/data/import.stamp
+      - ${workspace}/index.stamp
+    params:
+      - lab.toml:
+          - swebench
+    outs:
+      - ${workspace}/data/gt_state.json:
+          cache: false
+
+  collect:
+    cmd: recon-lab collect --set all && date -Iseconds > ${workspace}/data/signals.stamp
+    deps:
+      - src/cpl_lab/collect_signals.py
+      - src/cpl_lab/collector.py
+      - ${workspace}/data/gt_state.json
+    outs:
+      - ${workspace}/data/signals.stamp:
+          cache: false
+
+  merge:
+    cmd: recon-lab merge --what all
+    deps:
+      - src/cpl_lab/merge_ground_truth.py
+      - src/cpl_lab/merge_signals.py
+      - ${workspace}/data/gt_state.json
+      - ${workspace}/data/signals.stamp
+    outs:
+      - ${workspace}/data/merged/runs.parquet
+      - ${workspace}/data/merged/touched_objects.parquet
+      - ${workspace}/data/merged/queries.parquet
+      - ${workspace}/data/merged/candidates_rank.parquet
+
+  train:
+    cmd: recon-lab train --model all
+    deps:
+      - src/cpl_lab/train_ranker.py
+      - src/cpl_lab/train_gate.py
+      - src/cpl_lab/train_cutoff.py
+      - ${workspace}/data/merged/candidates_rank.parquet
+    outs:
+      - ${workspace}/models/ranker.lgbm
+      - ${workspace}/models/gate.lgbm
+      - ${workspace}/models/cutoff.lgbm
+
+  eval:
+    cmd: recon-lab eval
+    deps:
+      - src/cpl_lab/eval/run.py
+      - src/cpl_lab/eval/models/ranking.py
+      - src/cpl_lab/eval/metrics/ranking.py
+      - src/cpl_lab/eval/metrics/gate.py
+      - src/cpl_lab/eval/datasets/eval_gt.py
+      - src/cpl_lab/eval/experiments/eval_pipeline.yaml
+      - ${workspace}/models/ranker.lgbm
+      - ${workspace}/models/gate.lgbm
+      - ${workspace}/models/cutoff.lgbm
+    metrics:
+      - ${workspace}/eval/metrics.json:
+          cache: false
+    plots:
+      - ${workspace}/eval/plots/:
+          cache: false
+
+# DVC params — workspace resolves from lab.toml
+vars:
+  - workspace: ~/.recon/recon-lab

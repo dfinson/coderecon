@@ -1,0 +1,32 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+
+name: recon_lab_clone
+display_name: "Clone Repos"
+version: "1"
+description: "Clone SWE-bench repos to the workspace at pinned commits."
+
+inputs:
+  workspace:
+    type: uri_folder
+    description: "Mounted workspace root (blob datastore)."
+  repo_set:
+    type: string
+    default: "all"
+    description: "Repo set to clone: ranker-gate, cutoff, eval, or all."
+  jobs:
+    type: integer
+    default: 4
+    description: "Parallel clone jobs."
+
+environment:
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04
+  conda_file: ../environments/conda-pipeline.yml
+
+code: ../../src
+
+command: >-
+  export PYTHONPATH=.:$PYTHONPATH &&
+  recon-lab clone
+  --workspace ${{inputs.workspace}}
+  --set ${{inputs.repo_set}}
+  --jobs ${{inputs.jobs}}

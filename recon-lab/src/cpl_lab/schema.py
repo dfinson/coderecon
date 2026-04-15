@@ -96,8 +96,6 @@ class CandidateRank:
     nesting_depth: int
     has_parent_scope: bool
     # Retriever signals
-    emb_score: float | None
-    emb_rank: int | None
     term_match_count: int | None
     term_total_matches: int | None
     lex_hit_count: int | None

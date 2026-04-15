@@ -1,0 +1,34 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+
+name: recon_lab_index
+display_name: "Index Repos"
+version: "1"
+description: "Run `recon init` on each clone (tree-sitter parse + resolution). CPU-heavy."
+
+inputs:
+  workspace:
+    type: uri_folder
+    description: "Mounted workspace root (blob datastore)."
+  repo_set:
+    type: string
+    default: "all"
+  timeout:
+    type: integer
+    default: 1800
+    description: "Timeout per repo in seconds."
+
+environment:
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04
+  conda_file: ../environments/conda-pipeline.yml
+
+code: ../../src
+
+command: >-
+  export PYTHONPATH=.:$PYTHONPATH &&
+  recon-lab index
+  --workspace ${{inputs.workspace}}
+  --set ${{inputs.repo_set}}
+  --timeout ${{inputs.timeout}}
+
+resources:
+  instance_count: 1

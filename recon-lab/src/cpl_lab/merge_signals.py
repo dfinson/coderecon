@@ -73,15 +73,20 @@ _MERGED_SCHEMA = pa.schema([
     pa.field("has_parent_scope", pa.bool_()),
     pa.field("hub_score", pa.int64()),
     pa.field("is_test", pa.bool_()),
-    pa.field("emb_score", pa.float64()),
-    pa.field("emb_rank", pa.float64()),
+    pa.field("is_endpoint", pa.bool_()),
+    pa.field("test_coverage_count", pa.int64()),
     pa.field("term_match_count", pa.float64()),
     pa.field("term_total_matches", pa.float64()),
+    pa.field("lex_hit_count", pa.int64()),
     pa.field("graph_edge_type", pa.large_string()),
     pa.field("graph_seed_rank", pa.float64()),
+    pa.field("graph_caller_max_tier", pa.large_string()),
     pa.field("symbol_source", pa.large_string()),
     pa.field("import_direction", pa.large_string()),
     pa.field("retriever_hits", pa.int64()),
+    pa.field("seed_path_distance", pa.int64()),
+    pa.field("same_package", pa.bool_()),
+    pa.field("package_distance", pa.int64()),
     pa.field("query_len", pa.int64()),
     pa.field("has_identifier", pa.bool_()),
     pa.field("has_path", pa.bool_()),
@@ -287,14 +292,17 @@ def merge_signals(data_dir: Path) -> dict[str, Any]:
                 )
 
                 # Re-derive graded relevance from source of truth
+                # Signal task_id is just the mutation part (e.g. "M1"),
+                # but GT run_id is "{repo_id}_{task_id}" (e.g. "cpp-cli11_M1").
                 task_col = df["task_id"] if "task_id" in df.columns else df.get("run_id", "")
+                full_run_col = [f"{repo_id}_{t}" for t in task_col]
                 cand_col = df.get("candidate_key", "")
                 df["label_relevant"] = [
-                    tier_map.get((t, c), 0) for t, c in zip(task_col, cand_col)
+                    tier_map.get((t, c), 0) for t, c in zip(full_run_col, cand_col)
                 ]
 
                 # Alias task_id → run_id (training expects run_id for group keys)
-                df["run_id"] = task_col
+                df["run_id"] = full_run_col
 
                 n = len(df)
                 pos = int((df["label_relevant"] > 0).sum())

@@ -54,21 +54,26 @@ _SIGNALS_SCHEMA = pa.schema([
     pa.field("has_parent_scope", pa.bool_()),
     pa.field("hub_score", pa.float64()),
     pa.field("is_test", pa.bool_()),
-    # Embedding signal
-    pa.field("emb_score", pa.float64()),
-    pa.field("emb_rank", pa.int64()),
+    pa.field("is_endpoint", pa.bool_()),
+    pa.field("test_coverage_count", pa.int64()),
     # Term match signal
     pa.field("term_match_count", pa.int64()),
     pa.field("term_total_matches", pa.int64()),
+    pa.field("lex_hit_count", pa.int64()),
     # Graph signal
     pa.field("graph_edge_type", pa.string()),
     pa.field("graph_seed_rank", pa.int64()),
+    pa.field("graph_caller_max_tier", pa.string()),
     # Symbol signal
     pa.field("symbol_source", pa.string()),
     # Import signal
     pa.field("import_direction", pa.string()),
     # Agreement
     pa.field("retriever_hits", pa.int64()),
+    # Locality
+    pa.field("seed_path_distance", pa.int64()),
+    pa.field("same_package", pa.bool_()),
+    pa.field("package_distance", pa.int64()),
     # Query features
     pa.field("query_len", pa.int64()),
     pa.field("has_identifier", pa.bool_()),
@@ -166,7 +171,7 @@ def _parse_gt_tables(
 
 def _parse_raw_task_jsons(gt_dir: Path) -> tuple[list[dict[str, Any]], dict[str, dict[str, int]]]:
     """Parse raw per-task JSON files directly when JSONL tables are absent."""
-    from cpl_lab.collector import iter_task_json_files
+    from cpl_lab.data_manifest import iter_task_json_files
 
     flat: list[dict[str, Any]] = []
     rel: dict[str, dict[str, int]] = {}
@@ -259,8 +264,8 @@ def _worker_inner(args: tuple[str, str, str, str], queue: mp.Queue) -> None:  # 
     from coderecon.mcp.tools.recon.raw_signals import raw_signals_pipeline
 
     cp = clone_dir / ".recon"
-    ctx = AppContext.create(repo_root=clone_dir, db_path=cp / "index.db",
-                            tantivy_path=cp / "tantivy")
+    ctx = AppContext.standalone(repo_root=clone_dir, db_path=cp / "index.db",
+                                tantivy_path=cp / "tantivy")
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:

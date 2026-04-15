@@ -1,0 +1,23 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+
+name: recon_lab_merge
+display_name: "Merge Data"
+version: "1"
+description: "Merge per-repo ground truth + signals into unified parquet tables."
+
+inputs:
+  workspace:
+    type: uri_folder
+    description: "Mounted workspace root (blob datastore)."
+
+environment:
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04
+  conda_file: ../environments/conda-pipeline.yml
+
+code: ../../src
+
+command: >-
+  export PYTHONPATH=.:$PYTHONPATH &&
+  recon-lab merge
+  --workspace ${{inputs.workspace}}
+  --what all

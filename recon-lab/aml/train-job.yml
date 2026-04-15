@@ -1,0 +1,31 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+
+display_name: train-all-models
+experiment_name: coderecon-ranking
+description: "Train 4 structural LightGBM ranking models (gate, file-ranker, def-ranker, cutoff)"
+
+compute: azureml:train-cpu
+
+environment:
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04
+  conda_file: conda-train.yml
+
+inputs:
+  data:
+    type: uri_folder
+    path: azureml:training-data:1
+    mode: download
+
+outputs:
+  models:
+    type: uri_folder
+    mode: upload
+
+command: >-
+  export PYTHONPATH=.:$PYTHONPATH &&
+  python -m cpl_lab.train_all
+  --data-dir ${{inputs.data}}
+  --output-dir ${{outputs.models}}
+  --skip-merge
+
+code: ../src

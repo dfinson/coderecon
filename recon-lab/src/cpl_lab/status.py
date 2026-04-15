@@ -7,7 +7,7 @@ from typing import Any
 
 import click
 
-from cpl_lab.collector import iter_task_json_files
+from cpl_lab.data_manifest import iter_task_json_files
 from cpl_lab.data_manifest import iter_repo_data_dirs, repo_set_for_dir
 
 PIPELINE_STEPS = ["swebench", "collect", "merge", "train"]
