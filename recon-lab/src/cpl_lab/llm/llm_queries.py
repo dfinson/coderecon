@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from cpl_lab.llm_client import response_text, run_chat_completion
+from cpl_lab.llm.llm_client import response_text, run_chat_completion
 
 logger = logging.getLogger(__name__)
 

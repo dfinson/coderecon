@@ -6,7 +6,7 @@ Each sample carries candidates, GT keys, and problem statement in
 ``Sample.metadata``.  The ``input`` field holds the problem statement.
 
 Build the fixture first (no recon index required at eval time):
-    python -m cpl_lab.build_scaffold_rerank_data
+    python -m cpl_lab.experiments.build_scaffold_rerank_data
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ def scaffold_rank_dataset(
     if not data_path.exists():
         raise FileNotFoundError(
             f"Scaffold reranking fixture not found: {data_path}\n"
-            "Build it first: python -m cpl_lab.build_scaffold_rerank_data"
+            "Build it first: python -m cpl_lab.experiments.build_scaffold_rerank_data"
         )
 
     records: list[dict[str, Any]] = []

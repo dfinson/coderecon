@@ -552,7 +552,7 @@ def train_all(data_dir: Path, output_dir: Path, skip_merge: bool = False) -> dic
 
     # ── 0. Optionally re-merge signals ────────────────────────────
     if not skip_merge:
-        from cpl_lab.merge_signals import merge_signals
+        from cpl_lab.collect.merge_signals import merge_signals
         print("=== Merging Signals ===")
         sig_summary = merge_signals(data_dir)
         print(f"  {sig_summary['total_candidates']} candidates, "

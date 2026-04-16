@@ -29,14 +29,14 @@ Prerequisites:
             ~/.recon/recon-lab/clones/instances/pytest_dev__pytest_8399
 
 Usage:
-    python -m cpl_lab.build_scaffold_rerank_data --repo-filter pytest-dev/pytest
-    python -m cpl_lab.build_scaffold_rerank_data --max-tasks 50
-    python -m cpl_lab.build_scaffold_rerank_data --instances-dir ~/my/clones/instances
+    python -m cpl_lab.experiments.build_scaffold_rerank_data --repo-filter pytest-dev/pytest
+    python -m cpl_lab.experiments.build_scaffold_rerank_data --max-tasks 50
+    python -m cpl_lab.experiments.build_scaffold_rerank_data --instances-dir ~/my/clones/instances
 
 Usage:
-    python -m cpl_lab.build_scaffold_rerank_data
-    python -m cpl_lab.build_scaffold_rerank_data --max-tasks 50
-    python -m cpl_lab.build_scaffold_rerank_data --instances-dir ~/my/clones/instances
+    python -m cpl_lab.experiments.build_scaffold_rerank_data
+    python -m cpl_lab.experiments.build_scaffold_rerank_data --max-tasks 50
+    python -m cpl_lab.experiments.build_scaffold_rerank_data --instances-dir ~/my/clones/instances
 
 Output JSONL (one record per SWE-bench instance):
     {

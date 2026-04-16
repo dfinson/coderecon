@@ -49,7 +49,7 @@ def main(ctx: click.Context, workspace: str | None, verbose: bool, dry_run: bool
 @click.pass_context
 def clone(ctx: click.Context, repo_set: str, jobs: int | None) -> None:
     """Clone repos to the workspace (full history, no indexing)."""
-    from cpl_lab.clone import run_clone
+    from cpl_lab.pipeline.clone import run_clone
 
     cfg = ctx.obj["config"]
     jobs = jobs or cfg["clone"]["jobs"]
@@ -71,7 +71,7 @@ def clone(ctx: click.Context, repo_set: str, jobs: int | None) -> None:
 @click.pass_context
 def index_main(ctx: click.Context, repo_set: str) -> None:
     """Start daemon, register + index all main repos."""
-    from cpl_lab.pr_index import run_index_main
+    from cpl_lab.pipeline.pr_index import run_index_main
 
     import json, time
     cfg = ctx.obj["config"]
@@ -99,7 +99,7 @@ def index_main(ctx: click.Context, repo_set: str) -> None:
 def pr_select(ctx: click.Context, repo_set: str, repo: str | None,
               prs_per_repo: int | None) -> None:
     """Select merged PRs from GitHub for each repo."""
-    from cpl_lab.pr_select import run_pr_select
+    from cpl_lab.pipeline.pr_select import run_pr_select
 
     cfg = ctx.obj["config"]
     pr_cfg = cfg.get("pr_select", {})
@@ -125,7 +125,7 @@ def pr_select(ctx: click.Context, repo_set: str, repo: str | None,
 def pr_checkout(ctx: click.Context, repo_set: str, repo: str | None) -> None:
     """Create git worktrees for all selected PR instances."""
     import json, time
-    from cpl_lab.pr_checkout import run_pr_checkout
+    from cpl_lab.pipeline.pr_checkout import run_pr_checkout
 
     cfg = ctx.obj["config"]
     run_pr_checkout(
@@ -151,7 +151,7 @@ def pr_checkout(ctx: click.Context, repo_set: str, repo: str | None) -> None:
 def index_worktrees(ctx: click.Context, repo_set: str, repo: str | None) -> None:
     """Run recon init on each PR worktree and register with daemon."""
     import json, time
-    from cpl_lab.pr_index import run_index_worktrees
+    from cpl_lab.pipeline.pr_index import run_index_worktrees
 
     cfg = ctx.obj["config"]
     run_index_worktrees(
@@ -181,7 +181,7 @@ def index_worktrees(ctx: click.Context, repo_set: str, repo: str | None) -> None
 def pr_import(ctx: click.Context, repo_set: str, repo: str | None,
               max_instances: int, llm_model: str | None) -> None:
     """Import PR instances: diff → GT defs + LLM query generation."""
-    from cpl_lab.pr_import import run_pr_import
+    from cpl_lab.pipeline.pr_import import run_pr_import
 
     cfg = ctx.obj["config"]
     pr_cfg = cfg.get("pr_select", {})
@@ -207,7 +207,7 @@ def pr_import(ctx: click.Context, repo_set: str, repo: str | None,
 @click.pass_context
 def collect(ctx: click.Context, repo_set: str, repo: str | None, workers: int) -> None:
     """Collect retrieval signals (direct, no MCP server needed)."""
-    from cpl_lab.collect import run_collect
+    from cpl_lab.collect.collect import run_collect
 
     cfg = ctx.obj["config"]
     run_collect(
@@ -233,7 +233,7 @@ def merge(ctx: click.Context, what: str) -> None:
 
     if what in ("gt", "all"):
         click.echo("=== Merging Ground Truth ===")
-        from cpl_lab.merge_ground_truth import merge_ground_truth
+        from cpl_lab.collect.merge_ground_truth import merge_ground_truth
 
         summary = merge_ground_truth(cfg["data_dir"], clones_dir=cfg["clones_dir"],
                                      verbose=ctx.obj["verbose"])
@@ -241,7 +241,7 @@ def merge(ctx: click.Context, what: str) -> None:
             click.echo(f"  {table}: {count} rows")
 
     if what in ("signals", "all"):
-        from cpl_lab.merge_signals import merge_signals
+        from cpl_lab.collect.merge_signals import merge_signals
 
         summary = merge_signals(cfg["data_dir"])
         pos = summary['total_candidates'] * summary['positive_rate']
@@ -261,7 +261,7 @@ def merge(ctx: click.Context, what: str) -> None:
 @click.pass_context
 def train(ctx: click.Context, output_dir: str | None, skip_merge: bool) -> None:
     """Train all 8 models (gate, file-ranker, def-ranker, cutoff × structural/enhanced)."""
-    from cpl_lab.train_all import train_all
+    from cpl_lab.training.train_all import train_all
 
     cfg = ctx.obj["config"]
     from pathlib import Path as P
@@ -299,7 +299,7 @@ def eval_cmd(ctx: click.Context, experiment: str | None) -> None:
 def validate(ctx: click.Context, repo: str | None, repo_set: str) -> None:
     """Validate ground truth JSON against schema."""
     from cpl_lab.data_manifest import iter_repo_data_dirs, repo_set_for_dir
-    from cpl_lab.validate_ground_truth import validate_repo
+    from cpl_lab.training.validate_ground_truth import validate_repo
 
     cfg = ctx.obj["config"]
     data_dir = cfg["data_dir"]

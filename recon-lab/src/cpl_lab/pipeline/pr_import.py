@@ -19,7 +19,7 @@ from typing import Any
 
 import click
 
-from cpl_lab.clone import clone_dir_for
+from cpl_lab.pipeline.clone import clone_dir_for
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +46,8 @@ def import_single_instance(
 
     Returns a summary dict with status and counts.
     """
-    from cpl_lab.patch_ground_truth import map_hunks_to_defs, parse_unified_diff
-    from cpl_lab.llm_queries import adapt_instance
+    from cpl_lab.pipeline.patch_ground_truth import map_hunks_to_defs, parse_unified_diff
+    from cpl_lab.llm.llm_queries import adapt_instance
 
     iid = inst["instance_id"]
     rid = inst["repo_id"]

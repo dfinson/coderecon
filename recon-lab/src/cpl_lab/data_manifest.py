@@ -73,6 +73,6 @@ def clone_dir_for_dir(repo_dir: Path, clones_dir: Path) -> Path | None:
     if isinstance(clone_dir, str) and clone_dir:
         return Path(clone_dir)
 
-    from cpl_lab.clone import clone_dir_for as resolve_manifest_clone_dir
+    from cpl_lab.pipeline.clone import clone_dir_for as resolve_manifest_clone_dir
 
     return resolve_manifest_clone_dir(repo_dir.name, clones_dir)

@@ -44,7 +44,7 @@ def _find_clone_dir(clones_dir: Path, repo_dir: Path) -> Path | None:
 def _ensure_ground_truth_tables(repo_id: str, repo_dir: Path, clone_dir: Path) -> None:
     """Post-process raw task JSONs into JSONL tables when needed."""
     from cpl_lab.data_manifest import iter_task_json_files
-    from cpl_lab.merge_ground_truth import collect_ground_truth
+    from cpl_lab.collect.merge_ground_truth import collect_ground_truth
 
     gt_dir = repo_dir / "ground_truth"
     if (gt_dir / "queries.jsonl").exists() and (gt_dir / "touched_objects.jsonl").exists():
@@ -68,7 +68,7 @@ def run_collect(
     verbose: bool = False,
 ) -> None:
     """Collect retrieval signals — direct in-process, multi-worker."""
-    from cpl_lab.collect_signals import collect_all
+    from cpl_lab.collect.collect_signals import collect_all
 
     repo_ids = [repo] if repo else _iter_repos(data_dir, repo_set)
     if not repo_ids:

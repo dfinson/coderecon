@@ -6,15 +6,15 @@ from pathlib import Path
 import click
 import pytest
 
-from cpl_lab.collect_signals import _parse_gt_tables, _parse_raw_task_jsons
+from cpl_lab.collect.collect_signals import _parse_gt_tables, _parse_raw_task_jsons
 from cpl_lab.collect import _find_clone_dir
 from cpl_lab.collector import iter_task_json_files
 from cpl_lab.data_manifest import load_repo_manifest, write_repo_manifest
 from cpl_lab.github_models import _token_budget_field, response_text
-from cpl_lab.index import _find_recon_python, _recon_env, _recon_init_cmd
-from cpl_lab.merge_signals import _align_to_merged
-from cpl_lab.patch_ground_truth import parse_unified_diff
-from cpl_lab.validate_ground_truth import validate_task
+from cpl_lab.pipeline.index import _find_recon_python, _recon_env, _recon_init_cmd
+from cpl_lab.collect.merge_signals import _align_to_merged
+from cpl_lab.pipeline.patch_ground_truth import parse_unified_diff
+from cpl_lab.training.validate_ground_truth import validate_task
 import pyarrow as pa
 
 
@@ -282,7 +282,7 @@ def test_recon_init_cmd_supports_reindex_flag(tmp_path: Path, monkeypatch) -> No
     venv_python.parent.mkdir(parents=True)
     venv_python.write_text("#!/usr/bin/env python3\n")
     venv_python.chmod(0o755)
-    monkeypatch.setattr("cpl_lab.index._coderecon_repo_root", lambda: repo_root)
+    monkeypatch.setattr("cpl_lab.pipeline.index._coderecon_repo_root", lambda: repo_root)
 
     cmd, _ = _recon_init_cmd(tmp_path / "repo", reindex=True)
 

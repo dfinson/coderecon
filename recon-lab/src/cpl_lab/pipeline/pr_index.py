@@ -21,7 +21,7 @@ from pathlib import Path
 
 import click
 
-from cpl_lab.clone import REPO_MANIFEST, REPO_SETS, clone_dir_for
+from cpl_lab.pipeline.clone import REPO_MANIFEST, REPO_SETS, clone_dir_for
 
 
 def _recon_python() -> str:

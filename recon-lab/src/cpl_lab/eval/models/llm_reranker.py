@@ -123,7 +123,7 @@ def _call_azure_openai(
     max_tokens: int,
     timeout: int,
 ) -> str:
-    from cpl_lab.llm_queries import _get_azure_token
+    from cpl_lab.llm.llm_queries import _get_azure_token
 
     endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "").rstrip("/")
     if not endpoint:
@@ -176,7 +176,7 @@ def _call_github_models(
     max_tokens: int,
     timeout: int,
 ) -> str:
-    from cpl_lab.llm_client import response_text, run_chat_completion
+    from cpl_lab.llm.llm_client import response_text, run_chat_completion
 
     resp = run_chat_completion(
         model=model_name,

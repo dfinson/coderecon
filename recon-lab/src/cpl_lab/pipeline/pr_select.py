@@ -23,7 +23,7 @@ from urllib.request import Request, urlopen
 
 import click
 
-from cpl_lab.clone import (
+from cpl_lab.pipeline.clone import (
     REPO_MANIFEST,
     REPO_SETS,
     clone_dir_for,
@@ -155,7 +155,7 @@ def select_prs_for_repo(
     verbose: bool = False,
 ) -> list[dict[str, Any]]:
     """Select PRs for one repo. Returns list of instance dicts."""
-    from cpl_lab.patch_ground_truth import map_hunks_to_defs, parse_unified_diff
+    from cpl_lab.pipeline.patch_ground_truth import map_hunks_to_defs, parse_unified_diff
 
     slug = github_slug_for(repo_id)
     if not slug:

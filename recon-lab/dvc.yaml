@@ -21,7 +21,7 @@ stages:
   clone:
     cmd: recon-lab clone --set all
     deps:
-      - src/cpl_lab/clone.py
+      - src/cpl_lab/pipeline/clone.py
     outs:
       - ${workspace}/clones:
           persist: true    # don't delete on repro
@@ -30,7 +30,7 @@ stages:
   index-main:
     cmd: recon-lab index-main --set all
     deps:
-      - src/cpl_lab/pr_index.py
+      - src/cpl_lab/pipeline/pr_index.py
       - ${workspace}/clones
     outs:
       - ${workspace}/data/index_main.stamp:
@@ -39,8 +39,8 @@ stages:
   pr-select:
     cmd: recon-lab pr-select --set all
     deps:
-      - src/cpl_lab/pr_select.py
-      - src/cpl_lab/patch_ground_truth.py
+      - src/cpl_lab/pipeline/pr_select.py
+      - src/cpl_lab/pipeline/patch_ground_truth.py
       - ${workspace}/data/index_main.stamp
     params:
       - lab.toml:
@@ -52,7 +52,7 @@ stages:
   pr-checkout:
     cmd: recon-lab pr-checkout --set all
     deps:
-      - src/cpl_lab/pr_checkout.py
+      - src/cpl_lab/pipeline/pr_checkout.py
       - ${workspace}/data/pr_instances.jsonl
     outs:
       - ${workspace}/data/pr_checkout.stamp:
@@ -61,7 +61,7 @@ stages:
   index-worktrees:
     cmd: recon-lab index-worktrees --set all
     deps:
-      - src/cpl_lab/pr_index.py
+      - src/cpl_lab/pipeline/pr_index.py
       - ${workspace}/data/pr_checkout.stamp
     outs:
       - ${workspace}/data/index_worktrees.stamp:
@@ -70,9 +70,9 @@ stages:
   pr-import:
     cmd: recon-lab pr-import --set all
     deps:
-      - src/cpl_lab/pr_import.py
-      - src/cpl_lab/swebench_llm.py
-      - src/cpl_lab/patch_ground_truth.py
+      - src/cpl_lab/pipeline/pr_import.py
+      - src/cpl_lab/llm/llm_queries.py
+      - src/cpl_lab/pipeline/patch_ground_truth.py
       - ${workspace}/data/index_worktrees.stamp
     params:
       - lab.toml:
@@ -84,7 +84,7 @@ stages:
   collect:
     cmd: recon-lab collect --set all && date -Iseconds > ${workspace}/data/signals.stamp
     deps:
-      - src/cpl_lab/collect_signals.py
+      - src/cpl_lab/collect/collect_signals.py
       - ${workspace}/data/pr_import.stamp
     outs:
       - ${workspace}/data/signals.stamp:
@@ -93,8 +93,8 @@ stages:
   merge:
     cmd: recon-lab merge --what all
     deps:
-      - src/cpl_lab/merge_ground_truth.py
-      - src/cpl_lab/merge_signals.py
+      - src/cpl_lab/collect/merge_ground_truth.py
+      - src/cpl_lab/collect/merge_signals.py
       - ${workspace}/data/signals.stamp
     outs:
       - ${workspace}/data/merged/runs.parquet
@@ -105,7 +105,7 @@ stages:
   train:
     cmd: recon-lab train --model all
     deps:
-      - src/cpl_lab/train_all.py
+      - src/cpl_lab/training/train_all.py
       - ${workspace}/data/merged/candidates_rank.parquet
     outs:
       - ${workspace}/models/def_ranker.lgbm

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import click
 
-from cpl_lab.clone import clone_dir_for
+from cpl_lab.pipeline.clone import clone_dir_for
 
 
 def _git(
