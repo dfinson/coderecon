@@ -1,4 +1,4 @@
-"""Candidate merge, enrichment, and graph-seed selection.
+"""Candidate merge, enrichment, coverage expansion, and graph-seed selection.
 
 Single Responsibility: Combine outputs from multiple harvesters and resolve
 structural metadata.  No harvesting logic — just merge + enrich.
@@ -41,10 +41,14 @@ def _merge_candidates(
                 existing.from_term_match = existing.from_term_match or cand.from_term_match
                 existing.from_explicit = existing.from_explicit or cand.from_explicit
                 existing.from_graph = existing.from_graph or cand.from_graph
+                existing.from_coverage = existing.from_coverage or cand.from_coverage
                 existing.matched_terms |= cand.matched_terms
                 existing.term_match_count = max(existing.term_match_count, cand.term_match_count)
                 existing.term_total_matches = max(existing.term_total_matches, cand.term_total_matches)
                 existing.lex_hit_count = max(existing.lex_hit_count, cand.lex_hit_count)
+                existing.bm25_file_score = max(existing.bm25_file_score, cand.bm25_file_score)
+                if cand.symbol_source and not existing.symbol_source:
+                    existing.symbol_source = cand.symbol_source
                 if cand.graph_edge_type and not existing.graph_edge_type:
                     existing.graph_edge_type = cand.graph_edge_type
                     existing.graph_seed_rank = cand.graph_seed_rank
@@ -192,6 +196,59 @@ async def _enrich_candidates(
                     cand.is_callee_of_top = True
                 if uid in anchor_import_uids:
                     cand.is_imported_by_top = True
+
+
+async def _expand_via_coverage(
+    app_ctx: AppContext,
+    candidates: dict[str, HarvestCandidate],
+) -> dict[str, HarvestCandidate]:
+    """Expand candidates via deterministic coverage links.
+
+    Test defs already in the pool → source defs covered by those tests.
+
+    Only uses non-stale ``TestCoverageFact`` rows — the mapping
+    is deterministic from instrumented test runs.
+
+    Returns new candidates (not yet in the pool) to be merged.
+    """
+    from coderecon.index._internal.indexing.graph import FactQueries
+
+    coordinator = app_ctx.coordinator
+    new: dict[str, HarvestCandidate] = {}
+
+    test_file_paths = list({
+        c.file_path for c in candidates.values()
+        if c.is_test and c.file_path
+    })
+
+    if not test_file_paths:
+        return new
+
+    with coordinator.db.session() as session:
+        fq = FactQueries(session)
+
+        covered_uids = fq.batch_get_covered_def_uids(test_file_paths)
+        missing = [
+            uid for uid in covered_uids
+            if uid not in candidates and uid not in new
+        ]
+        if missing:
+            found = fq.batch_get_defs(missing)
+            for uid, d in found.items():
+                new[uid] = HarvestCandidate(
+                    def_uid=uid,
+                    def_fact=d,
+                    from_coverage=True,
+                    evidence=[
+                        EvidenceRecord(
+                            category="coverage",
+                            detail=f"covered by candidate test",
+                            score=1.0,
+                        )
+                    ],
+                )
+
+    return new
 
 
 def _select_graph_seeds(

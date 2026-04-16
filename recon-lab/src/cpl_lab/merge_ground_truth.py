@@ -123,7 +123,7 @@ def collect_ground_truth(
 
         for tier_key, tier_label in [
             ("minimum_sufficient_defs", "minimum"),
-            ("thrash_preventing_defs", "thrash_preventing"),
+            ("coverage_linked_defs", "coverage"),
         ]:
             for rd in task.get(tier_key, []):
                 end_line = _resolve_end_line(
@@ -161,7 +161,7 @@ def collect_ground_truth(
                     {"path": d["path"], "name": d["name"], "reason": d.get("reason", "")}
                     for d in task.get(tier_key, [])
                 ]
-                for tier_key in ("minimum_sufficient_defs", "thrash_preventing_defs")
+                for tier_key in ("minimum_sufficient_defs", "coverage_linked_defs")
             },
         })
 
@@ -206,14 +206,14 @@ def collect_ground_truth(
     _write_jsonl(audit_dir / "audit_records.jsonl", audit_records)
 
     n_minimum = sum(1 for t in touched if t["tier"] == "minimum")
-    n_thrash = sum(1 for t in touched if t["tier"] == "thrash_preventing")
+    n_coverage = sum(1 for t in touched if t["tier"] == "coverage")
 
     summary = {
         "repo_id": repo_id,
         "tasks": len(runs),
         "relevant_defs_total": len(touched),
         "minimum_sufficient": n_minimum,
-        "thrash_preventing": n_thrash,
+        "coverage_linked": n_coverage,
         "queries": len(queries),
         "unmatched": len(unmatched),
         "unmatched_rate": len(unmatched) / max(len(touched) + len(unmatched), 1),

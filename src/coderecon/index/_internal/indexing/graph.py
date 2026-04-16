@@ -543,6 +543,64 @@ class FactQueries:
             result[uid] = int(count)
         return result
 
+    def batch_get_covering_test_file_paths(
+        self, def_uids: list[str],
+    ) -> set[str]:
+        """Get test file paths that cover any of the given def_uids.
+
+        Parses ``test_id`` (e.g. ``tests/test_auth.py::test_login``) to
+        extract the file path.  Skips synthetic ``__suite__`` IDs.
+        Returns the set of unique test file paths.
+        """
+        if not def_uids:
+            return set()
+        stmt = (
+            select(TestCoverageFact.test_id)
+            .where(
+                col(TestCoverageFact.target_def_uid).in_(def_uids),
+                TestCoverageFact.stale == False,  # noqa: E712
+            )
+            .distinct()
+        )
+        rows = list(self._session.exec(stmt).all())
+        paths: set[str] = set()
+        for test_id in rows:
+            if test_id.startswith("__suite__"):
+                continue
+            file_path = test_id.split("::")[0] if "::" in test_id else test_id
+            if file_path:
+                paths.add(file_path)
+        return paths
+
+    def batch_get_covered_def_uids(
+        self, test_file_paths: list[str],
+    ) -> set[str]:
+        """Get def_uids covered by tests in the given test files.
+
+        Matches ``test_id`` values that start with any of the given file
+        paths (prefix match against the ``test_id`` index).
+        """
+        if not test_file_paths:
+            return set()
+        from sqlalchemy import or_, text
+
+        # Build prefix conditions: test_id LIKE 'path::%' OR test_id = 'path'
+        conditions = []
+        for path in test_file_paths:
+            conditions.append(
+                col(TestCoverageFact.test_id).startswith(path + "::")
+            )
+        stmt = (
+            select(TestCoverageFact.target_def_uid)
+            .where(
+                or_(*conditions),
+                TestCoverageFact.stale == False,  # noqa: E712
+            )
+            .distinct()
+        )
+        rows = list(self._session.exec(stmt).all())
+        return set(rows)
+
 
 # Re-export for backwards compatibility during migration
 # These will be removed once all consumers are updated

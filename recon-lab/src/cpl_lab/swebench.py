@@ -1,9 +1,11 @@
 """SWE-bench ground-truth pipeline — combined entry point.
 
 Delegates to:
-  - ``swebench_import``  — Phase 1 (no coderecon)
-  - ``swebench_resolve`` — Phase 2 (needs coderecon index)
+  - ``swebench_import``  — import instances + index + LLM queries
+  - ``swebench_resolve`` — map hunks to indexed defs, expand via coverage
   - ``swebench_common``  — shared dataclass, selection, git helpers
+
+Both import and resolve require the coderecon index.
 """
 
 from __future__ import annotations
@@ -38,7 +40,6 @@ def run_swebench(
     repo: str | None,
     max_instances: int,
     llm_model: str,
-    filter_model: str,
     training_dataset: str,
     training_split: str,
     eval_dataset: str,
@@ -78,7 +79,6 @@ def run_swebench(
                 data_dir=data_dir,
                 clones_dir=clones_dir,
                 llm_model=llm_model,
-                filter_model=filter_model,
                 verbose=verbose,
             )
         except Exception as exc:
@@ -92,7 +92,7 @@ def run_swebench(
         else:
             ok += 1
             click.echo(
-                f"  OK {summary['workspace_id']} | defs={summary['minimum_defs']}/{summary['thrash_defs']}"
+                f"  OK {summary['workspace_id']} | defs={summary['minimum_defs']}"
             )
 
     click.echo(f"\nSWE-bench import complete: {ok} ok, {skipped} skipped, {failed} failed")
@@ -104,10 +104,9 @@ def _process_instance(
     data_dir: Path,
     clones_dir: Path,
     llm_model: str,
-    filter_model: str,
     verbose: bool,
 ) -> dict[str, Any]:
-    """Combined path — runs Phase 1 + Phase 2 together."""
+    """Combined path — runs import + resolve together."""
     wid = workspace_id(instance.instance_id)
     repo_dir = data_dir / wid
     gt_dir = repo_dir / "ground_truth"
@@ -128,7 +127,6 @@ def _process_instance(
     resolve_result = resolve_instance(
         repo_dir=repo_dir,
         clones_dir=clones_dir,
-        filter_model=filter_model,
         verbose=verbose,
     )
     if resolve_result["status"] != "ok":
@@ -138,5 +136,4 @@ def _process_instance(
         "workspace_id": wid,
         "status": "ok",
         "minimum_defs": resolve_result["minimum_defs"],
-        "thrash_defs": resolve_result["thrash_defs"],
     }

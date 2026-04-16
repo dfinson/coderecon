@@ -4,20 +4,33 @@ Each LLM call does exactly ONE thing.  gpt-4.1-mini is cheap but not
 smart — we never ask it to juggle multiple output types in one shot.
 
 Call decomposition:
-  1. ``_classify_task``      — complexity + confidence + notes  (1 call)
-  2. ``_generate_ok_query``   — one query for one type           (8 calls)
-  3. ``_generate_non_ok_query`` — one query for one non-OK type  (6 calls)
-Total: 15 calls per instance.  Every call produces exactly one output.
+  1. ``_classify_task``          — complexity + confidence + notes  (1 call)
+  2. ``_generate_ok_query``      — one query for one type           (8 calls)
+  3. ``_generate_unsat_query``   — generate + validate pair         (2×2 = 4+ calls)
+  4. ``_generate_broad_query``   — LLM generate + RRF validate      (2×1+ calls)
+  5. ``_generate_ambig_query``   — LLM generate + RRF validate      (2×1+ calls)
+Total: 17+ calls per instance.  Non-OK types retry until validated.
+
+BROAD/AMBIG validation runs the generated query through the in-process
+RRF pipeline (harvesters + RRF fusion, no trained models) and checks
+post-hoc statistics against a *calibration baseline* derived from the 8
+OK queries for this instance.  No hardcoded thresholds — "scattered"
+means more scattered than any OK query; "split" means more balanced
+than any OK query.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
 import re
+import sqlite3
 import subprocess
+import threading
 import urllib.request
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -75,9 +88,75 @@ class AdaptationResult:
     task_complexity: str
     confidence: str
     solve_notes: str
-    tier_difference_reasoning: str
     queries: list[dict[str, Any]]
     non_ok_queries: list[dict[str, Any]]
+
+
+# ── Index fact extraction ────────────────────────────────────────
+
+
+def _extract_index_facts(index_db: Path) -> str:
+    """Extract deterministic facts from the coderecon index.
+
+    Returns a plain-text block listing: top-level directories, languages,
+    definition names by kind, and external dependencies.  Used as the
+    grounding set for UNSAT query generation and validation.
+    """
+    con = sqlite3.connect(str(index_db))
+    cur = con.cursor()
+
+    # Top-level directories (first path component)
+    rows = cur.execute(
+        "SELECT DISTINCT SUBSTR(path, 1, INSTR(path, '/') - 1) "
+        "FROM files WHERE INSTR(path, '/') > 0"
+    ).fetchall()
+    top_dirs = sorted({r[0] for r in rows if r[0]})
+
+    # Languages
+    rows = cur.execute(
+        "SELECT language_family, COUNT(*) FROM files "
+        "GROUP BY language_family ORDER BY COUNT(*) DESC"
+    ).fetchall()
+    languages = [(r[0], r[1]) for r in rows if r[0]]
+
+    # Class names (sample up to 50)
+    rows = cur.execute(
+        "SELECT DISTINCT name FROM def_facts WHERE kind = 'class' "
+        "ORDER BY name LIMIT 50"
+    ).fetchall()
+    classes = [r[0] for r in rows]
+
+    # Function/method names (sample up to 50)
+    rows = cur.execute(
+        "SELECT DISTINCT name FROM def_facts WHERE kind IN ('function', 'method') "
+        "ORDER BY name LIMIT 50"
+    ).fetchall()
+    functions = [r[0] for r in rows]
+
+    # External dependencies (top imports by frequency)
+    rows = cur.execute(
+        "SELECT source_literal, COUNT(*) FROM import_facts "
+        "WHERE resolved_path IS NULL OR resolved_path = '' "
+        "GROUP BY source_literal ORDER BY COUNT(*) DESC LIMIT 30"
+    ).fetchall()
+    deps = [r[0] for r in rows if r[0]]
+
+    con.close()
+
+    parts = []
+    if top_dirs:
+        parts.append(f"Top-level directories: {', '.join(top_dirs)}")
+    if languages:
+        lang_str = ", ".join(f"{lang} ({count} files)" for lang, count in languages)
+        parts.append(f"Languages: {lang_str}")
+    if classes:
+        parts.append(f"Classes: {', '.join(classes)}")
+    if functions:
+        parts.append(f"Functions/methods: {', '.join(functions)}")
+    if deps:
+        parts.append(f"External dependencies: {', '.join(deps)}")
+
+    return "\n".join(parts)
 
 
 # ── Public entry point ───────────────────────────────────────────
@@ -91,15 +170,34 @@ def adapt_instance(
     problem_statement: str,
     hints_text: str,
     patch_text: str,
+    index_db: Path,
+    clone_dir: Path,
     minimum_sufficient_defs: list[dict[str, Any]] | None = None,
-    thrash_preventing_defs: list[dict[str, Any]] | None = None,
+    prior_broad: list[str] | None = None,
+    prior_ambig: list[str] | None = None,
 ) -> AdaptationResult:
     """Produce all GT fields for one instance via focused single-purpose LLM calls.
 
-    15 calls total:
-      1 classify  +  8 OK queries  +  6 non-OK queries = 15
-    Every call produces exactly one output.  Never more than one query per call.
+    17+ calls total:
+      1 classify  +  8 OK queries  +  2 UNSAT (generate+validate pairs)
+      +  2 BROAD (LLM generate + RRF validate)  +  2 AMBIG (LLM + RRF)
+    Every LLM call produces exactly one output.  Non-OK types retry until validated.
+
+    BROAD/AMBIG validation constructs an in-process AppContext from *clone_dir*
+    and runs the query through the RRF pipeline (harvesters + RRF fusion, no
+    trained models) to verify the retrieval output actually exhibits the
+    expected scattering (BROAD) or multi-cluster split (AMBIG).
+
+    *prior_broad* / *prior_ambig* are lists of previously generated query
+    texts for this repo (across other instances).  Passed to the LLM as
+    anti-examples to encourage diversity — the same 12 repos generate
+    thousands of instances, so without this the LLM recycles the same
+    cross-cutting concepts.
     """
+    from coderecon.mcp.context import AppContext
+
+    prior_broad = prior_broad or []
+    prior_ambig = prior_ambig or []
 
     # Shared context block (reused across all calls)
     context = _build_context(
@@ -109,7 +207,6 @@ def adapt_instance(
         hints_text=hints_text,
         patch_text=patch_text,
         minimum_sufficient_defs=minimum_sufficient_defs,
-        thrash_preventing_defs=thrash_preventing_defs,
     )
 
     # Call 1: classify task
@@ -121,20 +218,51 @@ def adapt_instance(
         q = _generate_ok_query(model, context, query_type)
         ok_queries.append(q)
 
-    # Calls 10-15: one non-OK query per call (2 per type × 3 types = 6 calls)
-    # Extract patch identifiers once — used by the cheap Phase 1 gate
-    patch_identifiers = _extract_patch_identifiers(patch_text)
+    # Extract index facts once — used for UNSAT / BROAD / AMBIG generation
+    index_facts = _extract_index_facts(index_db)
+
+    # Build in-process AppContext for BROAD/AMBIG RRF validation.
+    # Cheap — just opens the existing SQLite + Tantivy, no re-indexing.
+    recon_dir = clone_dir / ".recon"
+    app_ctx = AppContext.standalone(
+        repo_root=clone_dir,
+        db_path=recon_dir / "index.db",
+        tantivy_path=recon_dir / "tantivy",
+    )
+    asyncio.run(app_ctx.coordinator.load_existing())
+
+    # Calibrate: run OK queries through RRF to establish what "focused"
+    # looks like on this repo.  BROAD/AMBIG gates use this as baseline.
+    baseline = _calibrate_ok_baseline(ok_queries, app_ctx)
+
     non_ok_queries: list[dict[str, Any]] = []
-    for non_ok_type in NON_OK_TYPES:
-        for variant in (1, 2):
-            q = _generate_non_ok_query(model, context, non_ok_type, variant, patch_identifiers)
-            non_ok_queries.append(q)
+    for variant in (1, 2):
+        # UNSAT — LLM fact-negation + LLM fact-checker
+        q = _generate_unsat_query(model, context, index_facts, variant)
+        non_ok_queries.append(q)
+
+    for variant in (1, 2):
+        # BROAD — LLM generate + RRF validate (must exceed OK baseline)
+        q = _generate_broad_query(
+            model, context, index_facts, variant, app_ctx, baseline,
+            prior_queries=prior_broad,
+        )
+        non_ok_queries.append(q)
+        prior_broad.append(q["query_text"])
+
+    for variant in (1, 2):
+        # AMBIG — LLM generate + RRF validate (must show balanced split beyond OK)
+        q = _generate_ambig_query(
+            model, context, index_facts, variant, app_ctx, baseline,
+            prior_queries=prior_ambig,
+        )
+        non_ok_queries.append(q)
+        prior_ambig.append(q["query_text"])
 
     return AdaptationResult(
         task_complexity=classification["task_complexity"],
         confidence=classification["confidence"],
         solve_notes=classification["solve_notes"],
-        tier_difference_reasoning=classification["tier_difference_reasoning"],
         queries=ok_queries,
         non_ok_queries=non_ok_queries,
     )
@@ -151,7 +279,6 @@ def _build_context(
     hints_text: str,
     patch_text: str,
     minimum_sufficient_defs: list[dict[str, Any]] | None,
-    thrash_preventing_defs: list[dict[str, Any]] | None,
 ) -> str:
     """Build a reusable context block that gets prepended to every call."""
     parts = [
@@ -170,12 +297,6 @@ def _build_context(
             for d in minimum_sufficient_defs[:15]
         )
         parts += ["", "## Changed definitions", defs_text]
-    if thrash_preventing_defs:
-        ctx_text = "\n".join(
-            f"  - {d['path']}:{d.get('start_line','')} ({d.get('kind','')}: {d.get('name','')})"
-            for d in thrash_preventing_defs[:20]
-        )
-        parts += ["", "## Related context definitions", ctx_text]
     return "\n".join(parts)
 
 
@@ -184,12 +305,11 @@ def _build_context(
 
 _CLASSIFY_SYSTEM = """\
 You classify a GitHub issue for a code retrieval benchmark.
-Return ONLY a JSON object with exactly these four fields:
+Return ONLY a JSON object with exactly these three fields:
 {
   "task_complexity": "narrow" or "medium" or "wide",
   "confidence": "high" or "medium" or "low",
-  "solve_notes": "One sentence summarising what the fix does.",
-  "tier_difference_reasoning": "One sentence explaining why some defs are edited and others are just read."
+  "solve_notes": "One sentence summarising what the fix does."
 }
 
 Definitions:
@@ -215,8 +335,6 @@ def _classify_task(model: str, context: str) -> dict[str, Any]:
         result["confidence"] = "medium"
     if not isinstance(result.get("solve_notes"), str):
         result["solve_notes"] = ""
-    if not isinstance(result.get("tier_difference_reasoning"), str):
-        result["tier_difference_reasoning"] = ""
     return result
 
 
@@ -274,181 +392,636 @@ def _generate_ok_query(
     return result
 
 
-# ── Calls 10-15: One non-OK query per call ───────────────────────
+# ── UNSAT query generation (fact-negation + validate) ─────────────
 
 
-_NON_OK_SYSTEM = """\
-You write ONE search query that should NOT return good results from a code retrieval system.
+_UNSAT_GENERATE_SYSTEM = """\
+You write ONE search query for a code retrieval benchmark.
+The query must describe a task that depends on the OPPOSITE of one or more
+of the provided facts being true.
+
 Return ONLY a JSON object with exactly these fields:
 {
-  "query_text": "the bad search query",
-  "seeds": [],
-  "pins": []
+  "query_text": "the search query",
+  "false_assumption": "which fact you negated to construct this query"
 }
 
 Rules:
-- The query must be realistic — something a developer might actually type.
-- The query must FAIL to retrieve the correct code for the specified reason.
-- query_text must be 3-10 words. Never a single word.
-- Do NOT copy any identifier, class name, function name, or file path from the
-  issue or patch into query_text. Paraphrase or invent new names.
-- seeds and pins must always be empty lists for non-OK queries.
+- Pick one or more facts from the provided list, invent the opposite.
+- The query should sound like a realistic developer search — something someone
+  would actually type into a code search tool.
+- query_text must be 3-15 words.
+- Do NOT mention that you are negating anything. Just write the query naturally.
+"""
+
+_UNSAT_VALIDATE_SYSTEM = """\
+You are a fact checker. You will receive a query and a set of facts.
+Determine whether the query can be answered given ONLY these facts.
+
+Return ONLY a JSON object:
+{
+  "answerable": true or false,
+  "reason": "one sentence explaining why"
+}
+
+Rules:
+- If ANY fact supports answering the query, return {"answerable": true, ...}.
+- If NO fact supports answering the query, return {"answerable": false, ...}.
+- Consider only the facts provided. Nothing else.
 """
 
 
-def _generate_non_ok_query(
+def _generate_unsat_query(
     model: str,
     context: str,
-    non_ok_type: str,
+    index_facts: str,
     variant: int,
-    patch_identifiers: set[str],
     *,
-    max_retries: int = 3,
+    max_retries: int = 10,
 ) -> dict[str, Any]:
-    """Generate ONE non-OK query for the given type, with deterministic gating.
+    """Generate one UNSAT query using fact-negation + LLM validation.
 
-    Phase 1 gates (no coderecon required):
-      - Identifier contamination: reject if any patch identifier leaks into query_text
-      - Word count: reject BROAD queries with <3 or >10 words
-    Retries up to ``max_retries`` times on gate failure before raising.
+    1. Generate: LLM sees index facts, writes a query that depends on
+       the opposite of those facts.
+    2. Validate: second LLM call checks the query against the same facts.
+       Pure logic — "can this query be answered from these facts?"
+    3. Loop until the validator confirms the query is unanswerable.
     """
-    description = _NON_OK_DESCRIPTIONS[non_ok_type]
+    for attempt in range(1, max_retries + 1):
+        # ── Generate ──
+        generate_prompt = (
+            f"{context}\n\n"
+            f"---\n\n"
+            f"## Known facts about this codebase\n"
+            f"{index_facts}\n\n"
+            f"---\n\n"
+            f"Write ONE search query (variant {variant}) that describes a task "
+            f"depending on the opposite of one or more of these facts being true.\n"
+        )
+        if attempt > 1:
+            generate_prompt += (
+                f"\n(Attempt {attempt} — previous queries were answerable from "
+                f"the facts. Try negating a DIFFERENT fact.)\n"
+            )
+
+        gen_result = _call_llm_json(
+            model=model,
+            system_prompt=_UNSAT_GENERATE_SYSTEM,
+            user_prompt=generate_prompt,
+            max_tokens=200,
+        )
+        query_text = gen_result.get("query_text", "")
+        if not isinstance(query_text, str) or not query_text.strip():
+            logger.warning("Empty UNSAT query_text, variant %d attempt %d", variant, attempt)
+            continue
+
+        # ── Validate ──
+        validate_prompt = (
+            f"Query: {query_text}\n\n"
+            f"Facts:\n{index_facts}\n\n"
+            f"Can this query be answered given ONLY these facts?"
+        )
+        val_result = _call_llm_json(
+            model=model,
+            system_prompt=_UNSAT_VALIDATE_SYSTEM,
+            user_prompt=validate_prompt,
+            max_tokens=100,
+        )
+        answerable = val_result.get("answerable")
+        if answerable is False:
+            return {
+                "query_type": "UNSAT",
+                "query_text": query_text,
+                "seeds": [],
+                "pins": [],
+                "false_assumption": gen_result.get("false_assumption", ""),
+                "evidence_of_absence": val_result.get("reason", ""),
+            }
+
+        logger.warning(
+            "UNSAT variant %d attempt %d: validator said answerable (%s) query=%r",
+            variant, attempt, val_result.get("reason", ""), query_text,
+        )
+
+    raise RuntimeError(
+        f"Failed to generate a validated UNSAT query (variant {variant}) "
+        f"after {max_retries} attempts"
+    )
+
+
+# ── BROAD / AMBIG generation (LLM generate + RRF validate) ──────
+#
+# No hardcoded retrieval thresholds.  Instead, the 8 OK queries are run
+# through RRF first to establish what "focused" looks like for THIS repo
+# at THIS commit.  BROAD must exceed ALL OK queries on dir_count AND
+# elbow-n.  AMBIG must exceed ALL OK queries on balance while staying
+# within the OK dir_count range.
+#
+# The only structural constants are methodology choices, not thresholds:
+
+# Path prefix depth for clustering — "django/db", "tests/forms".
+# 1 level is too coarse for monorepos (everything under one top-level
+# package); 3 is too fine (splits real modules into sub-modules).
+_CLUSTER_PATH_DEPTH = 2
+
+# Word-count bounds on generated query text — prompt-format constraint,
+# not a retrieval threshold.  Min 3 prevents single-keyword queries;
+# max 10 prevents paragraph-length queries.
+_NON_OK_MIN_WORDS = 3
+_NON_OK_MAX_WORDS = 10
+
+
+@dataclass(frozen=True)
+class OkBaseline:
+    """RRF statistics from the 8 OK queries — the calibration baseline.
+
+    Every field is the *maximum* observed across OK queries.  A non-OK
+    query must exceed these maxima on the relevant dimension to prove it
+    behaves differently from any focused query.
+    """
+    max_dir_count: int
+    max_elbow_n: int
+    max_balance: float
+
+    #: Minimum dir_count where at least one OK query had >=2 clusters.
+    #  AMBIG must have dir_count >= 2 (definitional — ambiguity requires
+    #  at least two subsystems) but capped at max_dir_count so it doesn't
+    #  leak into BROAD territory.
+    min_multi_dir_count: int = 2
+
+
+async def _rrf_stats(app_ctx: Any, query_text: str) -> dict[str, Any]:
+    """Run a query through the in-process RRF pipeline and return post-hoc stats.
+
+    No trained models involved — just harvesters + RRF fusion + elbow.
+    Returns dir_count, n, spread, cluster_sizes, balance for gate decisions.
+
+    Analysis window matches ``elbow_cut(max_n=30)`` — the full pre-elbow
+    candidate pool.
+    """
+    from coderecon.mcp.tools.recon.raw_signals import raw_signals_pipeline
+    from coderecon.ranking.elbow import elbow_cut
+    from coderecon.ranking.rrf import rrf_fuse
+
+    raw = await raw_signals_pipeline(app_ctx, query_text, seeds=None, pins=None)
+    candidates = rrf_fuse(raw.get("candidates", []))
+
+    # Analysis window = elbow_cut's max_n.
+    top = candidates[:30]
+    scores = [c["rrf_score"] for c in top]
+    n = elbow_cut(scores) if scores else 0
+
+    dir_counter: Counter[str] = Counter()
+    for c in top:
+        parts = c["path"].split("/")
+        prefix = "/".join(parts[:_CLUSTER_PATH_DEPTH]) if len(parts) >= _CLUSTER_PATH_DEPTH else parts[0]
+        dir_counter[prefix] += 1
+
+    cluster_sizes = sorted(dir_counter.values(), reverse=True)
+    balance = cluster_sizes[1] / cluster_sizes[0] if len(cluster_sizes) >= 2 else 0.0
+
+    return {
+        "scored_total": len(candidates),
+        "n": n,
+        "dir_count": len(dir_counter),
+        "spread": scores[0] - scores[-1] if len(scores) >= 2 else 0.0,
+        "cluster_sizes": cluster_sizes,
+        "balance": balance,
+    }
+
+
+def _calibrate_ok_baseline(
+    ok_queries: list[dict[str, Any]],
+    app_ctx: Any,
+) -> OkBaseline:
+    """Run all OK queries through RRF and compute the calibration baseline.
+
+    This defines "what focused retrieval looks like" for this repo.
+    Every dimension is the max across all OK queries — non-OK queries
+    must exceed these to qualify.
+    """
+    dir_counts: list[int] = []
+    elbow_ns: list[int] = []
+    balances: list[float] = []
+
+    for q in ok_queries:
+        seeds = q.get("seeds", []) or []
+        pins = q.get("pins", []) or []
+        # Run with actual seeds/pins so the baseline reflects real usage
+        stats = asyncio.run(_rrf_stats_with_hints(app_ctx, q["query_text"], seeds, pins))
+        dir_counts.append(stats["dir_count"])
+        elbow_ns.append(stats["n"])
+        balances.append(stats["balance"])
+
+    baseline = OkBaseline(
+        max_dir_count=max(dir_counts),
+        max_elbow_n=max(elbow_ns),
+        max_balance=max(balances),
+    )
+    logger.info(
+        "OK baseline: max_dir_count=%d, max_elbow_n=%d, max_balance=%.2f",
+        baseline.max_dir_count, baseline.max_elbow_n, baseline.max_balance,
+    )
+    return baseline
+
+
+async def _rrf_stats_with_hints(
+    app_ctx: Any,
+    query_text: str,
+    seeds: list[str] | None = None,
+    pins: list[str] | None = None,
+) -> dict[str, Any]:
+    """Like _rrf_stats but accepts seeds/pins for OK query calibration."""
+    from coderecon.mcp.tools.recon.raw_signals import raw_signals_pipeline
+    from coderecon.ranking.elbow import elbow_cut
+    from coderecon.ranking.rrf import rrf_fuse
+
+    raw = await raw_signals_pipeline(app_ctx, query_text, seeds=seeds, pins=pins)
+    candidates = rrf_fuse(raw.get("candidates", []))
+
+    top = candidates[:30]
+    scores = [c["rrf_score"] for c in top]
+    n = elbow_cut(scores) if scores else 0
+
+    dir_counter: Counter[str] = Counter()
+    for c in top:
+        parts = c["path"].split("/")
+        prefix = "/".join(parts[:_CLUSTER_PATH_DEPTH]) if len(parts) >= _CLUSTER_PATH_DEPTH else parts[0]
+        dir_counter[prefix] += 1
+
+    cluster_sizes = sorted(dir_counter.values(), reverse=True)
+    balance = cluster_sizes[1] / cluster_sizes[0] if len(cluster_sizes) >= 2 else 0.0
+
+    return {
+        "scored_total": len(candidates),
+        "n": n,
+        "dir_count": len(dir_counter),
+        "spread": scores[0] - scores[-1] if len(scores) >= 2 else 0.0,
+        "cluster_sizes": cluster_sizes,
+        "balance": balance,
+    }
+
+
+def _check_broad(stats: dict[str, Any], baseline: OkBaseline) -> str | None:
+    """BROAD gate — must be more scattered than every OK query.
+
+    Two separation conditions (both required):
+      - dir_count exceeds the max seen in ANY OK query
+      - elbow-n exceeds the max seen in ANY OK query
+    If either fails, the query isn't distinguishably more scattered
+    than a focused query on this repo.
+    """
+    if stats["dir_count"] <= baseline.max_dir_count:
+        return (
+            f"dir_count {stats['dir_count']} is within OK range "
+            f"(OK max={baseline.max_dir_count})"
+        )
+    if stats["n"] <= baseline.max_elbow_n:
+        return (
+            f"elbow n={stats['n']} is within OK range "
+            f"(OK max={baseline.max_elbow_n})"
+        )
+    return None
+
+
+def _check_ambig(stats: dict[str, Any], baseline: OkBaseline) -> str | None:
+    """AMBIG gate — must show a more balanced subsystem split than any OK query.
+
+    Conditions:
+      - dir_count >= 2 (definitional — ambiguity requires >= 2 subsystems)
+      - dir_count <= baseline.max_dir_count (above that is BROAD territory)
+      - balance exceeds the max seen in ANY OK query (the split is more
+        even than any focused query produces)
+      - At least 2 clusters have >= 2 results each (stray single-result
+        hits in a second dir don't count — that's noise, not a real
+        competing interpretation)
+    """
+    if stats["dir_count"] < 2:
+        return "single subsystem — ambiguity requires >= 2"
+    if stats["dir_count"] > baseline.max_dir_count:
+        return (
+            f"dir_count {stats['dir_count']} exceeds OK max "
+            f"({baseline.max_dir_count}) — that's BROAD, not AMBIG"
+        )
+    if stats["balance"] <= baseline.max_balance:
+        return (
+            f"balance {stats['balance']:.2f} is within OK range "
+            f"(OK max={baseline.max_balance:.2f})"
+        )
+    # Structural: need >= 2 clusters with >= 2 results each.
+    # This is the definition of "two real competing interpretations",
+    # not a tuned threshold.
+    substantial = [s for s in stats["cluster_sizes"] if s >= 2]
+    if len(substantial) < 2:
+        return "need >= 2 clusters with >= 2 results each"
+    return None
+
+
+_BROAD_GENERATE_SYSTEM = """\
+You write ONE search query for a code retrieval benchmark.
+The query must be too vague — it uses general cross-cutting concepts
+(error handling, configuration, validation, serialization, logging, etc.)
+that would match code across many unrelated modules.
+
+Return ONLY a JSON object with exactly these fields:
+{
+  "query_text": "the vague search query"
+}
+
+Rules:
+- query_text must be 3-10 words.
+- Sound like a real developer question, just too unfocused.
+- Do NOT use any identifier, class name, function name, or file path
+  from the issue or patch.
+- Use cross-cutting concerns that would scatter across the entire codebase.
+"""
+
+_AMBIG_GENERATE_SYSTEM = """\
+You write ONE search query for a code retrieval benchmark.
+The query must use a term or concept that exists in 2-3 UNRELATED
+subsystems of this codebase — e.g. the same function name in both the ORM
+and the template engine, or "validation" meaning both form validation
+and schema validation.
+
+Return ONLY a JSON object with exactly these fields:
+{
+  "query_text": "the ambiguous search query"
+}
+
+Rules:
+- query_text must be 3-10 words.
+- The query should be specific enough to match well, but the term
+  genuinely resolves to multiple unrelated code areas.
+- Do NOT use any identifier from the issue or patch.
+- Check the provided facts for terms/concepts that appear in multiple
+  unrelated subsystems.
+"""
+
+
+def _generate_broad_query(
+    model: str,
+    context: str,
+    index_facts: str,
+    variant: int,
+    app_ctx: Any,
+    baseline: OkBaseline,
+    *,
+    prior_queries: list[str] | None = None,
+    max_retries: int = 5,
+) -> dict[str, Any]:
+    """Generate one BROAD query using LLM generation + RRF validation.
+
+    1. LLM generates a vague cross-cutting query grounded on index facts.
+    2. Query is run through the in-process RRF pipeline.
+    3. Post-hoc stats must exceed the OK baseline on dir_count AND elbow-n.
+    Retries with concrete feedback on failure.
+
+    *prior_queries* lists BROAD queries already generated for this repo
+    (across instances).  Shown to the LLM as anti-examples.
+    """
+    last_failure = ""
+    last_query_text = f"broad cross-cutting query variant {variant}"
+    last_stats: dict[str, Any] = {"dir_count": 0, "n": 0, "spread": 0.0, "balance": 0.0, "cluster_sizes": []}
 
     for attempt in range(1, max_retries + 1):
         user_prompt = (
             f"{context}\n\n"
             f"---\n\n"
-            f"Write ONE {non_ok_type} query (variant {variant}) about this repository.\n\n"
-            f"What {non_ok_type} means: {description}\n"
+            f"## Known facts about this codebase\n"
+            f"{index_facts}\n\n"
+            f"---\n\n"
+            f"Write ONE vague, cross-cutting search query (variant {variant}) "
+            f"that would scatter results across many modules.\n"
         )
-        # On retries, add explicit instruction about what went wrong
-        if attempt > 1:
+        if prior_queries:
+            recent = prior_queries[-20:]
+            anti = "\n".join(f"  - {q}" for q in recent)
             user_prompt += (
-                f"\n(Previous attempt was rejected. "
-                f"Do NOT use any of these identifiers: {sorted(patch_identifiers)[:20]}. "
-                f"Be more creative.)\n"
+                f"\n## Previously generated BROAD queries for this repo\n"
+                f"Do NOT repeat or paraphrase any of these — use a DIFFERENT "
+                f"cross-cutting concept:\n{anti}\n"
+            )
+        if attempt > 1 and last_failure:
+            user_prompt += (
+                f"\n(Attempt {attempt} — previous query was rejected: {last_failure}. "
+                f"Use a MORE cross-cutting concept — something every module deals with.)\n"
             )
 
-        result = _call_llm_json(
+        gen_result = _call_llm_json(
             model=model,
-            system_prompt=_NON_OK_SYSTEM,
+            system_prompt=_BROAD_GENERATE_SYSTEM,
             user_prompt=user_prompt,
             max_tokens=200,
         )
-        query_text = result.get("query_text", "")
+        query_text = gen_result.get("query_text", "")
         if not isinstance(query_text, str) or not query_text.strip():
-            logger.warning("Empty query_text for %s variant %d, attempt %d", non_ok_type, variant, attempt)
+            logger.warning("Empty BROAD query_text, variant %d attempt %d", variant, attempt)
             continue
 
-        # Gate check
-        failure = _gate_non_ok_query(query_text, non_ok_type, patch_identifiers)
+        # Word count pre-check (cheap, avoids RRF call)
+        word_count = len(query_text.split())
+        if word_count < _NON_OK_MIN_WORDS or word_count > _NON_OK_MAX_WORDS:
+            last_failure = f"word count {word_count} (need {_NON_OK_MIN_WORDS}-{_NON_OK_MAX_WORDS})"
+            logger.warning("BROAD variant %d attempt %d: %s", variant, attempt, last_failure)
+            continue
+
+        # RRF validation against OK baseline
+        stats = asyncio.run(_rrf_stats(app_ctx, query_text))
+        failure = _check_broad(stats, baseline)
         if failure is None:
             return {
-                "query_type": non_ok_type,
+                "query_type": "BROAD",
                 "query_text": query_text,
-                "seeds": result.get("seeds", []) if isinstance(result.get("seeds"), list) else [],
-                "pins": result.get("pins", []) if isinstance(result.get("pins"), list) else [],
+                "seeds": [],
+                "pins": [],
+                "why_no_cutoff": (
+                    f"Elbow n={stats['n']} exceeds OK max "
+                    f"({baseline.max_elbow_n}) — no sharp score drop."
+                ),
+                "dispersion_description": (
+                    f"dir_count={stats['dir_count']} exceeds OK max "
+                    f"({baseline.max_dir_count}). Results scatter across "
+                    f"{stats['dir_count']} directory clusters."
+                ),
+                "rrf_stats": {
+                    "dir_count": stats["dir_count"],
+                    "n": stats["n"],
+                    "spread": round(stats["spread"], 4),
+                },
+                "ok_baseline": {
+                    "max_dir_count": baseline.max_dir_count,
+                    "max_elbow_n": baseline.max_elbow_n,
+                },
             }
 
+        last_failure = failure
+        last_query_text = query_text
+        last_stats = stats
         logger.warning(
-            "Gate rejected %s variant %d attempt %d: %s (query=%r)",
-            non_ok_type, variant, attempt, failure, query_text,
+            "BROAD variant %d attempt %d: RRF rejected — %s (query=%r, stats=%s)",
+            variant, attempt, failure, query_text,
+            {k: v for k, v in stats.items() if k != "cluster_sizes"},
         )
 
-    raise RuntimeError(
-        f"Failed to generate a valid {non_ok_type} query (variant {variant}) "
-        f"after {max_retries} attempts"
+    # Exhausted retries — use the last attempt as a best-effort fallback
+    # rather than discarding the entire instance.
+    logger.warning(
+        "BROAD variant %d: exhausted %d retries, using last attempt as fallback",
+        variant, max_retries,
     )
+    return {
+        "query_type": "BROAD",
+        "query_text": last_query_text,
+        "seeds": [],
+        "pins": [],
+        "why_no_cutoff": f"FALLBACK — validation failed after {max_retries} attempts: {last_failure}",
+        "dispersion_description": f"dir_count={last_stats['dir_count']}, n={last_stats['n']} (did not exceed baseline)",
+        "rrf_stats": {
+            "dir_count": last_stats["dir_count"],
+            "n": last_stats["n"],
+            "spread": round(last_stats["spread"], 4),
+        },
+        "ok_baseline": {
+            "max_dir_count": baseline.max_dir_count,
+            "max_elbow_n": baseline.max_elbow_n,
+        },
+        "fallback": True,
+    }
 
 
-# ── Phase 1 deterministic gates ─────────────────────────────────
+def _generate_ambig_query(
+    model: str,
+    context: str,
+    index_facts: str,
+    variant: int,
+    app_ctx: Any,
+    baseline: OkBaseline,
+    *,
+    prior_queries: list[str] | None = None,
+    max_retries: int = 5,
+) -> dict[str, Any]:
+    """Generate one AMBIG query using LLM generation + RRF validation.
 
-# Compound CamelCase identifiers — must have ≥2 CamelCase segments
-# (e.g. LcovParser, CoverageReport, SelectCrawler).  Single-segment names
-# like Reference, Extract, Optional are common English words and excluded.
-_CAMEL_RE = re.compile(r"\b([A-Z][a-z]+(?:[A-Z][a-z0-9]+)+)\b")
+    1. LLM generates a query using a term that spans 2-3 subsystems.
+    2. Query is run through the in-process RRF pipeline.
+    3. Post-hoc stats must show a more balanced split than any OK query:
+       dir_count in [2, ok_max_dir_count], balance > ok_max_balance,
+       >= 2 substantial clusters.
+    Retries with concrete feedback on failure.
 
-# snake_case compound identifiers (must contain at least one underscore,
-# e.g. parse_warnings, base_commit).  Single words without underscores are
-# excluded — they're almost always generic vocabulary.
-_SNAKE_RE = re.compile(r"\b([a-z][a-z0-9]*(?:_[a-z0-9]+)+)\b")
-
-# CamelCase tokens that are Python builtins / keywords, not project names.
-_CAMEL_IGNORE = frozenset({
-    "True", "False", "None", "ValueError", "TypeError", "KeyError",
-    "AttributeError", "IndexError", "RuntimeError", "FileNotFoundError",
-    "NotImplementedError", "StopIteration", "Exception", "BaseException",
-    "PermissionError", "ImportError", "NameError", "SyntaxError",
-})
-
-
-def _extract_patch_identifiers(patch_text: str) -> set[str]:
-    """Extract project-specific identifiers from patch text.
-
-    Only captures names that are likely to be project-specific:
-      - CamelCase class/type names (``LcovParser``, ``CoverageReport``)
-      - snake_case compound names with underscores (``parse_warnings``)
-      - File stems ≥5 chars from diff headers
-
-    Generic single words (``sql``, ``update``, ``check``) are ignored.
-    Returns lowercased identifiers.
+    *prior_queries* lists AMBIG queries already generated for this repo
+    (across instances).  Shown to the LLM as anti-examples.
     """
-    identifiers: set[str] = set()
+    last_failure = ""
+    last_query_text = f"ambiguous cross-subsystem query variant {variant}"
+    last_stats: dict[str, Any] = {"dir_count": 0, "n": 0, "spread": 0.0, "balance": 0.0, "cluster_sizes": []}
 
-    for line in patch_text.splitlines():
-        # File paths from diff headers — extract filename stems only
-        if line.startswith("diff --git"):
-            parts = line.split()
-            for p in parts[2:]:
-                stem = Path(p.lstrip("ab/")).stem
-                if len(stem) >= 5:
-                    identifiers.add(stem.lower())
+    for attempt in range(1, max_retries + 1):
+        user_prompt = (
+            f"{context}\n\n"
+            f"---\n\n"
+            f"## Known facts about this codebase\n"
+            f"{index_facts}\n\n"
+            f"---\n\n"
+            f"Write ONE ambiguous search query (variant {variant}) using a term "
+            f"that genuinely exists in 2-3 UNRELATED subsystems of this codebase.\n"
+        )
+        if prior_queries:
+            recent = prior_queries[-20:]
+            anti = "\n".join(f"  - {q}" for q in recent)
+            user_prompt += (
+                f"\n## Previously generated AMBIG queries for this repo\n"
+                f"Do NOT repeat or paraphrase any of these — pick a DIFFERENT "
+                f"ambiguous term or concept:\n{anti}\n"
+            )
+        if attempt > 1 and last_failure:
+            user_prompt += (
+                f"\n(Attempt {attempt} — previous query was rejected: {last_failure}. "
+                f"Pick a term that genuinely appears in multiple unrelated modules "
+                f"— check the class/function list for shared names.)\n"
+            )
+
+        gen_result = _call_llm_json(
+            model=model,
+            system_prompt=_AMBIG_GENERATE_SYSTEM,
+            user_prompt=user_prompt,
+            max_tokens=200,
+        )
+        query_text = gen_result.get("query_text", "")
+        if not isinstance(query_text, str) or not query_text.strip():
+            logger.warning("Empty AMBIG query_text, variant %d attempt %d", variant, attempt)
             continue
 
-        # Hunk headers + added/removed lines
-        if line.startswith(("@@", "+", "-")) and not line.startswith(("+++", "---")):
-            for m in _CAMEL_RE.finditer(line):
-                name = m.group(1)
-                if name not in _CAMEL_IGNORE:
-                    identifiers.add(name.lower())
-            for m in _SNAKE_RE.finditer(line):
-                identifiers.add(m.group(1).lower())
+        word_count = len(query_text.split())
+        if word_count < _NON_OK_MIN_WORDS or word_count > _NON_OK_MAX_WORDS:
+            last_failure = f"word count {word_count} (need {_NON_OK_MIN_WORDS}-{_NON_OK_MAX_WORDS})"
+            logger.warning("AMBIG variant %d attempt %d: %s", variant, attempt, last_failure)
+            continue
 
-    return identifiers
+        # RRF validation against OK baseline
+        stats = asyncio.run(_rrf_stats(app_ctx, query_text))
+        failure = _check_ambig(stats, baseline)
+        if failure is None:
+            clusters_desc = ", ".join(
+                f"{size} results" for size in stats["cluster_sizes"][:5]
+            )
+            return {
+                "query_type": "AMBIG",
+                "query_text": query_text,
+                "seeds": [],
+                "pins": [],
+                "candidate_neighborhoods": (
+                    f"{stats['dir_count']} directory clusters: [{clusters_desc}]"
+                ),
+                "why_ambiguous": (
+                    f"balance={stats['balance']:.2f} exceeds OK max "
+                    f"({baseline.max_balance:.2f}). Results split across "
+                    f"{stats['dir_count']} subsystems with no single dominant target."
+                ),
+                "rrf_stats": {
+                    "dir_count": stats["dir_count"],
+                    "n": stats["n"],
+                    "spread": round(stats["spread"], 4),
+                    "balance": round(stats["balance"], 2),
+                },
+                "ok_baseline": {
+                    "max_dir_count": baseline.max_dir_count,
+                    "max_balance": round(baseline.max_balance, 2),
+                },
+            }
 
+        last_failure = failure
+        last_query_text = query_text
+        last_stats = stats
+        logger.warning(
+            "AMBIG variant %d attempt %d: RRF rejected — %s (query=%r, stats=%s)",
+            variant, attempt, failure, query_text,
+            {k: v for k, v in stats.items() if k != "cluster_sizes"},
+        )
 
-def _gate_non_ok_query(
-    query_text: str,
-    non_ok_type: str,
-    patch_identifiers: set[str],
-) -> str | None:
-    """Check a non-OK query against deterministic Phase 1 gates.
-
-    Returns ``None`` if the query passes, or a failure reason string.
-    """
-    words = query_text.split()
-
-    # Gate 1: Word count for BROAD (3-10 words)
-    if non_ok_type == "BROAD":
-        if len(words) < 3:
-            return f"BROAD query too short ({len(words)} words, need ≥3)"
-        if len(words) > 10:
-            return f"BROAD query too long ({len(words)} words, need ≤10)"
-
-    # Gate 2: Identifier contamination (applies to UNSAT + BROAD)
-    # Only checks for project-specific names (CamelCase / snake_case compound),
-    # not generic single words.
-    if non_ok_type in ("UNSAT", "BROAD"):
-        query_lower = query_text.lower()
-        # Extract CamelCase and snake_case compound tokens from the query
-        query_camel = {m.group(1).lower() for m in _CAMEL_RE.finditer(query_text)}
-        query_snake = {m.group(1).lower() for m in _SNAKE_RE.finditer(query_lower)}
-        query_tokens = query_camel | query_snake
-        leaked = query_tokens & patch_identifiers
-        if leaked:
-            return f"identifier contamination: {sorted(leaked)}"
-
-    return None
+    # Exhausted retries — use the last attempt as a best-effort fallback.
+    logger.warning(
+        "AMBIG variant %d: exhausted %d retries, using last attempt as fallback",
+        variant, max_retries,
+    )
+    return {
+        "query_type": "AMBIG",
+        "query_text": last_query_text,
+        "seeds": [],
+        "pins": [],
+        "why_ambig": f"FALLBACK — validation failed after {max_retries} attempts: {last_failure}",
+        "cluster_description": f"dir_count={last_stats['dir_count']}, balance={last_stats.get('balance', 0):.2f} (did not exceed baseline)",
+        "rrf_stats": {
+            "dir_count": last_stats["dir_count"],
+            "n": last_stats["n"],
+            "balance": round(last_stats.get("balance", 0), 4),
+        },
+        "ok_baseline": {
+            "max_dir_count": baseline.max_dir_count,
+            "max_balance": round(baseline.max_balance, 4),
+        },
+        "fallback": True,
+    }
 
 
 # ── LLM transport ───────────────────────────────────────────────
@@ -457,6 +1030,7 @@ def _gate_non_ok_query(
 # Cached Azure AAD token — refreshed automatically when near expiry.
 _azure_token: str | None = None
 _azure_token_expires: float = 0.0  # time.monotonic() when it expires
+_azure_token_lock = threading.Lock()
 
 
 def _get_azure_token() -> str | None:
@@ -465,46 +1039,48 @@ def _get_azure_token() -> str | None:
     Caches the token and refreshes 5 minutes before expiry.
     Uses ``az account get-access-token`` which returns both the token
     and its expiry timestamp.
+    Thread-safe: serialises token refresh via lock.
     """
     import time as _time
 
     global _azure_token, _azure_token_expires
 
-    # Return cached if still valid (with 5-minute buffer)
+    # Fast path: cached token still valid (read without lock is safe for check)
     if _azure_token and _time.monotonic() < (_azure_token_expires - 300):
         return _azure_token
 
-    try:
-        result = subprocess.run(
-            ["az", "account", "get-access-token",
-             "--resource", "https://cognitiveservices.azure.com",
-             "--output", "json"],
-            capture_output=True, text=True, timeout=30, check=True,
-        )
-        body = json.loads(result.stdout)
-        token = body.get("accessToken", "").strip()
-        if not token:
+    with _azure_token_lock:
+        # Re-check under lock (another thread may have refreshed)
+        if _azure_token and _time.monotonic() < (_azure_token_expires - 300):
+            return _azure_token
+
+        try:
+            result = subprocess.run(
+                ["az", "account", "get-access-token",
+                 "--resource", "https://cognitiveservices.azure.com",
+                 "--output", "json"],
+                capture_output=True, text=True, timeout=30, check=True,
+            )
+            body = json.loads(result.stdout)
+            token = body.get("accessToken", "").strip()
+            if not token:
+                return None
+
+            expires_on = body.get("expires_on")
+            if expires_on:
+                ttl = int(expires_on) - int(_time.time())
+            else:
+                ttl = 3600
+
+            _azure_token = token
+            _azure_token_expires = _time.monotonic() + max(ttl, 60)
+            logger.info("Azure AAD token refreshed, TTL=%ds", ttl)
+            return _azure_token
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+                FileNotFoundError, json.JSONDecodeError, ValueError):
+            _azure_token = None
+            _azure_token_expires = 0.0
             return None
-
-        # Parse expiry — az returns "expiresOn" as a datetime string
-        # and "expires_on" as a unix timestamp (seconds).
-        expires_on = body.get("expires_on")
-        if expires_on:
-            # expires_on is unix timestamp (int or string)
-            ttl = int(expires_on) - int(_time.time())
-        else:
-            # Fallback: assume 1-hour token lifetime
-            ttl = 3600
-
-        _azure_token = token
-        _azure_token_expires = _time.monotonic() + max(ttl, 60)
-        logger.info("Azure AAD token refreshed, TTL=%ds", ttl)
-        return _azure_token
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
-            FileNotFoundError, json.JSONDecodeError, ValueError):
-        _azure_token = None
-        _azure_token_expires = 0.0
-        return None
 
 
 def _call_llm_json(
@@ -553,6 +1129,8 @@ def _call_llm_json(
                     text = resp["choices"][0]["message"]["content"]
                     return _parse_json_object(text)
                 except urllib.error.HTTPError as exc:
+                    logger.error("Azure HTTP %d on attempt %d/5: %s", exc.code, _attempt + 1,
+                                 exc.read().decode()[:300] if hasattr(exc, 'read') else str(exc))
                     if exc.code == 429:
                         # Rate limited — exponential backoff
                         wait = min(2 ** _attempt * 5, 60)
@@ -562,65 +1140,48 @@ def _call_llm_json(
                     if exc.code == 401 and _attempt == 0:
                         # Token expired — force refresh and retry
                         global _azure_token, _azure_token_expires
-                        _azure_token = None
-                        _azure_token_expires = 0.0
+                        with _azure_token_lock:
+                            _azure_token = None
+                            _azure_token_expires = 0.0
                         azure_token = _get_azure_token()
                         if not azure_token:
+                            logger.error("Azure: token refresh failed after 401")
                             break
                         continue
+                    logger.error("Azure: non-retryable HTTP %d, giving up", exc.code)
                     break
-                except Exception:
+                except RuntimeError as _exc:
+                    # JSON parse failure — retry with doubled max_tokens
+                    if "parse JSON" in str(_exc) and _attempt < 4:
+                        logger.warning("Azure: JSON parse failed, retrying with more tokens (attempt %d/5): %s",
+                                       _attempt + 1, str(_exc)[:200])
+                        max_tokens = min(max_tokens * 2, 4096)
+                        payload = json.dumps({
+                            "messages": [
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": user_prompt},
+                            ],
+                            "max_tokens": max_tokens,
+                        }).encode()
+                        continue
+                    logger.error("Azure call failed: %s: %s", type(_exc).__name__, _exc)
                     break
-
-    # 2. GitHub Models (fallback, with retry + backoff for rate limits)
-    for _gh_attempt in range(6):
-        try:
-            response = run_chat_completion(
-                model=model,
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                max_tokens=max_tokens,
-                timeout=90,
-            )
-            return _parse_json_object(response_text(response))
-        except RuntimeError as exc:
-            msg = str(exc)
-            if "429" in msg or "Too many" in msg or "rate" in msg.lower():
-                wait = min(2 ** _gh_attempt * 10, 120)
-                logger.warning("GitHub Models 429, backing off %ds (attempt %d/6)", wait, _gh_attempt + 1)
-                _time.sleep(wait)
-                continue
-            break
-
-    # 3. Anthropic
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if api_key:
-        payload = json.dumps(
-            {
-                "model": model,
-                "max_tokens": max_tokens,
-                "system": system_prompt,
-                "messages": [{"role": "user", "content": user_prompt}],
-            }
-        )
-        result = subprocess.run(
-            [
-                "curl", "-s", "-X", "POST",
-                "https://api.anthropic.com/v1/messages",
-                "-H", f"x-api-key: {api_key}",
-                "-H", "anthropic-version: 2023-06-01",
-                "-H", "content-type: application/json",
-                "-d", payload,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=90,
-            check=False,
-        )
-        if result.returncode == 0:
-            body = json.loads(result.stdout)
-            text = body.get("content", [{}])[0].get("text", "")
-            return _parse_json_object(text)
+                except Exception as _exc:
+                    # Transient network errors (DNS, timeout, connection) — retry with backoff
+                    import urllib.error as _ue
+                    if isinstance(_exc, (_ue.URLError, TimeoutError, OSError, ConnectionError)) and _attempt < 4:
+                        wait = min(2 ** _attempt * 5, 60)
+                        logger.warning("Azure network error, backing off %ds (attempt %d/5): %s",
+                                       wait, _attempt + 1, _exc)
+                        _time.sleep(wait)
+                        continue
+                    logger.error("Azure call failed (non-HTTP): %s: %s", type(_exc).__name__, _exc)
+                    break
+            else:
+                # All 5 retries exhausted (all 429s) — log it
+                logger.error("Azure: all 5 retries exhausted (rate-limited)")
+        else:
+            logger.error("Azure: _get_azure_token() returned None")
 
     raise RuntimeError("No working LLM transport found for SWE-bench adaptation")
 
@@ -634,4 +1195,5 @@ def _parse_json_object(text: str) -> dict[str, Any]:
         end = text.rfind("}")
         if start >= 0 and end > start:
             return json.loads(text[start:end + 1])
+    raise RuntimeError(f"Failed to parse JSON from LLM response: {text[:200]}")
     raise RuntimeError("LLM response was not valid JSON")

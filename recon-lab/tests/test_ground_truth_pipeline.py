@@ -47,8 +47,6 @@ def test_validate_task_accepts_swebench_narrow_queries() -> None:
                 "reason": "changed",
             }
         ],
-        "thrash_preventing_defs": [],
-        "tier_difference_reasoning": "reason",
         "excluded_defs": [],
         "queries": [
             {"query_type": "Q_SEMANTIC", "query_text": "a", "seeds": [], "pins": [], "justification": "j"},
@@ -122,7 +120,6 @@ def test_parse_raw_task_jsons_supports_swebench_task_files(tmp_path: Path) -> No
                         "start_line": 9,
                     }
                 ],
-                "thrash_preventing_defs": [],
                 "queries": [
                     {
                         "query_type": "Q_FULL",

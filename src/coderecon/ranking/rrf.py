@@ -1,13 +1,16 @@
 """Reciprocal Rank Fusion — model-free ranking fallback.
 
-Fuses 4 harvester rank lists (term-match, explicit, graph, import) into
-a single score per candidate using the standard RRF formula:
+Fuses 6 harvester rank lists (term-match, explicit, graph, import,
+shares-file-with-seed, coverage-linked) into a single score per candidate
+using the standard RRF formula:
 
     score(d) = Σ  1 / (k + rank_i(d))
 
 where i ranges over every list in which d appears.
 
-Used when LightGBM models are not available.
+Used when LightGBM models are not available.  When models *are*
+available, ``rrf_fuse()`` still runs and its ``rrf_score`` is fed
+to the ranker as a feature.
 """
 
 from __future__ import annotations
@@ -71,12 +74,12 @@ def rrf_file_prune(
 # ------------------------------------------------------------------
 
 def _build_rank_lists(candidates: list[dict[str, Any]]) -> list[list[int]]:
-    """Return up to 4 rank lists (each a list of candidate indices, best-first)."""
+    """Return up to 5 rank lists (each a list of candidate indices, best-first)."""
     lists: list[list[int]] = []
 
-    # 1. Term-match list: ranked by term_match_count desc, lex_hit_count desc
+    # 1. Term-match list: ranked by bm25_file_score desc, term_match_count desc
     term = [
-        (i, c.get("term_match_count") or 0, c.get("lex_hit_count") or 0)
+        (i, c.get("bm25_file_score") or 0.0, c.get("term_match_count") or 0)
         for i, c in enumerate(candidates)
         if c.get("term_match_count")
     ]
@@ -116,5 +119,21 @@ def _build_rank_lists(candidates: list[dict[str, Any]]) -> list[list[int]]:
     if imports:
         imports.sort(key=lambda t: t[1])
         lists.append([i for i, _ in imports])
+
+    # 5. Shares-file-with-seed list: short selective booster
+    shares_file = [
+        i for i, c in enumerate(candidates)
+        if c.get("shares_file_with_seed")
+    ]
+    if shares_file:
+        lists.append(shares_file)
+
+    # 6. Coverage-linked list: deterministic test↔source links
+    coverage = [
+        i for i, c in enumerate(candidates)
+        if c.get("from_coverage")
+    ]
+    if coverage:
+        lists.append(coverage)
 
     return lists

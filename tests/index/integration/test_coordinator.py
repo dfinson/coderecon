@@ -1122,3 +1122,194 @@ class TestCoordinatorStaleTantivyRemoval:
                     )
         finally:
             coordinator.close()
+
+
+class TestWorktreeIsolation:
+    """Tests for multi-worktree def_uid isolation and per-worktree file extraction.
+
+    Regression coverage for:
+    - UNIQUE constraint on def_facts.def_uid across worktrees (def_uid collision fix)
+    - Feature-branch files being read from the correct worktree checkout directory
+    """
+
+    @pytest.mark.asyncio
+    async def test_def_uid_isolation_across_worktrees(self, tmp_path: Path) -> None:
+        """def_uid for the same symbol must differ between main and a feature worktree.
+
+        Verifies the _apply_worktree_uid_remap() fix: without it, inserting the same
+        symbol (same file path + kind + lexical_path) for two worktrees would produce
+        identical def_uid PK values and raise UNIQUE constraint failed.
+        """
+        import sqlite3
+        import subprocess
+
+        main_repo = tmp_path / "main_repo"
+        main_repo.mkdir()
+        subprocess.run(["git", "init", "-b", "main"], cwd=main_repo, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "x@x.com"], cwd=main_repo, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "X"], cwd=main_repo, check=True, capture_output=True)
+        (main_repo / "src").mkdir()
+        (main_repo / "src" / "module.py").write_text('"""m"""\ndef original_fn(): return 1\n')
+        subprocess.run(["git", "add", "."], cwd=main_repo, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=main_repo, check=True, capture_output=True)
+
+        feat_wt = tmp_path / "feat_wt"
+        subprocess.run(
+            ["git", "worktree", "add", "-b", "feature/new-fn", str(feat_wt)],
+            cwd=main_repo, check=True, capture_output=True,
+        )
+        # Feature worktree has an additional function to verify per-worktree reads.
+        (feat_wt / "src" / "module.py").write_text(
+            '"""m"""\ndef original_fn(): return 1\ndef feature_fn(): return 99\n'
+        )
+
+        db_path = tmp_path / "idx.db"
+        tantivy_path = tmp_path / "tantivy"
+
+        coordinator = IndexCoordinatorEngine(main_repo, db_path, tantivy_path)
+        try:
+            # Phase 1: full init of main (creates DB tables + indexes main checkout)
+            await coordinator.initialize(_noop_progress)
+
+            # Phase 2: activate feature worktree and reindex changed file
+            coordinator.set_freshness_gate(
+                lambda p, l: True, "feature/new-fn", worktree_root=str(feat_wt)
+            )
+            # Must not raise UNIQUE constraint failed on def_uid
+            stats = await coordinator.reindex_incremental(
+                [Path("src/module.py")], worktree="feature/new-fn"
+            )
+        finally:
+            coordinator.close()
+
+        assert stats.files_processed == 1
+
+        # Verify DB state via raw SQL to avoid any ORM layer abstraction
+        con = sqlite3.connect(str(db_path))
+        cur = con.cursor()
+
+        wts = dict(cur.execute("SELECT name, id FROM worktrees").fetchall())
+        main_id = wts["main"]
+        feat_id = wts["feature/new-fn"]
+
+        main_defs = dict(cur.execute(
+            "SELECT d.name, d.def_uid FROM def_facts d "
+            "JOIN files fi ON fi.id=d.file_id "
+            "WHERE fi.worktree_id=? AND d.kind='function'",
+            (main_id,),
+        ).fetchall())
+        feat_defs = dict(cur.execute(
+            "SELECT d.name, d.def_uid FROM def_facts d "
+            "JOIN files fi ON fi.id=d.file_id "
+            "WHERE fi.worktree_id=? AND d.kind='function'",
+            (feat_id,),
+        ).fetchall())
+        con.close()
+
+        # Both worktrees must have original_fn
+        assert "original_fn" in main_defs, f"original_fn missing from main: {main_defs}"
+        assert "original_fn" in feat_defs, f"original_fn missing from feat: {feat_defs}"
+
+        # def_uid for the same symbol must differ (worktree-scoped remap prevents collision)
+        assert main_defs["original_fn"] != feat_defs["original_fn"], (
+            f"def_uid must differ across worktrees but got same value: {main_defs['original_fn']}"
+        )
+
+        # Feature-specific symbol must be present (file was read from feat_wt, not main_repo)
+        assert "feature_fn" in feat_defs, (
+            f"feature_fn missing from feat worktree defs — "
+            f"file was probably read from main checkout instead of worktree: {feat_defs}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_feature_worktree_reindex_is_idempotent(self, tmp_path: Path) -> None:
+        """Reindexing the same feature-worktree file twice must not create duplicate defs."""
+        import sqlite3
+        import subprocess
+
+        main_repo = tmp_path / "main_repo"
+        main_repo.mkdir()
+        subprocess.run(["git", "init", "-b", "main"], cwd=main_repo, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "x@x.com"], cwd=main_repo, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "X"], cwd=main_repo, check=True, capture_output=True)
+        (main_repo / "src").mkdir()
+        (main_repo / "src" / "module.py").write_text('"""m"""\ndef original_fn(): return 1\n')
+        subprocess.run(["git", "add", "."], cwd=main_repo, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=main_repo, check=True, capture_output=True)
+
+        feat_wt = tmp_path / "feat_wt"
+        subprocess.run(
+            ["git", "worktree", "add", "-b", "feature/idem", str(feat_wt)],
+            cwd=main_repo, check=True, capture_output=True,
+        )
+        (feat_wt / "src" / "module.py").write_text(
+            '"""m"""\ndef original_fn(): return 1\ndef feature_fn(): return 99\n'
+        )
+
+        db_path = tmp_path / "idx.db"
+        tantivy_path = tmp_path / "tantivy"
+
+        coordinator = IndexCoordinatorEngine(main_repo, db_path, tantivy_path)
+        try:
+            await coordinator.initialize(_noop_progress)
+            coordinator.set_freshness_gate(
+                lambda p, l: True, "feature/idem", worktree_root=str(feat_wt)
+            )
+            changed = [Path("src/module.py")]
+            # First reindex
+            await coordinator.reindex_incremental(changed, worktree="feature/idem")
+            # Second reindex of the same file — must not raise UNIQUE constraint
+            await coordinator.reindex_incremental(changed, worktree="feature/idem")
+        finally:
+            coordinator.close()
+
+        con = sqlite3.connect(str(db_path))
+        cur = con.cursor()
+        wts = dict(cur.execute("SELECT name, id FROM worktrees").fetchall())
+        feat_id = wts["feature/idem"]
+        # Count defs for the feature worktree; must be exactly 2 (original_fn + feature_fn)
+        count = cur.execute(
+            "SELECT COUNT(*) FROM def_facts d "
+            "JOIN files fi ON fi.id=d.file_id "
+            "WHERE fi.worktree_id=? AND d.kind='function'",
+            (feat_id,),
+        ).fetchone()[0]
+        con.close()
+
+        assert count == 2, f"Expected 2 defs after idempotent reindex, got {count}"
+
+    @pytest.mark.asyncio
+    async def test_set_freshness_gate_caches_worktree_root(self, tmp_path: Path) -> None:
+        """set_freshness_gate must store non-main worktree roots in _worktree_root_cache."""
+        db_path = tmp_path / "idx.db"
+        tantivy_path = tmp_path / "tantivy"
+        repo_root = tmp_path / "repo"
+        repo_root.mkdir()
+        feat_root = tmp_path / "feat"
+        feat_root.mkdir()
+
+        # Need DB tables first; initialize() creates them.
+        import subprocess
+        subprocess.run(["git", "init", "-b", "main"], cwd=repo_root, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "x@x.com"], cwd=repo_root, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "X"], cwd=repo_root, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "--allow-empty", "-m", "init"], cwd=repo_root, check=True, capture_output=True)
+
+        coordinator = IndexCoordinatorEngine(repo_root, db_path, tantivy_path)
+        try:
+            await coordinator.initialize(_noop_progress)
+            # Cache should be empty initially (no set_freshness_gate calls with root)
+            assert coordinator._worktree_root_cache == {}
+
+            # Main worktree — should NOT be cached (main uses self.repo_root)
+            coordinator.set_freshness_gate(lambda p, l: True, "main")
+            assert "main" not in coordinator._worktree_root_cache
+
+            # Non-main worktree with worktree_root — must be cached
+            coordinator.set_freshness_gate(
+                lambda p, l: True, "feature/x", worktree_root=str(feat_root)
+            )
+            assert "feature/x" in coordinator._worktree_root_cache
+            assert coordinator._worktree_root_cache["feature/x"] == feat_root
+        finally:
+            coordinator.close()

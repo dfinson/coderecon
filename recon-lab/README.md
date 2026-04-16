@@ -103,17 +103,16 @@ Four labels, defined as properties of the **(query, repo) pair**:
 
 ### 1.5 Relevance Model
 
-Graded (3-level). The ranker learns to prioritize minimum_sufficient
-defs over thrash_preventing defs, so that under budget pressure the
-must-see context survives the cutoff.
+Binary labelling. Each definition is either relevant (1) or
+irrelevant (0).  Relevant defs are those whose spans overlap a
+changed hunk in the gold patch (`minimum_sufficient`).
 
-| Gain | Tier | Meaning |
-|------|------|---------|
-| 2 | `minimum_sufficient` | Human-necessary — removing this def causes task failure |
-| 1 | `thrash_preventing` | Agent-necessary — removing this causes extra searches but task is still solvable |
-| 0 | irrelevant | Not relevant to the task |
+| Label | Meaning |
+|-------|---------|
+| 1 | Relevant — definition overlaps a changed hunk |
+| 0 | Irrelevant — not relevant to the task |
 
-LambdaMART natively optimizes NDCG with graded gains.
+LambdaMART optimizes NDCG with these binary gains.
 
 ---
 
@@ -298,10 +297,6 @@ Each imported instance produces one file: `data/{workspace_id}/ground_truth/{wor
   "minimum_sufficient_defs": [
     {"path": "...", "name": "...", "kind": "...", "start_line": 42, "end_line": 57, "reason": "changed hunk overlap"}
   ],
-  "thrash_preventing_defs": [
-    {"path": "...", "name": "...", "kind": "...", "start_line": 87, "end_line": 104, "reason": "same-file context"}
-  ],
-  "tier_difference_reasoning": "<why the two tiers differ or are identical>",
   "excluded_defs": [
     {"path": "...", "name": "...", "kind": "...", "start_line": 1, "end_line": 3, "reason": "..."}
   ],
@@ -316,11 +311,10 @@ Field details, query type rules, and validation constraints live in
 
 #### Data assembly
 
-1. For each def in `minimum_sufficient_defs` and `thrash_preventing_defs`:
+1. For each def in `minimum_sufficient_defs`:
    look up `(path, name, kind)` in coderecon index → resolve `def_uid`.
 2. If no match: flag for review (should be <2%).
-3. Write `touched_objects.jsonl` with `tier` field (`minimum` or `thrash_preventing`).
-   The ranker trains on the union (both tiers = relevant).
+3. Write `touched_objects.jsonl` with `tier` field (`minimum`).
 4. Write `audit/` with `diff`, `justification`, `excluded_defs`,
    `confidence`, `solve_notes` for third-agent auditing.
 5. Assemble `runs.jsonl`, `queries.jsonl`.
@@ -416,8 +410,7 @@ over-selection.
 ### 5.2 `touched_objects`
 
 One row per relevant def per task. Absence = irrelevant.
-Two tiers: `minimum` (human-necessary) and `thrash_preventing`
-(agent-necessary). The ranker trains on the union of both.
+Binary labelling: `minimum` = relevant (1), absent = irrelevant (0).
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -428,7 +421,7 @@ Two tiers: `minimum` (human-necessary) and `thrash_preventing`
 | `name` | str | DefFact name |
 | `start_line` | int | Span start |
 | `end_line` | int | Span end |
-| `tier` | str | `minimum` or `thrash_preventing` |
+| `tier` | str | `minimum` |
 
 ### 5.3 `queries`
 
@@ -470,7 +463,7 @@ gate label.
 
 1. Filter to OK-labeled queries.
 2. Train LightGBM LambdaMART grouped by `(run_id, query_id)`.
-3. Graded relevance: 2 (minimum_sufficient), 1 (thrash_preventing), 0.
+3. Binary relevance: 1 (relevant), 0 (irrelevant).
 
 ### 6.2 Cutoff (disjoint repo split)
 
@@ -564,7 +557,6 @@ recon-lab/
     ├── swebench.py            # SWE-bench ground truth import
     ├── swebench_llm.py        # LLM adaptation for SWE-bench instances
     ├── patch_ground_truth.py  # Diff parsing, hunk-to-def mapping
-    ├── llm_filter.py          # Cheap relevance filter for context defs
     ├── collector.py           # Ground truth collection
     ├── collect.py             # Signal collection adapter (§4.3 Phase 4)
     ├── collect_signals.py     # Retrieval signal collection

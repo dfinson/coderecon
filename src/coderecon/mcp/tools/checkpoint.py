@@ -521,6 +521,65 @@ def _serialize_test_result(
 
 
 # =============================================================================
+# Coverage Persistence
+# =============================================================================
+
+
+def _ingest_checkpoint_coverage(
+    app_ctx: "AppContext",
+    coverage_dir: Path,
+    failed_test_ids: set[str] | None = None,
+) -> None:
+    """Persist coverage artifacts from a checkpoint test run to TestCoverageFact.
+
+    Best-effort: logs and continues on any error.
+    """
+    try:
+        from coderecon.testing.coverage import (
+            CoverageParseError,
+            merge,
+            parse_artifact,
+        )
+
+        if not coverage_dir.is_dir():
+            return
+
+        # Find all coverage artifact files in the directory
+        artifact_files = list(coverage_dir.rglob("*"))
+        if not artifact_files:
+            return
+
+        reports = []
+        for f in artifact_files:
+            if not f.is_file():
+                continue
+            try:
+                report = parse_artifact(f, base_path=app_ctx.repo_root)
+                reports.append(report)
+            except (CoverageParseError, Exception):
+                pass
+
+        if not reports:
+            return
+
+        from coderecon.index._internal.analysis.coverage_ingestion import (
+            ingest_coverage,
+        )
+
+        merged = merge(*reports) if len(reports) > 1 else reports[0]
+        engine = app_ctx.coordinator.db.engine
+        epoch = app_ctx.coordinator.current_epoch
+        written = ingest_coverage(
+            engine, merged, epoch, failed_test_ids=failed_test_ids,
+        )
+        if written:
+            log.debug("checkpoint.coverage_ingested", facts=written)
+
+    except Exception:
+        log.debug("checkpoint.coverage_ingest_failed", exc_info=True)
+
+
+# =============================================================================
 # Verify Summary
 # =============================================================================
 
@@ -965,12 +1024,22 @@ async def _run_tiered_tests(
             + f" ({total_duration:.1f}s{hop_note}{skip_note})"
         )
 
+    # Collect failed test IDs for coverage ingestion
+    _failed_test_ids: set[str] = set()
+    for _tr in all_test_results:
+        if _tr.run_status and _tr.run_status.failures:
+            _failed_test_ids.update(
+                f"{f.path}::{f.name}"
+                for f in _tr.run_status.failures
+            )
+
     return {
         "serialized": combined,
         "status": final_status,
         "passed": total_passed,
         "failed": total_failed,
         "tier_log": tier_log,
+        "failed_test_ids": _failed_test_ids or None,
     }
 
 
@@ -1268,6 +1337,12 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
                     test_status = tiered_result["status"]
                     test_passed = tiered_result["passed"]
                     test_failed = tiered_result["failed"]
+
+                    # Persist coverage facts to DB for recon pipeline
+                    _ingest_checkpoint_coverage(
+                        app_ctx, Path(coverage_dir),
+                        failed_test_ids=tiered_result.get("failed_test_ids"),
+                    )
 
                     # Hoist coverage_hint to top-level for agent visibility
                     serialized = tiered_result["serialized"]

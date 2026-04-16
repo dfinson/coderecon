@@ -8,26 +8,15 @@ path = "~/.recon/recon-lab"
 
 [clone]
 jobs = 4
-depth = 1  # shallow clone depth (1 = single commit)
 
 [index]
 timeout = 1800  # 30 minutes per repo
 
-[swebench]
-training_dataset = "princeton-nlp/SWE-bench"
-training_split = "test"
-eval_dataset = "princeton-nlp/SWE-bench_Verified"
-eval_split = "test"
-supplemental_datasets = [
-    "princeton-nlp/SWE-bench:dev",
-    "r1v3r/multi_SWE_Bench_Rust:train",
-    "Daoguang/Multi-SWE-bench:java_verified",
-]
+[pr_select]
+prs_per_repo = 30
+max_files_changed = 50
+min_files_changed = 1
 llm_model = "openai/gpt-4-1-nano"
-filter_model = "openai/gpt-4-1-nano"
-max_instances = 0
-cutoff_mod = 5
-cutoff_remainder = 4
 
 [train]
 # "auto" resolves to $workspace/data

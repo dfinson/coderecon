@@ -222,8 +222,12 @@ class GlobalDaemon:
         lint_ops = LintOps(wt_root, repo_slot.coordinator)
         session_manager = SessionManager(config.timeouts)
 
-        # Inject freshness gate into coordinator for this worktree
-        repo_slot.coordinator.set_freshness_gate(repo_slot.gate, wt_name)
+        # Inject freshness gate into coordinator for this worktree.
+        # Pass the worktree's actual checkout path so the Worktree row gets
+        # the correct root_path (not always the main repo root).
+        repo_slot.coordinator.set_freshness_gate(
+            repo_slot.gate, wt_name, worktree_root=str(wt_root)
+        )
 
         app_ctx = AppContext(
             worktree_name=wt_name,

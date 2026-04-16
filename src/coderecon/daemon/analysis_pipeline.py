@@ -204,7 +204,15 @@ class AnalysisPipeline:
                     merged = merge(*reports) if len(reports) > 1 else reports[0]
                     engine = self.coordinator.db.engine
                     epoch = self.coordinator.current_epoch
-                    written = ingest_coverage(engine, merged, epoch)
+                    failed_ids: set[str] | None = None
+                    if result.run_status and result.run_status.failures:
+                        failed_ids = {
+                            f"{f.path}::{f.name}"
+                            for f in result.run_status.failures
+                        }
+                    written = ingest_coverage(
+                        engine, merged, epoch, failed_test_ids=failed_ids,
+                    )
                     logger.debug("tier2_coverage_ingested", facts=written)
 
             elapsed = time.monotonic() - t0

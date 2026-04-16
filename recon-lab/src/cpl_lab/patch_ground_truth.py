@@ -1,4 +1,9 @@
-"""Deterministic patch-to-definition mapping helpers."""
+"""Deterministic patch-to-definition mapping helpers.
+
+Maps SWE-bench patch hunks to indexed definitions.  Only produces
+``minimum_sufficient_defs`` (definitions whose spans overlap a changed
+hunk).  Labels are binary: relevant (1) vs irrelevant (0).
+"""
 
 from __future__ import annotations
 
@@ -100,16 +105,16 @@ def parse_unified_diff(diff_text: str) -> list[FileDiff]:
 def map_hunks_to_defs(
     file_diffs: list[FileDiff],
     index_db: Path,
-) -> tuple[list[DefEntry], list[DefEntry], list[DefEntry]]:
-    """Map changed hunks to definitions in the index."""
+) -> list[DefEntry]:
+    """Map changed hunks to definitions in the index.
+
+    Returns only minimum_sufficient defs — definitions whose spans
+    overlap a changed hunk.  Binary labelling: relevant vs irrelevant.
+    """
     con = sqlite3.connect(str(index_db))
     cur = con.cursor()
 
     min_suff: list[DefEntry] = []
-    thrash_prev: list[DefEntry] = []
-    excluded: list[DefEntry] = []
-
-    changed_paths = {fd.path for fd in file_diffs}
 
     for fd in file_diffs:
         if fd.is_deleted:
@@ -152,202 +157,150 @@ def map_hunks_to_defs(
                         )
                     )
 
-        for name, kind, start, end in all_defs_in_file:
-            key = (name, kind, start)
-            if key in changed_def_keys:
-                continue
-            thrash_prev.append(
-                DefEntry(
-                    path=fd.path,
-                    name=name,
-                    kind=kind,
-                    start_line=start,
-                    end_line=end,
-                    reason="Same-file context def (not in changed hunk)",
-                )
-            )
-
-    _add_test_file_defs(cur, changed_paths, thrash_prev)
-    _add_doc_and_config_defs(cur, changed_paths, min_suff, thrash_prev)
-
     con.close()
-    return min_suff, thrash_prev, excluded
+    return min_suff
 
 
-def _add_test_file_defs(
-    cur: sqlite3.Cursor,
-    changed_paths: set[str],
-    thrash_prev: list[DefEntry],
-) -> None:
-    existing_paths = {d.path for d in thrash_prev}
+def expand_defs_via_coverage(
+    minimum_sufficient: list[DefEntry],
+    index_db: Path,
+) -> list[DefEntry]:
+    """Expand ground truth via deterministic test↔source coverage links.
 
-    for src_path in changed_paths:
-        for test_path in _guess_test_paths(src_path):
-            if test_path in existing_paths:
+    Given a set of minimum_sufficient defs, queries ``test_coverage_facts``:
+      1. Source defs → covering test files → all defs in those test files
+      2. Test defs → covered source defs
+
+    Only non-stale coverage facts are used.  Returns new DefEntry objects
+    not already in the minimum_sufficient set.
+    """
+    if not minimum_sufficient:
+        return []
+
+    con = sqlite3.connect(str(index_db))
+    cur = con.cursor()
+
+    # Check if coverage table exists and has data
+    try:
+        has_coverage = cur.execute(
+            "SELECT COUNT(*) FROM test_coverage_facts WHERE stale = 0"
+        ).fetchone()[0]
+    except sqlite3.OperationalError:
+        con.close()
+        return []
+
+    if not has_coverage:
+        con.close()
+        return []
+
+    # Build lookup of existing GT keys to avoid duplicates
+    existing_keys: set[tuple[str, str, str, int]] = set()
+    for d in minimum_sufficient:
+        existing_keys.add((d.path, d.kind, d.name, d.start_line))
+
+    # Resolve def_uids for minimum_sufficient defs
+    source_uids: list[str] = []
+    test_file_paths: list[str] = []
+
+    for d in minimum_sufficient:
+        row = cur.execute(
+            """
+            SELECT d.def_uid, f.path
+            FROM def_facts d
+            JOIN files f ON d.file_id = f.id
+            WHERE f.path = ? AND d.name = ? AND d.kind = ?
+              AND d.start_line = ?
+            LIMIT 1
+            """,
+            (d.path, d.name, d.kind, d.start_line),
+        ).fetchone()
+        if row is None:
+            continue
+        uid, path = row
+        # Classify as test vs source
+        parts = path.split("/")
+        basename = parts[-1] if parts else ""
+        is_test = (
+            any(p in ("tests", "test") for p in parts[:-1])
+            or basename.startswith("test_")
+            or basename.endswith("_test.py")
+        )
+        if is_test:
+            test_file_paths.append(path)
+        else:
+            source_uids.append(uid)
+
+    expanded: list[DefEntry] = []
+
+    # Direction 1: source defs → covering test files → test defs
+    if source_uids:
+        placeholders = ",".join("?" * len(source_uids))
+        test_ids = cur.execute(
+            f"SELECT DISTINCT test_id FROM test_coverage_facts "
+            f"WHERE target_def_uid IN ({placeholders}) AND stale = 0",
+            source_uids,
+        ).fetchall()
+
+        test_paths: set[str] = set()
+        for (test_id,) in test_ids:
+            if test_id.startswith("__suite__"):
                 continue
-            rows = cur.execute(
+            fp = test_id.split("::")[0] if "::" in test_id else test_id
+            if fp:
+                test_paths.add(fp)
+
+        for tp in test_paths:
+            defs_in_test = cur.execute(
                 """
                 SELECT d.name, d.kind, d.start_line, d.end_line, f.path
                 FROM def_facts d
                 JOIN files f ON d.file_id = f.id
                 WHERE f.path = ?
-                ORDER BY d.start_line
                 """,
-                (test_path,),
+                (tp,),
             ).fetchall()
-            for name, kind, start, end, path in rows:
-                thrash_prev.append(
-                    DefEntry(
-                        path=path,
-                        name=name,
-                        kind=kind,
-                        start_line=start,
-                        end_line=end,
-                        reason=f"Test file for changed source {src_path}",
-                    )
-                )
-            if rows:
-                existing_paths.add(test_path)
+            for name, kind, start, end, path in defs_in_test:
+                key = (path, kind, name, start)
+                if key not in existing_keys:
+                    existing_keys.add(key)
+                    expanded.append(DefEntry(
+                        path=path, name=name, kind=kind,
+                        start_line=start, end_line=end,
+                        reason=f"test file covers GT source def (coverage-linked)",
+                    ))
 
+    # Direction 2: test files → covered source defs
+    if test_file_paths:
+        covered_uids: set[str] = set()
+        for tp in test_file_paths:
+            rows = cur.execute(
+                "SELECT DISTINCT target_def_uid FROM test_coverage_facts "
+                "WHERE test_id LIKE ? AND stale = 0",
+                (tp + "::%",),
+            ).fetchall()
+            for (uid,) in rows:
+                covered_uids.add(uid)
 
-_DOC_DIR_PREFIXES = ("docs/", "doc/", "documentation/", "guide/", "wiki/")
-_ALWAYS_RELEVANT_NAMES = frozenset(
-    {"README.md", "readme.md", "README.rst", "CHANGELOG.md", "CHANGES.rst", "CHANGES.md", "CONTRIBUTING.md"}
-)
+        if covered_uids:
+            placeholders = ",".join("?" * len(covered_uids))
+            defs = cur.execute(
+                f"""
+                SELECT d.name, d.kind, d.start_line, d.end_line, f.path
+                FROM def_facts d
+                JOIN files f ON d.file_id = f.id
+                WHERE d.def_uid IN ({placeholders})
+                """,
+                list(covered_uids),
+            ).fetchall()
+            for name, kind, start, end, path in defs:
+                key = (path, kind, name, start)
+                if key not in existing_keys:
+                    existing_keys.add(key)
+                    expanded.append(DefEntry(
+                        path=path, name=name, kind=kind,
+                        start_line=start, end_line=end,
+                        reason=f"source def covered by GT test (coverage-linked)",
+                    ))
 
-
-def _add_doc_and_config_defs(
-    cur: sqlite3.Cursor,
-    changed_paths: set[str],
-    min_suff: list[DefEntry],
-    thrash_prev: list[DefEntry],
-) -> None:
-    existing_paths = {d.path for d in min_suff} | {d.path for d in thrash_prev}
-    changed_dirs: set[str] = set()
-    changed_stems: set[str] = set()
-    for path in changed_paths:
-        parts = path.split("/")
-        changed_stems.add(parts[-1].rsplit(".", 1)[0].lower())
-        for idx in range(1, len(parts)):
-            changed_dirs.add("/".join(parts[:idx]))
-
-    doc_files = cur.execute(
-        """
-        SELECT f.id, f.path FROM files f
-        WHERE f.language_family IN ('markdown', 'toml', 'yaml', 'json', 'makefile', 'restructuredtext')
-           OR f.path LIKE '%.md'
-           OR f.path LIKE '%.rst'
-           OR f.path LIKE '%.toml'
-           OR f.path LIKE '%.yaml'
-           OR f.path LIKE '%.yml'
-           OR f.path LIKE '%.cfg'
-        """
-    ).fetchall()
-
-    matched_doc_paths: list[tuple[str, str]] = []
-    for _file_id, doc_path in doc_files:
-        if doc_path in existing_paths:
-            continue
-
-        doc_name = doc_path.split("/")[-1]
-        doc_dir = "/".join(doc_path.split("/")[:-1])
-        doc_stem = doc_name.rsplit(".", 1)[0].lower()
-
-        if doc_name in _ALWAYS_RELEVANT_NAMES and doc_dir in changed_dirs:
-            matched_doc_paths.append((doc_path, "Sibling doc in same directory as changed source"))
-            continue
-
-        if any(doc_path.startswith(prefix) for prefix in _DOC_DIR_PREFIXES):
-            if any(stem in doc_stem or doc_stem in stem for stem in changed_stems if len(stem) > 2):
-                matched_doc_paths.append((doc_path, "Documentation file name relates to changed module"))
-                continue
-
-        if "/" not in doc_path and doc_name in (
-            "pyproject.toml", "setup.cfg", "setup.py", "Cargo.toml", "package.json",
-            "go.mod", "Makefile", "CMakeLists.txt", "build.gradle", "pom.xml", "composer.json",
-        ):
-            matched_doc_paths.append((doc_path, "Root config file may contain related build or dependency context"))
-
-    for doc_path, reason in matched_doc_paths:
-        rows = cur.execute(
-            """
-            SELECT d.name, d.kind, d.start_line, d.end_line
-            FROM def_facts d
-            JOIN files f ON d.file_id = f.id
-            WHERE f.path = ?
-            ORDER BY d.start_line
-            """,
-            (doc_path,),
-        ).fetchall()
-
-        if rows:
-            for name, kind, start, end in rows:
-                thrash_prev.append(
-                    DefEntry(
-                        path=doc_path,
-                        name=name,
-                        kind=kind,
-                        start_line=start,
-                        end_line=end,
-                        reason=reason,
-                    )
-                )
-        else:
-            thrash_prev.append(
-                DefEntry(
-                    path=doc_path,
-                    name=doc_path.split("/")[-1],
-                    kind="heading",
-                    start_line=1,
-                    end_line=1,
-                    reason=reason,
-                )
-            )
-        existing_paths.add(doc_path)
-
-
-def _guess_test_paths(src_path: str) -> list[str]:
-    candidates: list[str] = []
-    parts = src_path.split("/")
-    filename = parts[-1]
-    stem, ext = (filename.rsplit(".", 1) + [""])[:2]
-
-    if ext == "py":
-        for test_dir in ("tests", "test"):
-            test_name = f"test_{stem}.{ext}"
-            candidates.append(
-                "/".join(parts[:-1]).replace("src/", f"{test_dir}/", 1).replace(stem, "") + test_name
-                if "src/" in src_path
-                else f"{test_dir}/{test_name}"
-            )
-        if parts[0] == "src" and len(parts) > 2:
-            candidates.append(f"tests/{parts[2]}/test_{stem}.py")
-        elif len(parts) >= 2:
-            candidates.append(f"tests/test_{stem}.py")
-            candidates.append(f"tests/{parts[0]}/test_{stem}.py")
-    elif ext in ("ts", "tsx", "js", "jsx"):
-        candidates.append(src_path.replace(f".{ext}", f".test.{ext}"))
-        candidates.append(src_path.replace(f".{ext}", f".spec.{ext}"))
-        base_dir = "/".join(parts[:-1])
-        candidates.append(f"{base_dir}/__tests__/{stem}.test.{ext}")
-    elif ext == "java":
-        candidates.append(src_path.replace("/main/", "/test/").replace(f"{stem}.java", f"{stem}Test.java"))
-    elif ext == "go":
-        candidates.append(src_path.replace(f".{ext}", f"_test.{ext}"))
-    elif ext == "rs":
-        if "src/" in src_path:
-            candidates.append(src_path.replace("src/", "tests/"))
-    elif ext == "cs":
-        for suffix in ("Tests", "Test"):
-            candidates.append(
-                src_path.replace("Src/", "Tests/")
-                .replace("src/", "tests/")
-                .replace(f"{stem}.cs", f"{stem}{suffix}.cs")
-            )
-    elif ext == "php":
-        candidates.append(src_path.replace("src/", "tests/").replace(f"{stem}.php", f"{stem}Test.php"))
-    elif ext == "rb":
-        candidates.append(src_path.replace("lib/", "spec/").replace(f"{stem}.rb", f"{stem}_spec.rb"))
-        candidates.append(src_path.replace("lib/", "test/").replace(f"{stem}.rb", f"test_{stem}.rb"))
-
-    return candidates
+    con.close()
+    return expanded

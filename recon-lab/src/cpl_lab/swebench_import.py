@@ -1,15 +1,16 @@
-"""SWE-bench Phase 1 — import raw instances + generate LLM queries.
+"""SWE-bench import — generate raw GT + LLM queries.
 
-Does NOT require coderecon.  Clones the repo (bare mirror + worktree),
-parses the patch into file diffs, and runs LLM adaptation to generate
-queries.
+Requires coderecon index.  Clones the repo, indexes it, parses the
+patch into file diffs, and runs LLM adaptation to generate queries.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
@@ -21,7 +22,7 @@ from cpl_lab.patch_ground_truth import parse_unified_diff
 from cpl_lab.swebench_common import (
     SwebenchInstance,
     combined_patch,
-    ensure_repo_checkout,
+    ensure_instance_checkout,
     logical_repo_id_from_slug,
     select_instances,
     workspace_id,
@@ -49,7 +50,7 @@ def run_swebench_import(
     workers: int = 1,
     verbose: bool = False,
 ) -> None:
-    """Phase 1: Import SWE-bench instances — raw GT + LLM-generated queries."""
+    """Import SWE-bench instances — worktree checkout, index, LLM queries."""
     instances = list(
         select_instances(
             repo_set=repo_set,
@@ -86,8 +87,16 @@ def _import_serial(
     verbose: bool,
 ) -> None:
     ok = skipped = failed = 0
+    # Per-repo accumulators: previously generated query texts.
+    # Shared across instances of the same repo to encourage diversity.
+    repo_broad: dict[str, list[str]] = defaultdict(list)
+    repo_ambig: dict[str, list[str]] = defaultdict(list)
+
     for index, instance in enumerate(instances, start=1):
         click.echo(f"[{index}/{len(instances)}] {instance.instance_id} ({instance.repo_set})")
+        repo_key = instance.repo
+        broad_acc = repo_broad[repo_key]
+        ambig_acc = repo_ambig[repo_key]
         try:
             summary = import_instance(
                 instance=instance,
@@ -95,6 +104,8 @@ def _import_serial(
                 clones_dir=clones_dir,
                 llm_model=llm_model,
                 verbose=verbose,
+                prior_broad=broad_acc,
+                prior_ambig=ambig_acc,
             )
         except Exception as exc:
             failed += 1
@@ -109,7 +120,7 @@ def _import_serial(
             n_queries = summary.get("queries", 0)
             click.echo(f"  OK {summary['workspace_id']} | queries={n_queries}")
 
-    click.echo(f"\nSWE-bench import (phase 1): {ok} ok, {skipped} skipped, {failed} failed")
+    click.echo(f"\nSWE-bench import: {ok} ok, {skipped} skipped, {failed} failed")
 
 
 def _import_parallel(
@@ -123,8 +134,17 @@ def _import_parallel(
     total = len(instances)
     ok = skipped = failed = 0
     done = 0
+    # Thread-safe per-repo accumulators for query diversity.
+    _lock = threading.Lock()
+    repo_broad: dict[str, list[str]] = defaultdict(list)
+    repo_ambig: dict[str, list[str]] = defaultdict(list)
 
     def _do(instance: SwebenchInstance) -> tuple[SwebenchInstance, dict[str, Any] | None, Exception | None]:
+        repo_key = instance.repo
+        # Snapshot current priors under lock (lists grow, snapshots are safe)
+        with _lock:
+            broad_snap = list(repo_broad[repo_key])
+            ambig_snap = list(repo_ambig[repo_key])
         try:
             summary = import_instance(
                 instance=instance,
@@ -132,7 +152,16 @@ def _import_parallel(
                 clones_dir=clones_dir,
                 llm_model=llm_model,
                 verbose=verbose,
+                prior_broad=broad_snap,
+                prior_ambig=ambig_snap,
             )
+            # Merge newly generated queries back into the shared accumulators
+            if summary.get("status") == "ok":
+                new_broad = summary.get("_broad_queries", [])
+                new_ambig = summary.get("_ambig_queries", [])
+                with _lock:
+                    repo_broad[repo_key].extend(new_broad)
+                    repo_ambig[repo_key].extend(new_ambig)
             return (instance, summary, None)
         except Exception as exc:
             return (instance, None, exc)
@@ -154,7 +183,7 @@ def _import_parallel(
                 n_queries = summary.get("queries", 0)
                 click.echo(f"{prefix} {inst.instance_id} OK queries={n_queries}")
 
-    click.echo(f"\nSWE-bench import (phase 1): {ok} ok, {skipped} skipped, {failed} failed")
+    click.echo(f"\nSWE-bench import: {ok} ok, {skipped} skipped, {failed} failed")
 
 
 def import_instance(
@@ -164,8 +193,16 @@ def import_instance(
     clones_dir: Path,
     llm_model: str,
     verbose: bool,
+    prior_broad: list[str] | None = None,
+    prior_ambig: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Import a single SWE-bench instance (Phase 1).
+    """Import a single SWE-bench instance.
+
+    Uses ensure_instance_checkout() to create a git worktree from a
+    shared mirror and index it.  Then runs LLM adaptation.
+
+    *prior_broad* / *prior_ambig*: previously generated query texts for
+    this repo, threaded from the import loop to encourage diversity.
 
     Writes:
       - ``ground_truth/raw_instance.json`` — instance metadata + parsed hunks
@@ -180,9 +217,13 @@ def import_instance(
     raw_path = gt_dir / "raw_instance.json"
 
     if raw_path.exists() and (gt_dir / "queries.json").exists():
-        return {"status": "skip", "reason": "already imported (phase 1)", "workspace_id": wid}
+        return {"status": "skip", "reason": "already imported", "workspace_id": wid}
 
-    clone_dir = ensure_repo_checkout(instance, clones_dir)
+    clone_dir = ensure_instance_checkout(instance, clones_dir)
+
+    index_db = clone_dir / ".recon" / "index.db"
+    if not index_db.exists():
+        raise FileNotFoundError(f"Missing index.db for {wid} after checkout")
 
     diff_text = combined_patch(instance)
     file_diffs = parse_unified_diff(diff_text)
@@ -206,6 +247,10 @@ def import_instance(
         problem_statement=instance.problem_statement,
         hints_text=instance.hints_text,
         patch_text=diff_text,
+        index_db=index_db,
+        clone_dir=clone_dir,
+        prior_broad=prior_broad,
+        prior_ambig=prior_ambig,
     )
 
     gt_dir.mkdir(parents=True, exist_ok=True)
@@ -226,7 +271,7 @@ def import_instance(
         "task_complexity": adaptation.task_complexity,
         "confidence": adaptation.confidence,
         "solve_notes": adaptation.solve_notes,
-        "tier_difference_reasoning": adaptation.tier_difference_reasoning,
+        "tier_difference_reasoning": "",
     }
     raw_path.write_text(json.dumps(raw_instance, indent=2))
 
@@ -263,8 +308,14 @@ def import_instance(
     if verbose:
         logger.info("swebench.import_ok", extra={"workspace_id": wid, "elapsed_sec": elapsed})
 
+    # Extract newly generated BROAD/AMBIG texts for the diversity accumulator
+    new_broad = [q["query_text"] for q in adaptation.non_ok_queries if q.get("query_type") == "BROAD"]
+    new_ambig = [q["query_text"] for q in adaptation.non_ok_queries if q.get("query_type") == "AMBIG"]
+
     return {
         "workspace_id": wid,
         "status": "ok",
         "queries": len(adaptation.queries) + len(adaptation.non_ok_queries),
+        "_broad_queries": new_broad,
+        "_ambig_queries": new_ambig,
     }

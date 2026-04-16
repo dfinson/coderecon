@@ -176,6 +176,7 @@ async def recon_pipeline(
     Otherwise: RRF fusion → file prune → elbow cutoff (model-free).
     """
     from coderecon.mcp.tools.recon.raw_signals import raw_signals_pipeline
+    from coderecon.ranking.rrf import rrf_fuse
 
     t0 = time.monotonic()
     repo_root = app_ctx.coordinator.repo_root
@@ -186,6 +187,9 @@ async def recon_pipeline(
     query_features = raw.get("query_features", {})
     repo_features = raw.get("repo_features", {})
     diagnostics = raw.get("diagnostics", {})
+
+    # 2. Always compute RRF scores (shared by both paths)
+    candidates = rrf_fuse(candidates)
 
     if _models_available():
         return await _pipeline_model(
@@ -302,10 +306,10 @@ def _pipeline_heuristic(
 ) -> dict[str, Any]:
     """Heuristic path: RRF fusion → file prune → elbow cutoff."""
     from coderecon.ranking.elbow import elbow_cut
-    from coderecon.ranking.rrf import rrf_file_prune, rrf_fuse
+    from coderecon.ranking.rrf import rrf_file_prune
 
-    # Fuse harvester lists via RRF
-    fused = rrf_fuse(candidates)
+    # Candidates already have rrf_score from shared layer; just prune + cut
+    fused = sorted(candidates, key=lambda c: -c.get("rrf_score", 0.0))
 
     # File-level prune
     pinned_paths = set(pins) if pins else set()

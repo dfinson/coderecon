@@ -57,7 +57,7 @@ def get_config(cli_override: str | None = None) -> dict:
     """Return merged config dict with resolved workspace paths."""
     cfg = _load_toml(_DEFAULT_CONFIG)
     ws = resolve_workspace(cli_override)
-    swebench_cfg = cfg.get("swebench", {})
+    pr_cfg = cfg.get("pr_select", {})
 
     return {
         "workspace": ws,
@@ -70,26 +70,15 @@ def get_config(cli_override: str | None = None) -> dict:
         "lab_root": LAB_ROOT,
         "clone": {
             "jobs": cfg.get("clone", {}).get("jobs", 4),
-            "depth": cfg.get("clone", {}).get("depth", 1),
         },
         "index": {
             "timeout": cfg.get("index", {}).get("timeout", 1800),
         },
-        "swebench": {
-            "training_dataset": swebench_cfg.get(
-                "training_dataset", "princeton-nlp/SWE-bench"
-            ),
-            "training_split": swebench_cfg.get("training_split", "dev"),
-            "eval_dataset": swebench_cfg.get(
-                "eval_dataset", "princeton-nlp/SWE-bench_Verified"
-            ),
-            "eval_split": swebench_cfg.get("eval_split", "test"),
-            "supplemental_datasets": swebench_cfg.get("supplemental_datasets", []),
-            "llm_model": swebench_cfg.get("llm_model", "openai/gpt-4.1-mini"),
-            "filter_model": swebench_cfg.get("filter_model", "openai/gpt-4.1-mini"),
-            "max_instances": swebench_cfg.get("max_instances", 0),
-            "cutoff_mod": swebench_cfg.get("cutoff_mod", 5),
-            "cutoff_remainder": swebench_cfg.get("cutoff_remainder", 4),
+        "pr_select": {
+            "prs_per_repo": pr_cfg.get("prs_per_repo", 30),
+            "max_files_changed": pr_cfg.get("max_files_changed", 50),
+            "min_files_changed": pr_cfg.get("min_files_changed", 1),
+            "llm_model": pr_cfg.get("llm_model", "openai/gpt-4-1-nano"),
         },
         "eval": {
             "default_experiment": cfg.get("eval", {}).get(

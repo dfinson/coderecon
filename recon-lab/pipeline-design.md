@@ -31,22 +31,6 @@ run — the import phase will skip them (`raw_instance.json` + `queries.json`
 exist). This saves ~1,620 LLM calls. The non-OK queries (UNSAT/BROAD/AMBIG)
 provide negative examples for gate classifier training.
 
-### Schema Compatibility
-
-All three HF datasets share the SWE-bench schema:
-
-| Field | SWE-bench | Rust | Java |
-|-------|-----------|------|------|
-| `instance_id` | ✅ | ✅ | ✅ |
-| `repo` | ✅ | ✅ | ✅ |
-| `base_commit` | ✅ | ✅ | ✅ |
-| `patch` | ✅ | ✅ | ✅ |
-| `test_patch` | ✅ | ✅ | ✅ |
-| `problem_statement` | ✅ | ✅ | ✅ |
-| `hints_text` | ✅ | ✅ | ✅ (null) |
-
-The existing `_row_to_instance()` handles all three datasets without changes.
-
 ---
 
 ## Pipeline Architecture
@@ -84,11 +68,10 @@ The existing `_row_to_instance()` handles all three datasets without changes.
 └──────────────────────────┬──────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ PHASE 3: swebench-resolve  (LLM + index lookup)             │
+│ PHASE 3: swebench-resolve  (index lookup, no LLM)           │
 │  For each instance with GT:                                 │
 │    • Parse gold patch → file_diffs                          │
 │    • map_hunks_to_defs(file_diffs, index.db)                │
-│    • LLM filter thrash_preventing defs                      │
 │    • Write {workspace_id}.json with labeled defs            │
 │                                                             │
 │  ≈ 2,349 × ~3-5 LLM calls                                  │
@@ -111,7 +94,7 @@ The existing `_row_to_instance()` handles all three datasets without changes.
 ┌─────────────────────────────────────────────────────────────┐
 │ PHASE 5: merge  (I/O bound)                                 │
 │  • Combine all per-repo parquets                            │
-│  • Join with labels (min_suff=2, thrash=1, irrelevant=0)    │
+│  • Join with labels (relevant=1, irrelevant=0)              │
 │  • Add repo metadata (object_count, file_count)             │
 │  • Output: candidates_rank.parquet (~2-5 GB expected)       │
 │                                                             │
@@ -146,12 +129,9 @@ The existing `_row_to_instance()` handles all three datasets without changes.
 1. **Eval-exclusion** in `select_instances()` — always loads eval IDs
    and excludes them from training, plus deduplicates across datasets.
    `swebench_common.py`: new `_iter_training()` helper.
-2. **`supplemental_datasets`** config — `config.py` reads list from
-   `lab.toml`, `select_instances()` iterates them after the primary dataset.
-3. **`lab.toml`** updated: `training_split = "test"`, supplemental list
-   includes `dev`, Rust, Java.
-4. **Plumbed through** `cli.py` → `swebench.py` / `swebench_import.py`.
-5. **Old data cleaned**: `recon-lab/data/` (128 MB REPO_MANIFEST GT),
+2. **`lab.toml`** updated: `training_split = "test"`.
+3. **Plumbed through** `cli.py` → `swebench.py` / `swebench_import.py`.
+4. **Old data cleaned**: `recon-lab/data/` (128 MB REPO_MANIFEST GT),
    `repos/` (59 markdown task defs), `experiments/` all deleted.
    `~/.recon/recon-lab/` cleaned: stale worktrees (41 GB), merged
    parquets (539 MB), models (15 MB) removed. Kept: 8 git mirrors

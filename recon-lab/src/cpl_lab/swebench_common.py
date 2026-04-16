@@ -55,7 +55,7 @@ def select_instances(
             requested_sets, eval_ids, seen, repo_filter, cutoff_mod, cutoff_remainder,
         )
 
-        # Supplemental training datasets.
+        # Supplemental training datasets (e.g. Multi-SWE-bench Rust, Java).
         for entry in supplemental_datasets or []:
             ds_id, ds_split = entry.split(":", 1)
             yield from _iter_training(
@@ -184,7 +184,7 @@ _repo_locks: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
 
 
 def ensure_repo_checkout(instance: SwebenchInstance, clones_dir: Path) -> Path:
-    """Clone-only checkout — no ``recon init``.  Used by Phase 1."""
+    """Clone-only checkout — no ``recon init``.  Legacy; prefer ensure_instance_checkout."""
     repo_slug = instance.repo.replace("/", "__")
     with _repo_locks[repo_slug]:
         return _ensure_repo_checkout_unlocked(instance, clones_dir, repo_slug)
@@ -230,26 +230,35 @@ def ensure_instance_checkout(instance: SwebenchInstance, clones_dir: Path) -> Pa
     instance_root.mkdir(parents=True, exist_ok=True)
 
     repo_slug = instance.repo.replace("/", "__")
-    mirror_dir = mirror_root / repo_slug
-    if not mirror_dir.exists():
-        run_git(["clone", "--mirror", f"https://github.com/{instance.repo}.git", str(mirror_dir)])
-    else:
-        run_git(["remote", "update", "--prune"], cwd=mirror_dir)
 
-    try:
-        run_git(["rev-parse", "--verify", instance.base_commit], cwd=mirror_dir)
-    except RuntimeError:
-        run_git(["fetch", "origin", instance.base_commit, "--depth=1"], cwd=mirror_dir)
+    # Lock per-repo to prevent parallel workers from racing on mirror creation
+    with _repo_locks[repo_slug]:
+        mirror_dir = mirror_root / repo_slug
+        if not mirror_dir.exists():
+            try:
+                run_git(["clone", "--mirror", f"https://github.com/{instance.repo}.git", str(mirror_dir)])
+            except RuntimeError:
+                # Clean up partial mirror so next attempt starts fresh
+                import shutil
+                shutil.rmtree(mirror_dir, ignore_errors=True)
+                raise
+        else:
+            run_git(["remote", "update", "--prune"], cwd=mirror_dir)
 
-    instance_dir = instance_root / workspace_id(instance.instance_id)
-    if not instance_dir.exists():
-        run_git(["worktree", "add", "--detach", str(instance_dir), instance.base_commit], cwd=mirror_dir)
-    else:
-        current = run_git(["rev-parse", "HEAD"], cwd=instance_dir).strip()
-        if current != instance.base_commit:
-            raise RuntimeError(
-                f"Existing instance checkout at {instance_dir} is pinned to {current[:12]}, expected {instance.base_commit[:12]}"
-            )
+        try:
+            run_git(["rev-parse", "--verify", instance.base_commit], cwd=mirror_dir)
+        except RuntimeError:
+            run_git(["fetch", "origin", instance.base_commit, "--depth=1"], cwd=mirror_dir)
+
+        instance_dir = instance_root / workspace_id(instance.instance_id)
+        if not instance_dir.exists():
+            run_git(["worktree", "add", "--detach", str(instance_dir), instance.base_commit], cwd=mirror_dir)
+        else:
+            current = run_git(["rev-parse", "HEAD"], cwd=instance_dir).strip()
+            if current != instance.base_commit:
+                raise RuntimeError(
+                    f"Existing instance checkout at {instance_dir} is pinned to {current[:12]}, expected {instance.base_commit[:12]}"
+                )
 
     index_db = instance_dir / ".recon" / "index.db"
     if not index_db.exists():

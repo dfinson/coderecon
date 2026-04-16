@@ -35,9 +35,7 @@ class Run:
 class TouchedObject:
     """§5.2 — a relevant DefFact for a task.
 
-    Two tiers: minimum (human-necessary) and thrash_preventing
-    (agent-necessary). Ranker uses graded relevance:
-    2 = minimum_sufficient, 1 = thrash_preventing, 0 = irrelevant.
+    Binary labelling: 1 = relevant (minimum_sufficient), 0 = irrelevant.
     """
 
     run_id: str
@@ -46,7 +44,7 @@ class TouchedObject:
     name: str
     start_line: int
     end_line: int
-    tier: str = "minimum"  # "minimum" or "thrash_preventing"
+    tier: str = "minimum"
 
 
 @dataclass(frozen=True)
@@ -99,16 +97,19 @@ class CandidateRank:
     term_match_count: int | None
     term_total_matches: int | None
     lex_hit_count: int | None
+    bm25_file_score: float
     graph_edge_type: str | None
     graph_seed_rank: int | None
     symbol_source: str | None
     import_direction: str | None
+    from_coverage: bool
     retriever_hits: int
+    rrf_score: float
     # Query features
     query_len: int
     has_identifier: bool
     has_path: bool
-    # Label (graded: 0=irrelevant, 1=thrash_preventing, 2=minimum_sufficient)
+    # Label (binary: 0=irrelevant, 1=relevant)
     label_relevant: int
 
 

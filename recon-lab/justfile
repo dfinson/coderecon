@@ -48,17 +48,20 @@ pipeline-status:
 clone set="all":
     recon-lab clone --set {{set}}
 
-index set="all":
-    recon-lab index --set {{set}}
+index-main set="all":
+    recon-lab index-main --set {{set}}
 
-swebench set="all" *ARGS="":
-    recon-lab swebench --set {{set}} {{ARGS}}
+pr-select set="all" *ARGS="":
+    recon-lab pr-select --set {{set}} {{ARGS}}
 
-swebench-import set="all" *ARGS="":
-    recon-lab swebench-import --set {{set}} {{ARGS}}
+pr-checkout set="all":
+    recon-lab pr-checkout --set {{set}}
 
-swebench-resolve set="all" *ARGS="":
-    recon-lab swebench-resolve --set {{set}} {{ARGS}}
+index-worktrees set="all":
+    recon-lab index-worktrees --set {{set}}
+
+pr-import set="all" *ARGS="":
+    recon-lab pr-import --set {{set}} {{ARGS}}
 
 collect set="all":
     recon-lab collect --set {{set}}

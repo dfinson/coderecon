@@ -1,22 +1,18 @@
-"""SWE-bench Phase 2 — resolve defs + LLM filter (needs coderecon index)."""
+"""SWE-bench resolve — map patch hunks to indexed defs, expand via coverage."""
 
 from __future__ import annotations
 
 import json
 import logging
-import subprocess
 import time
 from pathlib import Path
 from typing import Any
 
 import click
 
-from cpl_lab.llm_filter import filter_candidates
-from cpl_lab.patch_ground_truth import parse_unified_diff
+from cpl_lab.patch_ground_truth import parse_unified_diff, expand_defs_via_coverage
 from cpl_lab.swebench_common import (
     def_to_dict,
-    dict_to_def,
-    first_line,
     repo_name_matches,
 )
 
@@ -29,10 +25,9 @@ def run_swebench_resolve(
     clones_dir: Path,
     repo_set: str,
     repo: str | None,
-    filter_model: str,
     verbose: bool = False,
 ) -> None:
-    """Phase 2: Resolve defs + LLM filter — needs coderecon index."""
+    """Resolve defs — map patch hunks to indexed defs, expand via coverage."""
     from cpl_lab.data_manifest import iter_repo_data_dirs, load_repo_manifest
 
     candidates = []
@@ -60,7 +55,6 @@ def run_swebench_resolve(
             summary = resolve_instance(
                 repo_dir=repo_dir,
                 clones_dir=clones_dir,
-                filter_model=filter_model,
                 verbose=verbose,
             )
         except Exception as exc:
@@ -73,27 +67,28 @@ def run_swebench_resolve(
             click.echo(f"  SKIP {summary['reason']}")
         else:
             ok += 1
+            cov = summary.get('coverage_linked_defs', 0)
+            cov_str = f" +{cov} coverage" if cov else ""
             click.echo(
-                f"  OK defs={summary['minimum_defs']}/{summary['thrash_defs']}"
+                f"  OK defs={summary['minimum_defs']}{cov_str}"
             )
 
-    click.echo(f"\nSWE-bench resolve (phase 2): {ok} ok, {skipped} skipped, {failed} failed")
+    click.echo(f"\nSWE-bench resolve: {ok} ok, {skipped} skipped, {failed} failed")
 
 
 def resolve_instance(
     *,
     repo_dir: Path,
     clones_dir: Path,
-    filter_model: str,
     verbose: bool,
 ) -> dict[str, Any]:
-    """Resolve a single instance: map hunks to defs + LLM filter.
+    """Resolve a single instance: map hunks to indexed defs.
 
     Reads ``raw_instance.json`` and ``queries.json``, produces the merged
     ``{workspace_id}.json`` task file used by downstream pipeline stages.
     """
     from cpl_lab.data_manifest import load_repo_manifest
-    from cpl_lab.patch_ground_truth import DefEntry, map_hunks_to_defs
+    from cpl_lab.patch_ground_truth import map_hunks_to_defs
 
     t0 = time.monotonic()
     workspace_id = repo_dir.name
@@ -122,33 +117,20 @@ def resolve_instance(
 
     index_db = clone_dir / ".recon" / "index.db"
     if not index_db.exists():
-        from cpl_lab.index import _ensure_recon_models, _recon_init_cmd
+        raise FileNotFoundError(
+            f"Missing index.db for {workspace_id} at {index_db} — "
+            f"import stage should have created it"
+        )
 
-        _ensure_recon_models()
-        cmd, env = _recon_init_cmd(clone_dir, reindex=(clone_dir / ".recon").is_dir())
-        result = subprocess.run(cmd, env=env, check=False, capture_output=True, text=True)
-        if result.returncode != 0:
-            detail = result.stderr.strip() or result.stdout.strip() or "recon init failed"
-            raise RuntimeError(detail)
-
-    if not index_db.exists():
-        raise FileNotFoundError(f"Missing index.db for {workspace_id}")
-
-    minimum_sufficient, thrash_preventing, excluded = map_hunks_to_defs(file_diffs, index_db)
+    minimum_sufficient = map_hunks_to_defs(file_diffs, index_db)
     if not minimum_sufficient:
         return {"status": "skip", "reason": "no indexed defs mapped"}
 
     min_suff_dicts = [def_to_dict(entry) for entry in minimum_sufficient]
-    thrash_candidate_dicts = [def_to_dict(entry) for entry in thrash_preventing]
 
-    filter_result = filter_candidates(
-        issue_title=first_line(raw["problem_statement"]),
-        issue_body=raw["problem_statement"],
-        min_suff_defs=min_suff_dicts,
-        thrash_prev_defs=thrash_candidate_dicts,
-        model=filter_model,
-    )
-    filtered_thrash = [dict_to_def(entry) for entry in filter_result.kept]
+    # Expand GT via deterministic test↔source coverage links
+    coverage_linked = expand_defs_via_coverage(minimum_sufficient, index_db)
+    coverage_linked_dicts = [def_to_dict(entry) for entry in coverage_linked]
 
     ok_queries: list[dict[str, Any]] = []
     if queries_path.exists():
@@ -169,9 +151,8 @@ def resolve_instance(
         "base_commit": raw.get("base_commit", ""),
         "logical_repo_id": raw.get("logical_repo_id", ""),
         "minimum_sufficient_defs": min_suff_dicts,
-        "thrash_preventing_defs": [def_to_dict(entry) for entry in filtered_thrash],
-        "tier_difference_reasoning": raw.get("tier_difference_reasoning", ""),
-        "excluded_defs": [def_to_dict(entry) for entry in excluded],
+        "coverage_linked_defs": coverage_linked_dicts,
+        "excluded_defs": [],
         "queries": ok_queries,
     }
     task_path.write_text(json.dumps(task, indent=2))
@@ -180,7 +161,7 @@ def resolve_instance(
         "workspace_id": workspace_id,
         "status": "ok",
         "minimum_defs": len(minimum_sufficient),
-        "thrash_defs": len(filtered_thrash),
+        "coverage_linked_defs": len(coverage_linked),
         "elapsed_sec": round(time.monotonic() - t0, 1),
     }
     (repo_dir / "swebench_summary.json").write_text(json.dumps(summary, indent=2))

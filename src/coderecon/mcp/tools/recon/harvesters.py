@@ -113,6 +113,7 @@ async def _harvest_term_match(
                             lex_hit_count=1,
                             term_match_count=1,
                             term_total_matches=len(defs_in_file),
+                            bm25_file_score=score,
                         )
                         candidates[uid].evidence.append(
                             EvidenceRecord(
@@ -124,6 +125,9 @@ async def _harvest_term_match(
                     else:
                         candidates[uid].from_term_match = True
                         candidates[uid].lex_hit_count += 1
+                        candidates[uid].bm25_file_score = max(
+                            candidates[uid].bm25_file_score, score,
+                        )
 
     log.debug(
         "recon.harvest.term_match",

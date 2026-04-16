@@ -23,6 +23,7 @@ def ingest_coverage(
     epoch: int,
     *,
     test_id_prefix: str = "",
+    failed_test_ids: set[str] | None = None,
 ) -> int:
     """Ingest a coverage report into TestCoverageFact rows.
 
@@ -35,6 +36,9 @@ def ingest_coverage(
         report: Parsed coverage report
         epoch: Current epoch ID
         test_id_prefix: Optional prefix for test IDs extracted from function coverage
+        failed_test_ids: Test IDs that failed (used to set test_passed=False).
+            If None, test_passed is set to None (unknown).
+            If provided, matching IDs get False, others get True.
 
     Returns:
         Number of facts written
@@ -95,17 +99,19 @@ def ingest_coverage(
                 # Write one fact per test_id (or a synthetic test_id if none)
                 if test_ids:
                     for tid in test_ids:
+                        passed = _resolve_test_passed(tid, failed_test_ids)
                         _upsert_coverage_fact(
                             conn, tid, def_uid, path, covered, total,
-                            line_rate, branch_rate, epoch,
+                            line_rate, branch_rate, epoch, passed,
                         )
                         total_written += 1
                 else:
                     # No test ID granularity — use file-level synthetic ID
                     tid = f"__suite__:{file_path}"
+                    passed = _resolve_test_passed(tid, failed_test_ids)
                     _upsert_coverage_fact(
                         conn, tid, def_uid, path, covered, total,
-                        line_rate, branch_rate, epoch,
+                        line_rate, branch_rate, epoch, passed,
                     )
                     total_written += 1
 
@@ -254,6 +260,26 @@ def _extract_test_ids(file_cov: object, prefix: str) -> list[str]:
     return test_ids
 
 
+def _resolve_test_passed(
+    test_id: str, failed_test_ids: set[str] | None,
+) -> bool | None:
+    """Determine pass/fail status for a test_id.
+
+    Returns True (passed), False (failed), or None (unknown).
+    Uses prefix matching: if test_id starts with any failed ID
+    (or vice versa), it's considered failed.
+    """
+    if failed_test_ids is None:
+        return None
+    if not failed_test_ids:
+        return True  # no failures → everything passed
+    # Exact match or prefix match (test_id may be more or less specific)
+    for fid in failed_test_ids:
+        if test_id == fid or test_id.startswith(fid) or fid.startswith(test_id):
+            return False
+    return True
+
+
 def _upsert_coverage_fact(
     conn: object,
     test_id: str,
@@ -264,6 +290,7 @@ def _upsert_coverage_fact(
     line_rate: float,
     branch_rate: float | None,
     epoch: int,
+    test_passed: bool | None = None,
 ) -> None:
     """Insert or update a single TestCoverageFact."""
     # Check if exists
@@ -281,13 +308,14 @@ def _upsert_coverage_fact(
                 "UPDATE test_coverage_facts SET "
                 "covered_lines = :covered, total_lines = :total, "
                 "line_rate = :lr, branch_rate = :br, "
-                "epoch = :epoch, stale = 0 "
+                "epoch = :epoch, stale = 0, test_passed = :tp "
                 "WHERE test_id = :tid AND target_def_uid = :uid"
             ),
             {
                 "covered": covered, "total": total,
                 "lr": line_rate, "br": branch_rate,
-                "epoch": epoch, "tid": test_id, "uid": def_uid,
+                "epoch": epoch, "tp": test_passed,
+                "tid": test_id, "uid": def_uid,
             },
         )
     else:
@@ -295,12 +323,15 @@ def _upsert_coverage_fact(
             text(
                 "INSERT INTO test_coverage_facts "
                 "(test_id, target_def_uid, target_file_path, "
-                "covered_lines, total_lines, line_rate, branch_rate, epoch, stale) "
-                "VALUES (:tid, :uid, :fp, :covered, :total, :lr, :br, :epoch, 0)"
+                "covered_lines, total_lines, line_rate, branch_rate, "
+                "epoch, stale, test_passed) "
+                "VALUES (:tid, :uid, :fp, :covered, :total, :lr, :br, "
+                ":epoch, 0, :tp)"
             ),
             {
                 "tid": test_id, "uid": def_uid, "fp": file_path,
                 "covered": covered, "total": total,
-                "lr": line_rate, "br": branch_rate, "epoch": epoch,
+                "lr": line_rate, "br": branch_rate,
+                "epoch": epoch, "tp": test_passed,
             },
         )

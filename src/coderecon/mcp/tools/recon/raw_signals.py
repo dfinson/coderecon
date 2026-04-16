@@ -24,6 +24,7 @@ from coderecon.mcp.tools.recon.harvesters import (
 )
 from coderecon.mcp.tools.recon.merge import (
     _enrich_candidates,
+    _expand_via_coverage,
     _merge_candidates,
 )
 from coderecon.mcp.tools.recon.models import HarvestCandidate
@@ -112,6 +113,14 @@ async def raw_signals_pipeline(
     # Enrich: resolve missing DefFacts, populate metadata
     await _enrich_candidates(app_ctx, merged)
 
+    # Coverage expansion: bidirectional source↔test links
+    coverage_new = await _expand_via_coverage(app_ctx, merged)
+    if coverage_new:
+        merged.update(coverage_new)
+        await _enrich_candidates(app_ctx, coverage_new)
+        # Propagate enriched data back into merged
+        merged.update(coverage_new)
+
     # Collect seed file paths for path/package distance computation
     seed_paths: list[str] = []
     seed_modules: list[str] = []
@@ -135,6 +144,7 @@ async def raw_signals_pipeline(
             cand.from_term_match,
             cand.from_graph,
             cand.from_explicit,
+            cand.from_coverage,
             cand.import_direction is not None,
         ])
 
@@ -192,6 +202,7 @@ async def raw_signals_pipeline(
             "term_match_count": cand.term_match_count if cand.from_term_match else None,
             "term_total_matches": cand.term_total_matches if cand.from_term_match else None,
             "lex_hit_count": cand.lex_hit_count,
+            "bm25_file_score": cand.bm25_file_score,
             # Graph signal (categorical)
             "graph_edge_type": cand.graph_edge_type,
             "graph_seed_rank": cand.graph_seed_rank,
@@ -200,6 +211,8 @@ async def raw_signals_pipeline(
             "symbol_source": cand.symbol_source,
             # Import signal (categorical)
             "import_direction": cand.import_direction,
+            # Coverage expansion signal
+            "from_coverage": cand.from_coverage,
             # Retriever agreement
             "retriever_hits": retriever_hits,
             # Locality signals
@@ -257,6 +270,7 @@ async def raw_signals_pipeline(
             "graph_hits": sum(1 for c in merged.values() if c.from_graph),
             "symbol_hits": sum(1 for c in merged.values() if c.from_explicit),
             "import_hits": sum(1 for c in merged.values() if c.import_direction is not None),
+            "coverage_hits": sum(1 for c in merged.values() if c.from_coverage),
         },
     }
 

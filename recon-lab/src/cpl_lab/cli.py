@@ -2,10 +2,11 @@
 
 Usage:
     cpl-lab clone [--set SET]
-    cpl-lab index [--set SET] [--timeout SECS]
-    cpl-lab swebench [--set SET] [--repo ID] [--max-instances N]
-    cpl-lab swebench-import [--set SET] [--repo ID] [--max-instances N]
-    cpl-lab swebench-resolve [--set SET] [--repo ID]
+    cpl-lab index-main [--set SET]
+    cpl-lab pr-select [--set SET] [--repo ID]
+    cpl-lab pr-checkout [--set SET]
+    cpl-lab index-worktrees [--set SET]
+    cpl-lab pr-import [--set SET] [--repo ID] [--max-instances N]
     cpl-lab collect [--set SET] [--repo ID]
     cpl-lab merge [--what {gt,signals,all}]
     cpl-lab train [--model {ranker,cutoff,gate,all}]
@@ -47,7 +48,7 @@ def main(ctx: click.Context, workspace: str | None, verbose: bool, dry_run: bool
 @click.option("--jobs", type=int, default=None, help="Parallel clone jobs.")
 @click.pass_context
 def clone(ctx: click.Context, repo_set: str, jobs: int | None) -> None:
-    """Clone repos to the workspace."""
+    """Clone repos to the workspace (full history, no indexing)."""
     from cpl_lab.clone import run_clone
 
     cfg = ctx.obj["config"]
@@ -56,145 +57,141 @@ def clone(ctx: click.Context, repo_set: str, jobs: int | None) -> None:
         clones_dir=cfg["clones_dir"],
         repo_set=repo_set,
         jobs=jobs,
-        depth=cfg["clone"]["depth"],
         dry_run=ctx.obj["dry_run"],
         verbose=ctx.obj["verbose"],
     )
 
 
-# ── index ────────────────────────────────────────────────────────
+# ── index-main ───────────────────────────────────────────────────
 
 
-@main.command()
+@main.command("index-main")
 @click.option("--set", "repo_set", type=click.Choice(SETS), default="all",
               help="Which repo set to index.")
-@click.option("--timeout", type=int, default=None, help="Timeout per repo (seconds).")
-@click.option("--reindex", is_flag=True, help="Force re-index even if .recon/ exists.")
 @click.pass_context
-def index(ctx: click.Context, repo_set: str, timeout: int | None, reindex: bool) -> None:
-    """Run `recon init` on each clone."""
-    from cpl_lab.index import run_index
+def index_main(ctx: click.Context, repo_set: str) -> None:
+    """Start daemon, register + index all main repos."""
+    from cpl_lab.pr_index import run_index_main
 
+    import json, time
     cfg = ctx.obj["config"]
-    timeout = timeout or cfg["index"]["timeout"]
-    run_index(
+    run_index_main(
         clones_dir=cfg["clones_dir"],
         repo_set=repo_set,
-        timeout=timeout,
-        reindex=reindex,
-        dry_run=ctx.obj["dry_run"],
         verbose=ctx.obj["verbose"],
     )
+    # Write stamp file
+    stamp = cfg["data_dir"] / "index_main.stamp"
+    stamp.parent.mkdir(parents=True, exist_ok=True)
+    stamp.write_text(json.dumps({"timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")}))
 
 
-# ── swebench ─────────────────────────────────────────────────────
+# ── pr-select ────────────────────────────────────────────────────
 
 
-@main.command()
+@main.command("pr-select")
 @click.option("--set", "repo_set", type=click.Choice(SETS), default="all",
-              help="Which repo set to import from SWE-bench.")
-@click.option("--repo", default=None,
-              help="Filter to a single repo slug or logical repo ID.")
-@click.option("--max-instances", type=int, default=None,
-              help="Limit imported instances after set/repo filtering.")
-@click.option("--llm-model", default=None,
-              help="LLM model for query/tier adaptation.")
-@click.option("--filter-model", default=None,
-              help="LLM model for context filtering.")
+              help="Which repo set to select PRs for.")
+@click.option("--repo", default=None, help="Single repo ID.")
+@click.option("--prs-per-repo", type=int, default=None,
+              help="Max PRs to select per repo.")
 @click.pass_context
-def swebench(ctx: click.Context, repo_set: str, repo: str | None,
-             max_instances: int | None, llm_model: str | None,
-             filter_model: str | None) -> None:
-    """Import SWE-bench instances and adapt them into ground truth."""
-    from cpl_lab.swebench import run_swebench
+def pr_select(ctx: click.Context, repo_set: str, repo: str | None,
+              prs_per_repo: int | None) -> None:
+    """Select merged PRs from GitHub for each repo."""
+    from cpl_lab.pr_select import run_pr_select
 
     cfg = ctx.obj["config"]
-    swebench_cfg = cfg["swebench"]
-    run_swebench(
-        data_dir=cfg["data_dir"],
+    pr_cfg = cfg.get("pr_select", {})
+    run_pr_select(
         clones_dir=cfg["clones_dir"],
+        data_dir=cfg["data_dir"],
         repo_set=repo_set,
         repo=repo,
-        max_instances=max_instances if max_instances is not None else swebench_cfg["max_instances"],
-        llm_model=llm_model or swebench_cfg["llm_model"],
-        filter_model=filter_model or swebench_cfg["filter_model"],
-        training_dataset=swebench_cfg["training_dataset"],
-        training_split=swebench_cfg["training_split"],
-        eval_dataset=swebench_cfg["eval_dataset"],
-        eval_split=swebench_cfg["eval_split"],
-        cutoff_mod=swebench_cfg["cutoff_mod"],
-        cutoff_remainder=swebench_cfg["cutoff_remainder"],
-        supplemental_datasets=swebench_cfg["supplemental_datasets"],
+        prs_per_repo=prs_per_repo or pr_cfg.get("prs_per_repo", 30),
+        max_files=pr_cfg.get("max_files_changed", 50),
         verbose=ctx.obj["verbose"],
     )
 
 
-# ── swebench-import (Phase 1: no coderecon) ──────────────────────
+# ── pr-checkout ──────────────────────────────────────────────────
 
 
-@main.command("swebench-import")
+@main.command("pr-checkout")
 @click.option("--set", "repo_set", type=click.Choice(SETS), default="all",
-              help="Which repo set to import from SWE-bench.")
-@click.option("--repo", default=None,
-              help="Filter to a single repo slug or logical repo ID.")
-@click.option("--max-instances", type=int, default=None,
-              help="Limit imported instances after set/repo filtering.")
+              help="Which repo set.")
+@click.option("--repo", default=None, help="Single repo ID.")
+@click.pass_context
+def pr_checkout(ctx: click.Context, repo_set: str, repo: str | None) -> None:
+    """Create git worktrees for all selected PR instances."""
+    import json, time
+    from cpl_lab.pr_checkout import run_pr_checkout
+
+    cfg = ctx.obj["config"]
+    run_pr_checkout(
+        clones_dir=cfg["clones_dir"],
+        data_dir=cfg["data_dir"],
+        repo_set=repo_set,
+        repo=repo,
+        verbose=ctx.obj["verbose"],
+    )
+    stamp = cfg["data_dir"] / "pr_checkout.stamp"
+    stamp.parent.mkdir(parents=True, exist_ok=True)
+    stamp.write_text(json.dumps({"timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")}))
+
+
+# ── index-worktrees ──────────────────────────────────────────────
+
+
+@main.command("index-worktrees")
+@click.option("--set", "repo_set", type=click.Choice(SETS), default="all",
+              help="Which repo set.")
+@click.option("--repo", default=None, help="Single repo ID.")
+@click.pass_context
+def index_worktrees(ctx: click.Context, repo_set: str, repo: str | None) -> None:
+    """Run recon init on each PR worktree and register with daemon."""
+    import json, time
+    from cpl_lab.pr_index import run_index_worktrees
+
+    cfg = ctx.obj["config"]
+    run_index_worktrees(
+        clones_dir=cfg["clones_dir"],
+        data_dir=cfg["data_dir"],
+        repo_set=repo_set,
+        repo=repo,
+        verbose=ctx.obj["verbose"],
+    )
+    stamp = cfg["data_dir"] / "index_worktrees.stamp"
+    stamp.parent.mkdir(parents=True, exist_ok=True)
+    stamp.write_text(json.dumps({"timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")}))
+
+
+# ── pr-import ────────────────────────────────────────────────────
+
+
+@main.command("pr-import")
+@click.option("--set", "repo_set", type=click.Choice(SETS), default="all",
+              help="Which repo set to import.")
+@click.option("--repo", default=None, help="Single repo ID.")
+@click.option("--max-instances", type=int, default=0,
+              help="Limit imported instances (0=all).")
 @click.option("--llm-model", default=None,
               help="LLM model for query generation.")
-@click.option("--workers", type=int, default=10,
-              help="Parallel import workers (default 10).")
 @click.pass_context
-def swebench_import(ctx: click.Context, repo_set: str, repo: str | None,
-                   max_instances: int | None, llm_model: str | None,
-                   workers: int) -> None:
-    """Phase 1: Import SWE-bench instances + generate queries (no coderecon)."""
-    from cpl_lab.swebench import run_swebench_import
+def pr_import(ctx: click.Context, repo_set: str, repo: str | None,
+              max_instances: int, llm_model: str | None) -> None:
+    """Import PR instances: diff → GT defs + LLM query generation."""
+    from cpl_lab.pr_import import run_pr_import
 
     cfg = ctx.obj["config"]
-    swebench_cfg = cfg["swebench"]
-    run_swebench_import(
+    pr_cfg = cfg.get("pr_select", {})
+    run_pr_import(
         data_dir=cfg["data_dir"],
         clones_dir=cfg["clones_dir"],
+        llm_model=llm_model or pr_cfg.get("llm_model", "openai/gpt-4-1-nano"),
         repo_set=repo_set,
         repo=repo,
-        max_instances=max_instances if max_instances is not None else swebench_cfg["max_instances"],
-        llm_model=llm_model or swebench_cfg["llm_model"],
-        training_dataset=swebench_cfg["training_dataset"],
-        training_split=swebench_cfg["training_split"],
-        eval_dataset=swebench_cfg["eval_dataset"],
-        eval_split=swebench_cfg["eval_split"],
-        cutoff_mod=swebench_cfg["cutoff_mod"],
-        cutoff_remainder=swebench_cfg["cutoff_remainder"],
-        supplemental_datasets=swebench_cfg["supplemental_datasets"],
-        workers=workers,
-        verbose=ctx.obj["verbose"],
-    )
-
-
-# ── swebench-resolve (Phase 2: needs coderecon) ─────────────────
-
-
-@main.command("swebench-resolve")
-@click.option("--set", "repo_set", type=click.Choice(SETS), default="all",
-              help="Which repo set to resolve.")
-@click.option("--repo", default=None,
-              help="Filter to a single repo slug or logical repo ID.")
-@click.option("--filter-model", default=None,
-              help="LLM model for context filtering.")
-@click.pass_context
-def swebench_resolve(ctx: click.Context, repo_set: str, repo: str | None,
-                    filter_model: str | None) -> None:
-    """Phase 2: Map defs + LLM filter (needs coderecon index)."""
-    from cpl_lab.swebench import run_swebench_resolve
-
-    cfg = ctx.obj["config"]
-    swebench_cfg = cfg["swebench"]
-    run_swebench_resolve(
-        data_dir=cfg["data_dir"],
-        clones_dir=cfg["clones_dir"],
-        repo_set=repo_set,
-        repo=repo,
-        filter_model=filter_model or swebench_cfg["filter_model"],
+        max_instances=max_instances,
         verbose=ctx.obj["verbose"],
     )
 

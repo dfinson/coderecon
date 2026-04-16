@@ -33,7 +33,7 @@ NON_OK_TYPES = frozenset({"UNSAT", "BROAD", "AMBIG"})
 
 
 def _check_def_entry(entry: dict, context: str) -> list[str]:
-    """Validate a single def entry (minimum_sufficient / thrash_preventing / excluded)."""
+    """Validate a single def entry (minimum_sufficient / excluded)."""
     errors: list[str] = []
     for field in ("path", "name", "kind", "reason"):
         if field not in entry:
@@ -71,8 +71,7 @@ def validate_task(task: dict, file_path: str) -> list[str]:
     for field in (
         "task_id", "task_complexity", "task_text", "diff", "solve_notes",
         "confidence",
-        "minimum_sufficient_defs", "thrash_preventing_defs",
-        "tier_difference_reasoning", "excluded_defs", "queries",
+        "minimum_sufficient_defs", "excluded_defs", "queries",
     ):
         if field not in task:
             errors.append(f"{ctx}: missing required field '{field}'")
@@ -88,7 +87,7 @@ def validate_task(task: dict, file_path: str) -> list[str]:
         errors.append(f"{ctx}: invalid confidence '{conf}'")
 
     # Def lists
-    for tier_key in ("minimum_sufficient_defs", "thrash_preventing_defs", "excluded_defs"):
+    for tier_key in ("minimum_sufficient_defs", "excluded_defs"):
         defs = task.get(tier_key, [])
         if not isinstance(defs, list):
             errors.append(f"{ctx}: '{tier_key}' must be a list")
@@ -151,11 +150,44 @@ def validate_non_ok(data: dict, file_path: str) -> list[str]:
             for field in ("why_no_cutoff", "dispersion_description"):
                 if field not in q:
                     errors.append(f"{qctx}: BROAD missing '{field}'")
+            rrf = q.get("rrf_stats", {})
+            ok_bl = q.get("ok_baseline", {})
+            if rrf and ok_bl:
+                # Validate against the instance's own OK baseline
+                bl_dc = ok_bl.get("max_dir_count", 0)
+                bl_n = ok_bl.get("max_elbow_n", 0)
+                if rrf.get("dir_count", 0) <= bl_dc:
+                    errors.append(
+                        f"{qctx}: BROAD dir_count={rrf.get('dir_count')} "
+                        f"should exceed OK max ({bl_dc})"
+                    )
+                if rrf.get("n", 0) <= bl_n:
+                    errors.append(
+                        f"{qctx}: BROAD n={rrf.get('n')} "
+                        f"should exceed OK max ({bl_n})"
+                    )
         elif qt == "AMBIG":
             for field in ("candidate_neighborhoods", "why_ambiguous"):
                 if field not in q:
                     errors.append(f"{qctx}: AMBIG missing '{field}'")
-
+            rrf = q.get("rrf_stats", {})
+            ok_bl = q.get("ok_baseline", {})
+            if rrf and ok_bl:
+                bl_dc = ok_bl.get("max_dir_count", 999)
+                bl_bal = ok_bl.get("max_balance", 0)
+                dc = rrf.get("dir_count", 0)
+                if dc < 2:
+                    errors.append(f"{qctx}: AMBIG dir_count={dc} (need >= 2)")
+                if dc > bl_dc:
+                    errors.append(
+                        f"{qctx}: AMBIG dir_count={dc} exceeds "
+                        f"OK max ({bl_dc}) — that's BROAD"
+                    )
+                if rrf.get("balance", 0) <= bl_bal:
+                    errors.append(
+                        f"{qctx}: AMBIG balance={rrf.get('balance')} "
+                        f"should exceed OK max ({bl_bal})"
+                    )
     for qt, count in type_counts.items():
         if count < 2:
             errors.append(f"{ctx}: need >= 2 {qt} queries, got {count}")

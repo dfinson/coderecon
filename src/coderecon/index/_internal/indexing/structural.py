@@ -305,10 +305,72 @@ def _compute_def_uid(
     """Compute stable def_uid per SPEC.md §7.4.
 
     Includes file_path to distinguish same-named symbols in different files.
+    Does NOT include worktree_id here; worktree scoping is applied at insert
+    time by _apply_worktree_uid_remap.
     """
     sig = signature_hash or ""
     raw = f"{unit_id}:{file_path}:{kind}:{lexical_path}:{sig}:{disambiguator}"
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def _apply_worktree_uid_remap(
+    extraction: "ExtractionResult", worktree_id: int
+) -> None:
+    """Remap def_uid and import_uid values to be scoped to a worktree.
+
+    def_uid and import_uid are PRIMARY KEYs computed purely from syntactic
+    identity (file path + symbol shape), so two worktrees indexing the same
+    file would produce identical UIDs and collide on INSERT.  This function
+    rewrites every UID inside the extraction dicts to include worktree_id,
+    preserving all intra-extraction cross-references.
+
+    Call this once per extraction, after extraction and before bulk insert.
+    """
+    if worktree_id == 0:
+        return  # 0 is the "not set" sentinel; no remap needed
+
+    def _remap(uid: str) -> str:
+        return hashlib.sha256(f"{worktree_id}:{uid}".encode()).hexdigest()[:16]
+
+    # Build remap tables from this file's own UIDs
+    def_uid_remap: dict[str, str] = {
+        d["def_uid"]: _remap(d["def_uid"]) for d in extraction.defs
+    }
+    import_uid_remap: dict[str, str] = {
+        imp["import_uid"]: _remap(imp["import_uid"])
+        for imp in extraction.imports
+        if imp.get("import_uid")
+    }
+
+    # DefFact PKs
+    for d in extraction.defs:
+        d["def_uid"] = def_uid_remap[d["def_uid"]]
+
+    # TypeMemberFact — parent_def_uid / member_def_uid
+    for m in extraction.type_members:
+        m["parent_def_uid"] = def_uid_remap.get(m["parent_def_uid"], m["parent_def_uid"])
+        if m.get("member_def_uid"):
+            m["member_def_uid"] = def_uid_remap.get(m["member_def_uid"], m["member_def_uid"])
+
+    # InterfaceImplFact — implementor_def_uid / interface_def_uid
+    for impl in extraction.interface_impls:
+        impl["implementor_def_uid"] = def_uid_remap.get(
+            impl["implementor_def_uid"], impl["implementor_def_uid"]
+        )
+        iface_uid = impl.get("interface_def_uid")
+        if iface_uid:
+            impl["interface_def_uid"] = def_uid_remap.get(iface_uid, iface_uid)
+
+    # LocalBindFact — target_uid when target_kind == "DEF"
+    for b in extraction.binds:
+        if b.get("target_kind") == "DEF" and b.get("target_uid"):
+            b["target_uid"] = def_uid_remap.get(b["target_uid"], b["target_uid"])
+
+    # ImportFact PKs
+    for imp in extraction.imports:
+        old_uid = imp.get("import_uid")
+        if old_uid and old_uid in import_uid_remap:
+            imp["import_uid"] = import_uid_remap[old_uid]
 
 
 def _has_grammar_for_family(language_family: str | None) -> bool:
@@ -931,6 +993,8 @@ class StructuralIndexer:
         file_paths: list[str],
         context_id: int,
         workers: int = 1,
+        *,
+        repo_root: Path | str | None = None,
     ) -> list[ExtractionResult]:
         """Extract facts from files without persisting.
 
@@ -939,10 +1003,15 @@ class StructuralIndexer:
 
         Each result includes content_text and symbol_names for
         unified single-pass indexing (lexical + structural).
+
+        ``repo_root`` overrides the default ``self.repo_path`` for file
+        reading.  Pass the worktree checkout directory when indexing a
+        git worktree so files are read from the correct location.
         """
+        effective_root = Path(repo_root) if repo_root is not None else self.repo_path
         if workers > 1 and len(file_paths) > 1:
-            return self._parallel_extract(file_paths, context_id, workers)
-        return self._sequential_extract(file_paths, context_id)
+            return self._parallel_extract(file_paths, context_id, workers, repo_root=effective_root)
+        return self._sequential_extract(file_paths, context_id, repo_root=effective_root)
 
     def index_files(
         self,
@@ -950,6 +1019,7 @@ class StructuralIndexer:
         context_id: int,
         file_id_map: dict[str, int] | None = None,
         workers: int = 1,
+        worktree_id: int = 0,
         *,
         _extractions: list[ExtractionResult] | None = None,
     ) -> BatchResult:
@@ -994,7 +1064,14 @@ class StructuralIndexer:
                     context_id,
                     language_family=extraction.language_family,
                     declared_module=extraction.declared_module,
+                    worktree_id=worktree_id,
                 )
+
+        # Remap def_uid / import_uid to include worktree_id so that two
+        # worktrees indexing the same file don't collide on PK constraints.
+        for extraction in extractions:
+            if not extraction.error:
+                _apply_worktree_uid_remap(extraction, worktree_id)
 
         with self.db.bulk_writer() as writer:
             for extraction in extractions:
@@ -1434,24 +1511,27 @@ class StructuralIndexer:
 
         return newly_resolved
 
-    def _sequential_extract(self, file_paths: list[str], unit_id: int) -> list[ExtractionResult]:
+    def _sequential_extract(
+        self, file_paths: list[str], unit_id: int, repo_root: Path | None = None
+    ) -> list[ExtractionResult]:
         """Extract facts sequentially."""
+        root = str(repo_root if repo_root is not None else self.repo_path)
         results = []
         for path in file_paths:
-            result = _extract_file(path, str(self.repo_path), unit_id)
+            result = _extract_file(path, root, unit_id)
             results.append(result)
         return results
 
     def _parallel_extract(
-        self, file_paths: list[str], unit_id: int, workers: int
+        self, file_paths: list[str], unit_id: int, workers: int, repo_root: Path | None = None
     ) -> list[ExtractionResult]:
         """Extract facts in parallel using process pool."""
         results = []
-        repo_root = str(self.repo_path)
+        root = str(repo_root if repo_root is not None else self.repo_path)
 
         with ProcessPoolExecutor(max_workers=workers) as executor:
             futures = {
-                executor.submit(_extract_file, path, repo_root, unit_id): path
+                executor.submit(_extract_file, path, root, unit_id): path
                 for path in file_paths
             }
 
@@ -1473,6 +1553,7 @@ class StructuralIndexer:
         _context_id: int,
         language_family: str | None = None,
         declared_module: str | None = None,
+        worktree_id: int = 0,
     ) -> int:
         """Ensure file exists in database and return its ID."""
         import time
@@ -1480,7 +1561,10 @@ class StructuralIndexer:
         with self.db.session() as session:
             from sqlmodel import select
 
-            stmt = select(File).where(File.path == file_path)
+            stmt = select(File).where(
+                File.path == file_path,
+                File.worktree_id == worktree_id,
+            )
             existing = session.exec(stmt).first()
 
             if existing and existing.id is not None:
@@ -1498,6 +1582,7 @@ class StructuralIndexer:
                 language_family=language_family,
                 declared_module=declared_module,
                 indexed_at=time.time(),  # Mark as indexed
+                worktree_id=worktree_id,
             )
             session.add(file)
             session.commit()

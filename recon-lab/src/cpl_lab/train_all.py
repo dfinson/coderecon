@@ -33,7 +33,7 @@ from cpl_lab.schema import OK_QUERY_TYPES
 
 # -- Def Ranker features ------------------------------------------------
 DEF_RANKER_FEATURES = [
-    "term_match_count", "term_total_matches", "lex_hit_count",
+    "term_match_count", "term_total_matches", "lex_hit_count", "bm25_file_score",
     "graph_is_callee", "graph_is_caller", "graph_is_sibling",
     "graph_is_implementor", "graph_is_doc_xref",
     "graph_seed_rank", "graph_caller_tier",
@@ -44,7 +44,9 @@ DEF_RANKER_FEATURES = [
     "hub_score", "is_test", "is_endpoint", "test_coverage_count",
     "has_docstring", "has_decorators", "has_return_type", "has_parent_scope",
     "has_signature",
+    "from_coverage",
     "seed_path_distance", "same_package", "package_distance",
+    "rrf_score",
     "query_len", "has_identifier", "has_path", "term_count",
 ]
 
@@ -52,7 +54,7 @@ DEF_RANKER_FEATURES = [
 # Aggregated from def-level signals per (query, file) group.
 FILE_RANKER_FEATURES = [
     # Term match
-    "max_term_match", "sum_term_matches", "max_lex_hits",
+    "max_term_match", "sum_term_matches", "max_lex_hits", "max_bm25_file_score",
     # Graph
     "any_callee", "any_caller", "any_sibling", "any_doc_xref", "any_implementor",
     "best_graph_seed_rank", "best_caller_tier",
@@ -62,6 +64,10 @@ FILE_RANKER_FEATURES = [
     "any_import_forward", "any_import_reverse", "any_import_barrel", "any_import_test_pair",
     # Retriever agreement
     "max_retriever_hits", "sum_retriever_hits",
+    # Coverage
+    "any_from_coverage",
+    # RRF
+    "max_rrf_score",
     # File-level metadata
     "num_defs_in_file", "mean_hub_score", "max_hub_score",
     "is_test", "path_depth",
@@ -102,13 +108,14 @@ CUTOFF_FEATURES = [
 _LOAD_COLS = [
     "run_id", "query_id", "query_type", "repo_set", "label_relevant", "label_gate",
     "path", "kind", "name", "start_line", "end_line",
-    "term_match_count", "term_total_matches", "lex_hit_count",
+    "term_match_count", "term_total_matches", "lex_hit_count", "bm25_file_score",
     "graph_edge_type", "graph_seed_rank", "graph_caller_max_tier",
-    "symbol_source", "import_direction", "retriever_hits",
+    "symbol_source", "import_direction", "from_coverage", "retriever_hits",
     "object_size_lines", "path_depth", "nesting_depth",
     "hub_score", "is_test", "is_endpoint", "test_coverage_count",
     "has_docstring", "has_decorators", "has_return_type", "has_parent_scope",
     "seed_path_distance", "same_package", "package_distance",
+    "rrf_score",
     "signature_text", "parent_dir",
     "query_len", "has_identifier", "has_path", "identifier_density",
     "has_numbers", "has_quoted_strings", "term_count",
@@ -178,6 +185,7 @@ def _aggregate_file_features(df: pd.DataFrame) -> pd.DataFrame:
         max_term_match=("term_match_count", "max"),
         sum_term_matches=("term_total_matches", "sum"),
         max_lex_hits=("lex_hit_count", "max"),
+        max_bm25_file_score=("bm25_file_score", "max"),
         # Graph
         any_callee=("graph_is_callee", "any"),
         any_caller=("graph_is_caller", "any"),
@@ -199,6 +207,10 @@ def _aggregate_file_features(df: pd.DataFrame) -> pd.DataFrame:
         # Retriever agreement
         max_retriever_hits=("retriever_hits", "max"),
         sum_retriever_hits=("retriever_hits", "sum"),
+        # Coverage
+        any_from_coverage=("from_coverage", "any"),
+        # RRF
+        max_rrf_score=("rrf_score", "max"),
         # File metadata
         num_defs_in_file=("path", "count"),
         mean_hub_score=("hub_score", "mean"),
@@ -564,23 +576,23 @@ def train_all(data_dir: Path, output_dir: Path, skip_merge: bool = False) -> dic
     features = DEF_RANKER_FEATURES
     print(f"\n=== Training Def Ranker ===")
 
-        df = rg_df.sort_values(["run_id", "query_id"]).reset_index(drop=True)
-        group_col = df["run_id"].astype(str) + "__" + df["query_id"].astype(str)
-        group_sizes = df.groupby(group_col, sort=True).size().values
+    df = rg_df.sort_values(["run_id", "query_id"]).reset_index(drop=True)
+    group_col = df["run_id"].astype(str) + "__" + df["query_id"].astype(str)
+    group_sizes = df.groupby(group_col, sort=True).size().values
 
-        X = df[features].fillna(0).values
-        y = df["label_relevant"].astype(int).values
+    X = df[features].fillna(0).values
+    y = df["label_relevant"].astype(int).values
 
-        booster = _train_lgb_ranker(X, y, group_sizes, features)
-        _save_model(booster, output_dir / f"{name}.lgbm")
+    booster = _train_lgb_ranker(X, y, group_sizes, features)
+    _save_model(booster, output_dir / f"{name}.lgbm")
 
-        summary[name] = {
-            "candidates": len(df),
-            "groups": len(group_sizes),
-            "positive_rate": float(y.mean()),
-            "features": len(features),
-        }
-        print(f"  {summary[name]}")
+    summary[name] = {
+        "candidates": len(df),
+        "groups": len(group_sizes),
+        "positive_rate": float(y.mean()),
+        "features": len(features),
+    }
+    print(f"  {summary[name]}")
 
     # ── 3. Train File Rankers ─────────────────────────────────────
     import gc

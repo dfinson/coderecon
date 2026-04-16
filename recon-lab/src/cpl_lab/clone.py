@@ -244,6 +244,22 @@ def repo_set_for(repo_id: str) -> str | None:
     return entry["set"] if entry else None
 
 
+def github_slug_for(repo_id: str) -> str | None:
+    """Return 'owner/repo' for a repo_id (e.g. 'pallets/flask')."""
+    entry = REPO_MANIFEST.get(repo_id)
+    if entry is None:
+        return None
+    set_name = entry["set"]
+    clone_name = entry["clone_name"]
+    # Find matching URL in the set list
+    for url, _sha in REPO_SETS[set_name]:
+        if _repo_name(url) == clone_name:
+            # https://github.com/owner/repo → owner/repo
+            parts = url.rstrip("/").split("/")
+            return f"{parts[-2]}/{parts[-1]}"
+    return None
+
+
 def _repo_name(url: str) -> str:
     """Extract repo name from GitHub URL."""
     return url.rstrip("/").rsplit("/", 1)[-1]
@@ -257,57 +273,25 @@ def _git(args: list[str], cwd: Path | None = None, check: bool = True) -> subpro
 
 
 def _process_repo(
-    url: str, commit: str, dest: Path, depth: int, dry_run: bool, verbose: bool,
+    url: str, commit: str, dest: Path, dry_run: bool, verbose: bool,
 ) -> str:
-    """Clone and pin a single repo. Returns status string."""
+    """Clone a single repo (full history, HEAD). Returns status string.
+
+    No indexing — the daemon handles that in a later pass.
+    """
     name = dest.name
 
     if dry_run:
         click.echo(f"  [dry-run] would clone {name} → {dest}")
         return "dry-run"
 
-    # Stage 1: Clone
+    # Stage 1: Full clone (need history for worktrees at arbitrary commits)
     if (dest / ".git").is_dir():
         if verbose:
             click.echo(f"  {name}: clone exists")
     else:
-        click.echo(f"  {name}: cloning...")
-        _git(["clone", f"--depth={depth}", url, str(dest)])
-
-    # Stage 2: Pin to exact commit
-    result = _git(["rev-parse", "HEAD"], cwd=dest)
-    current = result.stdout.strip()
-    if current == commit:
-        if verbose:
-            click.echo(f"  {name}: pinned at {commit[:10]}")
-    else:
-        click.echo(f"  {name}: checking out {commit[:10]}...")
-        _git(["fetch", "origin", commit, "--depth=1"], cwd=dest, check=False)
-        _git(["checkout", commit], cwd=dest, check=False)
-
-    # Stage 3: Remove origin
-    result = _git(["remote", "get-url", "origin"], cwd=dest, check=False)
-    if result.returncode == 0:
-        _git(["remote", "remove", "origin"], cwd=dest)
-
-    # Stage 4: recon init
-    recon_dir = dest / ".recon"
-    if recon_dir.is_dir() and (recon_dir / "index.db").is_file():
-        if verbose:
-            click.echo(f"  {name}: already indexed")
-    else:
-        from cpl_lab.index import _ensure_recon_models, _recon_init_cmd
-
-        click.echo(f"  {name}: running recon init...")
-        _ensure_recon_models()
-        cmd, env = _recon_init_cmd(dest, reindex=recon_dir.is_dir())
-        subprocess.run(cmd, env=env, check=False)
-
-    # Commit any uncommitted artifacts
-    result = _git(["status", "--porcelain"], cwd=dest)
-    if result.stdout.strip():
-        _git(["add", "-A"], cwd=dest)
-        _git(["commit", "-m", "cpl init: add coderecon config files", "--no-verify", "-q"], cwd=dest)
+        click.echo(f"  {name}: cloning (full)...")
+        _git(["clone", url, str(dest)])
 
     return "ok"
 
@@ -316,7 +300,6 @@ def run_clone(
     clones_dir: Path,
     repo_set: str = "all",
     jobs: int = 4,
-    depth: int = 1,
     dry_run: bool = False,
     verbose: bool = False,
 ) -> None:
@@ -336,6 +319,6 @@ def run_clone(
             name = _repo_name(url)
             dest = set_dir / name
             click.echo(f"\n[{i}/{total}] {set_name}/{name}")
-            _process_repo(url, commit, dest, depth, dry_run, verbose)
+            _process_repo(url, commit, dest, dry_run, verbose)
 
     click.echo(f"\nDone: {total} repos processed")

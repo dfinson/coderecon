@@ -78,7 +78,7 @@ class Reconciler:
             self._git = GitOps(self.repo_root)
         return self._git
 
-    def reconcile(self, paths: list[Path] | None = None) -> ReconcileResult:
+    def reconcile(self, paths: list[Path] | None = None, worktree_id: int = 0) -> ReconcileResult:
         """
         Compare file content hashes and mark changed files.
 
@@ -93,6 +93,7 @@ class Reconciler:
 
         Args:
             paths: Optional list of paths to reconcile. If None, full reconcile.
+            worktree_id: The worktree ID to associate with new/modified file rows.
 
         Returns:
             ReconcileResult with statistics about the reconciliation.
@@ -157,7 +158,8 @@ class Reconciler:
                         {
                             "path": rel_path,
                             "content_hash": content_hash,
-                            "language": self._detect_language(rel_path),
+                            "language_family": self._detect_language(rel_path),
+                            "worktree_id": worktree_id,
                             "indexed_at": None,
                         }
                     )
@@ -168,6 +170,7 @@ class Reconciler:
                         {
                             "path": rel_path,
                             "content_hash": content_hash,
+                            "worktree_id": worktree_id,
                             "indexed_at": None,
                         }
                     )

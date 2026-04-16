@@ -60,6 +60,7 @@ _SIGNALS_SCHEMA = pa.schema([
     pa.field("term_match_count", pa.int64()),
     pa.field("term_total_matches", pa.int64()),
     pa.field("lex_hit_count", pa.int64()),
+    pa.field("bm25_file_score", pa.float64()),
     # Graph signal
     pa.field("graph_edge_type", pa.string()),
     pa.field("graph_seed_rank", pa.int64()),
@@ -68,8 +69,12 @@ _SIGNALS_SCHEMA = pa.schema([
     pa.field("symbol_source", pa.string()),
     # Import signal
     pa.field("import_direction", pa.string()),
+    # Coverage expansion
+    pa.field("from_coverage", pa.bool_()),
     # Agreement
     pa.field("retriever_hits", pa.int64()),
+    # RRF score
+    pa.field("rrf_score", pa.float64()),
     # Locality
     pa.field("seed_path_distance", pa.int64()),
     pa.field("same_package", pa.bool_()),
@@ -105,11 +110,7 @@ def _parse_legacy_gt(gt_file: Path) -> tuple[list[dict[str, Any]], dict[str, dic
         tr: dict[str, int] = {}
         for d in task.get("minimum_sufficient_defs", []):
             k = f"{d['path']}:{d.get('kind', '')}:{d.get('name', '')}:{d.get('start_line', 0)}"
-            tr[k] = 2
-        for d in task.get("thrash_preventing_defs", []):
-            k = f"{d['path']}:{d.get('kind', '')}:{d.get('name', '')}:{d.get('start_line', 0)}"
-            if k not in tr:
-                tr[k] = 1
+            tr[k] = 1
         rel[tid] = tr
         for qi, q in enumerate(task.get("queries", [])):
             flat.append({
@@ -144,7 +145,7 @@ def _parse_gt_tables(
         task_id = run_id.removeprefix(f"{repo_id}_")
         if not task_id:
             continue
-        rel.setdefault(task_id, {})[row["candidate_key"]] = 2 if row.get("tier") == "minimum" else 1
+        rel.setdefault(task_id, {})[row["candidate_key"]] = 1
 
     for line in queries_file.read_text().splitlines():
         if not line.strip():
@@ -185,10 +186,7 @@ def _parse_raw_task_jsons(gt_dir: Path) -> tuple[list[dict[str, Any]], dict[str,
         rel[tid] = {}
         for d in task.get("minimum_sufficient_defs", []):
             key = f"{d['path']}:{d.get('kind', '')}:{d.get('name', '')}:{d.get('start_line', 0)}"
-            rel[tid][key] = 2
-        for d in task.get("thrash_preventing_defs", []):
-            key = f"{d['path']}:{d.get('kind', '')}:{d.get('name', '')}:{d.get('start_line', 0)}"
-            rel[tid].setdefault(key, 1)
+            rel[tid][key] = 1
 
         for qi, q in enumerate(task.get("queries", [])):
             flat.append({

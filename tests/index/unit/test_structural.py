@@ -17,6 +17,7 @@ from coderecon.index._internal.indexing.structural import (
     BatchResult,
     ExtractionResult,
     StructuralIndexer,
+    _apply_worktree_uid_remap,
     _compute_def_uid,
     _extract_file,
     _find_containing_scope,
@@ -1293,3 +1294,116 @@ class TestPrecomputedExtractions:
         assert direct_result.refs_extracted == precomputed_result.refs_extracted
         assert direct_def_count == precomputed_def_count
         assert direct_ref_count == precomputed_ref_count
+
+
+# ---------------------------------------------------------------------------
+# _apply_worktree_uid_remap unit tests
+# ---------------------------------------------------------------------------
+
+def _make_extraction(
+    def_uid: str = "aabbccdd11223344",
+    import_uid: str = "eeff00112233aabb",
+) -> ExtractionResult:
+    """Build a minimal ExtractionResult with one def, one import, and linked facts."""
+    extraction = ExtractionResult(file_path="src/mod.py")
+    extraction.defs = [{"def_uid": def_uid, "name": "fn"}]
+    extraction.imports = [{"import_uid": import_uid, "name": "os"}]
+    extraction.type_members = [{"parent_def_uid": def_uid, "member_def_uid": def_uid}]
+    extraction.interface_impls = [
+        {"implementor_def_uid": def_uid, "interface_def_uid": def_uid}
+    ]
+    extraction.binds = [
+        {"target_kind": "DEF", "target_uid": def_uid},
+        {"target_kind": "IMPORT", "target_uid": import_uid},  # should NOT be remapped
+    ]
+    return extraction
+
+
+class TestApplyWorktreeUidRemap:
+    """Unit tests for _apply_worktree_uid_remap."""
+
+    def test_worktree_id_zero_is_noop(self) -> None:
+        """worktree_id=0 must not change any UIDs (0 is the sentinel for main/unset)."""
+        ex = _make_extraction()
+        original_def_uid = ex.defs[0]["def_uid"]
+        original_import_uid = ex.imports[0]["import_uid"]
+
+        _apply_worktree_uid_remap(ex, worktree_id=0)
+
+        assert ex.defs[0]["def_uid"] == original_def_uid
+        assert ex.imports[0]["import_uid"] == original_import_uid
+
+    def test_def_uid_is_remapped(self) -> None:
+        """def_uid must be replaced by sha256(f'{wt_id}:{old_uid}')[:16]."""
+        import hashlib
+
+        old_uid = "aabbccdd11223344"
+        ex = _make_extraction(def_uid=old_uid)
+        _apply_worktree_uid_remap(ex, worktree_id=3)
+
+        expected = hashlib.sha256(f"3:{old_uid}".encode()).hexdigest()[:16]
+        assert ex.defs[0]["def_uid"] == expected
+        assert ex.defs[0]["def_uid"] != old_uid
+
+    def test_import_uid_is_remapped(self) -> None:
+        """import_uid must also be remapped to prevent cross-worktree import PK collisions."""
+        import hashlib
+
+        old_uid = "eeff00112233aabb"
+        ex = _make_extraction(import_uid=old_uid)
+        _apply_worktree_uid_remap(ex, worktree_id=2)
+
+        expected = hashlib.sha256(f"2:{old_uid}".encode()).hexdigest()[:16]
+        assert ex.imports[0]["import_uid"] == expected
+
+    def test_different_worktree_ids_produce_different_uids(self) -> None:
+        """worktree_id=1 and worktree_id=2 must produce different UIDs for the same symbol."""
+        old_uid = "aabbccdd11223344"
+        ex1 = _make_extraction(def_uid=old_uid)
+        ex2 = _make_extraction(def_uid=old_uid)
+
+        _apply_worktree_uid_remap(ex1, worktree_id=1)
+        _apply_worktree_uid_remap(ex2, worktree_id=2)
+
+        assert ex1.defs[0]["def_uid"] != ex2.defs[0]["def_uid"]
+        assert ex1.defs[0]["def_uid"] != old_uid
+        assert ex2.defs[0]["def_uid"] != old_uid
+
+    def test_type_member_parent_and_member_uid_remapped(self) -> None:
+        """TypeMemberFact.parent_def_uid and member_def_uid must track the remapped def_uid."""
+        old_uid = "aabbccdd11223344"
+        ex = _make_extraction(def_uid=old_uid)
+        _apply_worktree_uid_remap(ex, worktree_id=1)
+
+        new_uid = ex.defs[0]["def_uid"]
+        assert ex.type_members[0]["parent_def_uid"] == new_uid
+        assert ex.type_members[0]["member_def_uid"] == new_uid
+
+    def test_interface_impl_uids_remapped(self) -> None:
+        """InterfaceImplFact.implementor_def_uid and interface_def_uid must be remapped."""
+        old_uid = "aabbccdd11223344"
+        ex = _make_extraction(def_uid=old_uid)
+        _apply_worktree_uid_remap(ex, worktree_id=1)
+
+        new_uid = ex.defs[0]["def_uid"]
+        assert ex.interface_impls[0]["implementor_def_uid"] == new_uid
+        assert ex.interface_impls[0]["interface_def_uid"] == new_uid
+
+    def test_local_bind_def_target_remapped(self) -> None:
+        """LocalBindFact.target_uid must be remapped when target_kind == 'DEF'."""
+        old_uid = "aabbccdd11223344"
+        ex = _make_extraction(def_uid=old_uid)
+        _apply_worktree_uid_remap(ex, worktree_id=1)
+
+        new_uid = ex.defs[0]["def_uid"]
+        # First bind has target_kind=DEF — must be remapped
+        assert ex.binds[0]["target_uid"] == new_uid
+        # Second bind has target_kind=IMPORT — must NOT be remapped by def remap
+        assert ex.binds[1]["target_uid"] == "eeff00112233aabb"
+
+    def test_uid_length_stays_16_chars(self) -> None:
+        """Remapped UIDs must be exactly 16 hex chars (same format as originals)."""
+        ex = _make_extraction()
+        _apply_worktree_uid_remap(ex, worktree_id=5)
+        assert len(ex.defs[0]["def_uid"]) == 16
+        assert len(ex.imports[0]["import_uid"]) == 16

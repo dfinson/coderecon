@@ -41,6 +41,7 @@ def extract_ranker_features(
         f["term_match_count"] = cand.get("term_match_count") or 0
         f["term_total_matches"] = cand.get("term_total_matches") or 0
         f["lex_hit_count"] = cand.get("lex_hit_count") or 0
+        f["bm25_file_score"] = cand.get("bm25_file_score") or 0.0
 
         # Graph signal (categorical → encoded)
         edge_type = cand.get("graph_edge_type")
@@ -100,6 +101,10 @@ def extract_ranker_features(
         f["shares_file_with_seed"] = cand.get("shares_file_with_seed", False)
         f["is_callee_of_top"] = cand.get("is_callee_of_top", False)
         f["is_imported_by_top"] = cand.get("is_imported_by_top", False)
+        f["from_coverage"] = cand.get("from_coverage", False)
+
+        # RRF ensemble score (computed in shared pipeline layer)
+        f["rrf_score"] = cand.get("rrf_score", 0.0)
 
         # Artifact kind one-hot (code/test/config/doc/build)
         ak = cand.get("artifact_kind", "code")

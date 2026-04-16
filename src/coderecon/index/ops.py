@@ -75,6 +75,7 @@ from coderecon.index.models import (
     ProbeStatus,
     RefFact,
     TestTarget,
+    Worktree,
 )
 from coderecon.lint.tools import registry as lint_registry
 from coderecon.testing.runner_pack import runner_registry
@@ -349,20 +350,65 @@ class IndexCoordinatorEngine:
 
         self._initialized = False
 
+        # Cache of worktree name → DB row ID, populated by _get_or_create_worktree_id.
+        self._worktree_id_cache: dict[str, int] = {}
+        # Cache of worktree name → filesystem root path (non-main worktrees only).
+        self._worktree_root_cache: dict[str, Path] = {}
+
         # Optional in-memory cache of all DefFacts (keyed by def_uid).
         # Lazy-loaded on first batch_get_defs() call; cleared on close().
         self._def_cache: dict[str, DefFact] | None = None
 
-    def set_freshness_gate(self, gate: FreshnessGate, worktree: str) -> None:
+    def _get_or_create_worktree_id(self, name: str, root_path: str | None = None) -> int:
+        """Return the `worktrees.id` for *name*, inserting the row if absent.
+
+        ``root_path`` should be the filesystem path of this worktree's checkout
+        directory.  For the main checkout it defaults to ``self.repo_root``;
+        for git worktrees the caller should pass the actual checkout path so
+        that the per-worktree ``root_path`` UNIQUE constraint isn't violated.
+        """
+        if name in self._worktree_id_cache:
+            return self._worktree_id_cache[name]
+        with self.db.session() as session:
+            stmt = select(Worktree).where(Worktree.name == name)
+            existing = session.exec(stmt).first()
+            if existing and existing.id is not None:
+                self._worktree_id_cache[name] = existing.id
+                return existing.id
+            effective_root = root_path if root_path is not None else str(self.repo_root)
+            wt = Worktree(
+                name=name,
+                root_path=effective_root,
+                is_main=(name == "main"),
+            )
+            session.add(wt)
+            session.commit()
+            session.refresh(wt)
+            wt_id = wt.id if wt.id is not None else 0
+            self._worktree_id_cache[name] = wt_id
+            return wt_id
+
+    def set_freshness_gate(
+        self, gate: FreshnessGate, worktree: str, worktree_root: str | None = None
+    ) -> None:
         """Inject freshness gate from daemon layer.
 
         Also sets the search worktrees overlay: feature worktrees fall back
         to main so that unchanged files are still found via main's index.
+
+        ``worktree_root`` is the filesystem path of the worktree checkout
+        directory (needed to insert the Worktree row with the correct path).
+        Defaults to the coordinator's repo_root when not supplied.
         """
         self._freshness_gate = gate
         self._freshness_worktree = worktree
         # Overlay: feature branches read their own entries first, then main.
         self._search_worktrees = [worktree] if worktree == "main" else [worktree, "main"]
+        # Ensure this worktree has a DB row so File.worktree_id FKs are valid.
+        self._get_or_create_worktree_id(worktree, root_path=worktree_root)
+        # Store worktree root so extraction reads from the correct checkout dir.
+        if worktree_root is not None and worktree != "main":
+            self._worktree_root_cache[worktree] = Path(worktree_root)
 
     async def initialize(
         self,
@@ -393,6 +439,8 @@ class IndexCoordinatorEngine:
         # Step 1-2: Database setup
         self.db.create_all()
         create_additional_indexes(self.db.engine)
+        # Seed the main worktree row so File.worktree_id is valid from the start.
+        self._get_or_create_worktree_id("main")
 
         # Initialize components
         self._parser = tree_sitter_service.parser
@@ -522,7 +570,10 @@ class IndexCoordinatorEngine:
 
         # Establish baseline reconciler state (HEAD, .reconignore hash)
         # This prevents spurious change detection on first incremental call
-        self._reconciler.reconcile(paths=[])
+        self._reconciler.reconcile(
+            paths=[],
+            worktree_id=self._get_or_create_worktree_id("main"),
+        )
 
         # Initialize fact queries
         # Note: FactQueries needs a session, so we create per-request
@@ -555,6 +606,76 @@ class IndexCoordinatorEngine:
             errors=errors,
             files_by_ext=files_by_ext,
         )
+
+    async def collect_initial_coverage(self) -> int:
+        """Run the full test suite with coverage and ingest results.
+
+        Best-effort: if no test targets exist, no runner pack is available,
+        or tests crash, returns 0 and logs a debug message.  Never raises.
+
+        Returns the number of TestCoverageFact rows written.
+        """
+        try:
+            from coderecon.testing.ops import TestOps
+
+            test_ops = TestOps(self.repo_root, self)
+            result = await test_ops.run(
+                targets=None,  # all targets
+                coverage=True,
+                fail_fast=False,  # collect as much coverage as possible
+            )
+
+            if not result.run_status or not result.run_status.coverage:
+                log.debug("initial_coverage.no_artifacts")
+                return 0
+
+            from coderecon.testing.coverage import (
+                CoverageParseError,
+                merge,
+                parse_artifact,
+            )
+
+            reports = []
+            for cov in result.run_status.coverage:
+                cov_path = cov.get("path", "")
+                if not cov_path:
+                    continue
+                try:
+                    fmt = cov.get("format")
+                    report = parse_artifact(
+                        Path(cov_path),
+                        format_id=fmt if fmt and fmt != "unknown" else None,
+                        base_path=self.repo_root,
+                    )
+                    reports.append(report)
+                except (CoverageParseError, Exception):
+                    log.debug("initial_coverage.parse_failed", path=cov_path, exc_info=True)
+
+            if not reports:
+                log.debug("initial_coverage.no_reports")
+                return 0
+
+            from coderecon.index._internal.analysis.coverage_ingestion import (
+                ingest_coverage,
+            )
+
+            merged = merge(*reports) if len(reports) > 1 else reports[0]
+            failed_ids: set[str] | None = None
+            if result.run_status and result.run_status.failures:
+                failed_ids = {
+                    f"{f.path}::{f.name}"
+                    for f in result.run_status.failures
+                }
+            written = ingest_coverage(
+                self.db.engine, merged, self.current_epoch,
+                failed_test_ids=failed_ids,
+            )
+            log.info("initial_coverage.ingested", facts=written)
+            return written
+
+        except Exception:
+            log.debug("initial_coverage.failed", exc_info=True)
+            return 0
 
     async def load_existing(self) -> bool:
         """Load existing index without re-indexing.
@@ -601,6 +722,29 @@ class IndexCoordinatorEngine:
         # Reload lexical index to pick up existing data
         if self._lexical is not None:
             self._lexical.reload()
+
+        # Ensure the main worktree row exists (idempotent).
+        main_wt_id = self._get_or_create_worktree_id("main")
+
+        # Migration: existing DBs indexed before the worktree_id fix have all
+        # files at worktree_id=0 (the column default).  Promote them to the
+        # real main worktree ID so queries that filter by worktree_id work.
+        if main_wt_id and main_wt_id != 0:
+            with self.db.session() as session:
+                stale = session.exec(
+                    select(File).where(File.worktree_id == 0)
+                ).all()
+                if stale:
+                    log.info(
+                        "worktree_migration",
+                        files=len(stale),
+                        from_id=0,
+                        to_id=main_wt_id,
+                    )
+                    for f in stale:
+                        f.worktree_id = main_wt_id
+                        session.add(f)
+                    session.commit()
 
         self._initialized = True
         return True
@@ -664,8 +808,11 @@ class IndexCoordinatorEngine:
 
         with self._reconcile_lock:
             # Reconcile changes
+            _wt_id = self._get_or_create_worktree_id(worktree)
             if self._reconciler is not None:
-                reconcile_result = self._reconciler.reconcile(changed_paths)
+                reconcile_result = self._reconciler.reconcile(
+                    changed_paths, worktree_id=_wt_id
+                )
 
                 # If .reconignore changed, do full reindex to apply new patterns
                 if reconcile_result.reconignore_changed:
@@ -707,6 +854,7 @@ class IndexCoordinatorEngine:
                                 path=str(path),
                                 content_hash=content_hash,
                                 language_family=lang,
+                                worktree_id=self._get_or_create_worktree_id(worktree),
                             )
                             session.add(file_record)
                             session.flush()  # Get ID
@@ -783,7 +931,13 @@ class IndexCoordinatorEngine:
                                 file_to_context[str_path] = root_id
 
                     # Collect file IDs for scoped resolution passes (batch query)
-                    files = session.exec(select(File).where(col(File.path).in_(str_changed))).all()
+                    # Filter by worktree_id to avoid picking up stale rows from other worktrees.
+                    files = session.exec(
+                        select(File).where(
+                            col(File.path).in_(str_changed),
+                            File.worktree_id == _wt_id,
+                        )
+                    ).all()
                     changed_file_ids: list[int] = [f.id for f in files if f.id is not None]
                     # Populate file_id_map for existing files so index_files()
                     # reuses them instead of querying _ensure_file_id() per file
@@ -804,8 +958,13 @@ class IndexCoordinatorEngine:
                     min(os.cpu_count() or 4, 16) if len(str_changed) >= _PARALLEL_THRESHOLD else 1
                 )
                 with self._tantivy_write_lock:
+                    # Use the worktree's own checkout directory for file reads,
+                    # falling back to repo_root for the main worktree.
+                    _extract_root = self._worktree_root_cache.get(worktree, self.repo_root)
                     for ctx_id, paths in context_files.items():
-                        extractions = self._structural.extract_files(paths, ctx_id, workers=workers)
+                        extractions = self._structural.extract_files(
+                            paths, ctx_id, workers=workers, repo_root=_extract_root
+                        )
 
                         failed_paths: list[str] = []
                         for extraction in extractions:
@@ -839,6 +998,7 @@ class IndexCoordinatorEngine:
                             ok_paths,
                             ctx_id,
                             file_id_map=file_id_map,
+                            worktree_id=self._get_or_create_worktree_id(worktree),
                             _extractions=ok_extractions,
                         )
 
@@ -979,7 +1139,8 @@ class IndexCoordinatorEngine:
                         ctx_id = file_to_context.get(rel_path, 1)
                         if self._lexical is not None:
                             self._lexical.add_file(
-                                rel_path, content, context_id=ctx_id, symbols=symbols
+                                rel_path, content, context_id=ctx_id, symbols=symbols,
+                                worktree=self._freshness_worktree or "main",
                             )
                         files_added += 1
                     except (OSError, UnicodeDecodeError):
@@ -1007,6 +1168,9 @@ class IndexCoordinatorEngine:
                         path=rel_path,
                         content_hash=content_hash,
                         language_family=lang,
+                        worktree_id=self._get_or_create_worktree_id(
+                            self._freshness_worktree or "main"
+                        ),
                     )
                     session.add(file_record)
                     session.flush()  # Get ID without committing
@@ -1024,12 +1188,15 @@ class IndexCoordinatorEngine:
                     by_context[ctx_id] = []
                 by_context[ctx_id].append(rel_path)
 
+            _wt = self._freshness_worktree or "main"
+            _root = self._worktree_root_cache.get(_wt, self.repo_root)
             for ctx_id, paths in by_context.items():
-                extractions = self._structural.extract_files(paths, ctx_id)
+                extractions = self._structural.extract_files(paths, ctx_id, repo_root=_root)
                 self._structural.index_files(
                     paths,
                     context_id=ctx_id,
                     file_id_map=file_id_map,
+                    worktree_id=self._get_or_create_worktree_id(_wt),
                     _extractions=extractions,
                 )
 
@@ -1199,7 +1366,8 @@ class IndexCoordinatorEngine:
                             ctx_id = file_to_context.get(rel_path, 1)
                             if self._lexical is not None:
                                 self._lexical.add_file(
-                                    rel_path, content, context_id=ctx_id, symbols=symbols
+                                    rel_path, content, context_id=ctx_id, symbols=symbols,
+                                    worktree=self._freshness_worktree or "main",
                                 )
                             files_added += 1
                             symbols_indexed += len(symbols)
@@ -1227,6 +1395,9 @@ class IndexCoordinatorEngine:
                             content_hash=content_hash,
                             language_family=lang,
                             indexed_at=time.time(),
+                            worktree_id=self._get_or_create_worktree_id(
+                                self._freshness_worktree or "main"
+                            ),
                         )
                         session.add(file_record)
                         session.flush()
@@ -1242,13 +1413,16 @@ class IndexCoordinatorEngine:
                     ctx_id = file_to_context.get(rel_path, 1)
                     by_context.setdefault(ctx_id, []).append(rel_path)
 
+                _wt2 = self._freshness_worktree or "main"
+                _root2 = self._worktree_root_cache.get(_wt2, self.repo_root)
                 for ctx_id, paths in by_context.items():
                     # Extract facts (tree-sitter parse + structural extraction)
-                    extractions = self._structural.extract_files(paths, ctx_id)
+                    extractions = self._structural.extract_files(paths, ctx_id, repo_root=_root2)
                     self._structural.index_files(
                         paths,
                         context_id=ctx_id,
                         file_id_map=file_id_map,
+                        worktree_id=self._get_or_create_worktree_id(_wt2),
                         _extractions=extractions,
                     )
 
@@ -2595,7 +2769,7 @@ class IndexCoordinatorEngine:
                                 extraction.content_text,
                                 context_id=ctx_id,
                                 symbols=extraction.symbol_names,
-                                worktree="main",
+                                worktree=self._freshness_worktree or "main",
                             )
 
                             count += 1
@@ -2611,7 +2785,13 @@ class IndexCoordinatorEngine:
                             on_progress(count, total, files_by_ext, "indexing")
 
                         # Persist structural facts (re-uses pre-computed extractions)
-                        self._structural.index_files(paths, ctx_id, _extractions=extractions)
+                        self._structural.index_files(
+                            paths, ctx_id,
+                            worktree_id=self._get_or_create_worktree_id(
+                                self._freshness_worktree or "main"
+                            ),
+                            _extractions=extractions,
+                        )
 
                 # Commit all Tantivy changes in one batch (1 commit, not N)
                 self._lexical.commit_staged()

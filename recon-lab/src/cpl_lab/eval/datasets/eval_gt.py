@@ -93,14 +93,14 @@ def _load_from_tables(
         if run_id == f"{repo_id}__non_ok":
             continue
         task_id = run_id.removeprefix(f"{repo_id}_")
-        tier = row.get("tier", "thrash_preventing")
+        tier = row.get("tier", "minimum")
 
         match_key = (task_id, tier, row.get("path", ""),
                      row.get("name", ""), row.get("kind", ""))
         if match_key in unmatched:
             continue
 
-        bucket = relevant.setdefault(task_id, {"minimum": [], "thrash_preventing": []})
+        bucket = relevant.setdefault(task_id, {"minimum": []})
         bucket.setdefault(tier, []).append(_def_key(row))
 
     for line in queries_file.read_text().splitlines():
@@ -112,12 +112,11 @@ def _load_from_tables(
             task_id = "__non_ok"
         else:
             task_id = run_id.removeprefix(f"{repo_id}_")
-        tiers = relevant.get(task_id, {"minimum": [], "thrash_preventing": []})
+        tiers = relevant.get(task_id, {"minimum": []})
         gt_edited = tiers.get("minimum", [])
-        gt_read = tiers.get("thrash_preventing", [])
 
         # Skip OK queries where ALL GT objects were phantoms
-        if row.get("label_gate", "OK") == "OK" and not gt_edited and not gt_read:
+        if row.get("label_gate", "OK") == "OK" and not gt_edited:
             continue
 
         records.append({
@@ -129,7 +128,7 @@ def _load_from_tables(
             "seeds": row.get("seeds", []),
             "pins": row.get("pins", []),
             "gt_edited": gt_edited,
-            "gt_read_necessary": gt_read,
+            "gt_read_necessary": [],
             "label_gate": row.get("label_gate", "OK"),
         })
 
@@ -141,7 +140,6 @@ def _load_from_legacy_jsonl(records: list[dict], repo_id: str, legacy_file: Path
         task = json.loads(line)
         tid = task.get("task_id", "")
         gt_edited = [_def_key(d) for d in task.get("minimum_sufficient_defs", [])]
-        gt_read = [_def_key(d) for d in task.get("thrash_preventing_defs", [])]
         label_gate = task.get("gate_label", "OK" if gt_edited else "UNSAT")
 
         for qi, q in enumerate(task.get("queries", [])):
@@ -154,6 +152,6 @@ def _load_from_legacy_jsonl(records: list[dict], repo_id: str, legacy_file: Path
                 "seeds": q.get("seeds", []),
                 "pins": q.get("pins", []),
                 "gt_edited": gt_edited,
-                "gt_read_necessary": gt_read,
+                "gt_read_necessary": [],
                 "label_gate": label_gate,
             })

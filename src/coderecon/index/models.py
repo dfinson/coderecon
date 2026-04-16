@@ -1113,6 +1113,7 @@ class TestCoverageFact(SQLModel, table=True):
     branch_rate: float | None = None  # Branch coverage within def range if available
     epoch: int = Field(index=True)  # Epoch when this measurement was taken
     stale: bool = Field(default=False)  # True if def body changed since measurement
+    test_passed: bool | None = Field(default=None)  # True=pass, False=fail, None=unknown
 
 
 class LintStatusFact(SQLModel, table=True):

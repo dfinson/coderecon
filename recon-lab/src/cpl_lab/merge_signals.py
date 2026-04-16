@@ -78,12 +78,15 @@ _MERGED_SCHEMA = pa.schema([
     pa.field("term_match_count", pa.float64()),
     pa.field("term_total_matches", pa.float64()),
     pa.field("lex_hit_count", pa.int64()),
+    pa.field("bm25_file_score", pa.float64()),
     pa.field("graph_edge_type", pa.large_string()),
     pa.field("graph_seed_rank", pa.float64()),
     pa.field("graph_caller_max_tier", pa.large_string()),
     pa.field("symbol_source", pa.large_string()),
     pa.field("import_direction", pa.large_string()),
+    pa.field("from_coverage", pa.bool_()),
     pa.field("retriever_hits", pa.int64()),
+    pa.field("rrf_score", pa.float64()),
     pa.field("seed_path_distance", pa.int64()),
     pa.field("same_package", pa.bool_()),
     pa.field("package_distance", pa.int64()),
@@ -110,7 +113,7 @@ def merge_signals(data_dir: Path) -> dict[str, Any]:
 
     Every row gets: ``repo_id``, ``repo_set``, ``query_type``,
     ``label_gate``, ``object_count``, ``file_count``, and graded
-    ``label_relevant`` (2 = minimum, 1 = thrash_preventing, 0 = irrelevant).
+    ``label_relevant`` (1 = relevant, 0 = irrelevant).
 
     Streams row groups from each repo's Parquet, enriches, and writes
     immediately.  Peak memory ≈ one row group (~50-100K rows) rather

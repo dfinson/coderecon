@@ -683,6 +683,15 @@ def initialize_repo(
                 status(f"Error: {err}", style="error")
             return False
 
+        # Step 11: Collect initial test coverage (best-effort)
+        cov_loop = asyncio.new_event_loop()
+        try:
+            cov_facts = cov_loop.run_until_complete(coord.collect_initial_coverage())
+        finally:
+            cov_loop.close()
+        if cov_facts:
+            status(f"Coverage: {cov_facts} test→def links ingested", style="success")
+
     finally:
         coord.close()
 

@@ -465,6 +465,7 @@ class HarvestCandidate:
     from_term_match: bool = False
     from_explicit: bool = False
     from_graph: bool = False
+    from_coverage: bool = False
 
     # Harvester-specific scores
     matched_terms: set[str] = field(default_factory=set)
@@ -473,6 +474,7 @@ class HarvestCandidate:
     term_match_count: int = 0  # Raw count of query terms matching this def's name
     term_total_matches: int = 0  # How many defs matched each term (IDF denominator)
     lex_hit_count: int = 0  # Per-def Tantivy lexical index hits
+    bm25_file_score: float = 0.0  # Best BM25 score of any file containing this def
     graph_edge_type: str | None = None  # callee/caller/sibling/override/implementor/doc_xref or None
     graph_seed_rank: int | None = None  # Position of the seed in merged pool
     graph_caller_max_tier: str | None = None  # Best ref_tier among caller refs (proven > strong > anchored > unknown)
@@ -506,6 +508,7 @@ class HarvestCandidate:
                 self.from_term_match,
                 self.from_explicit,
                 self.from_graph,
+                self.from_coverage,
             ]
         )
 
