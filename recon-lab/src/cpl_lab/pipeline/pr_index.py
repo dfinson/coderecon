@@ -26,7 +26,7 @@ from cpl_lab.pipeline.clone import REPO_MANIFEST, REPO_SETS, clone_dir_for
 
 def _recon_python() -> str:
     """Find the Python interpreter that can run the coderecon CLI."""
-    coderecon_root = Path(__file__).resolve().parents[3]
+    coderecon_root = Path(__file__).resolve().parents[4]
     venv = coderecon_root / ".venv" / "bin" / "python"
     if venv.is_file():
         return str(venv)

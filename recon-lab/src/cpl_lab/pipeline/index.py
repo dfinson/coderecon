@@ -12,7 +12,7 @@ import click
 
 
 def _coderecon_repo_root() -> Path:
-    return Path(__file__).resolve().parents[3]
+    return Path(__file__).resolve().parents[4]
 
 
 def _find_recon_python(repo_root: Path | None = None) -> str:
