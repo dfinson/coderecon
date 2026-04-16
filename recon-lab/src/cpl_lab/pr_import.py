@@ -47,7 +47,7 @@ def import_single_instance(
     Returns a summary dict with status and counts.
     """
     from cpl_lab.patch_ground_truth import map_hunks_to_defs, parse_unified_diff
-    from cpl_lab.swebench_llm import adapt_instance
+    from cpl_lab.llm_queries import adapt_instance
 
     iid = inst["instance_id"]
     rid = inst["repo_id"]

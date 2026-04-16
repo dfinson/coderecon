@@ -123,7 +123,7 @@ def _call_azure_openai(
     max_tokens: int,
     timeout: int,
 ) -> str:
-    from cpl_lab.swebench_llm import _get_azure_token
+    from cpl_lab.llm_queries import _get_azure_token
 
     endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "").rstrip("/")
     if not endpoint:

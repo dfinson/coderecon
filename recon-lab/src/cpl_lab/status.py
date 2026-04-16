@@ -10,7 +10,7 @@ import click
 from cpl_lab.data_manifest import iter_task_json_files
 from cpl_lab.data_manifest import iter_repo_data_dirs, repo_set_for_dir
 
-PIPELINE_STEPS = ["swebench", "collect", "merge", "train"]
+PIPELINE_STEPS = ["import", "collect", "merge", "train"]
 
 
 def _pipeline_position(
@@ -24,7 +24,7 @@ def _pipeline_position(
         if (gt_dir / "queries.jsonl").exists() or iter_task_json_files(gt_dir):
             imported_instances += 1
     if imported_instances == 0:
-        return "swebench", "no SWE-bench ground truth yet — run 'cpl-lab swebench'"
+        return "import", "no ground truth yet — run 'recon-lab pr-import'"
 
     # Check signals
     sig_repos = 0
