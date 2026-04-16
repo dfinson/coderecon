@@ -155,27 +155,38 @@ def run_index_main(
             if info["set"] in allowed
         ]
 
-    click.echo(f"\nRegistering {len(repo_ids)} main repos...")
-
-    for i, rid in enumerate(sorted(repo_ids), 1):
+    # Resolve clone dirs, skip missing
+    work: list[tuple[str, Path]] = []
+    for rid in sorted(repo_ids):
         cd = clone_dir_for(rid, clones_dir)
         if cd is None or not cd.is_dir():
-            click.echo(f"  [{i}/{len(repo_ids)}] {rid}: SKIP (no clone)")
-            continue
+            click.echo(f"  {rid}: SKIP (no clone)")
+        else:
+            work.append((rid, cd))
 
-        click.echo(f"  [{i}/{len(repo_ids)}] {rid}: registering...")
-        _register_repo(cd)
+    click.echo(f"\nRegistering {len(work)} main repos (parallel)...")
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    done = 0
+    workers = min(8, len(work))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(_register_repo, cd): rid for rid, cd in work}
+        for fut in as_completed(futures):
+            done += 1
+            rid = futures[fut]
+            exc = fut.exception()
+            if exc:
+                click.echo(f"  [{done}/{len(work)}] {rid}: ERROR {exc}")
+            else:
+                click.echo(f"  [{done}/{len(work)}] {rid}: registered")
 
     # Wait for all repos to finish indexing
     click.echo("\nWaiting for indexing to complete...")
-    for i, rid in enumerate(sorted(repo_ids), 1):
-        cd = clone_dir_for(rid, clones_dir)
-        if cd is None or not cd.is_dir():
-            continue
-        # The repo name in the daemon is derived from the directory name
+    for i, (rid, cd) in enumerate(work, 1):
         repo_name = cd.name
         if verbose:
-            click.echo(f"  Waiting for {repo_name}...")
+            click.echo(f"  [{i}/{len(work)}] Waiting for {repo_name}...")
         if not _wait_repo_idle(port, repo_name, timeout=1800):
             click.echo(f"  WARNING: {repo_name} did not finish indexing in 30min")
 
