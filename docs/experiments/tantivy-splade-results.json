@@ -1,0 +1,158 @@
+{
+  "ranker-gate/bubbletea": {
+    "vec_count": 1307,
+    "sqlite_load_s": 0.023,
+    "indexing": {
+      "count": 1307,
+      "elapsed_s": 0.236,
+      "throughput_vps": 5543.6,
+      "storage_bytes": 5986000,
+      "storage_mb": 5.99
+    },
+    "sqlite_data_bytes": 890301,
+    "query_latency": {
+      "sqlite": {
+        "p50_ms": 1.984,
+        "p95_ms": 2.882,
+        "p99_ms": 3.162,
+        "mean_ms": 1.975
+      },
+      "tantivy": {
+        "p50_ms": 11.408,
+        "p95_ms": 26.989,
+        "p99_ms": 33.15,
+        "mean_ms": 13.359
+      },
+      "n_queries": 50
+    },
+    "recall": {
+      "recall@10": 0.57,
+      "spearman@10": -1.2361,
+      "recall@50": 0.632,
+      "spearman@50": -0.7492,
+      "recall@100": 0.7066,
+      "spearman@100": -8.2863
+    },
+    "incremental": {
+      "n=1": {
+        "delete_ms": 8.4,
+        "add_ms": 32.1,
+        "total_ms": 40.6
+      },
+      "n=10": {
+        "delete_ms": 23.6,
+        "add_ms": 66.4,
+        "total_ms": 90.0
+      },
+      "n=50": {
+        "delete_ms": 50.7,
+        "add_ms": 86.1,
+        "total_ms": 136.8
+      }
+    }
+  },
+  "ranker-gate/fmt": {
+    "vec_count": 6585,
+    "sqlite_load_s": 0.209,
+    "indexing": {
+      "count": 6585,
+      "elapsed_s": 1.454,
+      "throughput_vps": 4529.8,
+      "storage_bytes": 73531921,
+      "storage_mb": 73.53
+    },
+    "sqlite_data_bytes": 7558220,
+    "query_latency": {
+      "sqlite": {
+        "p50_ms": 15.364,
+        "p95_ms": 20.996,
+        "p99_ms": 24.025,
+        "mean_ms": 15.528
+      },
+      "tantivy": {
+        "p50_ms": 37.79,
+        "p95_ms": 78.275,
+        "p99_ms": 100.979,
+        "mean_ms": 40.815
+      },
+      "n_queries": 50
+    },
+    "recall": {
+      "recall@10": 0.382,
+      "spearman@10": -1.1915,
+      "recall@50": 0.4596,
+      "spearman@50": -6.6185,
+      "recall@100": 0.4728,
+      "spearman@100": -7.169
+    },
+    "incremental": {
+      "n=1": {
+        "delete_ms": 21.8,
+        "add_ms": 42.8,
+        "total_ms": 64.6
+      },
+      "n=10": {
+        "delete_ms": 33.4,
+        "add_ms": 86.3,
+        "total_ms": 119.8
+      },
+      "n=50": {
+        "delete_ms": 61.9,
+        "add_ms": 113.9,
+        "total_ms": 175.8
+      }
+    }
+  },
+  "cutoff/simdjson": {
+    "vec_count": 23571,
+    "sqlite_load_s": 0.719,
+    "indexing": {
+      "count": 23571,
+      "elapsed_s": 5.177,
+      "throughput_vps": 4553.2,
+      "storage_bytes": 197753133,
+      "storage_mb": 197.75
+    },
+    "sqlite_data_bytes": 18422565,
+    "query_latency": {
+      "sqlite": {
+        "p50_ms": 39.516,
+        "p95_ms": 54.726,
+        "p99_ms": 57.48,
+        "mean_ms": 41.246
+      },
+      "tantivy": {
+        "p50_ms": 61.224,
+        "p95_ms": 112.473,
+        "p99_ms": 135.03,
+        "mean_ms": 59.399
+      },
+      "n_queries": 50
+    },
+    "recall": {
+      "recall@10": 0.328,
+      "spearman@10": -1.4181,
+      "recall@50": 0.4292,
+      "spearman@50": -13.3755,
+      "recall@100": 0.4738,
+      "spearman@100": -18.7706
+    },
+    "incremental": {
+      "n=1": {
+        "delete_ms": 22.0,
+        "add_ms": 38.9,
+        "total_ms": 60.9
+      },
+      "n=10": {
+        "delete_ms": 25.0,
+        "add_ms": 79.1,
+        "total_ms": 104.1
+      },
+      "n=50": {
+        "delete_ms": 46.8,
+        "add_ms": 123.2,
+        "total_ms": 170.0
+      }
+    }
+  }
+}
