@@ -43,6 +43,30 @@ def extract_ranker_features(
         f["lex_hit_count"] = cand.get("lex_hit_count") or 0
         f["bm25_file_score"] = cand.get("bm25_file_score") or 0.0
 
+        # SPLADE sparse retrieval score (continuous)
+        f["splade_score"] = cand.get("splade_score") or 0.0
+
+        # Cross-encoder relevance score (continuous)
+        f["ce_score"] = cand.get("ce_score") or 0.0
+
+        # TinyBERT cross-encoder score (all candidates, pre-file-prune)
+        f["ce_score_tiny"] = cand.get("ce_score_tiny") or 0.0
+
+        # Language family (categorical from index language module)
+        lang = cand.get("language_family", "")
+        f["lang_python"] = lang == "python"
+        f["lang_javascript"] = lang == "javascript"
+        f["lang_go"] = lang == "go"
+        f["lang_rust"] = lang == "rust"
+        f["lang_java"] = lang == "java"
+        f["lang_csharp"] = lang == "csharp"
+        f["lang_c_cpp"] = lang == "c_cpp"
+        f["lang_ruby"] = lang == "ruby"
+        f["lang_php"] = lang == "php"
+        f["lang_swift"] = lang == "swift"
+        f["lang_kotlin"] = lang == "kotlin"
+        f["lang_data"] = lang in ("json", "yaml", "toml", "xml")
+
         # Graph signal (categorical → encoded)
         edge_type = cand.get("graph_edge_type")
         f["graph_is_callee"] = edge_type == "callee"
@@ -102,6 +126,16 @@ def extract_ranker_features(
         f["is_callee_of_top"] = cand.get("is_callee_of_top", False)
         f["is_imported_by_top"] = cand.get("is_imported_by_top", False)
         f["from_coverage"] = cand.get("from_coverage", False)
+
+        # Harvester source flags
+        f["from_term_match"] = cand.get("from_term_match", False)
+        f["from_explicit"] = cand.get("from_explicit", False)
+        f["from_graph"] = cand.get("from_graph", False)
+
+        # Term coverage: fraction of query terms matched by this def
+        matched_count = cand.get("matched_terms_count", 0)
+        total_terms = query_features.get("term_count", 0)
+        f["term_coverage"] = matched_count / total_terms if total_terms > 0 else 0.0
 
         # RRF ensemble score (computed in shared pipeline layer)
         f["rrf_score"] = cand.get("rrf_score", 0.0)
@@ -196,8 +230,8 @@ def extract_cutoff_features(
         f["score_p75"] = 0.0
         f["score_p90"] = 0.0
         f["max_gap"] = 0.0
-        f["max_gap_position"] = 0.0
-        f["score_variance"] = 0.0
+        f["max_gap_pos"] = 0.0
+        f["score_var"] = 0.0
         f["score_entropy"] = 0.0
         f["cumulative_mass_top10"] = 0.0
     else:
@@ -211,11 +245,11 @@ def extract_cutoff_features(
         # Max gap and its position
         gaps = [scores[i] - scores[i + 1] for i in range(n - 1)] if n > 1 else [0.0]
         f["max_gap"] = max(gaps)
-        f["max_gap_position"] = (gaps.index(max(gaps)) + 1) / n if gaps else 0.0
+        f["max_gap_pos"] = (gaps.index(max(gaps)) + 1) / n if gaps else 0.0
 
         # Variance
         mean_s = sum(scores) / n
-        f["score_variance"] = sum((s - mean_s) ** 2 for s in scores) / n
+        f["score_var"] = sum((s - mean_s) ** 2 for s in scores) / n
 
         # Entropy of score distribution
         total = sum(scores) if sum(scores) > 0 else 1.0
@@ -230,6 +264,21 @@ def extract_cutoff_features(
     hits = [c.get("retriever_hits", 0) for c in ranked_candidates]
     f["agreement_mean"] = sum(hits) / max(len(hits), 1)
     f["agreement_max"] = max(hits) if hits else 0
+
+    # Retriever composition: what fraction of ranked candidates came from each source
+    n_ranked = max(len(ranked_candidates), 1)
+    f["fraction_from_term"] = sum(
+        1 for c in ranked_candidates if c.get("from_term_match")
+    ) / n_ranked
+    f["fraction_from_graph"] = sum(
+        1 for c in ranked_candidates if c.get("from_graph")
+    ) / n_ranked
+    f["fraction_from_explicit"] = sum(
+        1 for c in ranked_candidates if c.get("from_explicit")
+    ) / n_ranked
+    f["fraction_from_splade"] = sum(
+        1 for c in ranked_candidates if c.get("splade_score", 0) > 0
+    ) / n_ranked
 
     return f
 
@@ -295,11 +344,29 @@ def extract_gate_features(
         f["score_p75"] = 0.0
         f["path_entropy"] = 0.0
         f["cluster_count"] = 0
+        f["max_splade_score"] = 0.0
+        f["max_bm25_score"] = 0.0
+        f["has_graph_candidates"] = False
+        f["has_explicit_candidates"] = False
     else:
         f["top_score"] = pool_scores[0]
         f["score_p25"] = pool_scores[min(int(n * 0.25), n - 1)]
         f["score_p50"] = pool_scores[min(int(n * 0.5), n - 1)]
         f["score_p75"] = pool_scores[min(int(n * 0.75), n - 1)]
+
+        # Continuous score peaks from best retrievers
+        f["max_splade_score"] = max(
+            (c.get("splade_score", 0.0) for c in candidates), default=0.0
+        )
+        f["max_bm25_score"] = max(
+            (c.get("bm25_file_score", 0.0) for c in candidates), default=0.0
+        )
+        f["has_graph_candidates"] = any(
+            c.get("graph_edge_type") is not None for c in candidates
+        )
+        f["has_explicit_candidates"] = any(
+            c.get("symbol_source") is not None for c in candidates
+        )
 
         # Path entropy: Shannon entropy of directory distribution
         dirs = [c.get("parent_dir", "") for c in candidates if c.get("parent_dir")]
@@ -367,6 +434,7 @@ def extract_file_ranker_features(
         f["max_term_match"] = max((d.get("term_match_count", 0) for d in defs), default=0)
         f["sum_term_matches"] = sum(d.get("term_total_matches", 0) for d in defs)
         f["max_lex_hits"] = max((d.get("lex_hit_count", 0) for d in defs), default=0)
+        f["max_bm25_file_score"] = max((d.get("bm25_file_score", 0.0) for d in defs), default=0.0)
 
         # Graph
         f["any_callee"] = any(d.get("graph_is_callee", False) for d in defs)
@@ -393,12 +461,37 @@ def extract_file_ranker_features(
         f["max_retriever_hits"] = max((d.get("retriever_hits", 0) for d in defs), default=0)
         f["sum_retriever_hits"] = sum(d.get("retriever_hits", 0) for d in defs)
 
+        # Coverage
+        f["any_from_coverage"] = any(d.get("from_coverage", False) for d in defs)
+
+        # Structural links
+        f["any_shares_file_with_seed"] = any(d.get("shares_file_with_seed", False) for d in defs)
+        f["any_callee_of_top"] = any(d.get("is_callee_of_top", False) for d in defs)
+        f["any_imported_by_top"] = any(d.get("is_imported_by_top", False) for d in defs)
+
+        # RRF
+        f["max_rrf_score"] = max((d.get("rrf_score", 0.0) for d in defs), default=0.0)
+
+        # SPLADE
+        f["max_splade_score"] = max((d.get("splade_score", 0.0) for d in defs), default=0.0)
+
+        # TinyBERT cross-encoder (all defs, pre-file-prune)
+        ce_tiny_scores = [d.get("ce_score_tiny", 0.0) for d in defs]
+        f["max_ce_tiny"] = max(ce_tiny_scores, default=0.0)
+        f["mean_ce_tiny"] = sum(ce_tiny_scores) / max(len(ce_tiny_scores), 1)
+
+        # Artifact kind
+        f["any_artifact_test"] = any(d.get("artifact_kind") == "test" for d in defs)
+        f["any_artifact_config"] = any(d.get("artifact_kind") == "config" for d in defs)
+        f["any_artifact_doc"] = any(d.get("artifact_kind") == "doc" for d in defs)
+
         # File-level metadata
         f["num_defs_in_file"] = len(defs)
         hub_scores = [d.get("hub_score", 0) for d in defs]
         f["mean_hub_score"] = sum(hub_scores) / max(len(hub_scores), 1)
         f["max_hub_score"] = max(hub_scores, default=0)
         f["is_test"] = any(d.get("is_test", False) for d in defs)
+        f["is_barrel"] = any(d.get("is_barrel", False) for d in defs)
         f["path_depth"] = defs[0].get("path_depth", 0)
         f["any_docstring"] = any(d.get("has_docstring", False) for d in defs)
         f["any_decorators"] = any(d.get("has_decorators", False) for d in defs)

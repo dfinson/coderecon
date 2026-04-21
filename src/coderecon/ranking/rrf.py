@@ -1,8 +1,9 @@
 """Reciprocal Rank Fusion — model-free ranking fallback.
 
-Fuses 6 harvester rank lists (term-match, explicit, graph, import,
-shares-file-with-seed, coverage-linked) into a single score per candidate
-using the standard RRF formula:
+Fuses 11 harvester rank lists (term-match, explicit, graph, import,
+splade, shares-file-with-seed, coverage-linked, retriever-agreement,
+hub-score, callee-of-seed, imported-by-seed) into a single score per
+candidate using the standard RRF formula:
 
     score(d) = Σ  1 / (k + rank_i(d))
 
@@ -70,12 +71,27 @@ def rrf_file_prune(
 
 
 # ------------------------------------------------------------------
-# Internal: build per-harvester rank lists
+# Named rank lists (public) + internal wrapper
 # ------------------------------------------------------------------
 
-def _build_rank_lists(candidates: list[dict[str, Any]]) -> list[list[int]]:
-    """Return up to 5 rank lists (each a list of candidate indices, best-first)."""
-    lists: list[list[int]] = []
+#: Canonical list names in declaration order.
+ALL_LIST_NAMES: list[str] = [
+    "term_match", "explicit", "graph", "import", "splade",
+    "shares_file", "coverage", "retriever_agreement", "hub_score",
+    "callee_of_seed", "imported_by_seed",
+]
+
+
+def build_named_rank_lists(
+    candidates: list[dict[str, Any]],
+) -> list[tuple[str, list[int]]]:
+    """Return named rank lists for diagnostic and ablation use.
+
+    Each entry is ``(list_name, indices)`` where *indices* are candidate
+    positions sorted best-first.  Only lists with at least one matching
+    candidate are included.
+    """
+    named: list[tuple[str, list[int]]] = []
 
     # 1. Term-match list: ranked by bm25_file_score desc, term_match_count desc
     term = [
@@ -85,7 +101,7 @@ def _build_rank_lists(candidates: list[dict[str, Any]]) -> list[list[int]]:
     ]
     if term:
         term.sort(key=lambda t: (-t[1], -t[2]))
-        lists.append([i for i, _, _ in term])
+        named.append(("term_match", [i for i, _, _ in term]))
 
     # 2. Explicit list: ranked by symbol_source priority
     _src_priority = {"agent_seed": 0, "pin": 1, "path_mention": 2, "task_extracted": 3, "auto_seed": 4}
@@ -96,7 +112,7 @@ def _build_rank_lists(candidates: list[dict[str, Any]]) -> list[list[int]]:
     ]
     if explicit:
         explicit.sort(key=lambda t: t[1])
-        lists.append([i for i, _ in explicit])
+        named.append(("explicit", [i for i, _ in explicit]))
 
     # 3. Graph list: ranked by caller_tier desc then seed_rank asc
     _tier_val = {"proven": 3, "strong": 2, "anchored": 1, "unknown": 0}
@@ -107,7 +123,7 @@ def _build_rank_lists(candidates: list[dict[str, Any]]) -> list[list[int]]:
     ]
     if graph:
         graph.sort(key=lambda t: (-t[1], t[2]))
-        lists.append([i for i, _, _ in graph])
+        named.append(("graph", [i for i, _, _ in graph]))
 
     # 4. Import list: ranked by import_direction priority
     _imp_priority = {"test_pair": 0, "reverse": 1, "forward": 2, "barrel": 3}
@@ -118,22 +134,73 @@ def _build_rank_lists(candidates: list[dict[str, Any]]) -> list[list[int]]:
     ]
     if imports:
         imports.sort(key=lambda t: t[1])
-        lists.append([i for i, _ in imports])
+        named.append(("import", [i for i, _ in imports]))
 
-    # 5. Shares-file-with-seed list: short selective booster
+    # 5. SPLADE list: ranked by splade_score desc
+    splade = [
+        (i, c.get("splade_score") or 0.0)
+        for i, c in enumerate(candidates)
+        if c.get("splade_score", 0.0) > 0
+    ]
+    if splade:
+        splade.sort(key=lambda t: -t[1])
+        named.append(("splade", [i for i, _ in splade]))
+
+    # 6. Shares-file-with-seed list: short selective booster
     shares_file = [
         i for i, c in enumerate(candidates)
         if c.get("shares_file_with_seed")
     ]
     if shares_file:
-        lists.append(shares_file)
+        named.append(("shares_file", shares_file))
 
-    # 6. Coverage-linked list: deterministic test↔source links
+    # 7. Coverage-linked list: deterministic test↔source links
     coverage = [
         i for i, c in enumerate(candidates)
         if c.get("from_coverage")
     ]
     if coverage:
-        lists.append(coverage)
+        named.append(("coverage", coverage))
 
-    return lists
+    # 8. Retriever agreement: multi-harvester consensus (higher = more confident)
+    agreement = [
+        (i, c.get("retriever_hits") or 0)
+        for i, c in enumerate(candidates)
+        if (c.get("retriever_hits") or 0) >= 2
+    ]
+    if agreement:
+        agreement.sort(key=lambda t: -t[1])
+        named.append(("retriever_agreement", [i for i, _ in agreement]))
+
+    # 9. Hub score: structural centrality (caller count)
+    hubs = [
+        (i, c.get("hub_score") or 0)
+        for i, c in enumerate(candidates)
+        if (c.get("hub_score") or 0) > 0
+    ]
+    if hubs:
+        hubs.sort(key=lambda t: -t[1])
+        named.append(("hub_score", [i for i, _ in hubs]))
+
+    # 10. Callee-of-seed: direct call-edge from explicit seed
+    callee_of_seed = [
+        i for i, c in enumerate(candidates)
+        if c.get("is_callee_of_top")
+    ]
+    if callee_of_seed:
+        named.append(("callee_of_seed", callee_of_seed))
+
+    # 11. Imported-by-seed: direct import from seed file
+    imported_by_seed = [
+        i for i, c in enumerate(candidates)
+        if c.get("is_imported_by_top")
+    ]
+    if imported_by_seed:
+        named.append(("imported_by_seed", imported_by_seed))
+
+    return named
+
+
+def _build_rank_lists(candidates: list[dict[str, Any]]) -> list[list[int]]:
+    """Return up to 11 rank lists (each a list of candidate indices, best-first)."""
+    return [indices for _, indices in build_named_rank_lists(candidates)]
