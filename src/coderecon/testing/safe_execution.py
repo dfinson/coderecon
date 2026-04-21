@@ -36,6 +36,9 @@ class SafeExecutionConfig:
     strip_coverage_flags: bool = False
     # Unique run identifier for isolation
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+    # Per-subprocess memory ceiling (MB). When set, language strategies
+    # inject this via their runtime-specific env vars.
+    subprocess_memory_limit_mb: int | None = None
 
 
 LanguageFamily = Literal[
@@ -312,7 +315,7 @@ class SafeExecutionContext:
             "WATCHMAN_SOCK": "/dev/null",
             # Node.js options
             "NODE_ENV": "test",
-            "NODE_OPTIONS": "--max-old-space-size=4096",  # Prevent OOM
+            "NODE_OPTIONS": f"--max-old-space-size={self._config.subprocess_memory_limit_mb or 4096}",
             # Prevent npm/yarn prompts
             "npm_config_yes": "true",
             "YARN_ENABLE_IMMUTABLE_INSTALLS": "false",
@@ -341,7 +344,7 @@ class SafeExecutionContext:
         coverage_dir = self._config.artifact_dir / "coverage"
         coverage_dir.mkdir(parents=True, exist_ok=True)
 
-        return {
+        go_env: dict[str, str | object] = {
             # Ensure module mode
             "GO111MODULE": "on",
             # Isolated coverage output
@@ -355,6 +358,10 @@ class SafeExecutionContext:
             # Prevent prompts
             "GOTELEMETRY": "off",
         }
+        limit = self._config.subprocess_memory_limit_mb
+        if limit:
+            go_env["GOMEMLIMIT"] = f"{limit}MiB"
+        return go_env
 
     def _rust_env(self) -> dict[str, str | object]:
         """Rust environment overrides.
@@ -386,22 +393,26 @@ class SafeExecutionContext:
         - Disables Gradle daemon (can hang)
         - Prevents Maven interactive mode
         - Isolates JaCoCo output
+        - Caps JVM heap when memory ceiling is set
         """
         coverage_dir = self._config.artifact_dir / "coverage"
         coverage_dir.mkdir(parents=True, exist_ok=True)
 
+        limit = self._config.subprocess_memory_limit_mb
+        xmx = f" -Xmx{limit}m" if limit else ""
+
         return {
             # Gradle settings - disable daemon to prevent orphan processes
-            "GRADLE_OPTS": "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true",
+            "GRADLE_OPTS": f"-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true{xmx}",
             # Maven settings - batch mode, no prompts
-            "MAVEN_OPTS": "-Djansi.force=false -Dstyle.color=never",
+            "MAVEN_OPTS": f"-Djansi.force=false -Dstyle.color=never{xmx}",
             "MAVEN_BATCH_MODE": "true",
             # JaCoCo coverage output directory
             "JACOCO_DESTFILE": str(coverage_dir / "jacoco.exec"),
             # Disable sbt prompts (Scala)
-            "SBT_OPTS": "-Dsbt.ci=true -Dsbt.color=false",
-            # Prevent Java auto-update prompts
-            "_JAVA_OPTIONS": "-Djava.awt.headless=true",
+            "SBT_OPTS": f"-Dsbt.ci=true -Dsbt.color=false{xmx}",
+            # Prevent Java auto-update prompts + heap cap
+            "_JAVA_OPTIONS": f"-Djava.awt.headless=true{xmx}",
             # Kotlin specific
             "KOTLIN_DAEMON_ENABLED": "false",
         }
@@ -417,7 +428,7 @@ class SafeExecutionContext:
         coverage_dir = self._config.artifact_dir / "coverage"
         coverage_dir.mkdir(parents=True, exist_ok=True)
 
-        return {
+        env: dict[str, str | object] = {
             # .NET CLI settings
             "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
             "DOTNET_NOLOGO": "1",
@@ -432,6 +443,11 @@ class SafeExecutionContext:
             # MSBuild settings
             "MSBUILDDISABLENODEREUSE": "1",
         }
+        limit = self._config.subprocess_memory_limit_mb
+        if limit:
+            # .NET GC hard heap limit in bytes (hex)
+            env["DOTNET_GCHeapHardLimit"] = hex(limit * 1024 * 1024)
+        return env
 
     def _cpp_env(self) -> dict[str, str | object]:
         """C/C++ environment overrides.
@@ -505,8 +521,10 @@ class SafeExecutionContext:
             "COMPOSER_ALLOW_SUPERUSER": "1",
             # PHPUnit settings
             "PHPUNIT_RESULT_CACHE": str(self._config.artifact_dir / ".phpunit.result.cache"),
-            # Disable memory limit for tests
-            "PHP_MEMORY_LIMIT": "-1",
+            # Memory limit — use ceiling if set, else unlimited
+            "PHP_MEMORY_LIMIT": f"{self._config.subprocess_memory_limit_mb}M"
+            if self._config.subprocess_memory_limit_mb
+            else "-1",
         }
 
     def _elixir_env(self) -> dict[str, str | object]:
@@ -519,7 +537,7 @@ class SafeExecutionContext:
         coverage_dir = self._config.artifact_dir / "coverage"
         coverage_dir.mkdir(parents=True, exist_ok=True)
 
-        return {
+        env: dict[str, str | object] = {
             # Mix environment
             "MIX_ENV": "test",
             # Disable prompts
@@ -531,6 +549,10 @@ class SafeExecutionContext:
             # Hex settings - no prompts
             "HEX_HTTP_TIMEOUT": "60",
         }
+        limit = self._config.subprocess_memory_limit_mb
+        if limit:
+            env["ERL_FLAGS"] = f"+MBs {limit}"
+        return env
 
     def _dart_env(self) -> dict[str, str | object]:
         """Dart/Flutter environment overrides.

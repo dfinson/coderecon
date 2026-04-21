@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 import os
 import shutil
 import sys
@@ -45,10 +46,18 @@ from coderecon.testing.runtime import (
     ExecutionContextBuilder,
     RuntimeExecutionContext,
 )
+from coderecon.testing.resources import (
+    MemoryBudget,
+    MemoryHistory,
+    child_rss_mb,
+    classify_oom,
+)
 from coderecon.testing.safe_execution import SafeExecutionConfig, SafeExecutionContext
 
 if TYPE_CHECKING:
     from coderecon.index.ops import IndexCoordinatorEngine
+
+log = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -404,11 +413,17 @@ class TestOps:
         self,
         repo_root: Path,
         coordinator: IndexCoordinatorEngine,
+        *,
+        memory_reserve_mb: int = 1024,
+        subprocess_memory_limit_mb: int | None = None,
     ) -> None:
         """Initialize test ops."""
         self._repo_root = repo_root
+        self._workspace_root = repo_root
         self._coordinator = coordinator
         self._artifacts_base = repo_root / ".recon" / "artifacts" / "tests"
+        self._memory_reserve_mb = memory_reserve_mb
+        self._subprocess_memory_limit_mb = subprocess_memory_limit_mb
 
     async def discover(
         self,
@@ -825,6 +840,13 @@ class TestOps:
                 # Non-fatal: fall back to --cov=. if import graph fails
                 pass
 
+        # Memory budget + history
+        budget = MemoryBudget(reserve_mb=self._memory_reserve_mb)
+        history = MemoryHistory.for_repo(self._workspace_root)
+
+        # Compute per-process ceiling: explicit config or dynamic
+        ceiling = self._subprocess_memory_limit_mb or budget.ceiling_mb()
+
         # Create semaphore for parallelism
         sem = asyncio.Semaphore(parallelism)
 
@@ -834,7 +856,37 @@ class TestOps:
             if cancel_event.is_set():
                 return (target, None, None)
             async with sem:
-                result, cov_artifact = await self._run_single_target(
+                # Memory gate: wait until there's room
+                estimate = history.estimate_mb(target.target_id)
+                needed = estimate if estimate else 0
+                while not cancel_event.is_set():
+                    avail = budget.available_mb()
+                    if needed and avail < needed + self._memory_reserve_mb:
+                        log.debug(
+                            "memory_gate.waiting target=%s available_mb=%d estimated_mb=%d",
+                            target.target_id, avail, needed,
+                        )
+                        await asyncio.sleep(5)
+                        continue
+                    if not budget.can_launch():
+                        log.debug(
+                            "memory_gate.below_reserve target=%s available_mb=%d",
+                            target.target_id, avail,
+                        )
+                        await asyncio.sleep(5)
+                        continue
+                    break
+
+                if cancel_event.is_set():
+                    return (target, None, None)
+
+                # Use per-target ceiling from history if known and smaller
+                target_ceiling = ceiling
+                if history.oom_count(target.target_id) >= 2:
+                    # Chronically OOM target — give it full ceiling, run solo-ish
+                    target_ceiling = budget.ceiling_mb()
+
+                result, cov_artifact, peak_rss = await self._run_single_target(
                     target=target,
                     artifact_dir=artifact_dir,
                     test_filter=test_filter,
@@ -843,7 +895,60 @@ class TestOps:
                     coverage=coverage,
                     coverage_dir=coverage_dir,
                     source_dirs=source_dirs,
+                    subprocess_memory_limit_mb=target_ceiling,
                 )
+
+                # Classify and handle OOM
+                stderr_text = ""
+                exit_code = None
+                if result and result.execution:
+                    stderr_text = result.execution.raw_stderr or ""
+                    exit_code = result.execution.exit_code
+
+                is_oom = classify_oom(exit_code, stderr_text, peak_rss, target_ceiling)
+
+                if is_oom:
+                    history.record_oom(target.target_id, peak_rss)
+                    log.warning(
+                        "test_target.oom target=%s peak_rss_mb=%d ceiling_mb=%d",
+                        target.target_id, peak_rss, target_ceiling,
+                    )
+                    # Retry solo with full available ceiling
+                    retry_ceiling = budget.ceiling_mb()
+                    log.info(
+                        "test_target.oom_retry target=%s retry_ceiling_mb=%d",
+                        target.target_id, retry_ceiling,
+                    )
+                    result, cov_artifact, peak_rss = await self._run_single_target(
+                        target=target,
+                        artifact_dir=artifact_dir,
+                        test_filter=test_filter,
+                        tags=tags,
+                        timeout_sec=timeout_sec,
+                        coverage=coverage,
+                        coverage_dir=coverage_dir,
+                        source_dirs=source_dirs,
+                        subprocess_memory_limit_mb=retry_ceiling,
+                    )
+                    # Check retry result
+                    retry_stderr = ""
+                    retry_exit = None
+                    if result and result.execution:
+                        retry_stderr = result.execution.raw_stderr or ""
+                        retry_exit = result.execution.exit_code
+                    if classify_oom(retry_exit, retry_stderr, peak_rss, retry_ceiling):
+                        history.record_oom(target.target_id, peak_rss)
+                        log.warning(
+                            "test_target.oom_retry_failed target=%s peak_rss_mb=%d",
+                            target.target_id, peak_rss,
+                        )
+                    else:
+                        history.record(target.target_id, peak_rss)
+                else:
+                    # Normal completion — record RSS for future scheduling
+                    if peak_rss > 0:
+                        history.record(target.target_id, peak_rss)
+
                 return (target, result, cov_artifact)
 
         # Run ALL targets concurrently (semaphore limits parallelism)
@@ -997,7 +1102,8 @@ class TestOps:
         coverage: bool,
         coverage_dir: Path | None,
         source_dirs: list[str] | None = None,
-    ) -> tuple[ParsedTestSuite, CoverageArtifact | None]:
+        subprocess_memory_limit_mb: int | None = None,
+    ) -> tuple[ParsedTestSuite, CoverageArtifact | None, int]:
         """Run a single test target using its runner pack.
 
         Uses SafeExecutionContext to protect against misconfigurations in
@@ -1012,9 +1118,10 @@ class TestOps:
             coverage: Whether to collect coverage
             coverage_dir: Directory for coverage artifacts (required when coverage=True)
             source_dirs: Optional source directories for targeted coverage scoping.
+            subprocess_memory_limit_mb: Per-subprocess memory ceiling for env injection.
 
         Returns:
-            Tuple of (test results, coverage artifact if collected)
+            Tuple of (test results, coverage artifact if collected, peak RSS in MB)
         """
         pack_class = runner_registry.get(target.runner_pack_id)
         if not pack_class:
@@ -1029,6 +1136,7 @@ class TestOps:
                     workspace_root=target.workspace_root,
                 ),
                 None,
+                0,
             )
 
         pack = pack_class()
@@ -1061,6 +1169,7 @@ class TestOps:
                     workspace_root=target.workspace_root,
                 ),
                 None,
+                0,
             )
 
         # Handle coverage - use pre-indexed capability instead of detecting at runtime
@@ -1089,6 +1198,7 @@ class TestOps:
                 workspace_root=Path(target.workspace_root),
                 timeout_sec=timeout_sec,
                 strip_coverage_flags=coverage_available,
+                subprocess_memory_limit_mb=subprocess_memory_limit_mb,
             )
         )
 
@@ -1134,12 +1244,14 @@ class TestOps:
                     workspace_root=target.workspace_root,
                 ),
                 None,
+                0,
             )
 
         cwd = pack.get_cwd(target)
         stdout = ""
         stderr = ""
         exit_code: int | None = None
+        peak_rss_mb = 0
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -1149,12 +1261,33 @@ class TestOps:
                 cwd=cwd,
                 env=safe_env,  # Use safe environment with defensive overrides
             )
+
+            # Poll child RSS while waiting for completion
+            async def _poll_rss() -> int:
+                peak = 0
+                pid = proc.pid
+                while proc.returncode is None:
+                    rss = child_rss_mb(pid) if pid else 0
+                    if rss > peak:
+                        peak = rss
+                    await asyncio.sleep(2)
+                # One final sample after exit
+                rss = child_rss_mb(pid) if pid else 0
+                if rss > peak:
+                    peak = rss
+                return peak
+
+            rss_task = asyncio.create_task(_poll_rss())
+
             stdout_bytes, stderr_bytes = await asyncio.wait_for(
                 proc.communicate(), timeout=timeout_sec
             )
             stdout = stdout_bytes.decode(errors="replace")
             stderr = stderr_bytes.decode(errors="replace")
             exit_code = proc.returncode
+
+            # Collect peak RSS (poll task should be done since process exited)
+            peak_rss_mb = await rss_task
 
             # Write artifacts
             stdout_path = artifact_dir / f"{safe_name}.stdout.txt"
@@ -1205,7 +1338,7 @@ class TestOps:
                 # No suggested_action - we don't know the cause, agent should read stderr
                 result.errors = 1
 
-            return (result, cov_artifact)
+            return (result, cov_artifact, peak_rss_mb)
 
         except TimeoutError:
             safe_ctx.cleanup()
@@ -1226,6 +1359,7 @@ class TestOps:
                     workspace_root=target.workspace_root,
                 ),
                 None,
+                peak_rss_mb,
             )
         except OSError as e:
             safe_ctx.cleanup()
@@ -1244,6 +1378,7 @@ class TestOps:
                     workspace_root=target.workspace_root,
                 ),
                 None,
+                peak_rss_mb,
             )
         finally:
             # Always cleanup safe execution context

@@ -1198,3 +1198,123 @@ class TestIntegration:
             )
 
         ctx.cleanup()
+
+
+# =============================================================================
+# Memory Ceiling Injection Tests
+# =============================================================================
+
+
+class TestMemoryCeilingInjection:
+    """Tests that subprocess_memory_limit_mb is injected into language env vars."""
+
+    @pytest.fixture
+    def ceiling_config(self, temp_artifact_dir: Path, temp_workspace: Path) -> SafeExecutionConfig:
+        return SafeExecutionConfig(
+            artifact_dir=temp_artifact_dir,
+            workspace_root=temp_workspace,
+            subprocess_memory_limit_mb=2048,
+        )
+
+    @pytest.fixture
+    def ceiling_ctx(self, ceiling_config: SafeExecutionConfig) -> SafeExecutionContext:
+        return SafeExecutionContext(ceiling_config)
+
+    @pytest.fixture
+    def no_ceiling_ctx(self, base_config: SafeExecutionConfig) -> SafeExecutionContext:
+        """Context with no memory ceiling (default)."""
+        return SafeExecutionContext(base_config)
+
+    # -- Java -Xmx --
+
+    @pytest.mark.parametrize("pack_id", ["java.gradle", "java.maven", "kotlin.gradle", "scala.sbt"])
+    def test_java_xmx_injected(self, ceiling_ctx: SafeExecutionContext, pack_id: str) -> None:
+        env = ceiling_ctx.prepare_environment(pack_id)
+        assert "-Xmx2048m" in env["_JAVA_OPTIONS"]
+
+    def test_gradle_opts_xmx(self, ceiling_ctx: SafeExecutionContext) -> None:
+        env = ceiling_ctx.prepare_environment("java.gradle")
+        assert "-Xmx2048m" in env["GRADLE_OPTS"]
+
+    def test_maven_opts_xmx(self, ceiling_ctx: SafeExecutionContext) -> None:
+        env = ceiling_ctx.prepare_environment("java.maven")
+        assert "-Xmx2048m" in env["MAVEN_OPTS"]
+
+    def test_sbt_opts_xmx(self, ceiling_ctx: SafeExecutionContext) -> None:
+        env = ceiling_ctx.prepare_environment("scala.sbt")
+        assert "-Xmx2048m" in env["SBT_OPTS"]
+
+    def test_java_no_xmx_without_ceiling(self, no_ceiling_ctx: SafeExecutionContext) -> None:
+        env = no_ceiling_ctx.prepare_environment("java.gradle")
+        assert "-Xmx" not in env["GRADLE_OPTS"]
+        assert "-Xmx" not in env["_JAVA_OPTIONS"]
+
+    # -- JavaScript --max-old-space-size --
+
+    def test_js_node_options_with_ceiling(self, ceiling_ctx: SafeExecutionContext) -> None:
+        env = ceiling_ctx.prepare_environment("js.jest")
+        assert "--max-old-space-size=2048" in env["NODE_OPTIONS"]
+
+    def test_js_node_options_default_without_ceiling(
+        self, no_ceiling_ctx: SafeExecutionContext
+    ) -> None:
+        env = no_ceiling_ctx.prepare_environment("js.jest")
+        assert "--max-old-space-size=4096" in env["NODE_OPTIONS"]
+
+    # -- Go GOMEMLIMIT --
+
+    def test_go_gomemlimit_with_ceiling(self, ceiling_ctx: SafeExecutionContext) -> None:
+        env = ceiling_ctx.prepare_environment("go.gotest")
+        assert env["GOMEMLIMIT"] == "2048MiB"
+
+    def test_go_no_gomemlimit_without_ceiling(self, no_ceiling_ctx: SafeExecutionContext) -> None:
+        env = no_ceiling_ctx.prepare_environment("go.gotest")
+        assert "GOMEMLIMIT" not in env
+
+    # -- .NET GC heap limit --
+
+    def test_dotnet_gc_heap_with_ceiling(self, ceiling_ctx: SafeExecutionContext) -> None:
+        env = ceiling_ctx.prepare_environment("csharp.dotnet")
+        expected = hex(2048 * 1024 * 1024)
+        assert env["DOTNET_GCHeapHardLimit"] == expected
+
+    def test_dotnet_no_gc_heap_without_ceiling(
+        self, no_ceiling_ctx: SafeExecutionContext
+    ) -> None:
+        env = no_ceiling_ctx.prepare_environment("csharp.dotnet")
+        assert "DOTNET_GCHeapHardLimit" not in env
+
+    # -- Elixir ERL_FLAGS --
+
+    def test_elixir_erl_flags_with_ceiling(self, ceiling_ctx: SafeExecutionContext) -> None:
+        env = ceiling_ctx.prepare_environment("elixir.exunit")
+        assert env["ERL_FLAGS"] == "+MBs 2048"
+
+    def test_elixir_no_erl_flags_without_ceiling(
+        self, no_ceiling_ctx: SafeExecutionContext
+    ) -> None:
+        env = no_ceiling_ctx.prepare_environment("elixir.exunit")
+        assert "ERL_FLAGS" not in env
+
+    # -- PHP memory_limit --
+
+    def test_php_memory_limit_with_ceiling(self, ceiling_ctx: SafeExecutionContext) -> None:
+        env = ceiling_ctx.prepare_environment("php.phpunit")
+        assert env["PHP_MEMORY_LIMIT"] == "2048M"
+
+    def test_php_memory_limit_unlimited_without_ceiling(
+        self, no_ceiling_ctx: SafeExecutionContext
+    ) -> None:
+        env = no_ceiling_ctx.prepare_environment("php.phpunit")
+        assert env["PHP_MEMORY_LIMIT"] == "-1"
+
+    # -- Languages without memory knobs are unaffected --
+
+    def test_python_unaffected(self, ceiling_ctx: SafeExecutionContext) -> None:
+        env = ceiling_ctx.prepare_environment("python.pytest")
+        # Python has no memory limit env var — ensure no crash and normal keys present
+        assert env["PYTHONDONTWRITEBYTECODE"] == "1"
+
+    def test_rust_unaffected(self, ceiling_ctx: SafeExecutionContext) -> None:
+        env = ceiling_ctx.prepare_environment("rust.cargo_test")
+        assert env["CARGO_TERM_COLOR"] == "never"
