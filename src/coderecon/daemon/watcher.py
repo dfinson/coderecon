@@ -190,6 +190,23 @@ class FileWatcher:
     _dir_scan_task: asyncio.Task[None] | None = field(default=None, init=False)
     # Watched directory set for non-recursive mode
     _watched_dirs: set[Path] = field(default_factory=set, init=False)
+    # Whether this watcher degraded to poll mode due to inotify capacity.
+    _degraded_to_poll: bool = field(default=False, init=False)
+
+    @property
+    def watch_count(self) -> int:
+        """Number of directories currently being watched via inotify."""
+        return len(self._watched_dirs)
+
+    @staticmethod
+    def estimate_watch_count(repo_root: Path) -> int:
+        """Estimate how many inotify watches a repo would need.
+
+        Walks the tree using the same pruning logic as ``_collect_watch_dirs``
+        but only counts — no watches are created.
+        """
+        ignore_checker = IgnoreChecker(repo_root, respect_gitignore=False)
+        return len(_collect_watch_dirs(repo_root, ignore_checker))
 
     def __post_init__(self) -> None:
         """Initialize ignore checker and detect cross-filesystem."""
@@ -351,6 +368,22 @@ class FileWatcher:
                             logger.info("watcher_restart_requested", reason="new_directories")
                             break  # Break inner loop to re-collect dirs
                 except asyncio.CancelledError:
+                    raise
+                except OSError as e:
+                    if e.errno == 28:  # ENOSPC — out of inotify watches
+                        logger.warning(
+                            "inotify_enospc_fallback",
+                            repo_root=str(self.repo_root),
+                            watch_dirs=len(watch_dirs),
+                        )
+                        self._degraded_to_poll = True
+                        # Cancel debounce task before switching loops
+                        if self._debounce_task and not self._debounce_task.done():
+                            self._debounce_task.cancel()
+                            with contextlib.suppress(asyncio.CancelledError):
+                                await self._debounce_task
+                        self._watch_task = asyncio.create_task(self._poll_loop())
+                        return  # Exit inotify loop; poll loop takes over
                     raise
                 except Exception as e:
                     if self._stop_event.is_set():

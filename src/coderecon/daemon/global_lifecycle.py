@@ -106,24 +106,20 @@ async def run_global_server(
     registry = CatalogRegistry(catalog)
     daemon = GlobalDaemon(registry)
 
-    # Activate all registered repos
-    for repo in registry.list_repos():
-        worktrees = registry.list_worktrees(repo.id)  # type: ignore[arg-type]
-        main_wt = next((wt for wt in worktrees if wt.is_main), None)
-        if main_wt is None and worktrees:
-            main_wt = worktrees[0]
-        if main_wt:
-            storage_dir = registry.get_storage_dir(repo)
-            await daemon.activate_repo(
-                name=repo.name,
-                repo_root=Path(main_wt.root_path),
-                storage_dir=storage_dir,
-                repo_id=repo.id,  # type: ignore[arg-type]
-                dev_mode=dev_mode,
-            )
+    # No eager repo activation — repos are lazily activated on first MCP
+    # request via _DynamicMcpRouter → lazy_activate_repo().  This avoids
+    # loading 95+ SQLite indices and tantivy stores at boot when only a
+    # handful of repos will actually receive MCP connections.
+    log.info("repos_registered", count=len(registry.list_repos()))
 
-    # Queue incremental reindexes for files changed while daemon was down
+    # Startup scans are a no-op with zero active slots, but harmless to call.
     await daemon.queue_startup_scans()
+
+    # Start idle-eviction loop for non-main worktrees.
+    from coderecon.config.loader import load_config as _load_cfg
+
+    _cfg = _load_cfg(Path.cwd())
+    daemon.start_eviction_loop(_cfg.server.worktree_idle_timeout_sec)
 
     # Build global Starlette app
     app = daemon.build_app(dev_mode=dev_mode)
