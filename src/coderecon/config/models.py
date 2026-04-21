@@ -94,6 +94,11 @@ class ServerConfig(BaseModel):
         description="Debounce window before triggering reindex. "
         "Lower values may cause excessive reindexing during rapid edits.",
     )
+    worktree_idle_timeout_sec: float = Field(
+        default=300.0,
+        description="Seconds of inactivity before a non-main worktree's watcher "
+        "and MCP server are torn down. Set to 0 to disable eviction.",
+    )
 
     @field_validator("port")
     @classmethod
@@ -241,6 +246,17 @@ class TestingConfig(BaseModel):
         default=300,
         description="Default test timeout (5 min). "
         "RISK: Too low may kill slow integration tests; too high wastes CI time.",
+    )
+    memory_reserve_mb: int = Field(
+        default=1024,
+        description="Memory (MB) to keep free. Test runner pauses launching new "
+        "targets when available memory drops below this threshold.",
+    )
+    subprocess_memory_limit_mb: int | None = Field(
+        default=None,
+        description="Per-subprocess memory ceiling (MB). Injected via runtime-specific "
+        "env vars (e.g. -Xmx for JVM, --max-old-space-size for Node). "
+        "If None, computed dynamically from available memory at launch time.",
     )
 
 
