@@ -38,16 +38,26 @@ DEF_RANKER_FEATURES = [
     "graph_is_implementor", "graph_is_doc_xref",
     "graph_seed_rank", "graph_caller_tier",
     "sym_agent_seed", "sym_auto_seed", "sym_task_extracted", "sym_path_mention",
+    "sym_pin",
     "import_forward", "import_reverse", "import_barrel", "import_test_pair",
     "retriever_hits",
+    # Kind one-hot
+    "kind_function", "kind_class", "kind_method", "kind_variable", "kind_interface",
     "object_size_lines", "path_depth", "nesting_depth",
-    "hub_score", "is_test", "is_endpoint", "test_coverage_count",
+    "hub_score", "is_test", "is_barrel", "is_endpoint", "test_coverage_count",
     "has_docstring", "has_decorators", "has_return_type", "has_parent_scope",
     "has_signature",
+    # Structural links
+    "shares_file_with_seed", "is_callee_of_top", "is_imported_by_top",
     "from_coverage",
+    # Harvester source flags
+    "from_term_match", "from_explicit", "from_graph",
+    # Artifact kind one-hot
+    "artifact_code", "artifact_test", "artifact_config", "artifact_doc", "artifact_build",
     "seed_path_distance", "same_package", "package_distance",
     "rrf_score",
-    "query_len", "has_identifier", "has_path", "term_count",
+    "query_len", "has_identifier", "has_path", "identifier_density",
+    "has_numbers", "has_quoted_strings", "term_count",
 ]
 
 # -- File Ranker features ------------------------------------------------
@@ -66,11 +76,13 @@ FILE_RANKER_FEATURES = [
     "max_retriever_hits", "sum_retriever_hits",
     # Coverage
     "any_from_coverage",
+    # Structural links
+    "any_shares_file_with_seed", "any_callee_of_top", "any_imported_by_top",
     # RRF
     "max_rrf_score",
     # File-level metadata
     "num_defs_in_file", "mean_hub_score", "max_hub_score",
-    "is_test", "path_depth",
+    "is_test", "is_barrel", "path_depth",
     "any_docstring", "any_decorators", "any_return_type",
     # Locality
     "min_seed_path_distance", "same_package",
@@ -112,8 +124,11 @@ _LOAD_COLS = [
     "graph_edge_type", "graph_seed_rank", "graph_caller_max_tier",
     "symbol_source", "import_direction", "from_coverage", "retriever_hits",
     "object_size_lines", "path_depth", "nesting_depth",
-    "hub_score", "is_test", "is_endpoint", "test_coverage_count",
+    "hub_score", "is_test", "is_barrel", "is_endpoint", "test_coverage_count",
+    "artifact_kind",
     "has_docstring", "has_decorators", "has_return_type", "has_parent_scope",
+    "shares_file_with_seed", "is_callee_of_top", "is_imported_by_top",
+    "from_coverage", "from_term_match", "from_explicit", "from_graph",
     "seed_path_distance", "same_package", "package_distance",
     "rrf_score",
     "signature_text", "parent_dir",
@@ -156,6 +171,24 @@ def _prepare_def_features(df: pd.DataFrame) -> pd.DataFrame:
     df["import_reverse"] = df["import_direction"] == "reverse"
     df["import_barrel"] = df["import_direction"] == "barrel"
     df["import_test_pair"] = df["import_direction"] == "test_pair"
+
+    # Symbol source → pin
+    df["sym_pin"] = df["symbol_source"] == "pin"
+
+    # Kind one-hot
+    df["kind_function"] = df["kind"] == "function"
+    df["kind_class"] = df["kind"] == "class"
+    df["kind_method"] = df["kind"] == "method"
+    df["kind_variable"] = df["kind"] == "variable"
+    df["kind_interface"] = df["kind"] == "interface"
+
+    # Artifact kind one-hot
+    ak = df.get("artifact_kind", pd.Series(dtype=object)).fillna("code")
+    df["artifact_code"] = ak == "code"
+    df["artifact_test"] = ak == "test"
+    df["artifact_config"] = ak == "config"
+    df["artifact_doc"] = ak == "doc"
+    df["artifact_build"] = ak == "build"
 
     # Has signature
     df["has_signature"] = df.get("signature_text", pd.Series(dtype=object)).notna()
@@ -209,6 +242,10 @@ def _aggregate_file_features(df: pd.DataFrame) -> pd.DataFrame:
         sum_retriever_hits=("retriever_hits", "sum"),
         # Coverage
         any_from_coverage=("from_coverage", "any"),
+        # Structural links
+        any_shares_file_with_seed=("shares_file_with_seed", "any"),
+        any_callee_of_top=("is_callee_of_top", "any"),
+        any_imported_by_top=("is_imported_by_top", "any"),
         # RRF
         max_rrf_score=("rrf_score", "max"),
         # File metadata
@@ -216,6 +253,7 @@ def _aggregate_file_features(df: pd.DataFrame) -> pd.DataFrame:
         mean_hub_score=("hub_score", "mean"),
         max_hub_score=("hub_score", "max"),
         is_test=("is_test", "any"),
+        is_barrel=("is_barrel", "any"),
         any_docstring=("has_docstring", "any"),
         any_decorators=("has_decorators", "any"),
         any_return_type=("has_return_type", "any"),

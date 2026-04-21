@@ -7,15 +7,21 @@ Usage:
     cpl-lab pr-checkout [--set SET]
     cpl-lab index-worktrees [--set SET]
     cpl-lab pr-import [--set SET] [--repo ID] [--max-instances N]
+    cpl-lab non-ok-queries [--set SET] [--repo ID] [--force]
     cpl-lab collect [--set SET] [--repo ID]
     cpl-lab merge [--what {gt,signals,all}]
     cpl-lab train [--model {ranker,cutoff,gate,all}]
     cpl-lab eval [--experiment YAML]
     cpl-lab validate [--repo ID] [--set SET]
     cpl-lab status
+    cpl-lab splade-bakeoff [--repo ID] [--model KEY] [--max-queries N]
+    cpl-lab ce-bakeoff [--repo ID] [--model KEY] [--top-k N] [--test-body]
+    cpl-lab ce-export [--output-dir DIR]
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import click
 
@@ -177,9 +183,11 @@ def index_worktrees(ctx: click.Context, repo_set: str, repo: str | None) -> None
               help="Limit imported instances (0=all).")
 @click.option("--llm-model", default=None,
               help="LLM model for query generation.")
+@click.option("--workers", type=int, default=8,
+              help="Parallel workers for instance processing.")
 @click.pass_context
 def pr_import(ctx: click.Context, repo_set: str, repo: str | None,
-              max_instances: int, llm_model: str | None) -> None:
+              max_instances: int, llm_model: str | None, workers: int) -> None:
     """Import PR instances: diff → GT defs + LLM query generation."""
     from cpl_lab.pipeline.pr_import import run_pr_import
 
@@ -192,7 +200,38 @@ def pr_import(ctx: click.Context, repo_set: str, repo: str | None,
         repo_set=repo_set,
         repo=repo,
         max_instances=max_instances,
+        workers=workers,
         verbose=ctx.obj["verbose"],
+    )
+
+
+# ── non-ok-queries ───────────────────────────────────────────────
+
+
+@main.command("non-ok-queries")
+@click.option("--set", "repo_set", type=click.Choice(SETS), default="all",
+              help="Which repo set to generate non-OK queries for.")
+@click.option("--repo", default=None, help="Single repo ID.")
+@click.option("--llm-model", default=None,
+              help="LLM model (default: gpt-4.1-mini — needs reasoning capability).")
+@click.option("--force", is_flag=True, help="Overwrite existing non_ok_queries.json.")
+@click.option("--workers", default=1, help="Concurrent Copilot sessions (default 1).")
+@click.pass_context
+def non_ok_queries(ctx: click.Context, repo_set: str, repo: str | None,
+                   llm_model: str | None, force: bool, workers: int) -> None:
+    """Generate UNSAT/BROAD/AMBIG queries per repo (agentic, post pr-import)."""
+    from cpl_lab.pipeline.non_ok_queries import run_non_ok_queries
+
+    cfg = ctx.obj["config"]
+    run_non_ok_queries(
+        data_dir=cfg["data_dir"],
+        clones_dir=cfg["clones_dir"],
+        llm_model=llm_model or "openai/gpt-4.1-mini",
+        repo_set=repo_set,
+        repo=repo,
+        force=force,
+        verbose=ctx.obj["verbose"],
+        workers=workers,
     )
 
 
@@ -277,7 +316,7 @@ def train(ctx: click.Context, output_dir: str | None, skip_merge: bool) -> None:
 
 
 @main.command("eval")
-@click.option("--experiment", default=None, help="Experiment set: 'ranking' (default) or 'llm'.")
+@click.option("--experiment", default=None, help="Experiment set: 'ranking' (default).")
 @click.pass_context
 def eval_cmd(ctx: click.Context, experiment: str | None) -> None:
     """Run Inspect AI evaluation of the ranking pipeline."""
@@ -338,6 +377,80 @@ def validate(ctx: click.Context, repo: str | None, repo_set: str) -> None:
     click.echo(f"\nValidated: {ok} passed, {failed} failed")
     if failed:
         raise SystemExit(1)
+
+
+# ── splade-bakeoff ───────────────────────────────────────────────
+
+
+@main.command("splade-bakeoff")
+@click.option("--repo", multiple=True, help="Specific repo IDs (repeatable). Default: auto-discover.")
+@click.option("--model", multiple=True,
+              help="Model keys to test (repeatable). Default: all three.")
+@click.option("--max-queries", type=int, default=0,
+              help="Max queries per repo (0=all).")
+@click.pass_context
+def splade_bakeoff(ctx: click.Context, repo: tuple[str, ...], model: tuple[str, ...],
+                   max_queries: int) -> None:
+    """Run SPLADE model bakeoff — compare sparse encoders on code scaffolds."""
+    from cpl_lab.experiments.splade_bakeoff.run import run_bakeoff
+
+    cfg = ctx.obj["config"]
+    output_dir = cfg["workspace"] / "experiments" / "splade_bakeoff"
+    run_bakeoff(
+        data_dir=cfg["data_dir"],
+        clones_dir=cfg["clones_dir"],
+        output_dir=output_dir,
+        repo_ids=list(repo) if repo else None,
+        models=list(model) if model else None,
+        max_queries_per_repo=max_queries,
+        verbose=ctx.obj["verbose"],
+    )
+
+
+# ── ce-bakeoff ───────────────────────────────────────────────────
+
+
+@main.command("ce-bakeoff")
+@click.option("--repo", multiple=True,
+              help="Specific logical repo IDs (repeatable). Default: auto-discover.")
+@click.option("--model", multiple=True,
+              help="Model keys to test (repeatable). Default: all three.")
+@click.option("--top-k", multiple=True, type=int,
+              help="Candidate pool sizes (repeatable). Default: 20,50,100.")
+@click.option("--test-body", is_flag=True,
+              help="Also test scaffold+body representation.")
+@click.option("--max-queries", type=int, default=0,
+              help="Max queries per repo (0=all).")
+@click.pass_context
+def ce_bakeoff(ctx: click.Context, repo: tuple[str, ...], model: tuple[str, ...],
+               top_k: tuple[int, ...], test_body: bool, max_queries: int) -> None:
+    """Run cross-encoder reranking bakeoff — compare rerankers on code scaffolds."""
+    from cpl_lab.experiments.cross_encoder_rerank.run import run_ce_bakeoff
+
+    cfg = ctx.obj["config"]
+    output_dir = cfg["workspace"] / "experiments" / "cross_encoder_rerank"
+    run_ce_bakeoff(
+        data_dir=cfg["data_dir"],
+        clones_dir=cfg["clones_dir"],
+        output_dir=output_dir,
+        repo_ids=list(repo) if repo else None,
+        models=list(model) if model else None,
+        top_k_values=list(top_k) if top_k else None,
+        test_body=test_body,
+        max_queries_per_repo=max_queries,
+        verbose=ctx.obj["verbose"],
+    )
+
+
+@main.command("ce-export")
+@click.option("--output-dir", type=click.Path(path_type=Path), default=None,
+              help="Output directory for ONNX model + tokenizer.")
+@click.pass_context
+def ce_export(ctx: click.Context, output_dir: Path | None) -> None:
+    """Export MiniLM-L-6-v2 cross-encoder to ONNX for vendoring into coderecon."""
+    from cpl_lab.experiments.cross_encoder_rerank.export_onnx import export
+
+    export(output_dir)
 
 
 # ── status ───────────────────────────────────────────────────────

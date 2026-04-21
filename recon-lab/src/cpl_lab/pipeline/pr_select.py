@@ -18,7 +18,7 @@ import subprocess
 import time
 from pathlib import Path
 from typing import Any
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 import click
@@ -51,23 +51,34 @@ def _gh_headers() -> dict[str, str]:
     }
 
 
-def _gh_get(url: str, headers: dict[str, str]) -> list[dict[str, Any]]:
+def _gh_get(url: str, headers: dict[str, str], *, retries: int = 3) -> list[dict[str, Any]]:
     """GET a single page from the GitHub API, returning parsed JSON."""
-    req = Request(url, headers=headers)
-    try:
-        with urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read())
-    except HTTPError as exc:
-        if exc.code == 403:
-            # Rate limit — wait and retry once
-            reset = exc.headers.get("X-RateLimit-Reset")
-            if reset:
-                wait = max(int(reset) - int(time.time()), 1)
-                click.echo(f"    Rate limited, waiting {wait}s...")
-                time.sleep(min(wait, 60))
-                with urlopen(req, timeout=30) as resp:
-                    return json.loads(resp.read())
-        raise
+    for attempt in range(retries):
+        req = Request(url, headers=headers)
+        try:
+            with urlopen(req, timeout=30) as resp:
+                return json.loads(resp.read())
+        except HTTPError as exc:
+            if exc.code == 403:
+                # Rate limit — wait and retry
+                reset = exc.headers.get("X-RateLimit-Reset")
+                if reset:
+                    wait = max(int(reset) - int(time.time()), 1)
+                    click.echo(f"    Rate limited, waiting {wait}s...")
+                    time.sleep(min(wait, 60))
+                    continue
+            if exc.code in (502, 503, 504) and attempt < retries - 1:
+                click.echo(f"    HTTP {exc.code}, retrying in {2 ** attempt}s...")
+                time.sleep(2 ** attempt)
+                continue
+            raise
+        except (URLError, OSError) as exc:
+            if attempt < retries - 1:
+                click.echo(f"    Connection error ({exc}), retrying in {2 ** attempt}s...")
+                time.sleep(2 ** attempt)
+                continue
+            raise
+    return []  # unreachable, but keeps mypy happy
 
 
 def _fetch_merged_prs(
@@ -106,11 +117,10 @@ def _git_diff(clone_dir: Path, base: str, merge: str) -> str | None:
             ["git", "diff", f"{base}..{merge}"],
             cwd=clone_dir,
             capture_output=True,
-            text=True,
             check=True,
             timeout=60,
         )
-        return result.stdout
+        return result.stdout.decode("utf-8", errors="replace")
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return None
 
@@ -174,16 +184,13 @@ def select_prs_for_repo(
         number = pr["number"]
         title = (pr.get("title") or "").strip()
         body = (pr.get("body") or "").strip()
-        changed = pr.get("changed_files", 0)
         base_sha = pr.get("base", {}).get("sha")
         merge_sha = pr.get("merge_commit_sha")
 
-        # Filter: must have title, body, and reasonable size
+        # Filter: must have title, body, and shas
         if not title:
             continue
         if len(body) < min_body_chars:
-            continue
-        if changed < min_files or changed > max_files:
             continue
         if not base_sha or not merge_sha:
             continue
@@ -210,6 +217,12 @@ def select_prs_for_repo(
         except Exception:
             continue
         if not file_diffs:
+            continue
+
+        # Filter: reasonable number of changed files (computed locally
+        # since the list endpoint doesn't populate changed_files).
+        changed = len(file_diffs)
+        if changed < min_files or changed > max_files:
             continue
 
         # Check that diff touches at least 1 indexed def.
@@ -239,7 +252,7 @@ def select_prs_for_repo(
             "title": title,
             "body": body[:5000],
             "diff_text": diff_text,
-            "files_changed": changed,
+            "files_changed": len(file_diffs),
             "gt_def_count": len(gt_defs) if isinstance(gt_defs, list) else 0,
         })
 
@@ -283,6 +296,7 @@ def run_pr_select(
                 existing.add(row["instance_id"])
 
     total_new = 0
+    failed_repos: list[str] = []
 
     with open(out_path, "a") as f:
         for i, rid in enumerate(sorted(repo_ids), 1):
@@ -292,12 +306,17 @@ def run_pr_select(
                 click.echo(f"  Skipping — clone not found")
                 continue
 
-            instances = select_prs_for_repo(
-                rid, cd, headers,
-                prs_per_repo=prs_per_repo,
-                max_files=max_files,
-                verbose=verbose,
-            )
+            try:
+                instances = select_prs_for_repo(
+                    rid, cd, headers,
+                    prs_per_repo=prs_per_repo,
+                    max_files=max_files,
+                    verbose=verbose,
+                )
+            except Exception as exc:
+                click.echo(f"  ERROR: {exc}")
+                failed_repos.append(rid)
+                continue
 
             for inst in instances:
                 if inst["instance_id"] in existing:
@@ -306,5 +325,7 @@ def run_pr_select(
                 existing.add(inst["instance_id"])
                 total_new += 1
 
+    if failed_repos:
+        click.echo(f"\n{len(failed_repos)} repos failed: {', '.join(failed_repos)}")
     click.echo(f"\nDone: {total_new} new PR instances written to {out_path}")
     click.echo(f"Total in file: {len(existing)}")

@@ -1,4 +1,4 @@
-"""LLM-backed adaptation for SWE-bench instances.
+"""LLM-backed query generation for PR instances.
 
 Each LLM call does exactly ONE thing.  gpt-4.1-mini is cheap but not
 smart — we never ask it to juggle multiple output types in one shot.
@@ -6,17 +6,10 @@ smart — we never ask it to juggle multiple output types in one shot.
 Call decomposition:
   1. ``_classify_task``          — complexity + confidence + notes  (1 call)
   2. ``_generate_ok_query``      — one query for one type           (8 calls)
-  3. ``_generate_unsat_query``   — generate + validate pair         (2×2 = 4+ calls)
-  4. ``_generate_broad_query``   — LLM generate + RRF validate      (2×1+ calls)
-  5. ``_generate_ambig_query``   — LLM generate + RRF validate      (2×1+ calls)
-Total: 17+ calls per instance.  Non-OK types retry until validated.
+Total: 9 calls per instance.
 
-BROAD/AMBIG validation runs the generated query through the in-process
-RRF pipeline (harvesters + RRF fusion, no trained models) and checks
-post-hoc statistics against a *calibration baseline* derived from the 8
-OK queries for this instance.  No hardcoded thresholds — "scattered"
-means more scattered than any OK query; "split" means more balanced
-than any OK query.
+Non-OK queries (UNSAT/BROAD/AMBIG) are deferred to a separate
+per-repo agentic task that can reason about repository structure.
 """
 
 from __future__ import annotations
@@ -173,31 +166,16 @@ def adapt_instance(
     index_db: Path,
     clone_dir: Path,
     minimum_sufficient_defs: list[dict[str, Any]] | None = None,
-    prior_broad: list[str] | None = None,
-    prior_ambig: list[str] | None = None,
 ) -> AdaptationResult:
     """Produce all GT fields for one instance via focused single-purpose LLM calls.
 
-    17+ calls total:
-      1 classify  +  8 OK queries  +  2 UNSAT (generate+validate pairs)
-      +  2 BROAD (LLM generate + RRF validate)  +  2 AMBIG (LLM + RRF)
-    Every LLM call produces exactly one output.  Non-OK types retry until validated.
+    9 calls total:  1 classify  +  8 OK queries.
+    Every LLM call produces exactly one output.
 
-    BROAD/AMBIG validation constructs an in-process AppContext from *clone_dir*
-    and runs the query through the RRF pipeline (harvesters + RRF fusion, no
-    trained models) to verify the retrieval output actually exhibits the
-    expected scattering (BROAD) or multi-cluster split (AMBIG).
-
-    *prior_broad* / *prior_ambig* are lists of previously generated query
-    texts for this repo (across other instances).  Passed to the LLM as
-    anti-examples to encourage diversity — the same 12 repos generate
-    thousands of instances, so without this the LLM recycles the same
-    cross-cutting concepts.
+    Non-OK queries (UNSAT/BROAD/AMBIG) are deferred to a separate
+    per-repo agentic task.
     """
-    from coderecon.mcp.context import AppContext
-
-    prior_broad = prior_broad or []
-    prior_ambig = prior_ambig or []
+    from concurrent.futures import ThreadPoolExecutor
 
     # Shared context block (reused across all calls)
     context = _build_context(
@@ -209,62 +187,22 @@ def adapt_instance(
         minimum_sufficient_defs=minimum_sufficient_defs,
     )
 
-    # Call 1: classify task
-    classification = _classify_task(model, context)
-
-    # Calls 2-9: one OK query per type
-    ok_queries: list[dict[str, Any]] = []
-    for query_type in OK_QUERY_TYPES:
-        q = _generate_ok_query(model, context, query_type)
-        ok_queries.append(q)
-
-    # Extract index facts once — used for UNSAT / BROAD / AMBIG generation
-    index_facts = _extract_index_facts(index_db)
-
-    # Build in-process AppContext for BROAD/AMBIG RRF validation.
-    # Cheap — just opens the existing SQLite + Tantivy, no re-indexing.
-    recon_dir = clone_dir / ".recon"
-    app_ctx = AppContext.standalone(
-        repo_root=clone_dir,
-        db_path=recon_dir / "index.db",
-        tantivy_path=recon_dir / "tantivy",
-    )
-    asyncio.run(app_ctx.coordinator.load_existing())
-
-    # Calibrate: run OK queries through RRF to establish what "focused"
-    # looks like on this repo.  BROAD/AMBIG gates use this as baseline.
-    baseline = _calibrate_ok_baseline(ok_queries, app_ctx)
-
-    non_ok_queries: list[dict[str, Any]] = []
-    for variant in (1, 2):
-        # UNSAT — LLM fact-negation + LLM fact-checker
-        q = _generate_unsat_query(model, context, index_facts, variant)
-        non_ok_queries.append(q)
-
-    for variant in (1, 2):
-        # BROAD — LLM generate + RRF validate (must exceed OK baseline)
-        q = _generate_broad_query(
-            model, context, index_facts, variant, app_ctx, baseline,
-            prior_queries=prior_broad,
-        )
-        non_ok_queries.append(q)
-        prior_broad.append(q["query_text"])
-
-    for variant in (1, 2):
-        # AMBIG — LLM generate + RRF validate (must show balanced split beyond OK)
-        q = _generate_ambig_query(
-            model, context, index_facts, variant, app_ctx, baseline,
-            prior_queries=prior_ambig,
-        )
-        non_ok_queries.append(q)
-        prior_ambig.append(q["query_text"])
+    # Calls 1-9 in parallel: classify + 8 OK queries
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        classify_future = pool.submit(_classify_task, model, context)
+        ok_futures = [
+            pool.submit(_generate_ok_query, model, context, qt)
+            for qt in OK_QUERY_TYPES
+        ]
+        classification = classify_future.result()
+        ok_queries = [f.result() for f in ok_futures]
 
     return AdaptationResult(
         task_complexity=classification["task_complexity"],
         confidence=classification["confidence"],
         solve_notes=classification["solve_notes"],
         queries=ok_queries,
-        non_ok_queries=non_ok_queries,
+        non_ok_queries=[],
     )
 
 
@@ -665,21 +603,16 @@ async def _rrf_stats_with_hints(
 def _check_broad(stats: dict[str, Any], baseline: OkBaseline) -> str | None:
     """BROAD gate — must be more scattered than every OK query.
 
-    Two separation conditions (both required):
-      - dir_count exceeds the max seen in ANY OK query
-      - elbow-n exceeds the max seen in ANY OK query
-    If either fails, the query isn't distinguishably more scattered
-    than a focused query on this repo.
+    Condition: dir_count exceeds the max seen in ANY OK query.
+    Elbow-n is intentionally excluded: OK queries run with seeds/pins
+    which amplify recall, so seedless BROAD queries always have smaller
+    elbow-n regardless of query quality.  Directory scatter is the
+    correct dispersion signal.
     """
     if stats["dir_count"] <= baseline.max_dir_count:
         return (
             f"dir_count {stats['dir_count']} is within OK range "
             f"(OK max={baseline.max_dir_count})"
-        )
-    if stats["n"] <= baseline.max_elbow_n:
-        return (
-            f"elbow n={stats['n']} is within OK range "
-            f"(OK max={baseline.max_elbow_n})"
         )
     return None
 
@@ -767,7 +700,7 @@ def _generate_broad_query(
     baseline: OkBaseline,
     *,
     prior_queries: list[str] | None = None,
-    max_retries: int = 5,
+    max_retries: int = 2,
 ) -> dict[str, Any]:
     """Generate one BROAD query using LLM generation + RRF validation.
 
@@ -898,7 +831,7 @@ def _generate_ambig_query(
     baseline: OkBaseline,
     *,
     prior_queries: list[str] | None = None,
-    max_retries: int = 5,
+    max_retries: int = 2,
 ) -> dict[str, Any]:
     """Generate one AMBIG query using LLM generation + RRF validation.
 
@@ -1183,7 +1116,7 @@ def _call_llm_json(
         else:
             logger.error("Azure: _get_azure_token() returned None")
 
-    raise RuntimeError("No working LLM transport found for SWE-bench adaptation")
+    raise RuntimeError("No working LLM transport found for query generation")
 
 
 def _parse_json_object(text: str) -> dict[str, Any]:

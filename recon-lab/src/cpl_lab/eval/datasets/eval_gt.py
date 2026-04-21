@@ -1,4 +1,4 @@
-"""SWE-bench ground truth dataset for Inspect AI evaluation.
+"""Ground truth dataset for Inspect AI evaluation.
 
 Returns a ``Dataset`` of ``Sample`` objects for use with ``@task``.
 
@@ -26,7 +26,7 @@ def _def_key(d: dict) -> str:
 def eval_gt_dataset(
     data_dir: str = "~/.recon/recon-lab/data",
 ) -> Dataset:
-    """Load SWE-bench ground truth from all available indexed instances.
+    """Load ground truth from all available indexed instances.
 
     Args:
         data_dir: Root data directory (default ``~/.recon/recon-lab/data``).

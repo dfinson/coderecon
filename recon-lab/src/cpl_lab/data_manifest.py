@@ -76,3 +76,17 @@ def clone_dir_for_dir(repo_dir: Path, clones_dir: Path) -> Path | None:
     from cpl_lab.pipeline.clone import clone_dir_for as resolve_manifest_clone_dir
 
     return resolve_manifest_clone_dir(repo_dir.name, clones_dir)
+
+
+def main_clone_dir_for_dir(repo_dir: Path, clones_dir: Path) -> Path | None:
+    """Resolve the **main** repo clone directory (the one with index.db).
+
+    For PR-instance worktrees the manifest's ``clone_dir`` points at the
+    instance worktree which shares the main repo's index.  This helper
+    always resolves via ``logical_repo_id`` → ``REPO_MANIFEST`` so we get
+    the main repo that owns ``.recon/index.db``.
+    """
+    from cpl_lab.pipeline.clone import clone_dir_for as resolve_manifest_clone_dir
+
+    logical_id = logical_repo_id_for_dir(repo_dir)
+    return resolve_manifest_clone_dir(logical_id, clones_dir)

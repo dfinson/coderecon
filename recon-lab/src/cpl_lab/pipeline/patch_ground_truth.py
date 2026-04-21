@@ -1,6 +1,6 @@
 """Deterministic patch-to-definition mapping helpers.
 
-Maps SWE-bench patch hunks to indexed definitions.  Only produces
+Maps patch hunks to indexed definitions.  Only produces
 ``minimum_sufficient_defs`` (definitions whose spans overlap a changed
 hunk).  Labels are binary: relevant (1) vs irrelevant (0).
 """
@@ -104,15 +104,16 @@ def parse_unified_diff(diff_text: str) -> list[FileDiff]:
 
 def map_hunks_to_defs(
     file_diffs: list[FileDiff],
-    index_db: Path,
+    worktree_root: Path,
 ) -> list[DefEntry]:
-    """Map changed hunks to definitions in the index.
+    """Map changed hunks to definitions via tree-sitter parsing.
 
-    Returns only minimum_sufficient defs — definitions whose spans
-    overlap a changed hunk.  Binary labelling: relevant vs irrelevant.
+    Parses each changed file directly from the worktree checkout so that
+    definitions reflect the exact commit the worktree is at — no index.db
+    dependency.  Returns only minimum_sufficient defs (definitions whose
+    spans overlap a changed hunk).
     """
-    con = sqlite3.connect(str(index_db))
-    cur = con.cursor()
+    from coderecon.index._internal.parsing.service import tree_sitter_service
 
     min_suff: list[DefEntry] = []
 
@@ -120,36 +121,36 @@ def map_hunks_to_defs(
         if fd.is_deleted:
             continue
 
-        all_defs_in_file = cur.execute(
-            """
-            SELECT d.name, d.kind, d.start_line, d.end_line
-            FROM def_facts d
-            JOIN files f ON d.file_id = f.id
-            WHERE f.path = ?
-            ORDER BY d.start_line
-            """,
-            (fd.path,),
-        ).fetchall()
+        file_path = worktree_root / fd.path
+        if not file_path.exists():
+            continue
 
-        if not all_defs_in_file:
+        try:
+            result = tree_sitter_service.parse(file_path)
+            symbols = tree_sitter_service.extract_symbols(result)
+        except (ValueError, OSError):
+            # Unsupported language or unreadable file — skip silently
+            continue
+
+        if not symbols:
             continue
 
         changed_def_keys: set[tuple[str, str, int]] = set()
 
         for hunk in fd.hunks:
-            for name, kind, start, end in all_defs_in_file:
-                if start <= hunk.end_line and end >= hunk.start_line:
-                    key = (name, kind, start)
+            for sym in symbols:
+                if sym.line <= hunk.end_line and sym.end_line >= hunk.start_line:
+                    key = (sym.name, sym.kind, sym.line)
                     if key in changed_def_keys:
                         continue
                     changed_def_keys.add(key)
                     min_suff.append(
                         DefEntry(
                             path=fd.path,
-                            name=name,
-                            kind=kind,
-                            start_line=start,
-                            end_line=end,
+                            name=sym.name,
+                            kind=sym.kind,
+                            start_line=sym.line,
+                            end_line=sym.end_line,
                             reason=(
                                 "Definition overlaps with changed hunk "
                                 f"(lines {hunk.start_line}-{hunk.end_line})"
@@ -157,7 +158,6 @@ def map_hunks_to_defs(
                         )
                     )
 
-    con.close()
     return min_suff
 
 

@@ -54,8 +54,10 @@ _SIGNALS_SCHEMA = pa.schema([
     pa.field("has_parent_scope", pa.bool_()),
     pa.field("hub_score", pa.float64()),
     pa.field("is_test", pa.bool_()),
+    pa.field("is_barrel", pa.bool_()),
     pa.field("is_endpoint", pa.bool_()),
     pa.field("test_coverage_count", pa.int64()),
+    pa.field("artifact_kind", pa.string()),
     # Term match signal
     pa.field("term_match_count", pa.int64()),
     pa.field("term_total_matches", pa.int64()),
@@ -69,8 +71,16 @@ _SIGNALS_SCHEMA = pa.schema([
     pa.field("symbol_source", pa.string()),
     # Import signal
     pa.field("import_direction", pa.string()),
+    # Structural link signals
+    pa.field("shares_file_with_seed", pa.bool_()),
+    pa.field("is_callee_of_top", pa.bool_()),
+    pa.field("is_imported_by_top", pa.bool_()),
     # Coverage expansion
     pa.field("from_coverage", pa.bool_()),
+    # Harvester source flags
+    pa.field("from_term_match", pa.bool_()),
+    pa.field("from_explicit", pa.bool_()),
+    pa.field("from_graph", pa.bool_()),
     # Agreement
     pa.field("retriever_hits", pa.int64()),
     # RRF score
@@ -205,7 +215,7 @@ def _parse_raw_task_jsons(gt_dir: Path) -> tuple[list[dict[str, Any]], dict[str,
 # ("progress", repo_id, queries_done, queries_total)
 # ("done", repo_id, summary_dict)
 
-def _worker(args: tuple[str, str, str, str], queue: mp.Queue) -> None:  # type: ignore[type-arg]
+def _worker(args: tuple[str, str, str, str, str], queue: mp.Queue) -> None:  # type: ignore[type-arg]
     """Collect signals for one repo, posting progress to *queue*."""
     repo_id = args[0]
     try:
@@ -217,9 +227,11 @@ def _worker(args: tuple[str, str, str, str], queue: mp.Queue) -> None:  # type: 
         }))
 
 
-def _worker_inner(args: tuple[str, str, str, str], queue: mp.Queue) -> None:  # type: ignore[type-arg]
-    repo_id, data_dir_s, clone_dir_s, extra_path = args
-    data_dir, clone_dir = Path(data_dir_s), Path(clone_dir_s)
+def _worker_inner(args: tuple[str, str, str, str, str], queue: mp.Queue) -> None:  # type: ignore[type-arg]
+    repo_id, data_dir_s, main_clone_dir_s, instance_clone_dir_s, extra_path = args
+    data_dir = Path(data_dir_s)
+    main_clone_dir = Path(main_clone_dir_s)
+    instance_clone_dir = Path(instance_clone_dir_s)
 
     for p in extra_path.split(os.pathsep):
         if p and p not in sys.path:
@@ -261,9 +273,17 @@ def _worker_inner(args: tuple[str, str, str, str], queue: mp.Queue) -> None:  # 
     from coderecon.mcp.context import AppContext
     from coderecon.mcp.tools.recon.raw_signals import raw_signals_pipeline
 
-    cp = clone_dir / ".recon"
-    ctx = AppContext.standalone(repo_root=clone_dir, db_path=cp / "index.db",
-                                tantivy_path=cp / "tantivy")
+    # index.db and tantivy live in the main repo's .recon/;
+    # repo_root points at the instance worktree for correct file reads.
+    # worktree_name enables the overlay so worktree-specific files shadow main.
+    recon_dir = main_clone_dir / ".recon"
+    worktree_name = instance_clone_dir.name if instance_clone_dir != main_clone_dir else "main"
+    ctx = AppContext.standalone(
+        repo_root=instance_clone_dir,
+        db_path=recon_dir / "index.db",
+        tantivy_path=recon_dir / "tantivy",
+        worktree_name=worktree_name,
+    )
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -347,14 +367,14 @@ def _worker_inner(args: tuple[str, str, str, str], queue: mp.Queue) -> None:  # 
 # ---------------------------------------------------------------------------
 
 def collect_all(
-    repo_jobs: list[tuple[str, Path, Path]],
+    repo_jobs: list[tuple[str, Path, Path, Path]],
     workers: int = 4,
     on_progress: Any = None,   # (repo_id, done, total)
     on_complete: Any = None,   # (summary_dict)
 ) -> list[dict[str, Any]]:
     """Run collection with worker processes, streaming progress."""
     extra = os.pathsep.join(sys.path)
-    tasks = [(rid, str(dd), str(cd), extra) for rid, dd, cd in repo_jobs]
+    tasks = [(rid, str(dd), str(mcd), str(icd), extra) for rid, dd, mcd, icd in repo_jobs]
 
     spawn = mp.get_context("spawn")
     queue: mp.Queue = spawn.Queue()  # type: ignore[type-arg]

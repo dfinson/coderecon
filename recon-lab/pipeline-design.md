@@ -2,34 +2,20 @@
 
 ## Data Inventory
 
-| Dataset | HF ID | Split | Instances | Repos | Language | Role |
-|---------|-------|-------|-----------|-------|----------|------|
-| SWE-bench | `princeton-nlp/SWE-bench` | `dev` | 225 | 6 | Python | Train |
-| SWE-bench | `princeton-nlp/SWE-bench` | `test` | 2,294 | 12 | Python | Train (minus Verified) |
-| SWE-bench Verified | `princeton-nlp/SWE-bench_Verified` | `test` | 500 | 12 | Python | **Eval only** |
-| Multi-SWE-bench Rust | `r1v3r/multi_SWE_Bench_Rust` | `train` | 239 | 10 | Rust | Train |
-| Multi-SWE-bench Java | `Daoguang/Multi-SWE-bench` | `java_verified` | 91 | 6 | Java | Train |
+| Repo Set | Repos | PR Instances | Languages | Role |
+|----------|-------|-------------|-----------|------|
+| ranker-gate | 30 | ~960 | C++, C#, Go, Java, JS/TS, Python, Ruby, Rust, Swift | Train (ranker + gate) |
+| cutoff | 48 | ~1,500 | Same mix | Train (cutoff model) |
+| eval | 19 | ~420 | Same mix | **Eval only** |
+| **Total** | **97** | **~2,880** | **9 languages** | |
 
 ### Train/Eval Split
 
-All 500 Verified instances are a subset of SWE-bench `test`. Training on
-raw `test` and evaluating on Verified would be **data leakage**.
+Repos are assigned to exactly one set (`lab.toml`).  The eval set is
+held out entirely — no repo appears in both training and eval.
 
-Correct partition (verified via `select_instances` test):
-
-- **Train**: test\Verified (1,794) + dev (225) + Rust (239) + Java (91) = **2,349 instances, 28 repos, 3 languages**
-- **Eval**: Verified (500 Python instances)
-- **Total**: 2,849 instances
-
-Within training, the `cutoff_mod=5` hash split gives:
-
-- ranker-gate: **1,905** instances
-- cutoff: **444** instances
-
-108 dev instances already have LLM-generated queries (GT) from a previous
-run — the import phase will skip them (`raw_instance.json` + `queries.json`
-exist). This saves ~1,620 LLM calls. The non-OK queries (UNSAT/BROAD/AMBIG)
-provide negative examples for gate classifier training.
+Non-OK queries (UNSAT/BROAD/AMBIG) provide negative examples for gate
+classifier training.
 
 ---
 
@@ -37,68 +23,53 @@ provide negative examples for gate classifier training.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ PHASE 0: Config                                             │
-│  lab.toml changes + eval-exclusion logic in select_instances│
+│ PHASE 1: clone  (network + disk)                            │
+│  • Clone 97 repos (full history)                            │
+│  • Stored in clones/{set}/{repo_name}/                      │
+│  • No indexing — daemon handles that later                  │
 └──────────────────────────┬──────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ PHASE 1: swebench-import  (LLM: 15 calls/instance)         │
-│  For each dataset:                                          │
-│    • Load HF dataset                                        │
-│    • Clone repo at base_commit (git worktree)               │
-│    • Generate 8 OK queries + 6 non-OK queries via LLM      │
-│    • Write raw_instance.json + queries.json                 │
+│ PHASE 2: pr-import  (LLM: ~15 calls/instance)              │
+│  For each repo:                                             │
+│    • Fetch merged PRs from GitHub API                       │
+│    • Create git worktree at PR merge commit                 │
+│    • Register worktree with daemon → indexes diff           │
+│    • Generate 8 OK queries + ground truth via LLM           │
+│    • Write task JSON + manifest.json                        │
 │                                                             │
-│  ≈ 2,349 × 15 = 35,235 LLM calls (GPT-4.1-mini)           │
-│  Est. cost: ~$5-10 at 4.1-mini pricing                     │
-│  Est. time: ~4-8 hours (rate-limited)                       │
+│  Indexing happens automatically: daemon register-worktree   │
+│  runs git diff main...HEAD, then reindex_incremental()      │
+│  into the shared index.db with the worktree overlay.        │
 └──────────────────────────┬──────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ PHASE 2: index  (CPU-bound, no LLM)                         │
-│  For each worktree:                                         │
-│    • recon init → tree-sitter parse + resolution            │
-│    • Produces .recon/index.db per instance                  │
-│                                                             │
-│  28 base repos → 2,349 worktrees                            │
-│  With 1MB file size limit: avg 30s-2min/instance            │
-│  Est. time: ~20-40 hours on 1 worker (local)                │
-│  With 4 workers: ~5-10 hours                                │
-│  On AML D4s_v3: similar (4 vCPU)                            │
-└──────────────────────────┬──────────────────────────────────┘
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│ PHASE 3: swebench-resolve  (index lookup, no LLM)           │
-│  For each instance with GT:                                 │
-│    • Parse gold patch → file_diffs                          │
-│    • map_hunks_to_defs(file_diffs, index.db)                │
-│    • Write {workspace_id}.json with labeled defs            │
-│                                                             │
-│  ≈ 2,349 × ~3-5 LLM calls                                  │
-│  Est. cost: ~$2-5                                           │
-│  Est. time: ~2-4 hours                                      │
+│ PHASE 3: non-ok-queries  (LLM: ~6 calls/instance)          │
+│  For each instance with OK queries:                         │
+│    • Generate UNSAT, BROAD, AMBIG negative queries          │
+│    • Validate against index (fact-check, spread stats)      │
+│    • Write non_ok_queries.json                              │
 └──────────────────────────┬──────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ PHASE 4: collect  (CPU-bound, no LLM)                       │
 │  For each instance:                                         │
-│    • Load index.db + ground truth                           │
+│    • Load shared index.db with worktree overlay             │
 │    • For each query: run raw_signals_pipeline()             │
 │    • Extract 54+ features per candidate                     │
-│    • Write candidates_rank.parquet per repo                 │
+│    • Write candidates_rank.parquet per instance             │
 │                                                             │
-│  ≈ 2,349 instances × ~15 queries each                       │
-│  Est. time: ~10-20 hours on 2 workers                       │
+│  Collect resolves the main repo's .recon/index.db and       │
+│  uses the instance worktree as repo_root with               │
+│  worktree_name for correct overlay queries.                 │
 └──────────────────────────┬──────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ PHASE 5: merge  (I/O bound)                                 │
-│  • Combine all per-repo parquets                            │
+│  • Combine all per-instance parquets                        │
 │  • Join with labels (relevant=1, irrelevant=0)              │
 │  • Add repo metadata (object_count, file_count)             │
 │  • Output: candidates_rank.parquet (~2-5 GB expected)       │
-│                                                             │
-│  Est. time: ~5-10 minutes                                   │
 └──────────────────────────┬──────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
@@ -110,88 +81,84 @@ provide negative examples for gate classifier training.
 │    - cutoff (regression, 300 rounds)                        │
 │  • Data: ranker-gate set for ranker+gate, cutoff set        │
 │  • Subsampling: all positives + ≤50 negatives per query     │
-│                                                             │
-│  Est. time: <5 minutes                                      │
 └──────────────────────────┬──────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ PHASE 7: install + eval                                     │
 │  • Copy .lgbm files to src/coderecon/ranking/models/        │
-│  • Run eval on SWE-bench Verified (500 instances)           │
+│  • Run eval on held-out eval set (19 repos)                 │
 │  • Report NDCG@5/10/20, MAP, MRR                           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Code Changes (DONE)
-
-1. **Eval-exclusion** in `select_instances()` — always loads eval IDs
-   and excludes them from training, plus deduplicates across datasets.
-   `swebench_common.py`: new `_iter_training()` helper.
-2. **`lab.toml`** updated: `training_split = "test"`.
-3. **Plumbed through** `cli.py` → `swebench.py` / `swebench_import.py`.
-4. **Old data cleaned**: `recon-lab/data/` (128 MB REPO_MANIFEST GT),
-   `repos/` (59 markdown task defs), `experiments/` all deleted.
-   `~/.recon/recon-lab/` cleaned: stale worktrees (41 GB), merged
-   parquets (539 MB), models (15 MB) removed. Kept: 8 git mirrors
-   (3.9 GB), 108 dev GT dirs (4.5 MB).
-
----
-
 ## Execution Plan
 
-### Phase 1: Import (~4-6 hours wallclock)
+### Phase 1: Clone
 
 ```bash
-recon-lab swebench-import --set all
+recon-lab clone --set all
 ```
 
-2,349 training + 500 eval = 2,849 instances total.
-108 dev instances already imported → skip (~1,620 LLM calls saved).
-Remaining: ~2,741 × 15 = ~41K LLM calls (GPT-4.1-mini).
-Can parallelize with `--repo` flag per-repo in parallel terminals.
-
-### Phase 2: Index (~10 hours with 4 workers)
+### Phase 2: PR Import
 
 ```bash
-recon-lab index --set all --workers 4
+recon-lab pr-import --set all --workers 8
 ```
 
-The 1MB file size limit (`_MAX_FILE_BYTES`) prevents tree-sitter from
-choking on data files.
+Daemon automatically indexes each worktree on registration.
 
-### Phase 3: Resolve (~3 hours)
+### Phase 3: Non-OK Queries
 
 ```bash
-recon-lab swebench-resolve --set ranker-gate
-recon-lab swebench-resolve --set cutoff
+recon-lab non-ok-queries --set all --workers 4
 ```
 
-### Phase 4: Collect (~15 hours with 2 workers)
+### Phase 4: Collect
 
 ```bash
-recon-lab collect --set ranker-gate --workers 2
-recon-lab collect --set cutoff --workers 2
+recon-lab collect --set ranker-gate --workers 4
+recon-lab collect --set cutoff --workers 4
 ```
 
-### Phase 5-7: Merge → Train → Install (~10 minutes)
+### Phase 5-7: Merge → Train → Install
 
 ```bash
 recon-lab merge
 recon-lab train --output-dir ~/.recon/recon-lab/models
-# Copy models to package
 cp ~/.recon/recon-lab/models/*_structural.lgbm src/coderecon/ranking/models/
 ```
 
 ### Phase 8: Eval
 
 ```bash
-recon-lab swebench-import --set eval
-recon-lab index --set eval
-recon-lab swebench-resolve --set eval
 recon-lab eval
 ```
+
+---
+
+## Key Design Decisions
+
+### No separate index phase
+
+The daemon's `register-worktree` command handles indexing natively.
+When a worktree is registered, the daemon:
+1. Runs `git diff --name-only main...HEAD` to find changed files
+2. Calls `reindex_incremental(paths, worktree=name)` into the shared
+   `index.db` with the correct `worktree_id`
+3. The shared index stores all worktrees via `files.worktree_id` FK
+
+Queries use the overlay: `_search_worktrees = [worktree_name, "main"]`
+so worktree-specific files shadow the main branch per-file.
+
+### Collect uses two paths
+
+Each collect worker receives:
+- **main_clone_dir**: The main repo clone (e.g., `clones/ranker-gate/fmt/`)
+  that owns `.recon/index.db` and `.recon/tantivy/`
+- **instance_clone_dir**: The PR worktree (e.g., `clones/instances/cpp-fmt_pr4638/`)
+  used as `repo_root` for file reads, with `worktree_name` for overlay
 
 ---
 
@@ -199,36 +166,10 @@ recon-lab eval
 
 | Phase | CPU | RAM | Disk | LLM Calls | Cost |
 |-------|-----|-----|------|-----------|------|
-| Import | Low | 2 GB | ~5 GB (queries) | ~41K | ~$7-12 |
-| Index | High (all cores) | 8-12 GB | ~50 GB (indexes) | 0 | $0 |
-| Resolve | Low | 4 GB | ~1 GB | ~8K | ~$3 |
+| Clone | Low | 2 GB | ~15 GB | 0 | $0 |
+| PR Import | Low | 4 GB | ~10 GB | ~43K | ~$7-12 |
+| Non-OK Queries | Low | 2 GB | ~1 GB | ~17K | ~$3-5 |
 | Collect | High | 8-12 GB | ~5 GB (parquets) | 0 | $0 |
 | Merge | Low | 4 GB | ~5 GB | 0 | $0 |
 | Train | Medium | 4 GB | ~50 MB | 0 | $0 |
-| **Total** | | | **~66 GB** | **~49K** | **~$12-17** |
-
-Everything runs locally on the 16 GB machine. Indexing is the bottleneck
-but feasible with 2-4 workers (CODERECON_INDEX_WORKERS caps internal
-parallelism). AML is available as a fallback if local indexing is too slow.
-
----
-
-## Risk Mitigation
-
-1. **Memory pressure during indexing**: Use `CODERECON_INDEX_WORKERS=4`
-   with 2 outer workers to stay under 12 GB. Monitor with `free -h`.
-
-2. **LLM rate limits**: GPT-4.1-mini has generous limits. If throttled,
-   use `--repo` to serialize by repo and add retry/backoff.
-
-3. **Disk space**: 2,849 worktrees × git objects are shared per base repo
-   (mirror + worktrees). ~50 GB for indexes. 590 GB free on disk.
-
-4. **Phantom GT**: `train_all.py` already drops all-negative query groups
-   (defs that don't exist at the checked-out commit). This handles any
-   residual GT mapping failures.
-
-5. **Language imbalance**: 86% Python, 10% Rust, 4% Java. LightGBM
-   features are language-agnostic (structural, graph, term-match signals).
-   No language feature needed — the model learns from structural patterns
-   that generalize across languages.
+| **Total** | | | **~36 GB** | **~60K** | **~$12-19** |

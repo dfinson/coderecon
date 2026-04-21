@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import gc
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -39,11 +40,15 @@ class _RankingPipeline:
         mode: str,
         models_dir: str,
         variant: str,
+        *,
+        diagnostic: bool = False,
     ) -> None:
         self._instances_dir = Path(clone_dir).expanduser()
+        self._clones_dir = self._instances_dir.parent  # ../clones/
         self._mode = mode
         self._models_dir = Path(models_dir).expanduser()
         self._variant = variant
+        self._diagnostic = diagnostic
         self._cached_repo: str | None = None
         self._ctx: Any = None
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -67,16 +72,28 @@ class _RankingPipeline:
         from coderecon.mcp.context import AppContext
 
         wid = self._workspace_id(instance_id)
-        clone_dir = self._instances_dir / wid
-        cp = clone_dir / ".recon"
+        instance_dir = self._instances_dir / wid
+
+        # index.db lives on the main repo clone, not the instance worktree
+        from cpl_lab.data_manifest import main_clone_dir_for_dir
+
+        data_root = self._clones_dir.parent / "data"
+        data_dir = data_root / instance_id
+        main_dir = main_clone_dir_for_dir(data_dir, self._clones_dir)
+        if main_dir is None:
+            msg = f"Cannot resolve main clone for {instance_id!r}"
+            raise FileNotFoundError(msg)
+        cp = main_dir / ".recon"
         if not cp.exists():
             msg = f"No coderecon index at {cp} (instance {instance_id!r})"
             raise FileNotFoundError(msg)
 
+        repo_root = instance_dir if instance_dir.exists() else main_dir
+
         logging.disable(logging.WARNING)
 
         self._ctx = AppContext.standalone(
-            repo_root=clone_dir,
+            repo_root=repo_root,
             db_path=cp / "index.db",
             tantivy_path=cp / "tantivy",
         )
@@ -124,19 +141,27 @@ class _RankingPipeline:
         assert self._loop is not None
 
         from coderecon.mcp.tools.recon.raw_signals import raw_signals_pipeline
-        from coderecon.ranking.features import (
-            extract_cutoff_features,
-            extract_gate_features,
-            extract_ranker_features,
-        )
-        from coderecon.ranking.models import GateLabel
 
+        t0 = time.monotonic()
         raw = self._loop.run_until_complete(
             raw_signals_pipeline(self._ctx, query, seeds=seeds, pins=pins),
         )
         candidates = raw.get("candidates", [])
         query_features = raw.get("query_features", {})
         repo_features = raw.get("repo_features", {})
+        latency_sec = round(time.monotonic() - t0, 3)
+
+        if self._diagnostic:
+            return self._infer_diagnostic(
+                candidates, meta, pins, latency_sec,
+            )
+
+        from coderecon.ranking.features import (
+            extract_cutoff_features,
+            extract_gate_features,
+            extract_ranker_features,
+        )
+        from coderecon.ranking.models import GateLabel
 
         gate_features = extract_gate_features(candidates, query_features, repo_features)
         gate_label = self._gate.classify(gate_features)
@@ -169,6 +194,74 @@ class _RankingPipeline:
             "predicted_gate": gate_label.value,
         }
 
+    # ── Diagnostic path ───────────────────────────────────────────────
+
+    def _infer_diagnostic(
+        self,
+        candidates: list[dict[str, Any]],
+        meta: dict,
+        pins: list[str] | None,
+        latency_sec: float,
+    ) -> dict:
+        """RRF diagnostic: pool recall, per-harvester recall, prune loss, per-list data."""
+        from coderecon.ranking.rrf import (
+            build_named_rank_lists,
+            rrf_file_prune,
+            rrf_fuse,
+        )
+
+        pool_keys = [_def_key(c) for c in candidates]
+
+        per_harvester_keys = {
+            "term_match": [_def_key(c) for c in candidates if c.get("from_term_match")],
+            "explicit": [_def_key(c) for c in candidates if c.get("from_explicit")],
+            "graph": [_def_key(c) for c in candidates if c.get("from_graph")],
+            "import": [
+                _def_key(c) for c in candidates
+                if c.get("import_direction") is not None
+            ],
+            "splade": [
+                _def_key(c) for c in candidates
+                if (c.get("splade_score") or 0) > 0
+            ],
+            "coverage": [_def_key(c) for c in candidates if c.get("from_coverage")],
+        }
+
+        # RRF fusion (sets rrf_score on each candidate dict)
+        fused = rrf_fuse(candidates)
+
+        # File prune
+        pinned = set(pins or [])
+        pruned = rrf_file_prune(fused, pinned_paths=pinned)
+        post_prune_keys = [_def_key(c) for c in pruned]
+
+        # Per-list orderings for solo/LOO ablation
+        named_lists = build_named_rank_lists(candidates)
+        per_list_ordered_keys = {
+            name: [_def_key(candidates[idx]) for idx in indices]
+            for name, indices in named_lists
+        }
+
+        ranked_candidate_keys = [_def_key(c) for c in fused]
+
+        return {
+            "ranked_candidate_keys": ranked_candidate_keys,
+            "predicted_relevances": [
+                round(c.get("rrf_score", 0.0), 6) for c in fused
+            ],
+            "predicted_n": 20,
+            "predicted_gate": "OK",
+            # Diagnostic fields
+            "pool_candidate_keys": pool_keys,
+            "per_harvester_keys": per_harvester_keys,
+            "post_prune_keys": post_prune_keys,
+            "per_list_ordered_keys": per_list_ordered_keys,
+            "pool_size": len(candidates),
+            "post_prune_pool_size": len(pruned),
+            "latency_sec": latency_sec,
+            "repo_id": meta.get("repo_id", ""),
+        }
+
 
 @solver
 def ranking_solver(
@@ -192,6 +285,31 @@ def ranking_solver(
         state.store.set("predicted_relevances", result["predicted_relevances"])
         state.store.set("predicted_n", result["predicted_n"])
         state.store.set("predicted_gate", result["predicted_gate"])
+        return state
+
+    return solve
+
+
+@solver
+def diagnostic_ranking_solver(
+    clone_dir: str = "~/.recon/recon-lab/clones/instances",
+    models_dir: str = "~/.recon/recon-lab/models",
+    variant: str = "structural",
+) -> Solver:
+    """Diagnostic solver: RRF pipeline with full funnel instrumentation."""
+    pipeline = _RankingPipeline(
+        clone_dir=clone_dir,
+        mode="baseline",
+        models_dir=models_dir,
+        variant=variant,
+        diagnostic=True,
+    )
+
+    async def solve(state: TaskState, generate: Any) -> TaskState:
+        meta = state.metadata
+        result = pipeline.infer(meta)
+        for key, value in result.items():
+            state.store.set(key, value)
         return state
 
     return solve

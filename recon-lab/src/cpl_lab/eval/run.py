@@ -23,10 +23,8 @@ from pathlib import Path
 from inspect_ai import eval as inspect_eval
 
 from cpl_lab.eval.tasks import (
-    llm_reranker_azure,
-    llm_reranker_baseline,
-    llm_reranker_local,
     ranking_baseline,
+    ranking_diagnostic,
     ranking_trained,
 )
 
@@ -37,18 +35,17 @@ def run(experiment: str | None = None) -> None:
     Args:
         experiment: Which experiment set to run.
             None or "ranking" → ranking pipeline (baseline + trained).
-            "llm" → LLM reranker tasks (baseline + azure + local).
     """
     log_dir = str(Path("~/.recon/recon-lab/eval/logs").expanduser())
 
     if experiment is None or experiment == "ranking":
         tasks = [ranking_baseline(), ranking_trained()]
-    elif experiment == "llm":
-        tasks = [llm_reranker_baseline(), llm_reranker_azure(), llm_reranker_local()]
+    elif experiment == "diagnostic":
+        tasks = [ranking_diagnostic()]
     else:
         raise ValueError(
             f"Unknown experiment: {experiment!r}. "
-            "Use 'ranking' (default) or 'llm'."
+            "Use 'ranking' (default) or 'diagnostic'."
         )
 
     inspect_eval(

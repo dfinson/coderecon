@@ -228,7 +228,7 @@ def validate_repo(data_dir: Path) -> list[str]:
             errors.append(f"non_ok_queries.json: invalid JSON — {e}")
         else:
             errors.extend(validate_non_ok(non_ok, "non_ok_queries.json"))
-    elif "swebench" in sources or any(source != "pr-mining" for source in sources):
+    elif sources:
         errors.append("non_ok_queries.json not found")
 
     return errors

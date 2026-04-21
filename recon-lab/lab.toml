@@ -24,3 +24,10 @@ data_dir = "auto"
 
 [eval]
 default_experiment = "recon_ranking.yaml"
+
+[splade_bakeoff]
+# Models to compare (keys from encoder.MODELS).
+# Default: all three.
+models = ["splade-v3-distilbert", "splade-mini", "opensearch-v2"]
+# Max queries per repo (0 = all OK queries).
+max_queries_per_repo = 0

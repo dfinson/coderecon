@@ -75,6 +75,12 @@ train model="all":
 eval experiment="":
     recon-lab eval {{ if experiment != "" { "--experiment " + experiment } else { "" } }}
 
+# ── Experiments ──────────────────────────────────────────────────
+
+# SPLADE model bakeoff — compare sparse encoders on code scaffolds
+splade-bakeoff *ARGS="":
+    recon-lab splade-bakeoff {{ARGS}}
+
 validate set="all":
     recon-lab validate --set {{set}}
 

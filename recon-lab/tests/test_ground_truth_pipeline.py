@@ -7,10 +7,9 @@ import click
 import pytest
 
 from cpl_lab.collect.collect_signals import _parse_gt_tables, _parse_raw_task_jsons
-from cpl_lab.collect import _find_clone_dir
-from cpl_lab.collector import iter_task_json_files
-from cpl_lab.data_manifest import load_repo_manifest, write_repo_manifest
-from cpl_lab.github_models import _token_budget_field, response_text
+from cpl_lab.collect.collect import _find_clone_dir
+from cpl_lab.data_manifest import iter_task_json_files, load_repo_manifest, write_repo_manifest
+from cpl_lab.llm.llm_client import _token_budget_field, response_text
 from cpl_lab.pipeline.index import _find_recon_python, _recon_env, _recon_init_cmd
 from cpl_lab.collect.merge_signals import _align_to_merged
 from cpl_lab.pipeline.patch_ground_truth import parse_unified_diff
@@ -28,7 +27,7 @@ def test_parse_unified_diff_tracks_hunk_end_lines() -> None:
     assert file_diffs[0].hunks[0].end_line == 12
 
 
-def test_validate_task_accepts_swebench_narrow_queries() -> None:
+def test_validate_task_accepts_narrow_queries() -> None:
     task = {
         "task_id": "django__django_101",
         "task_complexity": "narrow",
@@ -36,7 +35,7 @@ def test_validate_task_accepts_swebench_narrow_queries() -> None:
         "diff": "diff",
         "solve_notes": "notes",
         "confidence": "high",
-        "source": "swebench",
+        "source": "pr",
         "minimum_sufficient_defs": [
             {
                 "path": "src/app.py",
@@ -102,10 +101,10 @@ def test_parse_gt_tables_reads_postprocessed_ground_truth(tmp_path: Path) -> Non
     queries, rel = _parse_gt_tables("django__django_101", gt_dir)
 
     assert queries[0]["task_id"] == "django__django_101"
-    assert rel["django__django_101"]["src/parser.py:function:parse:12"] == 2
+    assert rel["django__django_101"]["src/parser.py:function:parse:12"] == 1
 
 
-def test_parse_raw_task_jsons_supports_swebench_task_files(tmp_path: Path) -> None:
+def test_parse_raw_task_jsons_supports_task_files(tmp_path: Path) -> None:
     gt_dir = tmp_path / "ground_truth"
     gt_dir.mkdir()
     (gt_dir / "django__django_303.json").write_text(
@@ -135,7 +134,7 @@ def test_parse_raw_task_jsons_supports_swebench_task_files(tmp_path: Path) -> No
     queries, rel = _parse_raw_task_jsons(gt_dir)
 
     assert queries[0]["task_id"] == "django__django_303"
-    assert rel["django__django_303"]["src/app.py:function:run:9"] == 2
+    assert rel["django__django_303"]["src/app.py:function:run:9"] == 1
 
 
 def test_repo_manifest_round_trip(tmp_path: Path) -> None:

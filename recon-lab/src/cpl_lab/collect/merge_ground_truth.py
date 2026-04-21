@@ -30,6 +30,7 @@ from cpl_lab.data_manifest import (
     iter_repo_data_dirs,
     iter_task_json_files,
     load_repo_manifest,
+    main_clone_dir_for_dir,
 )
 
 
@@ -118,7 +119,7 @@ def collect_ground_truth(
             "run_id": run_id,
             "repo_id": repo_id,
             "task_id": task_id,
-            "task_text": task["task_text"],
+            "task_text": task.get("task_text") or task.get("title", ""),
         })
 
         for tier_key, tier_label in [
@@ -250,8 +251,8 @@ def _postprocess_repos(
             skipped += 1
             continue
 
-        # Find the index.db
-        clone = clone_dir_for_dir(repo_dir, clones_dir)
+        # Find the index.db (use main repo clone, not instance worktree)
+        clone = main_clone_dir_for_dir(repo_dir, clones_dir)
         if clone is None or not clone.is_dir():
             click.echo(f"  {repo_id}: clone not found, skipping postprocess", err=True)
             failed += 1
@@ -362,7 +363,7 @@ def _collect_repo_features(
     for repo_dir in iter_repo_data_dirs(data_dir):
         repo_id = repo_dir.name
         manifest = load_repo_manifest(repo_dir)
-        clone = clone_dir_for_dir(repo_dir, clones_dir)
+        clone = main_clone_dir_for_dir(repo_dir, clones_dir)
         if clone is None:
             continue
         index_db = clone / ".recon" / "index.db"

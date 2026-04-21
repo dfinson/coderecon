@@ -36,9 +36,17 @@ def _iter_repos(data_dir: Path, repo_set: str) -> list[str]:
 
 
 def _find_clone_dir(clones_dir: Path, repo_dir: Path) -> Path | None:
+    """Resolve the instance worktree clone directory."""
     from cpl_lab.data_manifest import clone_dir_for_dir
 
     return clone_dir_for_dir(repo_dir, clones_dir)
+
+
+def _find_main_clone_dir(clones_dir: Path, repo_dir: Path) -> Path | None:
+    """Resolve the main repo clone directory (owns .recon/index.db)."""
+    from cpl_lab.data_manifest import main_clone_dir_for_dir
+
+    return main_clone_dir_for_dir(repo_dir, clones_dir)
 
 
 def _ensure_ground_truth_tables(repo_id: str, repo_dir: Path, clone_dir: Path) -> None:
@@ -75,7 +83,7 @@ def run_collect(
         console.print("[yellow]No repos with ground truth found.[/yellow]")
         return
 
-    jobs: list[tuple[str, Path, Path]] = []
+    jobs: list[tuple[str, Path, Path, Path]] = []
     skipped = 0
     for rid in repo_ids:
         # Skip repos that already have completed signals
@@ -84,15 +92,17 @@ def run_collect(
             skipped += 1
             continue
         repo_dir = data_dir / rid
-        cd = _find_clone_dir(clones_dir, repo_dir)
-        if cd and (cd / ".recon" / "index.db").exists():
+        instance_dir = _find_clone_dir(clones_dir, repo_dir)
+        main_dir = _find_main_clone_dir(clones_dir, repo_dir)
+        if main_dir and (main_dir / ".recon" / "index.db").exists():
             try:
-                _ensure_ground_truth_tables(rid, repo_dir, cd)
+                _ensure_ground_truth_tables(rid, repo_dir, main_dir)
             except Exception as exc:
                 if verbose:
                     console.print(f"[red]Skipping {rid}: GT postprocess failed: {exc}[/red]")
                 continue
-            jobs.append((rid, repo_dir, cd))
+            # instance_dir may be the same as main_dir for non-worktree repos
+            jobs.append((rid, repo_dir, main_dir, instance_dir or main_dir))
 
     if skipped:
         console.print(f"[dim]Skipping {skipped} repos with completed signals.[/dim]")

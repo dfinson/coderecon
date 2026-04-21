@@ -7,15 +7,15 @@
 #   dvc repro train
 #
 # Pipeline DAG (PR-based):
-#   clone ──→ index-main ──→ pr-select ──→ pr-checkout ──→ index-worktrees ──→ pr-import ──→ collect ──→ merge ──→ train ──→ eval
+#   clone ──→ pr-select ──→ pr-checkout ──→ pr-import ──→ non-ok-queries ──→ collect ──→ merge ──→ train ──→ eval
 #
-# Pass 1 (clone): Full clone of all 98 repos at HEAD.
-# Pass 2 (index-main): Start daemon, register + index main repos.
-# Pass 3 (pr-select): GitHub API → select PRs, compute diffs, write pr_instances.jsonl.
-# Pass 4 (pr-checkout): Create worktrees at PR base commits.
-# Pass 5 (index-worktrees): recon init per worktree, register with daemon.
-# Pass 6 (pr-import): diff → GT defs + GPT-4.1-nano query generation.
-# Pass 7+ (collect → merge → train → eval): unchanged.
+# Pass 1 (clone): Full clone of all 96 repos at HEAD.
+# Pass 2 (pr-select): GitHub API → select PRs, compute diffs, write pr_instances.jsonl.
+# Pass 3 (pr-checkout): Create worktrees at PR base commits.
+#          The daemon handles indexing (main + worktrees) natively via register-worktree.
+# Pass 4 (pr-import): diff → GT defs + GPT-4.1-nano OK query generation.
+# Pass 5 (non-ok-queries): Copilot SDK agent → UNSAT/BROAD/AMBIG queries per repo.
+# Pass 6+ (collect → merge → train → eval).
 
 stages:
   clone:
@@ -27,21 +27,12 @@ stages:
           persist: true    # don't delete on repro
           cache: false     # too large to cache
 
-  index-main:
-    cmd: recon-lab index-main --set all
-    deps:
-      - src/cpl_lab/pipeline/pr_index.py
-      - ${workspace}/clones
-    outs:
-      - ${workspace}/data/index_main.stamp:
-          cache: false
-
   pr-select:
     cmd: recon-lab pr-select --set all
     deps:
       - src/cpl_lab/pipeline/pr_select.py
       - src/cpl_lab/pipeline/patch_ground_truth.py
-      - ${workspace}/data/index_main.stamp
+      - ${workspace}/clones
     params:
       - lab.toml:
           - pr_select
@@ -58,22 +49,13 @@ stages:
       - ${workspace}/data/pr_checkout.stamp:
           cache: false
 
-  index-worktrees:
-    cmd: recon-lab index-worktrees --set all
-    deps:
-      - src/cpl_lab/pipeline/pr_index.py
-      - ${workspace}/data/pr_checkout.stamp
-    outs:
-      - ${workspace}/data/index_worktrees.stamp:
-          cache: false
-
   pr-import:
     cmd: recon-lab pr-import --set all
     deps:
       - src/cpl_lab/pipeline/pr_import.py
       - src/cpl_lab/llm/llm_queries.py
       - src/cpl_lab/pipeline/patch_ground_truth.py
-      - ${workspace}/data/index_worktrees.stamp
+      - ${workspace}/data/pr_checkout.stamp
     params:
       - lab.toml:
           - pr_select
@@ -81,11 +63,20 @@ stages:
       - ${workspace}/data/pr_import.stamp:
           cache: false
 
+  non-ok-queries:
+    cmd: recon-lab non-ok-queries --set all
+    deps:
+      - src/cpl_lab/pipeline/non_ok_queries.py
+      - ${workspace}/data/pr_import.stamp
+    outs:
+      - ${workspace}/data/non_ok_queries.stamp:
+          cache: false
+
   collect:
     cmd: recon-lab collect --set all && date -Iseconds > ${workspace}/data/signals.stamp
     deps:
       - src/cpl_lab/collect/collect_signals.py
-      - ${workspace}/data/pr_import.stamp
+      - ${workspace}/data/non_ok_queries.stamp
     outs:
       - ${workspace}/data/signals.stamp:
           cache: false
@@ -130,6 +121,30 @@ stages:
           cache: false
     plots:
       - ${workspace}/eval/plots/:
+          cache: false
+
+  splade-bakeoff:
+    cmd: recon-lab splade-bakeoff
+    deps:
+      - src/cpl_lab/experiments/splade_bakeoff/run.py
+      - src/cpl_lab/experiments/splade_bakeoff/scaffold.py
+      - src/cpl_lab/experiments/splade_bakeoff/encoder.py
+      - ${workspace}/data/pr_import.stamp
+    params:
+      - lab.toml:
+          - splade_bakeoff
+    metrics:
+      - ${workspace}/experiments/splade_bakeoff/metrics.json:
+          cache: false
+    plots:
+      - ${workspace}/experiments/splade_bakeoff/per_query.parquet:
+          cache: false
+    outs:
+      - ${workspace}/experiments/splade_bakeoff/term_samples_splade-v3-distilbert.json:
+          cache: false
+      - ${workspace}/experiments/splade_bakeoff/term_samples_splade-mini.json:
+          cache: false
+      - ${workspace}/experiments/splade_bakeoff/term_samples_opensearch-v2.json:
           cache: false
 
 # DVC params — workspace resolves from lab.toml

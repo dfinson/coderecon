@@ -2,11 +2,12 @@
 
 For each PR in ``pr_instances.jsonl``:
   1. Re-map diff hunks against the **worktree** index (not main).
-  2. Generate 8 OK + 6 non-OK queries via ``adapt_instance()``
-     (same GPT-4.1-nano flow as SWE-bench).
+  2. Generate 8 OK queries via ``adapt_instance()``
+     (GPT-4.1-nano, 9 LLM calls: 1 classify + 8 query types).
   3. Write per-instance ground truth + query files.
 
-No coverage expansion — GT is purely the patch defs.
+Non-OK queries (UNSAT/BROAD/AMBIG) are deferred to a separate
+per-repo agentic task.  No coverage expansion — GT is purely the patch defs.
 """
 
 from __future__ import annotations
@@ -38,8 +39,6 @@ def import_single_instance(
     instances_dir: Path,
     data_dir: Path,
     llm_model: str,
-    prior_broad: list[str],
-    prior_ambig: list[str],
     verbose: bool = False,
 ) -> dict[str, Any]:
     """Import a single PR instance: GT defs + queries.
@@ -56,7 +55,8 @@ def import_single_instance(
     body = inst.get("body", "")
 
     wt_dir = instances_dir / iid
-    index_db = wt_dir / ".recon" / "index.db"
+    clones_dir = instances_dir.parent
+    main_clone_dir = clone_dir_for(rid, clones_dir)
 
     summary: dict[str, Any] = {
         "instance_id": iid,
@@ -66,9 +66,18 @@ def import_single_instance(
         "queries": 0,
     }
 
-    # Check worktree is indexed
-    if not index_db.exists():
-        summary["error"] = "worktree not indexed"
+    # Check worktree checkout exists
+    if not wt_dir.is_dir():
+        summary["error"] = "worktree directory missing"
+        return summary
+
+    # Resolve main repo's index for LLM context / RRF validation
+    if main_clone_dir is None:
+        summary["error"] = f"unknown repo_id {rid}"
+        return summary
+    main_index_db = main_clone_dir / ".recon" / "index.db"
+    if not main_index_db.exists():
+        summary["error"] = "main repo not indexed"
         return summary
 
     # Parse diff and map to defs
@@ -83,7 +92,7 @@ def import_single_instance(
         return summary
 
     try:
-        gt_defs = map_hunks_to_defs(file_diffs, index_db)
+        gt_defs = map_hunks_to_defs(file_diffs, wt_dir)
     except Exception as exc:
         summary["error"] = f"hunk mapping failed: {exc}"
         return summary
@@ -115,11 +124,9 @@ def import_single_instance(
             problem_statement=problem,
             hints_text="",
             patch_text=diff_text[:6000],
-            index_db=index_db,
-            clone_dir=wt_dir,
+            index_db=main_index_db,
+            clone_dir=main_clone_dir,
             minimum_sufficient_defs=min_defs,
-            prior_broad=prior_broad,
-            prior_ambig=prior_ambig,
         )
     except Exception as exc:
         summary["error"] = f"LLM adaptation failed: {exc}"
@@ -192,9 +199,13 @@ def run_pr_import(
     repo_set: str = "all",
     repo: str | None = None,
     max_instances: int = 0,
+    workers: int = 8,
     verbose: bool = False,
 ) -> None:
     """Import all PR instances: diff→GT + query generation."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     instances_dir = clones_dir / "instances"
 
     pr_file = data_dir / "pr_instances.jsonl"
@@ -229,37 +240,48 @@ def run_pr_import(
             continue
         todo.append(inst)
 
-    click.echo(f"Importing {len(todo)} PR instances ({len(instances) - len(todo)} already done)")
-
-    # Per-repo accumulators for BROAD/AMBIG diversity
-    prior_broad: dict[str, list[str]] = {}
-    prior_ambig: dict[str, list[str]] = {}
+    click.echo(f"Importing {len(todo)} PR instances ({len(instances) - len(todo)} already done, {workers} workers)")
 
     ok = gt_only = errors = 0
+    _counter_lock = threading.Lock()
+    completed = 0
     t0 = time.monotonic()
 
-    for i, inst in enumerate(todo, 1):
-        rid = inst["repo_id"]
-        iid = inst["instance_id"]
-
-        if verbose or i % 10 == 0 or i == len(todo):
-            click.echo(f"  [{i}/{len(todo)}] {iid}")
-
-        pb = prior_broad.setdefault(rid, [])
-        pa = prior_ambig.setdefault(rid, [])
-
-        summary = import_single_instance(
-            inst, instances_dir, data_dir, llm_model, pb, pa, verbose=verbose,
+    def _process(inst: dict) -> dict[str, Any]:
+        return import_single_instance(
+            inst, instances_dir, data_dir, llm_model,
+            verbose=verbose,
         )
 
-        if summary["status"] == "ok":
-            ok += 1
-        elif summary["status"] == "gt_only":
-            gt_only += 1
-        else:
-            errors += 1
-            if verbose:
-                click.echo(f"    ERROR: {summary.get('error', 'unknown')}")
+    effective_workers = min(workers, len(todo))
+    with ThreadPoolExecutor(max_workers=effective_workers) as pool:
+        futures = {pool.submit(_process, inst): inst for inst in todo}
+        for future in as_completed(futures):
+            inst = futures[future]
+            iid = inst["instance_id"]
+            try:
+                summary = future.result()
+            except Exception as exc:
+                summary = {"instance_id": iid, "status": "error", "error": str(exc)}
+
+            with _counter_lock:
+                completed += 1
+                if summary["status"] == "ok":
+                    ok += 1
+                elif summary["status"] == "gt_only":
+                    gt_only += 1
+                else:
+                    errors += 1
+                if verbose or completed % 20 == 0 or completed == len(todo):
+                    elapsed = time.monotonic() - t0
+                    rate = completed / elapsed if elapsed > 0 else 0
+                    eta = (len(todo) - completed) / rate if rate > 0 else 0
+                    click.echo(
+                        f"  [{completed}/{len(todo)}] {iid} → {summary['status']}"
+                        f"  ({rate:.1f}/s, ETA {eta/60:.0f}m)"
+                    )
+                    if summary.get("error") and verbose:
+                        click.echo(f"    ERROR: {summary['error']}")
 
     elapsed = time.monotonic() - t0
     click.echo(f"\nDone in {elapsed:.0f}s: {ok} ok, {gt_only} gt-only, {errors} errors")
