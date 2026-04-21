@@ -561,6 +561,20 @@ def initialize_repo(
             else:
                 phase.complete("Grammars ready")
 
+    # === GPU Detection ===
+    from coderecon.core.gpu import probe_gpu
+
+    gpu_result = probe_gpu()
+    if gpu_result.has_onnx_gpu:
+        provider = gpu_result.onnx_gpu_providers[0].replace("ExecutionProvider", "")
+        status(f"GPU acceleration: {provider}", style="success")
+    elif gpu_result.gpu_available_but_not_configured:
+        hint = gpu_result.install_hint
+        status(f"GPU detected ({gpu_result.provider_name}) but ONNX GPU provider not installed", style="info")
+        if hint:
+            status(f"  Enable GPU: {hint}", style="info")
+    # else: no GPU, say nothing — CPU is the default
+
     # === Lexical Indexing Phase ===
     from coderecon.index.ops import IndexCoordinatorEngine
 
@@ -584,6 +598,8 @@ def initialize_repo(
     resolution_phase: PhaseBox | None = None
     refs_task_id: Any = None
     types_task_id: Any = None
+    splade_phase: PhaseBox | None = None
+    splade_task_id: Any = None
     indexing_elapsed = 0.0
 
     try:
@@ -601,6 +617,7 @@ def initialize_repo(
         ) -> None:
             nonlocal resolution_phase
             nonlocal refs_task_id, types_task_id, indexing_elapsed
+            nonlocal splade_phase, splade_task_id
 
             if progress_phase == "indexing":
                 # Update indexing phase box
@@ -654,6 +671,24 @@ def initialize_repo(
                     resolution_phase._progress.update(types_task_id, completed=pct)  # type: ignore[union-attr]
                     resolution_phase._update()
 
+            elif progress_phase == "encoding_splade":
+                # Close resolution phase if still open
+                if resolution_phase is not None:
+                    total_elapsed = time.time() - start_time
+                    resolution_elapsed = total_elapsed - indexing_elapsed
+                    resolution_phase.complete(f"Done ({resolution_elapsed:.1f}s)")
+                    resolution_phase.__exit__(None, None, None)
+                    resolution_phase = None
+
+                if splade_phase is None:
+                    splade_phase = phase_box("SPLADE encoding", width=60)
+                    splade_phase.__enter__()
+                    splade_task_id = splade_phase.add_progress("Encoding vectors", total=100)
+
+                pct = int(indexed / total * 100) if total > 0 else 0
+                splade_phase._progress.update(splade_task_id, completed=pct)  # type: ignore[union-attr]
+                splade_phase._update()
+
         loop = asyncio.new_event_loop()
         try:
             result = loop.run_until_complete(coord.initialize(on_index_progress=on_index_progress))
@@ -678,15 +713,31 @@ def initialize_repo(
             resolution_phase.complete(f"Done ({resolution_elapsed:.1f}s)")
             resolution_phase.__exit__(None, None, None)
 
+        # Close SPLADE phase box if it was opened
+        if splade_phase is not None:
+            splade_phase.complete("Done")
+            splade_phase.__exit__(None, None, None)
+
         if result.errors:
             for err in result.errors:
                 status(f"Error: {err}", style="error")
             return False
 
         # Step 11: Collect initial test coverage (best-effort)
+        # Load testing config for memory-aware execution
+        from coderecon.config.loader import load_config as _load_config
+
+        _cfg = _load_config(repo_root)
+
         cov_loop = asyncio.new_event_loop()
         try:
-            cov_facts = cov_loop.run_until_complete(coord.collect_initial_coverage())
+            cov_facts = cov_loop.run_until_complete(
+                coord.collect_initial_coverage(
+                    parallelism=_cfg.testing.default_parallelism,
+                    memory_reserve_mb=_cfg.testing.memory_reserve_mb,
+                    subprocess_memory_limit_mb=_cfg.testing.subprocess_memory_limit_mb,
+                )
+            )
         finally:
             cov_loop.close()
         if cov_facts:

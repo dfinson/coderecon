@@ -23,6 +23,22 @@ def _default_coderecon_home() -> Path:
     return Path.home() / ".coderecon"
 
 
+def _run_migrations(engine: Engine) -> None:
+    """Run Alembic migrations to bring the catalog DB up to date."""
+    from alembic import command
+    from alembic.config import Config
+
+    migrations_dir = str(Path(__file__).parent / "migrations")
+
+    cfg = Config()
+    cfg.set_main_option("script_location", migrations_dir)
+    cfg.attributes["connection"] = engine
+
+    with engine.begin() as connection:
+        cfg.attributes["connection"] = connection
+        command.upgrade(cfg, "head")
+
+
 class CatalogDB:
     """Manages the global catalog SQLite database."""
 
@@ -43,17 +59,8 @@ class CatalogDB:
         return self._engine
 
     def create_all(self) -> None:
-        """Create catalog tables if they don't exist."""
-        from coderecon.catalog.models import RepoEntry, WorktreeEntry
-
-        # Only create catalog tables, not the full SQLModel metadata
-        tables = [
-            RepoEntry.__table__,  # type: ignore[attr-defined]
-            WorktreeEntry.__table__,  # type: ignore[attr-defined]
-        ]
-        from sqlmodel import SQLModel
-
-        SQLModel.metadata.create_all(self.engine, tables=tables)
+        """Apply Alembic migrations to bring catalog schema up to date."""
+        _run_migrations(self.engine)
 
     def session(self) -> Session:
         """Create a new database session."""

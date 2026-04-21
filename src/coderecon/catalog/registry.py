@@ -280,6 +280,16 @@ class CatalogRegistry:
                 ).all()
             )
 
+    def lookup_worktree(self, repo_id: int, name: str) -> WorktreeEntry | None:
+        """Look up a single worktree by repo_id and name."""
+        with self.catalog.session() as session:
+            return session.exec(
+                select(WorktreeEntry).where(
+                    WorktreeEntry.repo_id == repo_id,
+                    WorktreeEntry.name == name,
+                )
+            ).first()
+
     def get_storage_dir(self, repo: RepoEntry) -> Path:
         """Get the per-repo storage directory."""
         return Path(repo.storage_dir)
