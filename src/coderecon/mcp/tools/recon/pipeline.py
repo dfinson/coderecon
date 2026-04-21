@@ -195,12 +195,136 @@ async def recon_pipeline(
         return await _pipeline_model(
             candidates, query_features, repo_features, diagnostics,
             repo_root=repo_root, seeds=seeds, pins=pins, t0=t0,
+            task=task, db=app_ctx.coordinator.db,
         )
     log.info("ranking.heuristic_mode", reason="models_unavailable")
     return _pipeline_heuristic(
         candidates, diagnostics,
         repo_root=repo_root, seeds=seeds, pins=pins, t0=t0,
     )
+
+
+def _fetch_scaffolds(
+    candidates: list[dict[str, Any]],
+    db: Any,
+) -> dict[str, str]:
+    """Fetch stored scaffold texts for candidates from SpladeVec table."""
+    from coderecon.index.models import SpladeVec
+
+    def_uids = [c["def_uid"] for c in candidates if c.get("def_uid")]
+    if not def_uids:
+        return {}
+
+    try:
+        with db.session() as session:
+            from sqlmodel import col, select
+
+            rows = list(session.exec(
+                select(SpladeVec.def_uid, SpladeVec.scaffold_text)
+                .where(col(SpladeVec.def_uid).in_(def_uids))
+            ).all())
+            return {uid: txt for uid, txt in rows if txt}
+    except Exception:
+        log.warning("cross_encoder.scaffold_lookup_failed", exc_info=True)
+        return {}
+
+
+def _build_ce_documents(
+    candidates: list[dict[str, Any]],
+    scaffolds: dict[str, str],
+) -> list[str]:
+    """Build CE input documents from stored scaffolds with metadata fallback."""
+    documents = []
+    for c in candidates:
+        scaffold = scaffolds.get(c.get("def_uid", ""))
+        if scaffold:
+            documents.append(scaffold)
+        else:
+            parts = [c.get("path", ""), f"{c.get('kind', '')} {c.get('name', '')}"]
+            documents.append("\n".join(parts))
+    return documents
+
+
+def _score_cross_encoder_tiny(
+    candidates: list[dict[str, Any]],
+    task: str,
+    db: Any,
+) -> list[dict[str, Any]]:
+    """Run TinyBERT cross-encoder on ALL candidates before file pruning.
+
+    Attaches ce_score_tiny to each candidate.  Also computes per-file
+    aggregates (max/mean) so the file ranker can use CE signal.
+    """
+    if not candidates:
+        return candidates
+
+    try:
+        from coderecon.ranking.cross_encoder import get_tiny_scorer
+    except Exception:
+        log.debug("cross_encoder_tiny.unavailable", exc_info=True)
+        return candidates
+
+    scaffolds = _fetch_scaffolds(candidates, db)
+    documents = _build_ce_documents(candidates, scaffolds)
+
+    try:
+        scorer = get_tiny_scorer()
+        scores = scorer.score_pairs(task, documents)
+        for c, s in zip(candidates, scores):
+            c["ce_score_tiny"] = float(s)
+    except Exception:
+        log.warning("cross_encoder_tiny.scoring_failed", exc_info=True)
+        return candidates
+
+    # Compute per-file aggregates for file ranker
+    from collections import defaultdict
+    file_scores: dict[str, list[float]] = defaultdict(list)
+    for c in candidates:
+        if "ce_score_tiny" in c:
+            file_scores[c.get("path", "")].append(c["ce_score_tiny"])
+
+    for c in candidates:
+        path = c.get("path", "")
+        fs = file_scores.get(path)
+        if fs:
+            c["ce_tiny_file_max"] = max(fs)
+            c["ce_tiny_file_mean"] = sum(fs) / len(fs)
+
+    return candidates
+
+
+def _score_cross_encoder(
+    candidates: list[dict[str, Any]],
+    task: str,
+    db: Any,
+) -> list[dict[str, Any]]:
+    """Run cross-encoder on filtered candidates and attach ce_score.
+
+    Reads pre-built scaffold text from the SpladeVec table (persisted
+    at index time).  scaffold_text is guaranteed to be populated by the
+    consistency backfill system — no on-the-fly rebuilding.
+    """
+    if not candidates:
+        return candidates
+
+    try:
+        from coderecon.ranking.cross_encoder import get_scorer
+    except Exception:
+        log.debug("cross_encoder.unavailable", exc_info=True)
+        return candidates
+
+    scaffolds = _fetch_scaffolds(candidates, db)
+    documents = _build_ce_documents(candidates, scaffolds)
+
+    try:
+        scorer = get_scorer()
+        scores = scorer.score_pairs(task, documents)
+        for c, s in zip(candidates, scores):
+            c["ce_score"] = float(s)
+    except Exception:
+        log.warning("cross_encoder.scoring_failed", exc_info=True)
+
+    return candidates
 
 
 async def _pipeline_model(
@@ -213,6 +337,8 @@ async def _pipeline_model(
     seeds: list[str] | None,
     pins: list[str] | None,
     t0: float,
+    task: str,
+    db: Any,
 ) -> dict[str, Any]:
     """Model path: gate → file ranker → def ranker → cutoff."""
     from coderecon.ranking.cutoff import load_cutoff
@@ -254,6 +380,9 @@ async def _pipeline_model(
             "hints": hints,
         }
 
+    # TinyBERT cross-encoder scoring (ALL candidates, before file pruning)
+    candidates = _score_cross_encoder_tiny(candidates, task, db)
+
     # File Ranking (Stage 1) — prune to top files
     file_ranker = load_file_ranker()
     file_features, file_to_candidates = extract_file_ranker_features(
@@ -269,6 +398,9 @@ async def _pipeline_model(
         if c.get("symbol_source") in ("pin", "agent_seed"):
             top_file_paths.add(c.get("path", ""))
     filtered_candidates = [c for c in candidates if c.get("path", "") in top_file_paths]
+
+    # Cross-encoder scoring (adds ce_score to each candidate)
+    filtered_candidates = _score_cross_encoder(filtered_candidates, task, db)
 
     # Def Ranking (Stage 2)
     ranker = load_ranker()

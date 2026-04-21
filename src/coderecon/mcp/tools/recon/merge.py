@@ -60,6 +60,7 @@ def _merge_candidates(
                     existing.graph_caller_max_tier = cand.graph_caller_max_tier
                 if cand.import_direction and not existing.import_direction:
                     existing.import_direction = cand.import_direction
+                existing.splade_score = max(existing.splade_score, cand.splade_score)
                 existing.evidence.extend(cand.evidence)
                 if existing.def_fact is None and cand.def_fact is not None:
                     existing.def_fact = cand.def_fact
@@ -130,6 +131,8 @@ async def _enrich_candidates(
             cand.hub_score = hub_score_cache.get(uid, 0)
 
             cand.file_path = fid_path_cache.get(d.file_id, "")
+            frec = file_map.get(d.file_id)
+            cand.language_family = frec.language_family or "" if frec else ""
             cand.is_test = _is_test_file(cand.file_path)
             cand.is_barrel = _is_barrel_file(cand.file_path)
             cand.is_endpoint = uid in endpoint_cache

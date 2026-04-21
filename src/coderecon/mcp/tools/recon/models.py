@@ -480,6 +480,7 @@ class HarvestCandidate:
     graph_caller_max_tier: str | None = None  # Best ref_tier among caller refs (proven > strong > anchored > unknown)
     symbol_source: str | None = None  # agent_seed/auto_seed/task_extracted/path_mention or None
     import_direction: str | None = None  # forward/reverse/barrel/test_pair or None
+    splade_score: float = 0.0  # SPLADE sparse dot-product score (Harvester S)
 
     # Structured evidence trail
     evidence: list[EvidenceRecord] = field(default_factory=list)
@@ -491,6 +492,7 @@ class HarvestCandidate:
     # Structural metadata (populated during enrichment)
     hub_score: int = 0
     file_path: str = ""
+    language_family: str = ""
     is_test: bool = False
     is_barrel: bool = False
     is_endpoint: bool = False

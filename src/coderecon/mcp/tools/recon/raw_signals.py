@@ -20,6 +20,7 @@ from coderecon.mcp.tools.recon.harvesters import (
     _harvest_explicit,
     _harvest_graph,
     _harvest_imports,
+    _harvest_splade,
     _harvest_term_match,
 )
 from coderecon.mcp.tools.recon.merge import (
@@ -58,13 +59,17 @@ async def raw_signals_pipeline(
     # B: Term match
     term_candidates = await _harvest_term_match(app_ctx, parsed)
 
+    # S: SPLADE sparse retrieval
+    splade_candidates = await _harvest_splade(app_ctx, parsed)
+
     # D: Explicit (symbols/paths from query text + agent seeds)
     explicit_candidates = await _harvest_explicit(
         app_ctx, parsed, explicit_seeds=seeds or None,
     )
 
-    # Merge B-D
-    merged = _merge_candidates(term_candidates, explicit_candidates)
+    # Merge B-S-D
+    merged = _merge_candidates(term_candidates, splade_candidates)
+    merged = _merge_candidates(merged, explicit_candidates)
 
     # D2: Pin injection — add all defs from pinned files
     if pins:
@@ -146,6 +151,7 @@ async def raw_signals_pipeline(
             cand.from_explicit,
             cand.from_coverage,
             cand.import_direction is not None,
+            cand.splade_score > 0,
         ])
 
         # Path tokenization
@@ -178,10 +184,12 @@ async def raw_signals_pipeline(
             "object_size_lines": d.end_line - d.start_line + 1,
             # Path features
             "file_ext": "." + cand.file_path.rsplit(".", 1)[-1] if "." in cand.file_path else "",
+            "language_family": cand.language_family,
             "parent_dir": parent_dir,
             "path_depth": path_depth,
             # Structural metadata from index
             "has_docstring": d.docstring is not None and len(d.docstring) > 0,
+            "docstring": d.docstring or "",
             "has_decorators": d.decorators_json is not None and d.decorators_json != "[]",
             "has_return_type": d.return_type is not None,
             "signature_text": d.signature_text,
@@ -211,8 +219,15 @@ async def raw_signals_pipeline(
             "symbol_source": cand.symbol_source,
             # Import signal (categorical)
             "import_direction": cand.import_direction,
+            # SPLADE sparse retrieval score
+            "splade_score": cand.splade_score,
             # Coverage expansion signal
             "from_coverage": cand.from_coverage,
+            # Harvester source flags
+            "from_term_match": cand.from_term_match,
+            "from_explicit": cand.from_explicit,
+            "from_graph": cand.from_graph,
+            "matched_terms_count": len(cand.matched_terms),
             # Retriever agreement
             "retriever_hits": retriever_hits,
             # Locality signals

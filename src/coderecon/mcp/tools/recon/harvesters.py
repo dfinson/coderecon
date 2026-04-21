@@ -168,11 +168,11 @@ async def _harvest_explicit(
         for name in auto_seeds:
             d = await coordinator.get_def(name)
             if d is not None and d.def_uid not in candidates:
-                candidates[d.def_uid] = HarvestCandidate(
+                candidates[uid] = HarvestCandidate(
                     def_uid=d.def_uid,
                     def_fact=d,
                     from_explicit=False,
-                    from_term_match=True,  # counts as a term-match signal
+                    from_term_match=False,
                     symbol_source="auto_seed",
                     evidence=[
                         EvidenceRecord(
@@ -673,5 +673,63 @@ async def _harvest_imports(
         "recon.harvest.imports",
         count=len(candidates),
         seed_files=len(seed_file_ids),
+    )
+    return candidates
+
+
+# ===================================================================
+# Harvester S: SPLADE sparse retrieval
+# ===================================================================
+
+
+async def _harvest_splade(
+    app_ctx: AppContext,
+    parsed: ParsedTask,
+) -> dict[str, HarvestCandidate]:
+    """Harvester S: SPLADE sparse dot-product retrieval.
+
+    Encodes the query text with splade-mini, scores all stored def
+    vectors, and returns candidates above the score floor.
+    """
+    candidates: dict[str, HarvestCandidate] = {}
+    query_text = parsed.query_text or parsed.raw
+    if not query_text:
+        return candidates
+
+    coordinator = app_ctx.coordinator
+
+    from coderecon.index._internal.indexing.splade import retrieve_splade
+
+    scores = retrieve_splade(coordinator.db, query_text)
+
+    if not scores:
+        return candidates
+
+    # Resolve DefFacts for scored UIDs
+    scored_uids = list(scores.keys())
+    def_map = coordinator.batch_get_defs(scored_uids)
+
+    for uid, score in scores.items():
+        d = def_map.get(uid)
+        if d is None:
+            continue
+        candidates[uid] = HarvestCandidate(
+            def_uid=uid,
+            def_fact=d,
+            from_term_match=False,
+            splade_score=score,
+            evidence=[
+                EvidenceRecord(
+                    category="splade",
+                    detail=f"SPLADE score={score:.2f}",
+                    score=score,
+                )
+            ],
+        )
+
+    log.debug(
+        "recon.harvest.splade",
+        count=len(candidates),
+        top_score=max(scores.values()) if scores else 0,
     )
     return candidates
