@@ -607,7 +607,13 @@ class IndexCoordinatorEngine:
             files_by_ext=files_by_ext,
         )
 
-    async def collect_initial_coverage(self) -> int:
+    async def collect_initial_coverage(
+        self,
+        *,
+        parallelism: int | None = None,
+        memory_reserve_mb: int = 1024,
+        subprocess_memory_limit_mb: int | None = None,
+    ) -> int:
         """Run the full test suite with coverage and ingest results.
 
         Best-effort: if no test targets exist, no runner pack is available,
@@ -618,11 +624,17 @@ class IndexCoordinatorEngine:
         try:
             from coderecon.testing.ops import TestOps
 
-            test_ops = TestOps(self.repo_root, self)
+            test_ops = TestOps(
+                self.repo_root,
+                self,
+                memory_reserve_mb=memory_reserve_mb,
+                subprocess_memory_limit_mb=subprocess_memory_limit_mb,
+            )
             result = await test_ops.run(
                 targets=None,  # all targets
                 coverage=True,
                 fail_fast=False,  # collect as much coverage as possible
+                parallelism=parallelism,
             )
 
             if not result.run_status or not result.run_status.coverage:
@@ -649,7 +661,7 @@ class IndexCoordinatorEngine:
                     )
                     reports.append(report)
                 except (CoverageParseError, Exception):
-                    log.debug("initial_coverage.parse_failed", path=cov_path, exc_info=True)
+                    log.debug("initial_coverage.parse_failed", extra={"path": cov_path}, exc_info=True)
 
             if not reports:
                 log.debug("initial_coverage.no_reports")
@@ -670,7 +682,7 @@ class IndexCoordinatorEngine:
                 self.db.engine, merged, self.current_epoch,
                 failed_test_ids=failed_ids,
             )
-            log.info("initial_coverage.ingested", facts=written)
+            log.info("initial_coverage.ingested", extra={"facts": written})
             return written
 
         except Exception:
@@ -737,9 +749,11 @@ class IndexCoordinatorEngine:
                 if stale:
                     log.info(
                         "worktree_migration",
-                        files=len(stale),
-                        from_id=0,
-                        to_id=main_wt_id,
+                        extra={
+                            "files": len(stale),
+                            "from_id": 0,
+                            "to_id": main_wt_id,
+                        },
                     )
                     for f in stale:
                         f.worktree_id = main_wt_id
@@ -748,6 +762,26 @@ class IndexCoordinatorEngine:
 
         self._initialized = True
         return True
+
+    def backfill_missing_signals(self) -> dict[str, int]:
+        """Detect and backfill missing derived signals.
+
+        Runs a cheap SQL scan for each registered signal check.  If gaps
+        are found (e.g. defs without SPLADE vectors, or vectors with a
+        stale model version), the corresponding backfill pass is run for
+        only the affected file IDs.
+
+        Safe to call on every load — returns immediately when consistent.
+        """
+        from coderecon.index._internal.db import (
+            backfill_gaps,
+            check_consistency,
+        )
+
+        report = check_consistency(self.db)
+        if report.consistent:
+            return {}
+        return backfill_gaps(self.db, report)
 
     def changed_since_last_index(self) -> list[Path]:
         """Return paths changed since the last indexed HEAD (git-diff based).
@@ -989,10 +1023,14 @@ class IndexCoordinatorEngine:
                                 files_updated += 1
                             symbols_indexed += len(extraction.symbol_names)
 
+                            # Release file content after staging
+                            extraction.content_text = None
+                            extraction.symbol_names = []
+
                         # Persist structural facts (reuses pre-computed extractions)
                         # Filter out failed extractions — index_files skips them
                         # but doesn't purge existing facts
-                        ok_extractions = [e for e in extractions if e.content_text is not None]
+                        ok_extractions = [e for e in extractions if e.file_path not in failed_paths]
                         ok_paths = [e.file_path for e in ok_extractions]
                         self._structural.index_files(
                             ok_paths,
@@ -1022,6 +1060,15 @@ class IndexCoordinatorEngine:
                     run_pass_1_5(self.db, None, file_ids=changed_file_ids)
                     resolve_references(self.db, file_ids=changed_file_ids)
                     resolve_type_traced(self.db, file_ids=changed_file_ids)
+
+                # SPLADE: re-encode vectors for changed files
+                self._reindex_splade_vectors(changed_file_ids)
+
+                # Passes 5-7: run global semantic passes when vectors
+                # exist.  These are global (not file-scoped) because
+                # changing one def's vector can affect its similarity
+                # to every other def.
+                self._reindex_semantic_passes(changed_file_ids)
 
                 # Mark successfully indexed files as indexed
                 if changed_file_ids:
@@ -1247,6 +1294,14 @@ class IndexCoordinatorEngine:
                 file = session.exec(select(File).where(File.path == str_path)).first()
                 if file and file.id is not None:
                     file_id = file.id
+                    # Remove SPLADE vectors for defs in this file
+                    # (must run BEFORE def_facts deletion so we can find the UIDs)
+                    session.exec(
+                        text(
+                            "DELETE FROM splade_vecs WHERE def_uid IN "
+                            "(SELECT def_uid FROM def_facts WHERE file_id = :fid)"
+                        ).bindparams(fid=file_id)
+                    )  # type: ignore[call-overload]
                     session.exec(
                         text("DELETE FROM def_facts WHERE file_id = :fid").bindparams(fid=file_id)
                     )  # type: ignore[call-overload]
@@ -2772,6 +2827,11 @@ class IndexCoordinatorEngine:
                                 worktree=self._freshness_worktree or "main",
                             )
 
+                            # Release file content now — index_files() only
+                            # needs structural facts, not the raw text.
+                            extraction.content_text = None
+                            extraction.symbol_names = []
+
                             count += 1
                             indexed_paths.append(extraction.file_path)
 
@@ -2793,15 +2853,18 @@ class IndexCoordinatorEngine:
                             _extractions=extractions,
                         )
 
-                # Commit all Tantivy changes in one batch (1 commit, not N)
-                self._lexical.commit_staged()
+                    # Commit Tantivy after each batch so the staging buffer
+                    # (which holds file contents) doesn't grow unbounded.
+                    # Tantivy merges segments internally during search.
+                    if self._lexical.has_staged_changes():
+                        self._lexical.commit_staged()
 
                 # Re-resolve any import paths that couldn't resolve during
                 # batched indexing (e.g. batch 1 imports targeting batch 2 files).
                 _extract_elapsed = time.time() - _extract_start
                 log.info("index.stage.extract_complete",
-                         files=count, elapsed_sec=round(_extract_elapsed, 1),
-                         workers=workers)
+                         extra={"files": count, "elapsed_sec": round(_extract_elapsed, 1),
+                         "workers": workers})
 
                 _resolve_start = time.time()
                 self._structural.resolve_all_imports()
@@ -2833,9 +2896,178 @@ class IndexCoordinatorEngine:
                 resolve_type_traced(self.db, on_progress=pass3_progress)
                 _resolve_elapsed = time.time() - _resolve_start
                 log.info("index.stage.resolve_complete",
-                         elapsed_sec=round(_resolve_elapsed, 1))
+                         extra={"elapsed_sec": round(_resolve_elapsed, 1)})
+
+                # SPLADE sparse vector encoding (after all resolution passes
+                # so callees/type-refs are available for scaffold building).
+                # Runs outside tantivy_write_lock since it only writes to SQLite.
+                self._index_splade_vectors(on_progress, files_by_ext)
+
+                # Pass 4: Semantic resolution — resolve remaining unresolved
+                # refs, member accesses, and shapes via SPLADE+CE.
+                self._semantic_resolve(on_progress, files_by_ext)
+
+                # Pass 5: Semantic neighbors — compute pairwise SPLADE
+                # dot products between all defs.
+                self._compute_semantic_neighbors(on_progress, files_by_ext)
+
+                # Pass 6: Doc chunk linking — encode non-code file chunks
+                # and link to code definitions.
+                self._index_doc_chunks(on_progress, files_by_ext)
 
         return count, indexed_paths, files_by_ext
+
+    def _index_splade_vectors(
+        self,
+        on_progress: Callable[[int, int, dict[str, int], str], None],
+        files_by_ext: dict[str, int],
+    ) -> None:
+        """Compute SPLADE vectors for all defs (full index)."""
+        from coderecon.index._internal.indexing.splade import index_splade_vectors
+
+        on_progress(0, 1, files_by_ext, "encoding_splade")
+
+        def _splade_progress(encoded: int, total: int) -> None:
+            on_progress(encoded, total, files_by_ext, "encoding_splade")
+
+        stored = index_splade_vectors(self.db, progress_cb=_splade_progress)
+        log.info("index.splade.complete", extra={"stored": stored})
+
+    def _reindex_splade_vectors(self, file_ids: list[int]) -> None:
+        """Re-encode SPLADE vectors for defs in changed files (incremental)."""
+        if not file_ids:
+            return
+        from coderecon.index._internal.indexing.splade import index_splade_vectors
+
+        stored = index_splade_vectors(self.db, file_ids=file_ids)
+        log.debug("reindex.splade.complete", extra={"stored": stored, "file_ids": len(file_ids)})
+
+    def _reindex_semantic_passes(self, changed_file_ids: list[int]) -> None:
+        """Run Passes 5-7 after incremental SPLADE re-encode.
+
+        These are global passes (not file-scoped) but only run when
+        SPLADE vectors exist and files have actually changed.
+        """
+        if not changed_file_ids:
+            return
+
+        from coderecon.index._internal.indexing.doc_chunks import (
+            index_doc_chunk_vectors,
+            link_doc_chunks_to_defs,
+        )
+        from coderecon.index._internal.indexing.semantic_neighbors import (
+            compute_semantic_neighbors,
+        )
+        from coderecon.index._internal.indexing.semantic_resolver import (
+            resolve_unresolved_accesses,
+            resolve_unresolved_refs,
+            resolve_unresolved_shapes,
+        )
+
+        # Pass 5: Semantic resolution — try to resolve remaining edges.
+        try:
+            refs = resolve_unresolved_refs(self.db)
+            accesses = resolve_unresolved_accesses(self.db)
+            shapes = resolve_unresolved_shapes(self.db)
+            log.debug("reindex.semantic_resolve.complete",
+                      extra={"refs": refs, "accesses": accesses, "shapes": shapes})
+        except Exception:
+            log.warning("reindex.semantic_resolve.failed", exc_info=True)
+
+        # Pass 6: Semantic neighbors — recompute for changed defs.
+        try:
+            edges = compute_semantic_neighbors(
+                self.db, changed_file_ids=changed_file_ids
+            )
+            log.debug("reindex.semantic_neighbors.complete", extra={"edges": edges})
+        except Exception:
+            log.warning("reindex.semantic_neighbors.failed", exc_info=True)
+
+        # Pass 7: Doc chunk linking — re-link doc chunks that may
+        # reference changed defs (scope to changed doc files if any).
+        try:
+            doc_file_ids = self._get_doc_file_ids(changed_file_ids)
+            if doc_file_ids:
+                chunks = index_doc_chunk_vectors(self.db, file_ids=doc_file_ids)
+                log.debug("reindex.doc_chunks.encode", extra={"chunks": chunks})
+            # Re-link all chunks against updated def vectors
+            edges = link_doc_chunks_to_defs(self.db)
+            log.debug("reindex.doc_chunks.link", extra={"edges": edges})
+        except Exception:
+            log.warning("reindex.doc_chunks.failed", exc_info=True)
+
+    def _get_doc_file_ids(self, file_ids: list[int]) -> list[int]:
+        """Filter file_ids to only doc/config files."""
+        if not file_ids:
+            return []
+        with self.db.session() as session:
+            from coderecon.index._internal.indexing.doc_chunks import _DOC_FAMILIES
+            rows = session.exec(
+                select(File.id).where(
+                    col(File.id).in_(file_ids),
+                    col(File.language_family).in_(list(_DOC_FAMILIES)),
+                )
+            ).all()
+            return [r for r in rows if r is not None]
+
+    def _semantic_resolve(
+        self,
+        on_progress: Callable[[int, int, dict[str, int], str], None],
+        files_by_ext: dict[str, int],
+    ) -> None:
+        """Pass 4: Resolve unresolved refs/accesses/shapes via SPLADE+CE."""
+        from coderecon.index._internal.indexing.semantic_resolver import (
+            resolve_unresolved_accesses,
+            resolve_unresolved_refs,
+            resolve_unresolved_shapes,
+        )
+
+        on_progress(0, 3, files_by_ext, "semantic_resolve")
+
+        refs = resolve_unresolved_refs(self.db)
+        on_progress(1, 3, files_by_ext, "semantic_resolve")
+
+        accesses = resolve_unresolved_accesses(self.db)
+        on_progress(2, 3, files_by_ext, "semantic_resolve")
+
+        shapes = resolve_unresolved_shapes(self.db)
+        on_progress(3, 3, files_by_ext, "semantic_resolve")
+
+        log.info("index.semantic_resolve.complete",
+                 extra={"refs": refs, "accesses": accesses, "shapes": shapes})
+
+    def _compute_semantic_neighbors(
+        self,
+        on_progress: Callable[[int, int, dict[str, int], str], None],
+        files_by_ext: dict[str, int],
+    ) -> None:
+        """Pass 5: Compute semantic neighbor edges."""
+        from coderecon.index._internal.indexing.semantic_neighbors import (
+            compute_semantic_neighbors,
+        )
+
+        on_progress(0, 1, files_by_ext, "semantic_neighbors")
+        edges = compute_semantic_neighbors(self.db)
+        on_progress(1, 1, files_by_ext, "semantic_neighbors")
+        log.info("index.semantic_neighbors.complete", extra={"edges": edges})
+
+    def _index_doc_chunks(
+        self,
+        on_progress: Callable[[int, int, dict[str, int], str], None],
+        files_by_ext: dict[str, int],
+    ) -> None:
+        """Pass 6: Encode doc chunks and link to code defs."""
+        from coderecon.index._internal.indexing.doc_chunks import (
+            index_doc_chunk_vectors,
+            link_doc_chunks_to_defs,
+        )
+
+        on_progress(0, 2, files_by_ext, "doc_chunk_linking")
+        chunks = index_doc_chunk_vectors(self.db)
+        on_progress(1, 2, files_by_ext, "doc_chunk_linking")
+        edges = link_doc_chunks_to_defs(self.db)
+        on_progress(2, 2, files_by_ext, "doc_chunk_linking")
+        log.info("index.doc_chunks.complete", extra={"chunks": chunks, "edges": edges})
 
     def batch_get_defs(self, def_uids: list[str]) -> dict[str, DefFact]:
         """Get DefFacts by UID, using an in-memory cache.
@@ -2855,7 +3087,7 @@ class IndexCoordinatorEngine:
                 self._def_cache = {d.def_uid: d for d in all_defs}
                 log.debug(
                     "def_cache.loaded",
-                    count=len(self._def_cache),
+                    extra={"count": len(self._def_cache)},
                 )
         return {uid: self._def_cache[uid] for uid in def_uids if uid in self._def_cache}
 

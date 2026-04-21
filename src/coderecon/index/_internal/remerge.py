@@ -177,12 +177,14 @@ def remerge_worktree(
 
     log.info(
         "remerge_complete",
-        worktree_id=target_worktree_id,
-        changed=len(changed_paths),
-        adopted=result.adopted,
-        reindexed=len(result.reindexed),
-        pruned=result.pruned,
-        elapsed_ms=round(result.elapsed_ms, 1),
+        extra={
+            "worktree_id": target_worktree_id,
+            "changed": len(changed_paths),
+            "adopted": result.adopted,
+            "reindexed": len(result.reindexed),
+            "pruned": result.pruned,
+            "elapsed_ms": round(result.elapsed_ms, 1),
+        },
     )
 
     return result
@@ -225,7 +227,7 @@ def drop_worktree_data(engine: Engine, worktree_id: int) -> int:
 
         conn.commit()
 
-    log.info("worktree_data_dropped", worktree_id=worktree_id, files=len(file_ids))
+    log.info("worktree_data_dropped", extra={"worktree_id": worktree_id, "files": len(file_ids)})
     return len(file_ids)
 
 

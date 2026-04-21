@@ -74,6 +74,24 @@ class Database:
     def create_all(self) -> None:
         """Create all tables from SQLModel metadata."""
         SQLModel.metadata.create_all(self.engine)
+        self._migrate_schema()
+
+    def _migrate_schema(self) -> None:
+        """Apply lightweight column additions for existing SQLite databases."""
+        migrations = [
+            ("splade_vecs", "scaffold_text", "TEXT"),
+            ("splade_vecs", "vector_blob", "BLOB"),
+        ]
+        with self.engine.connect() as conn:
+            for table, column, col_type in migrations:
+                try:
+                    conn.execute(
+                        text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+                    )
+                    conn.commit()
+                except OperationalError:
+                    # Column already exists — expected for new or already-migrated DBs
+                    conn.rollback()
 
     def drop_all(self) -> None:
         """Drop all tables. Use with caution."""

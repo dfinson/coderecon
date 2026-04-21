@@ -250,6 +250,7 @@ class RefTier(StrEnum):
     PROVEN = "proven"  # Same-file lexical bind with LocalBindFact certainty=CERTAIN
     STRONG = "strong"  # Cross-file with explicit ImportFact + ExportSurface trace
     ANCHORED = "anchored"  # Ambiguous but grouped in AnchorGroup
+    SEMANTIC = "semantic"  # Resolved via SPLADE+CE semantic matching
     UNKNOWN = "unknown"  # Cannot classify
 
 
@@ -376,6 +377,7 @@ class ResolutionMethod(StrEnum):
     IMPORT_TRACED = "import_traced"  # Via import resolution
     INTERFACE_MATCHED = "interface_matched"  # Via interface/trait impl
     SHAPE_MATCHED = "shape_matched"  # Via duck-type shape inference
+    SEMANTIC = "semantic"  # Via SPLADE+CE semantic similarity
     LEXICAL = "lexical"  # Lexical search only (lowest confidence)
     UNRESOLVED = "unresolved"  # Could not resolve
 
@@ -1177,6 +1179,84 @@ class DocCrossRef(SQLModel, table=True):
     raw_text: str  # Original reference text ("See also FooClass")
     target_def_uid: str = Field(index=True)  # Resolved DefFact.def_uid
     confidence: str = Field(default="high")  # "high", "medium", "low"
+
+
+class SpladeVec(SQLModel, table=True):
+    """SPLADE sparse vector for a DefFact.
+
+    Stores the sparse term-weight vector produced by splade-mini for
+    each definition's anglicised scaffold.  Used at query time for
+    sparse dot-product retrieval (Harvester S).
+    """
+
+    __tablename__ = "splade_vecs"
+
+    def_uid: str = Field(primary_key=True)  # Matches DefFact.def_uid
+    vector_json: str  # Compact JSON: {"term_idx": weight, ...}
+    model_version: str = Field(index=True)  # e.g. "splade-mini-v1"
+    scaffold_text: str | None = Field(default=None)  # Anglicised scaffold text
+    vector_blob: bytes | None = Field(default=None)  # Packed (uint32,float32) pairs
+
+
+class SemanticNeighborFact(SQLModel, table=True):
+    """Semantic neighbor edge between two definitions.
+
+    Pre-computed at index time via SPLADE dot product between def
+    scaffold vectors.  Captures "similar code" relationships invisible
+    to AST analysis — e.g. two parsers in different modules, duplicate
+    implementations, analogous API handlers.
+    """
+
+    __tablename__ = "semantic_neighbor_facts"
+
+    id: int | None = Field(default=None, primary_key=True)
+    source_def_uid: str = Field(index=True)
+    neighbor_def_uid: str = Field(index=True)
+    score: float  # SPLADE dot-product similarity
+    model_version: str = Field(index=True)
+
+
+class FileChunkVec(SQLModel, table=True):
+    """SPLADE vector for a non-code file chunk.
+
+    Non-code files (markdown, YAML, TOML, etc.) don't produce DefFacts
+    but still contain semantically meaningful content.  Each structural
+    chunk (heading section, config key-path, etc.) gets a SPLADE vector
+    for dot-product linking against code definitions.
+    """
+
+    __tablename__ = "file_chunk_vecs"
+
+    id: int | None = Field(default=None, primary_key=True)
+    file_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
+    )
+    chunk_key: str  # Structural key: heading path, YAML key-path, etc.
+    chunk_text: str  # Raw text of the chunk
+    start_line: int
+    end_line: int
+    vector_json: str  # Compact JSON sparse vector
+    model_version: str = Field(index=True)
+
+
+class DocCodeEdgeFact(SQLModel, table=True):
+    """Semantic edge from a non-code file chunk to a code definition.
+
+    Created at index time by dot-product between FileChunkVec and
+    SpladeVec vectors.  Represents a semantic "relates to" connection
+    between documentation/config content and code.
+    """
+
+    __tablename__ = "doc_code_edge_facts"
+
+    id: int | None = Field(default=None, primary_key=True)
+    file_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
+    )
+    chunk_key: str  # Which chunk in the file
+    target_def_uid: str = Field(index=True)  # Code def this chunk relates to
+    score: float  # SPLADE dot-product similarity
+    model_version: str = Field(index=True)
 
 
 # ============================================================================

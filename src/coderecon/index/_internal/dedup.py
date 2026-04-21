@@ -62,10 +62,12 @@ def find_reusable_files(
     if reusable:
         log.info(
             "content_hash_dedup",
-            worktree_id=worktree_id,
-            total_files=len(file_hashes),
-            reusable_files=len(reusable),
-            saved_pct=round(100 * len(reusable) / len(file_hashes), 1),
+            extra={
+                "worktree_id": worktree_id,
+                "total_files": len(file_hashes),
+                "reusable_files": len(reusable),
+                "saved_pct": round(100 * len(reusable) / len(file_hashes), 1),
+            },
         )
 
     return reusable
@@ -129,16 +131,18 @@ def clone_facts_from_source(
                 total += result.rowcount
             except Exception:  # noqa: BLE001
                 # Table might not have all columns — skip silently
-                log.debug("clone_facts_skip", table=table)
+                log.debug("clone_facts_skip", extra={"table": table})
 
         conn.commit()
 
     elapsed = time.monotonic() - t0
     log.debug(
         "facts_cloned",
-        source_file_id=source_file_id,
-        target_file_id=target_file_id,
-        facts=total,
-        elapsed_ms=round(elapsed * 1000),
+        extra={
+            "source_file_id": source_file_id,
+            "target_file_id": target_file_id,
+            "facts": total,
+            "elapsed_ms": round(elapsed * 1000),
+        },
     )
     return total

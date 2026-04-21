@@ -155,7 +155,7 @@ def snapshots_from_blob(
         result = parser.parse(_Path(file_path), content=source)
         symbols = parser.extract_symbols(result)
     except Exception:
-        log.warning("blob_parse_failed", path=file_path)
+        log.warning("blob_parse_failed", extra={"path": file_path})
         return []
 
     snapshots: list[DefSnapshot] = []

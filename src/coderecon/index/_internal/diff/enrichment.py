@@ -125,22 +125,22 @@ def _enrich_single_change(
             session, rc.path, rc.kind, rc.name
         )
     except Exception:
-        log.debug("enrich_refs_failed", path=rc.path, name=rc.name, exc_info=True)
+        log.debug("enrich_refs_failed", extra={"path": rc.path, "name": rc.name}, exc_info=True)
 
     try:
         imp_files = _enrich_imports(session, rc.name)
     except Exception:
-        log.debug("enrich_imports_failed", path=rc.path, name=rc.name, exc_info=True)
+        log.debug("enrich_imports_failed", extra={"path": rc.path, "name": rc.name}, exc_info=True)
 
     try:
         test_files = _enrich_test_files(ref_files, imp_files)
     except Exception:
-        log.debug("enrich_tests_failed", path=rc.path, name=rc.name, exc_info=True)
+        log.debug("enrich_tests_failed", extra={"path": rc.path, "name": rc.name}, exc_info=True)
 
     try:
         visibility, is_static = _enrich_visibility(session, rc.path, rc.kind, rc.name)
     except Exception:
-        log.debug("enrich_visibility_failed", path=rc.path, name=rc.name, exc_info=True)
+        log.debug("enrich_visibility_failed", extra={"path": rc.path, "name": rc.name}, exc_info=True)
 
     ref_count = ref_tiers.total if ref_tiers else None
     has_any = ref_count is not None or ref_files or imp_files or test_files or visibility
@@ -185,7 +185,7 @@ def _enrich_single_change(
             if old_entity_id:
                 previous_entity_id = old_entity_id
         except Exception:
-            log.debug("old_entity_id_failed", path=rc.path, old_name=rc.old_name, exc_info=True)
+            log.debug("old_entity_id_failed", extra={"path": rc.path, "old_name": rc.old_name}, exc_info=True)
 
     return StructuralChange(
         path=rc.path,
