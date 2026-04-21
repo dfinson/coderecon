@@ -2,30 +2,38 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://dfinson.github.io/coderecon/</loc>
-         <lastmod>2026-04-16</lastmod>
+         <lastmod>2026-04-21</lastmod>
     </url>
     <url>
          <loc>https://dfinson.github.io/coderecon/architecture/</loc>
-         <lastmod>2026-04-16</lastmod>
+         <lastmod>2026-04-21</lastmod>
     </url>
     <url>
          <loc>https://dfinson.github.io/coderecon/cli/</loc>
-         <lastmod>2026-04-16</lastmod>
+         <lastmod>2026-04-21</lastmod>
     </url>
     <url>
          <loc>https://dfinson.github.io/coderecon/configuration/</loc>
-         <lastmod>2026-04-16</lastmod>
+         <lastmod>2026-04-21</lastmod>
     </url>
     <url>
          <loc>https://dfinson.github.io/coderecon/getting-started/</loc>
-         <lastmod>2026-04-16</lastmod>
+         <lastmod>2026-04-21</lastmod>
     </url>
     <url>
          <loc>https://dfinson.github.io/coderecon/mcp-setup/</loc>
-         <lastmod>2026-04-16</lastmod>
+         <lastmod>2026-04-21</lastmod>
     </url>
     <url>
          <loc>https://dfinson.github.io/coderecon/tools/</loc>
-         <lastmod>2026-04-16</lastmod>
+         <lastmod>2026-04-21</lastmod>
+    </url>
+    <url>
+         <loc>https://dfinson.github.io/coderecon/experiments/streaming-pipeline-assessment/</loc>
+         <lastmod>2026-04-21</lastmod>
+    </url>
+    <url>
+         <loc>https://dfinson.github.io/coderecon/experiments/tantivy-splade-experiment/</loc>
+         <lastmod>2026-04-21</lastmod>
     </url>
 </urlset>
