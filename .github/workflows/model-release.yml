@@ -1,0 +1,71 @@
+name: Model Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Model package version (e.g. 1.0.0)"
+        required: true
+        default: "1.0.0"
+
+permissions:
+  contents: write
+  id-token: write  # For PyPI trusted publishing
+
+jobs:
+  release-models:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: pypi
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          lfs: false  # Models are built from source, not from LFS
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Build SPLADE model wheel
+        working-directory: model-packages/coderecon-models-splade
+        run: uv build --wheel
+
+      - name: Build cross-encoder model wheel
+        working-directory: model-packages/coderecon-models-ce
+        run: uv build --wheel
+
+      - name: Create model release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="models-v${{ inputs.version }}"
+
+          # Delete existing release/tag if re-publishing same version
+          gh release delete "$TAG" --yes 2>/dev/null || true
+          git push origin ":refs/tags/$TAG" 2>/dev/null || true
+
+          gh release create "$TAG" \
+            model-packages/coderecon-models-splade/dist/*.whl \
+            model-packages/coderecon-models-ce/dist/*.whl \
+            --title "Model Weights $TAG" \
+            --notes "ONNX model wheels for coderecon.
+
+          - **coderecon-models-splade**: SPLADE-mini (~40 MB)
+          - **coderecon-models-ce**: MiniLM-L-6-v2 cross-encoder (~80 MB)
+
+          Referenced by \`[tool.uv.sources]\` in coderecon's pyproject.toml."
+
+      - name: Publish SPLADE model to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: model-packages/coderecon-models-splade/dist/
+
+      - name: Publish cross-encoder model to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: model-packages/coderecon-models-ce/dist/

@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "coderecon-models-splade"
+version = "1.0.0"
+description = "SPLADE-mini ONNX model for coderecon sparse retrieval"
+license = "MIT"
+requires-python = ">=3.12"
+
+[tool.hatch.build.targets.wheel]
+packages = ["coderecon_models_splade"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"models/model.onnx" = "coderecon_models_splade/models/model.onnx"
+"models/tokenizer.json" = "coderecon_models_splade/models/tokenizer.json"
