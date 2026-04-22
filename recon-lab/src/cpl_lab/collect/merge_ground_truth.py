@@ -181,7 +181,15 @@ def collect_ground_truth(
 
     con.close()
 
-    non_ok_path = gt_dir / "non_ok_queries.json"
+    # Non-OK queries (UNSAT/BROAD/AMBIG) are per-repo, stored in the main
+    # repo's data dir.  For PR worktrees, resolve via manifest.json.
+    manifest_path = data_dir / "manifest.json"
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text())
+        logical_repo_id = manifest.get("logical_repo_id") or manifest.get("repo_id")
+    else:
+        logical_repo_id = data_dir.name
+    non_ok_path = data_dir.parent / logical_repo_id / "ground_truth" / "non_ok_queries.json"
     if non_ok_path.exists():
         non_ok = json.loads(non_ok_path.read_text())
         non_ok_run_id = f"{repo_id}__non_ok"

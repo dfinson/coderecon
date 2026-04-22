@@ -216,6 +216,16 @@ await sdk.checkpoint(
     worktree: str = "main",
 ) -> CheckpointResult
 
+# ── Raw Signals (training / evaluation) ────────────────────
+
+await sdk.raw_signals(
+    repo: str,
+    query: str,                    # Same as recon task
+    seeds: list[str] = [],
+    pins: list[str] = [],
+    worktree: str = "main",
+) -> RawSignalsResult
+
 # ── Introspection ──────────────────────────────────────────
 
 await sdk.describe(
@@ -565,9 +575,13 @@ async def _handle_request(daemon, registry, request, write_message):
     await write_message(response)
 ```
 
-**`dispatch.py`** — Routes `method` to the right tool handler. Resolves `repo` + `worktree` to an `AppContext` via the same lazy-activation path as `_DynamicMcpRouter`:
+**`dispatch.py`** — Routes `method` to the right core function. Uses the **shared `resolve_worktree()`** helper (see §6.6) for repo/worktree resolution — the same function that `_DynamicMcpRouter.handle()` will be refactored to use.
+
+Critically, dispatch does **not** maintain a parallel handler layer. It calls the same extracted core functions that the MCP `register_tools()` wrappers call (see §6.7 for the prerequisite refactoring).
 
 ```python
+from coderecon.daemon.resolve import resolve_worktree
+
 async def dispatch(daemon: GlobalDaemon, registry: CatalogRegistry, request: dict) -> dict:
     method = request["method"]
     params = request.get("params", {})
@@ -575,7 +589,7 @@ async def dispatch(daemon: GlobalDaemon, registry: CatalogRegistry, request: dic
     session_id = request.get("session_id")
     
     try:
-        # Management methods
+        # Management methods (no repo context needed)
         if method == "register":
             return await handle_register(daemon, registry, params, request_id)
         if method == "catalog":
@@ -583,72 +597,130 @@ async def dispatch(daemon: GlobalDaemon, registry: CatalogRegistry, request: dic
         if method == "status":
             return await handle_status(daemon, params, request_id)
         
-        # Tool methods — require repo
+        # Tool methods — resolve repo + worktree via shared helper
         repo_name = params.pop("repo")
         worktree = params.pop("worktree", "main")
         
-        # Same lazy activation as _DynamicMcpRouter
-        slot = daemon.get_slot(repo_name)
-        if slot is None:
-            slot = await daemon.lazy_activate_repo(repo_name)
-        if slot is None:
-            return error_response(request_id, "REPO_NOT_FOUND", f"No repo '{repo_name}'")
-        
-        wt_slot = slot.worktrees.get(worktree)
+        wt_slot = await resolve_worktree(daemon, repo_name, worktree)
         if wt_slot is None:
-            wt_slot = await daemon.lazy_activate_worktree(repo_name, worktree)
-        if wt_slot is None:
-            return error_response(request_id, "WORKTREE_NOT_FOUND", f"No worktree '{worktree}'")
+            return error_response(request_id, "NOT_FOUND",
+                f"No repo '{repo_name}' / worktree '{worktree}'")
         
         app_ctx = wt_slot.app_ctx
         session = app_ctx.session_manager.get_or_create(session_id)
         
-        # Dispatch to tool handler
-        handler = TOOL_HANDLERS[method]
-        result = await handler(app_ctx, session, params)
+        # Call the SAME core function that MCP tools call
+        core_fn = CORE_FUNCTIONS[method]
+        result = await core_fn(app_ctx=app_ctx, session=session, **params)
         return success_response(request_id, result)
         
     except Exception as exc:
         return error_response(request_id, "INTERNAL", str(exc))
 ```
 
-**`TOOL_HANDLERS`** — A dispatch table mapping method names to handler functions. These handlers call the same ops and pipeline code that the MCP tools call, but without FastMCP or MCP context objects:
+**`CORE_FUNCTIONS`** maps method names directly to the extracted core functions that already exist (or will be extracted as a prerequisite — see §6.7):
 
 ```python
-TOOL_HANDLERS: dict[str, ToolHandler] = {
-    "recon": handle_recon,
-    "recon_map": handle_recon_map,
-    "recon_impact": handle_recon_impact,
-    "recon_understand": handle_recon_understand,
-    "semantic_diff": handle_semantic_diff,
-    "graph_cycles": handle_graph_cycles,
-    "graph_communities": handle_graph_communities,
-    "graph_export": handle_graph_export,
-    "refactor_rename": handle_refactor_rename,
-    "refactor_move": handle_refactor_move,
-    "refactor_commit": handle_refactor_commit,
-    "refactor_cancel": handle_refactor_cancel,
-    "checkpoint": handle_checkpoint,
-    "describe": handle_describe,
+from coderecon.mcp.tools.recon import recon_pipeline, recon_map_core, raw_signals_pipeline
+from coderecon.mcp.tools.checkpoint import checkpoint_pipeline
+from coderecon.mcp.tools.diff import semantic_diff_core
+from coderecon.mcp.tools.refactor import (
+    refactor_rename_core, refactor_move_core, refactor_commit_core,
+    refactor_cancel_core, recon_impact_core,
+)
+from coderecon.mcp.tools.graph import (
+    graph_cycles_core, graph_communities_core, graph_export_core,
+    recon_understand_core,
+)
+from coderecon.mcp.tools.introspection import describe_core
+
+CORE_FUNCTIONS: dict[str, CoreFn] = {
+    "recon":              recon_pipeline,
+    "recon_map":          recon_map_core,
+    "raw_signals":        raw_signals_pipeline,
+    "recon_impact":       recon_impact_core,
+    "recon_understand":   recon_understand_core,
+    "semantic_diff":      semantic_diff_core,
+    "graph_cycles":       graph_cycles_core,
+    "graph_communities":  graph_communities_core,
+    "graph_export":       graph_export_core,
+    "refactor_rename":    refactor_rename_core,
+    "refactor_move":      refactor_move_core,
+    "refactor_commit":    refactor_commit_core,
+    "refactor_cancel":    refactor_cancel_core,
+    "checkpoint":         checkpoint_pipeline,
+    "describe":           describe_core,
 }
 ```
 
-Each handler is a thin function that calls the existing ops/pipeline code:
+There is **no `handlers.py`**. No parallel handler layer. The dispatch table points directly at the core functions that MCP tools also call. This is the critical DRY property.
+
+### 6.6 Shared Repo/Worktree Resolution
+
+The repo/worktree lazy-activation logic currently lives inline in `_DynamicMcpRouter.handle()`. The SDK dispatch needs the same logic. To avoid duplication, extract it into a shared function:
 
 ```python
-async def handle_recon(ctx: AppContext, session: SessionState, params: dict) -> dict:
-    """Same logic as mcp/tools/recon.py but without MCP wiring."""
-    from coderecon.mcp.tools.recon import recon_pipeline  # or whatever the core function is
+# daemon/resolve.py — NEW (extracted from global_app.py)
+
+async def resolve_worktree(
+    daemon: GlobalDaemon,
+    repo_name: str,
+    worktree: str = "main",
+) -> WorktreeSlot | None:
+    """Resolve repo + worktree with lazy activation.
     
-    result = await recon_pipeline(
-        app_ctx=ctx,
-        session=session,
-        task=params["task"],
-        seeds=params.get("seeds", []),
-        pins=params.get("pins", []),
-    )
-    return result  # Already a dict
+    Shared by both HTTP (_DynamicMcpRouter) and stdio (dispatch.py).
+    Returns None if the repo or worktree can't be found/activated.
+    """
+    slot = daemon.get_slot(repo_name)
+    if slot is None:
+        slot = await daemon.lazy_activate_repo(repo_name)
+    if slot is None:
+        return None
+
+    wt_slot = slot.worktrees.get(worktree)
+    if wt_slot is None:
+        wt_slot = await daemon.lazy_activate_worktree(repo_name, worktree)
+    if wt_slot is None:
+        return None
+
+    wt_slot.last_request_at = time.time()
+    return wt_slot
 ```
+
+`_DynamicMcpRouter.handle()` is refactored to call `resolve_worktree()` instead of inlining the lookup. Zero behavior change, just extraction.
+
+### 6.7 Prerequisite: Core Function Extraction (DRY)
+
+The SDK and MCP must call the **same** core functions. Today, some tool modules already have clean extracted core functions; others have business logic inlined inside `@mcp.tool()` closures. Before building the stdio transport, each module needs a core function with the signature:
+
+```python
+async def tool_core(app_ctx: AppContext, session: SessionState, **tool_params) -> dict
+```
+
+Current state by module:
+
+| Module | Core function exists? | Work needed |
+|--------|----------------------|-------------|
+| `mcp/tools/recon/pipeline.py` | ✅ `recon_pipeline()` | None — already extracted |
+| `mcp/tools/recon/raw_signals.py` | ✅ `raw_signals_pipeline()` | None — already extracted |
+| `mcp/tools/refactor.py` | ✅ Ops layer is clean | Extract thin `refactor_rename_core()` etc. that do session lookup + ops call + serialization (~5 lines each) |
+| `mcp/tools/graph.py` | ✅ Ops imports are clean | Extract `graph_cycles_core()` etc. (~10 lines each) |
+| `mcp/tools/diff.py` | ✅ Helpers extracted | Extract `semantic_diff_core()` that dispatches to `_run_git_diff` / `_run_epoch_diff` (~15 lines) |
+| `mcp/tools/checkpoint.py` | ❌ **400+ lines inlined** | **Extract `checkpoint_pipeline()`** — the lint→test→commit orchestration. This is the only significant extraction. |
+| `mcp/tools/introspection.py` | ✅ Trivial | Extract `describe_core()` (~10 lines) |
+
+After extraction, each MCP `@mcp.tool()` closure becomes:
+
+```python
+@mcp.tool(...)
+async def checkpoint(ctx: Context, changed_files: list[str], ...):
+    session = app_ctx.session_manager.get_or_create(ctx.session_id)
+    return await checkpoint_pipeline(app_ctx=app_ctx, session=session,
+        changed_files=changed_files, ...)
+```
+
+The stdio dispatch table (`CORE_FUNCTIONS`) points at the same `checkpoint_pipeline`. **One function, two callers, zero duplication.**
 
 ### 6.3 Logging Constraint
 
@@ -998,6 +1070,33 @@ class StatusResult:
     repos: list[dict]
 
 @dataclass(frozen=True)
+class RawSignalsResult:
+    """Raw retrieval signals for training and evaluation.
+    
+    Contains the full feature matrix for every candidate definition
+    returned by the harvester pipeline, BEFORE ranking model application.
+    Used by recon-lab for model training, evaluation, and data collection.
+    """
+    query_features: dict[str, Any]      # query_len, has_identifier, intent, term_count, ...
+    repo_features: dict[str, Any]       # object_count, file_count
+    candidates: list[dict[str, Any]]    # 50+ fields per candidate (see below)
+    diagnostics: dict[str, Any]         # elapsed_ms, candidate_count, per-harvester hit counts
+
+# Candidate fields (per entry in candidates[]):
+#   Identity:    def_uid, path, kind, name, lexical_path, qualified_name
+#   Structural:  start_line, end_line, object_size_lines, nesting_depth,
+#                has_docstring, docstring, signature_text
+#   Metadata:    language_family, is_test, is_barrel, is_endpoint,
+#                hub_score, test_coverage_count
+#   Signals:     from_term_match, from_explicit, from_graph, from_coverage,
+#                term_match_count, lex_hit_count, bm25_file_score,
+#                splade_score, graph_edge_type, graph_seed_rank,
+#                import_direction, symbol_source
+#   Computed:    retriever_hits, seed_path_distance, same_package,
+#                package_distance, shares_file_with_seed,
+#                is_callee_of_top, is_imported_by_top, rrf_score
+
+@dataclass(frozen=True)
 class Event:
     """A daemon-initiated event (see §5.3 for full event catalog)."""
     type: str               # e.g. "index.progress", "freshness.fresh"
@@ -1115,14 +1214,29 @@ Both modes use the exact same `GlobalDaemon`, `CatalogRegistry`, `RepoSlot`, `Wo
 
 ## 13. Implementation Plan
 
+### Phase 0 — Prerequisite: Core Function Extraction
+
+Before any new files are created, extract core functions from MCP tool modules (§6.7). This is a refactor of existing code with zero behavior change:
+
+| Component | File | Description |
+|-----------|------|-------------|
+| Resolve helper | `daemon/resolve.py` | Extract `resolve_worktree()` from `_DynamicMcpRouter.handle()` |
+| Checkpoint core | `mcp/tools/checkpoint.py` | Extract `checkpoint_pipeline()` from inlined `@mcp.tool` closure |
+| Refactor cores | `mcp/tools/refactor.py` | Extract `refactor_rename_core()`, `refactor_move_core()`, etc. |
+| Diff core | `mcp/tools/diff.py` | Extract `semantic_diff_core()` |
+| Graph cores | `mcp/tools/graph.py` | Extract `graph_cycles_core()`, `recon_understand_core()`, etc. |
+| Introspection core | `mcp/tools/introspection.py` | Extract `describe_core()` |
+| HTTP router refactor | `daemon/global_app.py` | Refactor `_DynamicMcpRouter.handle()` to call `resolve_worktree()` |
+
+**Validation**: All existing MCP tests must pass unchanged after extraction.
+
 ### Phase 1 — Stdio Transport in Daemon
 
 | Component | File | Description |
 |-----------|------|-------------|
 | Stdio read/write loop | `daemon/stdio_transport.py` | NDJSON over async stdin/stdout, write lock for interleaved events+responses |
 | Event bus | `daemon/event_bus.py` | `EventBus` class + `wire_event_hooks()` — bridges internal signals (indexer callbacks, FreshnessGate transitions, watcher changes, analysis pipeline) to NDJSON events on stdout |
-| Request dispatch | `daemon/dispatch.py` | Method → tool handler routing, repo/worktree resolution, session binding |
-| Tool handlers | `daemon/handlers.py` | Thin functions calling existing ops/pipelines (extracted from MCP tool modules) |
+| Request dispatch | `daemon/dispatch.py` | Method → `CORE_FUNCTIONS` table routing, calls `resolve_worktree()`, session binding. **No parallel handler layer** — points directly at extracted core functions |
 | CLI flag | `cli/up.py` | `--stdio` flag on `recon up` |
 | Lifecycle | `daemon/global_lifecycle.py` | `run_global_server_stdio()` alongside existing `run_global_server()` |
 
@@ -1163,8 +1277,8 @@ Both modes use the exact same `GlobalDaemon`, `CatalogRegistry`, `RepoSlot`, `Wo
 | # | Question | Recommendation |
 |---|----------|----------------|
 | 1 | If an HTTP daemon is already running when `sdk.start()` is called, should the SDK (a) refuse, (b) connect to the HTTP daemon, or (c) spawn stdio daemon anyway (coexist)? | **(c)** — coexist. They share the catalog DB but have independent process lifecycles. The stdio daemon reads the same catalog. |
-| 2 | Should the dispatch layer share code with the MCP tool registration, or should handlers be independently maintained? | **Shared core** — extract the business logic from MCP tool modules into callable functions. Both MCP `register_tools()` and stdio `TOOL_HANDLERS` call the same functions. |
+| 2 | ~~Should the dispatch layer share code with the MCP tool registration?~~ | **Resolved (§6.7)** — Extract core functions from MCP tool modules. Both MCP `@mcp.tool()` wrappers and stdio `CORE_FUNCTIONS` dispatch table call the same functions. No parallel handler layer. |
 | 3 | Should `as_openai_tools()` / `as_langchain_tools()` live in the core package or in optional extras? | **Core** for `as_openai_tools()` (schema-only, no import needed). **Optional** for `as_langchain_tools()` (requires `langchain-core` import). |
 | 4 | Should the protocol support request cancellation? | **Not in v1** — add later if needed. The daemon can be killed. Individual long-running ops (reindex) can be interrupted via `SIGTERM` to the daemon. |
 | 5 | Should the daemon support concurrent requests over stdio, or serial? | **Concurrent** — the SDK may have multiple agents or multiple pending calls. Use `id` for correlation. The daemon runs handlers concurrently via `asyncio.create_task`. |
-| 6 | Ready signal: what does the daemon write to stdout when it's ready to accept requests? | `{"notification": "ready", "data": {"version": "...", "repos": [...]}}` — the SDK waits for this before returning from `start()`. |
+| 6 | Ready signal: what does the daemon write to stdout when it's ready to accept requests? | `{"event": "daemon.ready", "data": {"version": "...", "repos": [...]}}` — the SDK waits for this before returning from `start()`. |

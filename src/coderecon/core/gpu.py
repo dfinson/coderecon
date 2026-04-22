@@ -43,19 +43,10 @@ class GpuProbeResult:
     @property
     def install_hint(self) -> str | None:
         """Return the install command for the missing provider, or None."""
-        import sys
-
         if not self.gpu_available_but_not_configured:
             return None
         if GpuVendor.NVIDIA in self.detected_gpus:
-            if sys.platform == "linux":
-                return "pip install coderecon[gpu]"
-            elif sys.platform == "win32":
-                return (
-                    "Install CUDA Toolkit from https://developer.nvidia.com/cuda-downloads\n"
-                    "then: pip install onnxruntime-gpu"
-                )
-            return None
+            return "pip install --force-reinstall onnxruntime-gpu"
         if GpuVendor.AMD in self.detected_gpus:
             return "pip install onnxruntime-rocm"
         return None

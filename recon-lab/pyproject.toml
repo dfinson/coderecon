@@ -46,12 +46,9 @@ packages = ["src/cpl_lab"]
 
 [tool.uv.sources]
 coderecon = { path = "..", editable = true }
-torch = { index = "pytorch-cpu" }
-
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
+coderecon-models-ce = { path = "../model-packages/coderecon-models-ce" }
+coderecon-models-splade = { path = "../model-packages/coderecon-models-splade" }
+coderecon-models-ce-tiny = { path = "../model-packages/coderecon-models-ce-tiny" }
 
 [tool.ruff]
 target-version = "py311"

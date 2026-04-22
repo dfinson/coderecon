@@ -79,10 +79,15 @@ def _ensure_cuda_lib_path() -> None:
 
     # 2. Well-known system CUDA paths
     if not lib_dirs:
-        for candidate in (
+        candidates = [
             "/usr/local/cuda/lib64",
             "/usr/lib/x86_64-linux-gnu",
-        ):
+        ]
+        # Ollama bundles cuDNN 9 + CUDA libs; search its known directories
+        for p in sorted(Path("/usr/local/lib/ollama").glob("*cuda*"), reverse=True):
+            if p.is_dir():
+                candidates.insert(0, str(p))
+        for candidate in candidates:
             cudnn = Path(candidate) / "libcudnn.so.9"
             if cudnn.exists():
                 lib_dirs.append(candidate)
