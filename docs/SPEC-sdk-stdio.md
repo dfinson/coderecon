@@ -482,15 +482,131 @@ Wired into existing hooks:
 
 The EventBus hooks are injected at daemon startup in stdio mode. In HTTP mode, they don't exist — the HTTP daemon doesn't need them (clients poll `/status` instead).
 
-### 5.4 Session Binding
+### 5.4 Session Management
 
-The SDK sends a `session_id` header in every request. The daemon uses this to bind `SessionState` (fingerprints, mutation context, exclusive locks) — identical to how MCP sessions work today.
+Every request carries a `session_id` field. The daemon uses it to bind `SessionState` — the same object that MCP tools use today (candidate maps, mutation context, exclusive locks, read-only intent).
 
 ```json
 {"id": "r1", "session_id": "s_abc123", "method": "recon", "params": {...}}
 ```
 
-If omitted, the daemon creates a new session. The SDK manages session IDs internally — the integrator never sees them unless they want to.
+#### Why Sessions Matter
+
+Not all tools are stateless. The `recon → refactor → checkpoint` workflow **accumulates state** within a session:
+
+1. `recon` populates `candidate_maps` (which symbols are addressable) and sets `read_only` intent.
+2. `refactor_rename` / `refactor_move` reads `candidate_maps` to resolve symbols, writes `pending_refactors` into `mutation_ctx`.
+3. `checkpoint` reads `read_only` (warns if mutations happened in a read-only session), clears `mutation_ctx` on success.
+
+Additionally, `checkpoint` and `semantic_diff` are **exclusive** — they acquire a per-session lock that blocks all other tool calls on the same session for their duration.
+
+Stateless tools (`graph_*`, `recon_map`, `recon_understand`, `describe`, `raw_signals`) don't read or write session state. They still receive a session for uniform dispatch, but the session ID doesn't affect their behavior.
+
+#### Session Scope: Per (repo, worktree) Pair
+
+On the daemon side, `SessionManager` is **per-worktree** — each `WorktreeSlot` has its own instance. Two sessions with the same `session_id` sent to different worktrees create completely independent `SessionState` objects (different `SessionManager` instances).
+
+The SDK's **default strategy** is one session per `(repo, worktree)` pair:
+
+```python
+# SDK auto-generates session IDs keyed by (repo, worktree)
+# All calls to the same (repo, worktree) share one session
+
+sdk = CodeRecon()
+await sdk.start()
+
+# These two calls share one session — recon populates candidate_maps,
+# refactor reads them:
+await sdk.recon(repo="myrepo", task="find auth middleware")
+await sdk.refactor_rename(repo="myrepo", symbol="AuthMiddleware",
+                          new_name="AuthGuard", justification="...")
+
+# This goes to a different worktree → different session automatically:
+await sdk.recon(repo="myrepo", task="find auth", worktree="feature-x")
+```
+
+Internally, the `CodeRecon` client maintains a `dict[tuple[str, str], str]` mapping `(repo_name, worktree)` → `session_id`. On the first call to a new `(repo, worktree)` pair, a session ID is generated (`"sess_" + 12 hex chars`). All subsequent calls to the same pair reuse it.
+
+This works because:
+- The daemon's `SessionManager` is per-worktree — natural alignment.
+- The typical agent workflow operates on one worktree — state accumulates correctly.
+- Different worktrees never share state — no cross-contamination.
+
+#### Explicit Sessions: Multi-Agent Escape Hatch
+
+The default strategy breaks when **multiple agents operate on the same worktree concurrently**. If two agents share one session:
+- Agent A's `recon` populates `candidate_maps`. Agent B's `recon` overwrites them.
+- Agent A's `refactor_rename` sees Agent B's candidates — wrong results.
+- Agent A's `checkpoint` (exclusive) blocks Agent B's tools for its entire duration.
+
+For this case, the integrator creates **explicit sessions**:
+
+```python
+# Two agents, same repo, same worktree — explicit sessions prevent interference
+agent_a = sdk.session("agent-a")
+agent_b = sdk.session("agent-b")
+
+# Each gets its own candidate_maps, mutation_ctx, exclusive lock:
+await agent_a.recon(repo="myrepo", task="find auth middleware")
+await agent_b.recon(repo="myrepo", task="find caching layer")
+
+# Refactors operate on their own candidate maps:
+await agent_a.refactor_rename(repo="myrepo", symbol="AuthMiddleware", ...)
+await agent_b.refactor_rename(repo="myrepo", symbol="CacheStore", ...)
+
+# Checkpoints are exclusive per session — A's checkpoint doesn't block B:
+await agent_a.checkpoint(repo="myrepo", ...)  # locks session "agent-a" only
+await agent_b.checkpoint(repo="myrepo", ...)  # locks session "agent-b" only
+```
+
+`sdk.session(name)` returns a `SessionHandle` — a thin proxy where every tool method injects the given session ID instead of the auto-generated one. The `name` is used directly as the `session_id` (prefixed to avoid collisions: `"ext_{name}"`).
+
+**Note**: Even with separate sessions, mutations on the same worktree are still serialized by the daemon's `MutationRouter` (per-worktree lock). Two concurrent `checkpoint` calls on the same worktree will queue, not fail. The session-level exclusive lock only prevents *other tools on the same session* from interleaving — the worktree-level lock prevents actual file system conflicts.
+
+#### RepoHandle and Sessions
+
+`RepoHandle` inherits the session strategy of whatever created it:
+
+```python
+# Default sessions (per repo+worktree):
+project = sdk.repo("myrepo")
+await project.recon(task="find auth")       # session for ("myrepo", "main")
+await project.refactor_rename(...)          # same session — sees candidate_maps
+
+# Explicit sessions via handle:
+agent_a = sdk.session("agent-a").repo("myrepo")
+await agent_a.recon(task="find auth")       # session "ext_agent-a" on ("myrepo", "main")
+```
+
+#### Session Lifecycle
+
+| Event | Behavior |
+|-------|----------|
+| First call to `(repo, worktree)` | SDK generates session ID, daemon creates `SessionState` via `get_or_create()` |
+| Subsequent calls | Same session ID reused, daemon calls `session.touch()` updating `last_active` |
+| `sdk.stop()` / `async with` exit | SDK sends `session_close` for all active session IDs |
+| SDK crash (no clean shutdown) | Daemon's idle timeout GCs sessions after 30 min (`cleanup_stale()`) |
+| Integrator calls `sdk.close_session(repo, worktree)` | Explicit session teardown — clears candidate_maps, mutation_ctx on daemon side |
+| Explicit session handle GC'd | No automatic cleanup — integrator should close explicitly, or rely on idle timeout |
+
+The `session_close` request is a management method (like `register` / `catalog`):
+
+```json
+{"id": "r99", "method": "session_close", "params": {"session_id": "sess_abc123"}}
+```
+
+The daemon calls `session_manager.close(session_id)` — removes the `SessionState` immediately.
+
+#### Wire Format
+
+Every tool request includes `session_id`:
+
+```json
+{"id": "r1", "session_id": "sess_a1b2c3d4e5f6", "method": "recon", "params": {"repo": "myrepo", "task": "find auth"}}
+{"id": "r2", "session_id": "sess_a1b2c3d4e5f6", "method": "refactor_rename", "params": {"repo": "myrepo", "symbol": "Foo", ...}}
+```
+
+Management methods (`register`, `catalog`, `status`, `session_close`) don't need `session_id`.
 
 ---
 
@@ -761,9 +877,9 @@ recon up --stdio [--log-file PATH] [--log-level LEVEL] [--dev]
 ```
 src/coderecon/
 ├── sdk/
-│   ├── __init__.py         # Exports: CodeRecon, RepoHandle, result types
-│   ├── client.py           # CodeRecon class — spawn daemon, stdio RPC
-│   ├── handle.py           # RepoHandle — repo-bound convenience
+│   ├── __init__.py         # Exports: CodeRecon, RepoHandle, SessionHandle, result types
+│   ├── client.py           # CodeRecon class — spawn daemon, stdio RPC, session management
+│   ├── handle.py           # RepoHandle, SessionHandle — bound convenience objects
 │   ├── types.py            # Result dataclasses
 │   ├── protocol.py         # Stdio JSON wire format: encode, decode, correlate
 │   └── frameworks.py       # as_openai_tools(), as_langchain_tools()
@@ -786,7 +902,23 @@ class CodeRecon:
         """Spawn the daemon child process. Blocks until daemon.ready event."""
     
     async def stop(self) -> None:
-        """Shut down the daemon child process."""
+        """Send session_close for all active sessions, then shut down the daemon."""
+    
+    # ── Session management (see §5.4) ──
+    
+    def session(self, name: str) -> SessionHandle:
+        """Create an explicit named session for multi-agent scenarios.
+        
+        Returns a SessionHandle with the same tool methods as CodeRecon,
+        but all calls use session_id "ext_{name}" instead of the auto-generated one.
+        """
+    
+    async def close_session(self, repo: str, worktree: str = "main") -> None:
+        """Explicitly close the auto-generated session for a (repo, worktree) pair.
+        
+        Clears candidate_maps, mutation_ctx, and exclusive locks on the daemon side.
+        A new session is auto-created on the next call to that (repo, worktree).
+        """
     
     def repo(self, name: str, worktree: str = "main") -> RepoHandle:
         """Return a repo-bound handle with pre-bound tool methods."""
@@ -855,6 +987,14 @@ async def start(self) -> None:
     await self._wait_ready(timeout=30.0)
 
 async def stop(self) -> None:
+    # Close all active sessions before shutdown
+    for session_id in list(self._sessions.values()):
+        try:
+            await self._call("session_close", {"session_id": session_id},
+                             session_id=None)
+        except Exception:
+            pass  # Best effort — daemon may already be exiting
+    
     if self._process and self._process.returncode is None:
         self._process.stdin.close()                    # EOF → daemon shuts down
         try:
@@ -865,13 +1005,49 @@ async def stop(self) -> None:
     self._reader_task.cancel()
 ```
 
-### 7.3 RPC Internals
+### 7.3 Session ID Resolution
 
 ```python
-async def _call(self, method: str, params: dict) -> dict:
-    """Send a request to the daemon and await the response."""
+# Internal state:
+#   _sessions: dict[tuple[str, str], str]  — (repo, worktree) → session_id
+#   _explicit_session: str | None          — set on SessionHandle, None on CodeRecon
+
+def _resolve_session_id(self, repo: str, worktree: str) -> str:
+    """Get or create the session ID for this (repo, worktree) pair.
+    
+    If this is a SessionHandle (explicit session), always returns that handle's
+    fixed session ID. Otherwise, auto-generates per (repo, worktree).
+    """
+    if self._explicit_session is not None:
+        return self._explicit_session
+    
+    key = (repo, worktree)
+    if key not in self._sessions:
+        self._sessions[key] = f"sess_{secrets.token_hex(6)}"
+    return self._sessions[key]
+```
+
+### 7.4 RPC Internals
+
+```python
+async def _call(self, method: str, params: dict,
+                session_id: str | None = _SENTINEL) -> dict:
+    """Send a request to the daemon and await the response.
+    
+    session_id is auto-resolved from (repo, worktree) in params unless
+    explicitly passed (e.g., for management methods that don't need one).
+    """
     request_id = self._next_id()
     request = {"id": request_id, "method": method, "params": params}
+    
+    # Attach session_id for tool methods (not management methods)
+    if session_id is _SENTINEL:
+        repo = params.get("repo")
+        worktree = params.get("worktree", "main")
+        if repo is not None:
+            request["session_id"] = self._resolve_session_id(repo, worktree)
+    elif session_id is not None:
+        request["session_id"] = session_id
     
     future: asyncio.Future[dict] = asyncio.get_event_loop().create_future()
     self._pending[request_id] = future
@@ -956,6 +1132,39 @@ async def recon(
 ```
 
 The docstring, type annotations, and parameter names are what agent frameworks consume to generate tool schemas.
+
+### 7.6 `SessionHandle`
+
+Returned by `sdk.session(name)`. Same tool methods as `CodeRecon`, but all calls use a fixed session ID.
+
+```python
+class SessionHandle:
+    """Explicit session for multi-agent isolation.
+    
+    Every tool call from this handle uses session_id "ext_{name}",
+    bypassing the auto-generated per-(repo, worktree) strategy.
+    """
+    
+    def __init__(self, client: CodeRecon, name: str) -> None:
+        self._client = client
+        self._explicit_session = f"ext_{name}"
+    
+    def repo(self, name: str, worktree: str = "main") -> RepoHandle:
+        """Repo-bound handle that inherits this explicit session."""
+    
+    # All tool methods delegate to client._call with self._explicit_session:
+    async def recon(self, repo: str, ...) -> ReconResult: ...
+    async def refactor_rename(self, repo: str, ...) -> RefactorResult: ...
+    async def checkpoint(self, repo: str, ...) -> CheckpointResult: ...
+    # ... (same surface as CodeRecon)
+    
+    async def close(self) -> None:
+        """Send session_close for this explicit session."""
+        await self._client._call("session_close",
+            {"session_id": self._explicit_session}, session_id=None)
+```
+
+`SessionHandle` does NOT have `start()`, `stop()`, `on()`, `events()`, `register()`, or `catalog()` — those are daemon-level operations, not session-scoped.
 
 ---
 
@@ -1203,7 +1412,7 @@ The SDK and the HTTP daemon share all internal code but use different transports
 | Discovery | PID + port files | Parent process holds pipes |
 | Client | MCP client (any language) | `CodeRecon` Python class (or raw stdio) |
 | Routing | URL path: `/repos/{name}/worktrees/{wt}/mcp/...` | JSON field: `"repo"`, `"worktree"` |
-| Session binding | MCP session ID | `"session_id"` in request |
+| Session binding | MCP session ID (per connection) | `"session_id"` in request — auto per (repo, worktree), or explicit via `SessionHandle` (§5.4) |
 | Events / Progress | Clients poll `GET /status` | Streamed as NDJSON events on stdout (§5.3) |
 | Lifecycle | Persistent service | Child process of integrator |
 | Multi-client | Yes (HTTP) | Single client (stdin owner) |

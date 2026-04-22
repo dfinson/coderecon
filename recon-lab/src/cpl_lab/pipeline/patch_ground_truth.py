@@ -117,8 +117,9 @@ def map_hunks_to_defs(
     con = sqlite3.connect(str(index_db))
     cur = con.cursor()
 
-    # Resolve worktree_id — fall back to "main" if specific worktree
-    # is missing or was registered but never indexed (0 files).
+    # Resolve worktree_id — require the specific worktree to be indexed.
+    # Do NOT fall back to main: main has HEAD defs, not the PR-commit defs,
+    # which would poison training data with wrong line ranges.
     row = cur.execute(
         "SELECT id FROM worktrees WHERE name = ?", (worktree_name,)
     ).fetchone()
@@ -127,14 +128,11 @@ def map_hunks_to_defs(
             "SELECT 1 FROM files WHERE worktree_id = ? LIMIT 1", (row[0],)
         ).fetchone()
         if not has_files:
-            row = None  # registered but empty — fall back
-    if row is None:
-        row = cur.execute(
-            "SELECT id FROM worktrees WHERE is_main = 1"
-        ).fetchone()
+            con.close()
+            return []  # registered but not indexed
     if row is None:
         con.close()
-        return []
+        return []  # worktree not found
     wt_id = row[0]
 
     # Build lookup: relative path → list of (name, kind, start_line, end_line)
