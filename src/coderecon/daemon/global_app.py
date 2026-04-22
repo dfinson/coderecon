@@ -136,10 +136,11 @@ class GlobalDaemon:
         Loads the existing index (no full reindex) so startup is fast.
 
         Only the **main** worktree is eagerly activated (watcher + MCP).
-        Non-main worktrees get their freshness gate and diff-reindex queued
-        but are NOT activated until a client actually connects (lazy activation
-        in ``_DynamicMcpRouter``).  This avoids inotify/memory exhaustion when
-        hundreds of worktrees are registered (e.g. lab pipeline, multi-agent).
+        Non-main worktrees get their freshness gate registered and diff-based
+        reindex queued (so their changed files are indexed immediately) but are
+        NOT fully activated (no watcher/MCP) until a client actually connects
+        (lazy activation in ``_DynamicMcpRouter``).  This avoids inotify/memory
+        exhaustion when hundreds of worktrees are registered.
         """
         from coderecon.config.loader import load_config
         from coderecon.daemon.indexer import BackgroundIndexer
@@ -213,6 +214,31 @@ class GlobalDaemon:
                     coordinator.set_freshness_gate(
                         gate, wt.name, worktree_root=str(wt_path),
                     )
+
+                    # Queue diff-based reindex so the worktree's changed
+                    # files are indexed immediately after registration.
+                    try:
+                        wt_git = GitOps(wt_path)
+                        loop = asyncio.get_event_loop()
+                        diff_paths = await loop.run_in_executor(
+                            None, wt_git.files_changed_vs, "main",
+                        )
+                        if diff_paths:
+                            abs_paths = [wt_path / p for p in diff_paths]
+                            indexer.queue_paths(wt.name, abs_paths)
+                            log.info(
+                                "activate_repo.queued_worktree_diff",
+                                repo=name,
+                                worktree=wt.name,
+                                changed_files=len(diff_paths),
+                            )
+                    except Exception as exc:
+                        log.warning(
+                            "activate_repo.worktree_diff_failed",
+                            repo=name,
+                            worktree=wt.name,
+                            error=str(exc),
+                        )
 
         self._slots[name] = slot
 
