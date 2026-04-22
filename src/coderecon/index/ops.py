@@ -834,6 +834,26 @@ class IndexCoordinatorEngine:
         # Deduplicate paths to avoid UNIQUE constraint violations
         changed_paths = list(dict.fromkeys(changed_paths))
 
+        # Resolve effective root: for non-main worktrees whose checkout
+        # lives outside the main repo tree, use the worktree-specific root
+        # for all filesystem operations (existence checks, file reads, etc.).
+        _effective_root = self._worktree_root_cache.get(worktree, self.repo_root)
+
+        # Normalize: convert any absolute worktree paths to repo-relative.
+        _normalized: list[Path] = []
+        for p in changed_paths:
+            if p.is_absolute():
+                try:
+                    p = p.relative_to(_effective_root)
+                except ValueError:
+                    # Might be relative to repo_root (main worktree)
+                    try:
+                        p = p.relative_to(self.repo_root)
+                    except ValueError:
+                        continue  # skip paths we can't resolve
+            _normalized.append(p)
+        changed_paths = _normalized
+
         start_time = time.time()
         files_added = 0
         files_updated = 0
@@ -845,7 +865,8 @@ class IndexCoordinatorEngine:
             _wt_id = self._get_or_create_worktree_id(worktree)
             if self._reconciler is not None:
                 reconcile_result = self._reconciler.reconcile(
-                    changed_paths, worktree_id=_wt_id
+                    changed_paths, worktree_id=_wt_id,
+                    worktree_root=_effective_root if worktree != "main" else None,
                 )
 
                 # If .reconignore changed, do full reindex to apply new patterns
@@ -861,7 +882,7 @@ class IndexCoordinatorEngine:
                 indexed_set = set(session.exec(select(File.path)).all())
 
             for path in changed_paths:
-                full_path = self.repo_root / path
+                full_path = _effective_root / path
                 str_path = str(path)
                 if full_path.exists():
                     if str_path in indexed_set:
@@ -877,7 +898,7 @@ class IndexCoordinatorEngine:
             if new_paths:
                 with self.db.session() as session:
                     for path in new_paths:
-                        full_path = self.repo_root / path
+                        full_path = _effective_root / path
                         if not full_path.exists():
                             continue
                         try:
@@ -905,7 +926,7 @@ class IndexCoordinatorEngine:
             # symbol_names for the symbol field, eliminating the redundant
             # _safe_read_text() + _extract_symbols() calls.
             all_changed = existing_paths + new_paths
-            str_changed = [str(p) for p in all_changed if (self.repo_root / p).exists()]
+            str_changed = [str(p) for p in all_changed if (_effective_root / p).exists()]
             existing_set = {str(p) for p in existing_paths}
 
             if str_changed and self._structural is not None and self._lexical is not None:
@@ -992,9 +1013,8 @@ class IndexCoordinatorEngine:
                     min(os.cpu_count() or 4, 16) if len(str_changed) >= _PARALLEL_THRESHOLD else 1
                 )
                 with self._tantivy_write_lock:
-                    # Use the worktree's own checkout directory for file reads,
-                    # falling back to repo_root for the main worktree.
-                    _extract_root = self._worktree_root_cache.get(worktree, self.repo_root)
+                    # Use the effective root (worktree checkout dir or repo root).
+                    _extract_root = _effective_root
                     for ctx_id, paths in context_files.items():
                         extractions = self._structural.extract_files(
                             paths, ctx_id, workers=workers, repo_root=_extract_root

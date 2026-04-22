@@ -133,7 +133,7 @@ class Reconciler:
         if paths is None:
             files_to_check = self._get_all_tracked_files()
         else:
-            files_to_check = [self._normalize_path(p) for p in paths]
+            files_to_check = [self._normalize_path(p, _effective_root) for p in paths]
 
         # Get current hashes from database
         db_hashes = self._get_db_hashes(files_to_check)
@@ -144,7 +144,7 @@ class Reconciler:
         removed_paths: list[str] = []
 
         for rel_path in files_to_check:
-            abs_path = self.repo_root / rel_path
+            abs_path = _effective_root / rel_path
             result.files_checked += 1
 
             try:
@@ -309,10 +309,14 @@ class Reconciler:
                 hasher.update(chunk)
         return hasher.hexdigest()
 
-    def _normalize_path(self, path: Path) -> str:
-        """Normalize path to relative POSIX format."""
+    def _normalize_path(self, path: Path, root: Path | None = None) -> str:
+        """Normalize path to relative POSIX format.
+
+        ``root`` overrides ``self.repo_root`` for worktrees whose checkout
+        directory lives outside the main repo tree.
+        """
         if path.is_absolute():
-            path = path.relative_to(self.repo_root)
+            path = path.relative_to(root or self.repo_root)
         return str(path).replace("\\", "/")
 
     def _detect_language(self, path: str) -> str | None:
