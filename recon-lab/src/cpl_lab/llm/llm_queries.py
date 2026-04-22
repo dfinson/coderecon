@@ -1083,9 +1083,9 @@ def _call_llm_json(
                         continue
                     logger.error("Azure: non-retryable HTTP %d, giving up", exc.code)
                     break
-                except RuntimeError as _exc:
+                except (RuntimeError, json.JSONDecodeError) as _exc:
                     # JSON parse failure — retry with doubled max_tokens
-                    if "parse JSON" in str(_exc) and _attempt < 4:
+                    if _attempt < 4:
                         logger.warning("Azure: JSON parse failed, retrying with more tokens (attempt %d/5): %s",
                                        _attempt + 1, str(_exc)[:200])
                         max_tokens = min(max_tokens * 2, 4096)
@@ -1124,9 +1124,23 @@ def _parse_json_object(text: str) -> dict[str, Any]:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start >= 0 and end > start:
-            return json.loads(text[start:end + 1])
+        pass
+
+    # Try extracting just the JSON object
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        candidate = text[start:end + 1]
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
+        # Fix invalid \escape sequences (LLM outputs raw backslashes in regex etc.)
+        import re
+        fixed = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', candidate)
+        try:
+            return json.loads(fixed)
+        except json.JSONDecodeError:
+            pass
+
     raise RuntimeError(f"Failed to parse JSON from LLM response: {text[:200]}")
-    raise RuntimeError("LLM response was not valid JSON")

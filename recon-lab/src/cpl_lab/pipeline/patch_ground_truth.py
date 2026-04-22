@@ -104,53 +104,79 @@ def parse_unified_diff(diff_text: str) -> list[FileDiff]:
 
 def map_hunks_to_defs(
     file_diffs: list[FileDiff],
-    worktree_root: Path,
+    index_db: Path,
+    worktree_name: str,
 ) -> list[DefEntry]:
-    """Map changed hunks to definitions via tree-sitter parsing.
+    """Map changed hunks to indexed definitions for a worktree.
 
-    Parses each changed file directly from the worktree checkout so that
-    definitions reflect the exact commit the worktree is at — no index.db
-    dependency.  Returns only minimum_sufficient defs (definitions whose
-    spans overlap a changed hunk).
+    Queries ``def_facts`` from the main repo's index.db, filtered by
+    ``worktree_name`` via the ``files.worktree_id`` → ``worktrees.name``
+    join.  Returns only minimum_sufficient defs (definitions whose spans
+    overlap a changed hunk).
     """
-    from coderecon.index._internal.parsing.service import tree_sitter_service
+    con = sqlite3.connect(str(index_db))
+    cur = con.cursor()
+
+    # Resolve worktree_id — fall back to "main" if specific worktree
+    # is missing or was registered but never indexed (0 files).
+    row = cur.execute(
+        "SELECT id FROM worktrees WHERE name = ?", (worktree_name,)
+    ).fetchone()
+    if row is not None:
+        has_files = cur.execute(
+            "SELECT 1 FROM files WHERE worktree_id = ? LIMIT 1", (row[0],)
+        ).fetchone()
+        if not has_files:
+            row = None  # registered but empty — fall back
+    if row is None:
+        row = cur.execute(
+            "SELECT id FROM worktrees WHERE is_main = 1"
+        ).fetchone()
+    if row is None:
+        con.close()
+        return []
+    wt_id = row[0]
+
+    # Build lookup: relative path → list of (name, kind, start_line, end_line)
+    defs_by_path: dict[str, list[tuple[str, str, int, int]]] = {}
+    for name, kind, start_line, end_line, path in cur.execute(
+        """
+        SELECT d.name, d.kind, d.start_line, d.end_line, f.path
+        FROM def_facts d
+        JOIN files f ON d.file_id = f.id
+        WHERE f.worktree_id = ?
+        """,
+        (wt_id,),
+    ):
+        defs_by_path.setdefault(path, []).append((name, kind, start_line, end_line))
+
+    con.close()
 
     min_suff: list[DefEntry] = []
+    changed_def_keys: set[tuple[str, str, int]] = set()
 
     for fd in file_diffs:
         if fd.is_deleted:
             continue
 
-        file_path = worktree_root / fd.path
-        if not file_path.exists():
+        defs = defs_by_path.get(fd.path)
+        if not defs:
             continue
-
-        try:
-            result = tree_sitter_service.parse(file_path)
-            symbols = tree_sitter_service.extract_symbols(result)
-        except (ValueError, OSError):
-            # Unsupported language or unreadable file — skip silently
-            continue
-
-        if not symbols:
-            continue
-
-        changed_def_keys: set[tuple[str, str, int]] = set()
 
         for hunk in fd.hunks:
-            for sym in symbols:
-                if sym.line <= hunk.end_line and sym.end_line >= hunk.start_line:
-                    key = (sym.name, sym.kind, sym.line)
+            for name, kind, start_line, end_line in defs:
+                if start_line <= hunk.end_line and end_line >= hunk.start_line:
+                    key = (name, kind, start_line)
                     if key in changed_def_keys:
                         continue
                     changed_def_keys.add(key)
                     min_suff.append(
                         DefEntry(
                             path=fd.path,
-                            name=sym.name,
-                            kind=sym.kind,
-                            start_line=sym.line,
-                            end_line=sym.end_line,
+                            name=name,
+                            kind=kind,
+                            start_line=start_line,
+                            end_line=end_line,
                             reason=(
                                 "Definition overlaps with changed hunk "
                                 f"(lines {hunk.start_line}-{hunk.end_line})"

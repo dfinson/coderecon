@@ -92,7 +92,7 @@ def import_single_instance(
         return summary
 
     try:
-        gt_defs = map_hunks_to_defs(file_diffs, wt_dir)
+        gt_defs = map_hunks_to_defs(file_diffs, main_index_db, iid)
     except Exception as exc:
         summary["error"] = f"hunk mapping failed: {exc}"
         return summary

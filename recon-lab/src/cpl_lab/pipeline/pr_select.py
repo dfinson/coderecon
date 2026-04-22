@@ -235,7 +235,7 @@ def select_prs_for_repo(
             gt_defs = file_diffs  # placeholder — will be validated later
         else:
             try:
-                gt_defs = map_hunks_to_defs(file_diffs, index_db)
+                gt_defs = map_hunks_to_defs(file_diffs, index_db, "main")
             except Exception:
                 gt_defs = []
             if not gt_defs:
