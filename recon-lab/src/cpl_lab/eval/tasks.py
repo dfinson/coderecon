@@ -4,9 +4,11 @@ Each @task function composes a dataset, solver (pipeline), and scorer.
 Run via:
     inspect eval cpl_lab/eval/tasks.py@ranking_baseline
     inspect eval cpl_lab/eval/tasks.py@ranking_trained
+    inspect eval cpl_lab/eval/tasks.py@ranking_micro
 
 Or via the CLI:
     recon-lab eval                     # runs ranking_baseline + ranking_trained
+    recon-lab micro-eval               # offline sanity check from merged parquet
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ from inspect_ai import Task, task
 from cpl_lab.eval.datasets.eval_gt import eval_gt_dataset
 from cpl_lab.eval.metrics.gate import gate_scorer
 from cpl_lab.eval.metrics.ranking import diagnostic_ranking_scorer, ranking_scorer
+from cpl_lab.eval.models.offline_ranking import offline_ranking_solver
 from cpl_lab.eval.models.ranking import diagnostic_ranking_solver, ranking_solver
 
 # ── Ranking pipeline tasks ────────────────────────────────────────────────
@@ -34,7 +37,6 @@ def ranking_baseline(
             clone_dir=clone_dir,
             mode="baseline",
             models_dir=models_dir,
-            variant="structural",
         ),
         scorer=[ranking_scorer(), gate_scorer()],
         max_messages=1,
@@ -46,7 +48,6 @@ def ranking_trained(
     data_dir: str = "~/.recon/recon-lab/data",
     clone_dir: str = "~/.recon/recon-lab/clones/instances",
     models_dir: str = "~/.recon/recon-lab/models",
-    variant: str = "structural",
 ) -> Task:
     """Trained ranking: LightGBM gate + ranker + cutoff."""
     return Task(
@@ -55,7 +56,6 @@ def ranking_trained(
             clone_dir=clone_dir,
             mode="ranking",
             models_dir=models_dir,
-            variant=variant,
         ),
         scorer=[ranking_scorer(), gate_scorer()],
         max_messages=1,
@@ -74,8 +74,28 @@ def ranking_diagnostic(
         solver=diagnostic_ranking_solver(
             clone_dir=clone_dir,
             models_dir=models_dir,
-            variant="structural",
         ),
         scorer=[diagnostic_ranking_scorer(), gate_scorer()],
+        max_messages=1,
+    )
+
+
+# ── Micro-eval: offline sanity check from merged parquet ──────────────────
+
+
+@task
+def ranking_micro(
+    data_dir: str = "~/.recon/recon-lab/data",
+    models_dir: str = "~/.recon/recon-lab/models",
+) -> Task:
+    """Offline micro-eval: score pre-collected candidates, no daemon needed."""
+    merged_dir = str(data_dir.rstrip("/") + "/merged") if isinstance(data_dir, str) else str(data_dir / "merged")
+    return Task(
+        dataset=eval_gt_dataset(data_dir=data_dir),
+        solver=offline_ranking_solver(
+            merged_dir=merged_dir,
+            models_dir=models_dir,
+        ),
+        scorer=[ranking_scorer(), gate_scorer()],
         max_messages=1,
     )

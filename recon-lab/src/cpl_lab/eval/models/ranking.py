@@ -39,7 +39,6 @@ class _RankingPipeline:
         clone_dir: str,
         mode: str,
         models_dir: str,
-        variant: str,
         *,
         diagnostic: bool = False,
     ) -> None:
@@ -47,11 +46,9 @@ class _RankingPipeline:
         self._clones_dir = self._instances_dir.parent  # ../clones/
         self._mode = mode
         self._models_dir = Path(models_dir).expanduser()
-        self._variant = variant
         self._diagnostic = diagnostic
         self._cached_repo: str | None = None
         self._ctx: Any = None
-        self._loop: asyncio.AbstractEventLoop | None = None
         self._gate: Any = None
         self._ranker: Any = None
         self._cutoff: Any = None
@@ -59,7 +56,7 @@ class _RankingPipeline:
     def _workspace_id(self, instance_id: str) -> str:
         return "".join(c if c.isalnum() else "_" for c in instance_id)
 
-    def _ensure_context(self, instance_id: str) -> None:
+    async def _ensure_context(self, instance_id: str) -> None:
         if self._cached_repo == instance_id and self._ctx is not None:
             return
 
@@ -98,11 +95,7 @@ class _RankingPipeline:
             tantivy_path=cp / "tantivy",
         )
 
-        if self._loop is None or self._loop.is_closed():
-            self._loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self._loop)
-
-        self._loop.run_until_complete(self._ctx.coordinator.load_existing())
+        await self._ctx.coordinator.load_existing()
         self._cached_repo = instance_id
 
         from coderecon.ranking.cutoff import load_cutoff
@@ -110,16 +103,11 @@ class _RankingPipeline:
         from coderecon.ranking.ranker import load_ranker
 
         if self._mode == "ranking":
-            v = self._variant
-            gate_path = self._models_dir / f"gate_{v}.lgbm"
-            ranker_path = self._models_dir / f"def_ranker_{v}.lgbm"
-            cutoff_path = self._models_dir / f"cutoff_{v}.lgbm"
-            if not gate_path.exists():
-                gate_path = self._models_dir / "gate.lgbm"
+            gate_path = self._models_dir / "gate.lgbm"
+            ranker_path = self._models_dir / "def_ranker.lgbm"
+            cutoff_path = self._models_dir / "cutoff.lgbm"
             if not ranker_path.exists():
                 ranker_path = self._models_dir / "ranker.lgbm"
-            if not cutoff_path.exists():
-                cutoff_path = self._models_dir / "cutoff.lgbm"
             self._gate = load_gate(gate_path)
             self._ranker = load_ranker(ranker_path)
             self._cutoff = load_cutoff(cutoff_path)
@@ -129,23 +117,20 @@ class _RankingPipeline:
             self._ranker = load_ranker(_dummy)
             self._cutoff = load_cutoff(_dummy)
 
-    def infer(self, meta: dict) -> dict:
+    async def infer(self, meta: dict) -> dict:
         """Run the full pipeline for a single query record."""
         instance_id = meta.get("task_id") or meta["repo_id"]
         query = meta.get("problem_statement") or meta["query_text"]
         seeds = meta.get("seeds") or None
         pins = meta.get("pins") or None
 
-        self._ensure_context(instance_id)
+        await self._ensure_context(instance_id)
         assert self._ctx is not None
-        assert self._loop is not None
 
         from coderecon.mcp.tools.recon.raw_signals import raw_signals_pipeline
 
         t0 = time.monotonic()
-        raw = self._loop.run_until_complete(
-            raw_signals_pipeline(self._ctx, query, seeds=seeds, pins=pins),
-        )
+        raw = await raw_signals_pipeline(self._ctx, query, seeds=seeds, pins=pins)
         candidates = raw.get("candidates", [])
         query_features = raw.get("query_features", {})
         repo_features = raw.get("repo_features", {})
@@ -268,19 +253,17 @@ def ranking_solver(
     clone_dir: str = "~/.recon/recon-lab/clones/instances",
     mode: str = "baseline",
     models_dir: str = "~/.recon/recon-lab/models",
-    variant: str = "structural",
 ) -> Solver:
     """Inspect AI solver that runs the in-process ranking pipeline."""
     pipeline = _RankingPipeline(
         clone_dir=clone_dir,
         mode=mode,
         models_dir=models_dir,
-        variant=variant,
     )
 
     async def solve(state: TaskState, generate: Any) -> TaskState:
         meta = state.metadata
-        result = pipeline.infer(meta)
+        result = await pipeline.infer(meta)
         state.store.set("ranked_candidate_keys", result["ranked_candidate_keys"])
         state.store.set("predicted_relevances", result["predicted_relevances"])
         state.store.set("predicted_n", result["predicted_n"])
@@ -294,20 +277,18 @@ def ranking_solver(
 def diagnostic_ranking_solver(
     clone_dir: str = "~/.recon/recon-lab/clones/instances",
     models_dir: str = "~/.recon/recon-lab/models",
-    variant: str = "structural",
 ) -> Solver:
     """Diagnostic solver: RRF pipeline with full funnel instrumentation."""
     pipeline = _RankingPipeline(
         clone_dir=clone_dir,
         mode="baseline",
         models_dir=models_dir,
-        variant=variant,
         diagnostic=True,
     )
 
     async def solve(state: TaskState, generate: Any) -> TaskState:
         meta = state.metadata
-        result = pipeline.infer(meta)
+        result = await pipeline.infer(meta)
         for key, value in result.items():
             state.store.set(key, value)
         return state

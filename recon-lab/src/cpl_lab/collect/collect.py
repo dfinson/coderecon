@@ -195,6 +195,9 @@ def run_collect(
         else:
             failed += 1
             mark = "[red]✗[/red]"
+            err = s.get("error", "")
+            if err:
+                rid = f"{rid} [dim red]{err[:50]}[/dim red]"
 
         tbl.add_row(rid, f"{q}", f"{c:,}", f"{sec}s", mark)
         overall.update(overall_bar, advance=1)

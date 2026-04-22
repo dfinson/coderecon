@@ -109,13 +109,18 @@ def _ensure_cuda_lib_path() -> None:
             break
 
 
-def _select_onnx_providers() -> list[str]:
+def _select_onnx_providers(
+    vram_bytes: int | None = None,
+) -> list[str | tuple[str, dict[str, Any]]]:
     """Select the best available ONNX Runtime execution providers.
 
     Tries GPU providers first (CUDA, ROCm, CoreML), falls back to CPU.
     Respects CODERECON_ONNX_DEVICE env var to force a specific provider.
 
-    On Linux, auto-patches LD_LIBRARY_PATH for pip-installed CUDA libs.
+    When *vram_bytes* is given and CUDA is available, configures the BFC
+    arena to use ``kSameAsRequested`` (no power-of-two overshoot) and
+    caps ``gpu_mem_limit`` at 85 % of VRAM so the arena never grabs
+    everything.
     """
     import os
 
@@ -127,11 +132,19 @@ def _select_onnx_providers() -> list[str]:
     _ensure_cuda_lib_path()
 
     available = set(ort.get_available_providers())
-    providers: list[str] = []
+    providers: list[str | tuple[str, dict[str, Any]]] = []
 
     # Prefer CUDA > ROCm > CoreML > CPU
     if "CUDAExecutionProvider" in available:
-        providers.append("CUDAExecutionProvider")
+        cuda_opts: dict[str, Any] = {
+            # kSameAsRequested = 1: allocate exactly the amount needed,
+            # not next-power-of-two.  Prevents the arena from claiming
+            # all VRAM on a single large allocation attempt.
+            "arena_extend_strategy": "kSameAsRequested",
+        }
+        if vram_bytes:
+            cuda_opts["gpu_mem_limit"] = int(vram_bytes * 0.85)
+        providers.append(("CUDAExecutionProvider", cuda_opts))
     if "ROCMExecutionProvider" in available:
         providers.append("ROCMExecutionProvider")
     if "CoreMLExecutionProvider" in available:
@@ -157,6 +170,55 @@ BATCH_SIZE_CPU = 16
 BATCH_SIZE_GPU = 64
 # Resolved at first encoder load
 BATCH_SIZE = BATCH_SIZE_CPU
+
+# ── Adaptive GPU batch sizing ────────────────────────────────────
+#
+# Empirical: splade-mini (distilbert-6L-768H) peak VRAM per sample
+# at a given sequence length.  Derived from observed OOM:
+#   55 samples × 340 tokens → 9.1 GB CUDA allocation request
+#   → ~165 MB/sample at 340 tokens → ~486 KB/sample/token.
+# The quadratic attention term means this *overestimates* for short
+# sequences, but conservative is correct — OOM fallback handles outliers.
+_VRAM_BYTES_PER_SAMPLE_PER_TOKEN = 500_000  # 500 KB
+_VRAM_MODEL_OVERHEAD_BYTES = 2500 * 1024 * 1024  # 2.5 GB  (model + ORT runtime + arena fragmentation)
+_VRAM_UTILIZATION = 0.90  # use at most 90% of total VRAM
+
+
+def _query_gpu_vram_bytes() -> int | None:
+    """Query total GPU VRAM in bytes via nvidia-smi.
+
+    Returns None if nvidia-smi is unavailable or fails.
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=memory.total",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            # Output is in MiB, one line per GPU — take the first
+            mib = int(result.stdout.strip().split("\n")[0])
+            return mib * 1024 * 1024
+    except (FileNotFoundError, ValueError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
+def _compute_gpu_batch_size(max_seq_len: int, vram_bytes: int) -> int:
+    """Derive a safe batch size for *max_seq_len* tokens given *vram_bytes* of GPU memory."""
+    usable = int(vram_bytes * _VRAM_UTILIZATION) - _VRAM_MODEL_OVERHEAD_BYTES
+    if usable <= 0:
+        return 1
+    bytes_per_sample = max(1, max_seq_len) * _VRAM_BYTES_PER_SAMPLE_PER_TOKEN
+    batch = max(1, usable // bytes_per_sample)
+    return min(batch, BATCH_SIZE_GPU)
 
 # Vendored ONNX model + tokenizer (from coderecon-models-splade package)
 from coderecon_models_splade import ONNX_PATH as _ONNX_PATH
@@ -435,52 +497,84 @@ class SpladeEncoder:
     tokenizer_path: Path = _TOKENIZER_PATH
     _session: ort.InferenceSession | None = field(default=None, repr=False)
     _tokenizer: Tokenizer | None = field(default=None, repr=False)
+    _cpu_session: ort.InferenceSession | None = field(default=None, repr=False)
+    _vram_bytes: int | None = field(default=None, repr=False)
+
+    def _make_gpu_session(
+        self,
+        vram_bytes: int | None = None,
+    ) -> ort.InferenceSession:
+        """Create a CUDA InferenceSession with arena-safe settings.
+
+        Separated from :meth:`load` so we can build a *fresh* session
+        after an OOM (the BFC arena resets with a new session).
+        """
+        opts = ort.SessionOptions()
+        opts.enable_mem_pattern = False
+        providers = _select_onnx_providers(vram_bytes=vram_bytes)
+        return ort.InferenceSession(
+            str(self.onnx_path),
+            sess_options=opts,
+            providers=providers,
+        )
 
     def load(self) -> None:
         """Load ONNX session + tokenizer (lazy, auto-detect GPU)."""
         global _gpu_active, BATCH_SIZE  # noqa: PLW0603
         if self._session is not None:
             return
-        opts = ort.SessionOptions()
-        # Disable memory pattern pre-allocation so varying batch sizes
-        # don't hit "shape mismatch attempting to re-use buffer" errors.
-        opts.enable_mem_pattern = False
-        providers = _select_onnx_providers()
-        self._session = ort.InferenceSession(
-            str(self.onnx_path),
-            sess_options=opts,
-            providers=providers,
-        )
+        # Query VRAM *before* session creation so we can configure
+        # gpu_mem_limit on the first session.
+        self._vram_bytes = _query_gpu_vram_bytes()
+        self._session = self._make_gpu_session(vram_bytes=self._vram_bytes)
         active = self._session.get_providers()
         _gpu_active = any(p != "CPUExecutionProvider" for p in active)
         if _gpu_active:
             BATCH_SIZE = BATCH_SIZE_GPU
+            if self._vram_bytes:
+                log.info(
+                    "splade.gpu_vram",
+                    extra={"vram_mib": self._vram_bytes // (1024 * 1024)},
+                )
         log.info("splade.loaded", extra={"providers": active, "gpu": _gpu_active})
         self._tokenizer = Tokenizer.from_file(str(self.tokenizer_path))
         self._tokenizer.enable_truncation(max_length=512)
         self._tokenizer.enable_padding()
 
-    def _encode_batch(self, texts: list[str]) -> list[dict[int, float]]:
+    def _encode_batch(
+        self,
+        texts: list[str],
+        session: ort.InferenceSession | None = None,
+    ) -> list[dict[int, float]]:
         """Run a batch of texts through the ONNX model → sparse vectors.
 
         The ONNX model has SPLADE pooling (ReLU → log1p → max-over-seq)
         baked into the graph, outputting (batch, vocab_size) directly.
+
+        *session* overrides the default session (used by CPU fallback).
         """
-        assert self._session is not None and self._tokenizer is not None
+        sess = session or self._session
+        assert sess is not None and self._tokenizer is not None
 
         encodings = self._tokenizer.encode_batch(texts)
         ids = np.array([e.ids for e in encodings], dtype=np.int64)
         mask = np.array([e.attention_mask for e in encodings], dtype=np.int64)
         tids = np.zeros_like(ids)
 
-        (pooled,) = self._session.run(
+        (raw,) = sess.run(
             None,
             {
                 "input_ids": ids,
                 "attention_mask": mask,
                 "token_type_ids": tids,
             },
-        )  # (batch, vocab_size)
+        )
+
+        # SPLADE pooling: ReLU → log1p → max-over-sequence
+        if raw.ndim == 3:
+            pooled = np.log1p(np.maximum(raw, 0)).max(axis=1)
+        else:
+            pooled = raw  # already (batch, vocab_size)
 
         results: list[dict[int, float]] = []
         for row in pooled:
@@ -488,11 +582,65 @@ class SpladeEncoder:
             results.append({int(idx): float(row[idx]) for idx in nz})
         return results
 
+    def _get_cpu_session(self) -> ort.InferenceSession:
+        """Lazily create a CPU-only ONNX session for OOM fallback."""
+        if self._cpu_session is None:
+            opts = ort.SessionOptions()
+            opts.enable_mem_pattern = False
+            self._cpu_session = ort.InferenceSession(
+                str(self.onnx_path),
+                sess_options=opts,
+                providers=["CPUExecutionProvider"],
+            )
+        return self._cpu_session
+
+    def _encode_batch_safe(self, texts: list[str]) -> list[dict[int, float]]:
+        """Encode with OOM recovery: fresh GPU session, then CPU fallback.
+
+        On a CUDA OOM error the BFC arena's internal free-lists may be
+        fragmented.  Retrying on the *same* session often cascades into
+        repeated failures even for smaller batches.
+
+        Strategy:
+        1. Try the batch on the current GPU session.
+        2. On OOM → create a **fresh** GPU session (new BFC arena),
+           halve the batch, and retry on the fresh session.
+        3. If a single item still OOMs on a fresh GPU session → CPU.
+        """
+        try:
+            return self._encode_batch(texts)
+        except Exception as exc:
+            err_msg = str(exc).lower()
+            is_oom = (
+                "out of memory" in err_msg
+                or "failed to allocate memory" in err_msg
+                or "smaller than requested" in err_msg
+            )
+            if not _gpu_active or not is_oom:
+                raise
+            log.warning(
+                "splade.gpu_oom",
+                extra={"batch_size": len(texts), "error": str(exc)[:200]},
+            )
+            # Replace the current session with a fresh one (resets BFC arena)
+            self._session = self._make_gpu_session(vram_bytes=self._vram_bytes)
+            if len(texts) > 1:
+                mid = len(texts) // 2
+                return self._encode_batch_safe(texts[:mid]) + self._encode_batch_safe(
+                    texts[mid:]
+                )
+            # Single item OOM on GPU — fall back to CPU
+            log.warning("splade.cpu_fallback", extra={"text_len": len(texts[0])})
+            return self._encode_batch(texts, session=self._get_cpu_session())
+
     def encode_documents(self, texts: list[str], batch_size: int = BATCH_SIZE) -> list[dict[int, float]]:
         """Encode document texts → sparse vectors (batched ONNX inference).
 
-        Sorts texts by tokenized length before batching to minimise
-        padding waste, then restores original order.
+        Sorts texts by tokenized length before batching.  When GPU is
+        active and VRAM is known, batch size is computed per-chunk from
+        the longest sequence in that chunk so that the estimated peak
+        memory stays within VRAM.  OOM errors are caught and recovered
+        by halving the batch, with a final CPU fallback for single items.
         """
         self.load()
         if not texts:
@@ -501,15 +649,29 @@ class SpladeEncoder:
 
         # Sort by token count → similar lengths in each batch → less padding
         indexed = list(enumerate(texts))
-        indexed.sort(key=lambda x: len(self._tokenizer.encode(x[1]).ids))
+        tok_lengths = [len(self._tokenizer.encode(t).ids) for _, t in indexed]
+        indexed.sort(key=lambda x: tok_lengths[x[0]])
 
         ordered_vecs: list[tuple[int, dict[int, float]]] = []
-        for i in range(0, len(indexed), batch_size):
-            batch_items = indexed[i : i + batch_size]
+        pos = 0
+        while pos < len(indexed):
+            remaining = len(indexed) - pos
+            if _gpu_active and self._vram_bytes:
+                # Items are sorted ascending by length.  The longest in a
+                # candidate batch of size N is at pos+N-1.  Use the longest
+                # in the maximum possible batch to derive a safe batch size.
+                max_possible = min(remaining, BATCH_SIZE_GPU)
+                longest_seq = tok_lengths[indexed[pos + max_possible - 1][0]]
+                bs = max(1, min(max_possible, _compute_gpu_batch_size(longest_seq, self._vram_bytes)))
+            else:
+                bs = min(remaining, batch_size)
+
+            batch_items = indexed[pos : pos + bs]
             batch_texts = [t for _, t in batch_items]
-            batch_vecs = self._encode_batch(batch_texts)
+            batch_vecs = self._encode_batch_safe(batch_texts) if _gpu_active else self._encode_batch(batch_texts)
             for (orig_idx, _), vec in zip(batch_items, batch_vecs):
                 ordered_vecs.append((orig_idx, vec))
+            pos += bs
 
         # Restore original order
         ordered_vecs.sort(key=lambda x: x[0])
@@ -652,7 +814,7 @@ def index_splade_vectors(
     # Encode in batches
     log.info("splade.encode_start", extra={"n_defs": len(texts)})
     t0 = time.monotonic()
-    all_vecs = encoder.encode_documents(texts, batch_size=BATCH_SIZE)
+    all_vecs = encoder.encode_documents(texts)
     elapsed = time.monotonic() - t0
     log.info(
         "splade.encode_done",

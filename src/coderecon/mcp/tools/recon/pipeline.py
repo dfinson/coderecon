@@ -176,20 +176,16 @@ async def recon_pipeline(
     Otherwise: RRF fusion → file prune → elbow cutoff (model-free).
     """
     from coderecon.mcp.tools.recon.raw_signals import raw_signals_pipeline
-    from coderecon.ranking.rrf import rrf_fuse
 
     t0 = time.monotonic()
     repo_root = app_ctx.coordinator.repo_root
 
-    # 1. Get raw signals
+    # 1. Get raw signals (includes CE scoring + RRF fusion)
     raw = await raw_signals_pipeline(app_ctx, task, seeds=seeds, pins=pins)
     candidates = raw.get("candidates", [])
     query_features = raw.get("query_features", {})
     repo_features = raw.get("repo_features", {})
     diagnostics = raw.get("diagnostics", {})
-
-    # 2. Always compute RRF scores (shared by both paths)
-    candidates = rrf_fuse(candidates)
 
     if _models_available():
         return await _pipeline_model(
@@ -380,8 +376,7 @@ async def _pipeline_model(
             "hints": hints,
         }
 
-    # TinyBERT cross-encoder scoring (ALL candidates, before file pruning)
-    candidates = _score_cross_encoder_tiny(candidates, task, db)
+    # CE scoring already done in raw_signals_pipeline; proceed to file ranking
 
     # File Ranking (Stage 1) — prune to top files
     file_ranker = load_file_ranker()

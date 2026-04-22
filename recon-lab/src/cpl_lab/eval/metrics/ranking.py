@@ -91,6 +91,48 @@ def metric_avg_hit_10() -> Metric:
 
 
 @metric
+def metric_avg_f1_10() -> Metric:
+    def compute(scores: list[Score]) -> float:
+        return _avg_metadata_field(scores, "f1_10")
+    return compute
+
+
+@metric
+def metric_avg_precision_10() -> Metric:
+    def compute(scores: list[Score]) -> float:
+        return _avg_metadata_field(scores, "precision_10")
+    return compute
+
+
+@metric
+def metric_avg_recall_10() -> Metric:
+    def compute(scores: list[Score]) -> float:
+        return _avg_metadata_field(scores, "recall_10")
+    return compute
+
+
+@metric
+def metric_avg_f1_20() -> Metric:
+    def compute(scores: list[Score]) -> float:
+        return _avg_metadata_field(scores, "f1_20")
+    return compute
+
+
+@metric
+def metric_avg_precision_20() -> Metric:
+    def compute(scores: list[Score]) -> float:
+        return _avg_metadata_field(scores, "precision_20")
+    return compute
+
+
+@metric
+def metric_avg_recall_20() -> Metric:
+    def compute(scores: list[Score]) -> float:
+        return _avg_metadata_field(scores, "recall_20")
+    return compute
+
+
+@metric
 def metric_avg_cutoff_f1() -> Metric:
     def compute(scores: list[Score]) -> float:
         return _avg_metadata_field(scores, "cutoff_f1")
@@ -134,6 +176,12 @@ def metric_p95_latency() -> Metric:
     metric_avg_ndcg_20(),
     metric_avg_hit_5(),
     metric_avg_hit_10(),
+    metric_avg_f1_10(),
+    metric_avg_precision_10(),
+    metric_avg_recall_10(),
+    metric_avg_f1_20(),
+    metric_avg_precision_20(),
+    metric_avg_recall_20(),
     metric_avg_cutoff_f1(),
     metric_avg_cutoff_precision(),
     metric_avg_cutoff_recall(),
@@ -173,8 +221,12 @@ def ranking_scorer() -> Scorer:
 
         top_5 = set(ranked_candidate_keys[:5])
         top_10 = set(ranked_candidate_keys[:10])
+        top_20 = set(ranked_candidate_keys[:20])
         hit_5 = 1.0 if top_5 & edited_set else 0.0
         hit_10 = 1.0 if top_10 & edited_set else 0.0
+
+        prf_10 = _prf(top_10, all_gt)
+        prf_20 = _prf(top_20, all_gt)
 
         returned = set(ranked_candidate_keys[:predicted_n])
         cutoff_prf = _prf(returned, all_gt)
@@ -189,6 +241,12 @@ def ranking_scorer() -> Scorer:
                 "ndcg_full": round(ndcg_full, 4),
                 "hit_5": hit_5,
                 "hit_10": hit_10,
+                "precision_10": prf_10["precision"],
+                "recall_10": prf_10["recall"],
+                "f1_10": prf_10["f1"],
+                "precision_20": prf_20["precision"],
+                "recall_20": prf_20["recall"],
+                "f1_20": prf_20["f1"],
                 "cutoff_precision": cutoff_prf["precision"],
                 "cutoff_recall": cutoff_prf["recall"],
                 "cutoff_f1": cutoff_prf["f1"],

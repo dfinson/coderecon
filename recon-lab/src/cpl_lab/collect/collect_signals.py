@@ -75,12 +75,19 @@ _SIGNALS_SCHEMA = pa.schema([
     pa.field("shares_file_with_seed", pa.bool_()),
     pa.field("is_callee_of_top", pa.bool_()),
     pa.field("is_imported_by_top", pa.bool_()),
+    # SPLADE sparse retrieval score
+    pa.field("splade_score", pa.float64()),
+    # Cross-encoder score (TinyBERT, all candidates)
+    pa.field("ce_score_tiny", pa.float64()),
+    # Language family
+    pa.field("language_family", pa.string()),
     # Coverage expansion
     pa.field("from_coverage", pa.bool_()),
     # Harvester source flags
     pa.field("from_term_match", pa.bool_()),
     pa.field("from_explicit", pa.bool_()),
     pa.field("from_graph", pa.bool_()),
+    pa.field("matched_terms_count", pa.int64()),
     # Agreement
     pa.field("retriever_hits", pa.int64()),
     # RRF score
@@ -97,6 +104,10 @@ _SIGNALS_SCHEMA = pa.schema([
     pa.field("has_numbers", pa.bool_()),
     pa.field("has_quoted_strings", pa.bool_()),
     pa.field("term_count", pa.int64()),
+    # Task intent signals
+    pa.field("intent", pa.string()),
+    pa.field("is_stacktrace_driven", pa.bool_()),
+    pa.field("is_test_driven", pa.bool_()),
     # Label
     pa.field("label_relevant", pa.int64()),
 ])
@@ -246,7 +257,10 @@ def _worker_inner(args: tuple[str, str, str, str, str], queue: mp.Queue) -> None
         )
     except Exception:
         pass
-    sys.stderr = open(os.devnull, "w")
+    # Redirect stderr to a per-worker log file for post-mortem debugging
+    err_log = data_dir / "signals" / "worker_stderr.log"
+    err_log.parent.mkdir(parents=True, exist_ok=True)
+    sys.stderr = open(err_log, "w")
 
     gt_dir = data_dir / "ground_truth"
     queries_file = gt_dir / "queries.jsonl"
@@ -322,7 +336,7 @@ def _worker_inner(args: tuple[str, str, str, str, str], queue: mp.Queue) -> None
         for c in res.get("candidates", []):
             cand_key = f"{c.get('path', '')}:{c.get('kind', '')}:{c.get('name', '')}:{c.get('start_line', 0)}"
             grade = tr.get(cand_key, 0)
-            rows.append({
+            row = {
                 "task_id": q["task_id"], "query_id": q["query_id"],
                 "query_type": q["query_type"],
                 "candidate_key": cand_key, **c,
@@ -333,8 +347,23 @@ def _worker_inner(args: tuple[str, str, str, str, str], queue: mp.Queue) -> None
                 "has_numbers": qf.get("has_numbers", False),
                 "has_quoted_strings": qf.get("has_quoted_strings", False),
                 "term_count": qf.get("term_count", 0),
+                "intent": qf.get("intent", ""),
+                "is_stacktrace_driven": qf.get("is_stacktrace_driven", False),
+                "is_test_driven": qf.get("is_test_driven", False),
                 "label_relevant": grade,
-            })
+            }
+            # Fill defaults for schema fields not provided by the pipeline
+            for field in _SIGNALS_SCHEMA:
+                if field.name not in row:
+                    if pa.types.is_floating(field.type):
+                        row[field.name] = 0.0
+                    elif pa.types.is_integer(field.type):
+                        row[field.name] = 0
+                    elif pa.types.is_boolean(field.type):
+                        row[field.name] = False
+                    elif pa.types.is_string(field.type):
+                        row[field.name] = ""
+            rows.append(row)
 
         if rows:
             batch_table = pa.Table.from_pandas(

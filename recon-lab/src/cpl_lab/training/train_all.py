@@ -1,10 +1,10 @@
-"""Train 4 structural models.
+"""Train 4 ranking models.
 
 Models:
-  1. Gate (structural)        — query routing
-  2. File Ranker (structural) — file-level LambdaMART
-  3. Def Ranker (structural)  — def-level LambdaMART
-  4. Cutoff (structural)      — N* regressor from structural ranker scores
+  1. Gate        — query routing (OK/UNSAT/BROAD/AMBIG)
+  2. File Ranker — file-level LambdaMART
+  3. Def Ranker  — def-level LambdaMART
+  4. Cutoff      — N* regressor from ranker scores
 
 Usage::
 
@@ -34,13 +34,24 @@ from cpl_lab.schema import OK_QUERY_TYPES
 # -- Def Ranker features ------------------------------------------------
 DEF_RANKER_FEATURES = [
     "term_match_count", "term_total_matches", "lex_hit_count", "bm25_file_score",
+    # SPLADE sparse retrieval score
+    "splade_score",
+    # Cross-encoder score (TinyBERT, all candidates)
+    "ce_score_tiny",
+    # Graph signal (one-hot)
     "graph_is_callee", "graph_is_caller", "graph_is_sibling",
     "graph_is_implementor", "graph_is_doc_xref",
     "graph_seed_rank", "graph_caller_tier",
+    # Symbol source (one-hot)
     "sym_agent_seed", "sym_auto_seed", "sym_task_extracted", "sym_path_mention",
     "sym_pin",
+    # Import direction (one-hot)
     "import_forward", "import_reverse", "import_barrel", "import_test_pair",
     "retriever_hits",
+    # Language family (one-hot)
+    "lang_python", "lang_javascript", "lang_go", "lang_rust",
+    "lang_java", "lang_csharp", "lang_c_cpp", "lang_ruby",
+    "lang_php", "lang_swift", "lang_kotlin", "lang_data",
     # Kind one-hot
     "kind_function", "kind_class", "kind_method", "kind_variable", "kind_interface",
     "object_size_lines", "path_depth", "nesting_depth",
@@ -54,10 +65,16 @@ DEF_RANKER_FEATURES = [
     "from_term_match", "from_explicit", "from_graph",
     # Artifact kind one-hot
     "artifact_code", "artifact_test", "artifact_config", "artifact_doc", "artifact_build",
+    # Term coverage
+    "term_coverage",
     "seed_path_distance", "same_package", "package_distance",
     "rrf_score",
+    # Query features
     "query_len", "has_identifier", "has_path", "identifier_density",
     "has_numbers", "has_quoted_strings", "term_count",
+    # Intent one-hot
+    "intent_debug", "intent_implement", "intent_refactor", "intent_understand", "intent_test",
+    "is_stacktrace_driven", "is_test_driven",
 ]
 
 # -- File Ranker features ------------------------------------------------
@@ -80,6 +97,12 @@ FILE_RANKER_FEATURES = [
     "any_shares_file_with_seed", "any_callee_of_top", "any_imported_by_top",
     # RRF
     "max_rrf_score",
+    # SPLADE
+    "max_splade_score",
+    # Cross-encoder (TinyBERT)
+    "max_ce_tiny", "mean_ce_tiny",
+    # Artifact kind
+    "any_artifact_test", "any_artifact_config", "any_artifact_doc",
     # File-level metadata
     "num_defs_in_file", "mean_hub_score", "max_hub_score",
     "is_test", "is_barrel", "path_depth",
@@ -94,10 +117,13 @@ FILE_RANKER_FEATURES = [
 GATE_FEATURES = [
     "query_len", "identifier_density", "has_path",
     "has_numbers", "has_quoted_strings",
+    "is_stacktrace_driven", "is_test_driven",
     "has_agent_seeds", "agent_seed_count",
     "object_count", "file_count",
     "total_candidates",
     "top_score", "score_p25", "score_p50", "score_p75",
+    "max_splade_score", "max_bm25_score",
+    "has_graph_candidates", "has_explicit_candidates",
     "path_entropy", "cluster_count",
     "agreement_mean", "agreement_std",
 ]
@@ -106,11 +132,17 @@ GATE_LABELS = {"OK": 0, "UNSAT": 1, "BROAD": 2, "AMBIG": 3}
 
 # -- Cutoff features ------------------------------------------------------
 CUTOFF_FEATURES = [
-    "query_len", "has_identifier", "has_path", "total_candidates",
-    "top_score", "score_p25", "score_p50", "score_p75",
+    "query_len", "has_identifier", "has_path",
+    "has_numbers", "has_quoted_strings",
+    "is_stacktrace_driven", "is_test_driven",
+    "object_count", "file_count",
+    "total_candidates",
+    "top_score", "score_p10", "score_p25", "score_p50", "score_p75", "score_p90",
     "max_gap", "max_gap_pos", "score_var",
     "score_entropy", "cumulative_mass_top10",
-    "agreement_mean",
+    "agreement_mean", "agreement_max",
+    "fraction_from_term", "fraction_from_graph",
+    "fraction_from_explicit", "fraction_from_splade",
 ]
 
 # ═══════════════════════════════════════════════════════════════════
@@ -121,6 +153,7 @@ _LOAD_COLS = [
     "run_id", "query_id", "query_type", "repo_set", "label_relevant", "label_gate",
     "path", "kind", "name", "start_line", "end_line",
     "term_match_count", "term_total_matches", "lex_hit_count", "bm25_file_score",
+    "splade_score", "ce_score_tiny", "language_family",
     "graph_edge_type", "graph_seed_rank", "graph_caller_max_tier",
     "symbol_source", "import_direction", "from_coverage", "retriever_hits",
     "object_size_lines", "path_depth", "nesting_depth",
@@ -129,11 +162,13 @@ _LOAD_COLS = [
     "has_docstring", "has_decorators", "has_return_type", "has_parent_scope",
     "shares_file_with_seed", "is_callee_of_top", "is_imported_by_top",
     "from_coverage", "from_term_match", "from_explicit", "from_graph",
+    "matched_terms_count",
     "seed_path_distance", "same_package", "package_distance",
     "rrf_score",
     "signature_text", "parent_dir",
     "query_len", "has_identifier", "has_path", "identifier_density",
     "has_numbers", "has_quoted_strings", "term_count",
+    "intent", "is_stacktrace_driven", "is_test_driven",
     "object_count", "file_count",
 ]
 
@@ -145,6 +180,10 @@ _LOAD_COLS = [
 def _prepare_def_features(df: pd.DataFrame) -> pd.DataFrame:
     """Encode categorical signals into binary columns."""
     df = df.copy()
+
+    # SPLADE / cross-encoder scores (pass through, fill NaN)
+    df["splade_score"] = df.get("splade_score", pd.Series(dtype=float)).fillna(0.0)
+    df["ce_score_tiny"] = df.get("ce_score_tiny", pd.Series(dtype=float)).fillna(0.0)
 
     # Graph edge type → binary
     df["graph_is_callee"] = df["graph_edge_type"] == "callee"
@@ -175,6 +214,21 @@ def _prepare_def_features(df: pd.DataFrame) -> pd.DataFrame:
     # Symbol source → pin
     df["sym_pin"] = df["symbol_source"] == "pin"
 
+    # Language family → one-hot
+    lang = df.get("language_family", pd.Series(dtype=object)).fillna("")
+    df["lang_python"] = lang == "python"
+    df["lang_javascript"] = lang == "javascript"
+    df["lang_go"] = lang == "go"
+    df["lang_rust"] = lang == "rust"
+    df["lang_java"] = lang == "java"
+    df["lang_csharp"] = lang == "csharp"
+    df["lang_c_cpp"] = lang == "c_cpp"
+    df["lang_ruby"] = lang == "ruby"
+    df["lang_php"] = lang == "php"
+    df["lang_swift"] = lang == "swift"
+    df["lang_kotlin"] = lang == "kotlin"
+    df["lang_data"] = lang.isin(["json", "yaml", "toml", "xml"])
+
     # Kind one-hot
     df["kind_function"] = df["kind"] == "function"
     df["kind_class"] = df["kind"] == "class"
@@ -192,6 +246,23 @@ def _prepare_def_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # Has signature
     df["has_signature"] = df.get("signature_text", pd.Series(dtype=object)).notna()
+
+    # Term coverage: fraction of query terms matched
+    matched = df.get("matched_terms_count", pd.Series(dtype=float)).fillna(0)
+    total_terms = df.get("term_count", pd.Series(dtype=float)).fillna(0)
+    df["term_coverage"] = (matched / total_terms.replace(0, 1)).fillna(0.0)
+
+    # Intent one-hot
+    intent = df.get("intent", pd.Series(dtype=object)).fillna("")
+    df["intent_debug"] = intent == "debug"
+    df["intent_implement"] = intent == "implement"
+    df["intent_refactor"] = intent == "refactor"
+    df["intent_understand"] = intent == "understand"
+    df["intent_test"] = intent == "test"
+
+    # Stacktrace / test-driven flags (may already be bool from parquet)
+    df["is_stacktrace_driven"] = df.get("is_stacktrace_driven", pd.Series(dtype=bool)).fillna(False)
+    df["is_test_driven"] = df.get("is_test_driven", pd.Series(dtype=bool)).fillna(False)
 
     # Fill NaN for numeric columns
     for col in DEF_RANKER_FEATURES:
@@ -248,6 +319,15 @@ def _aggregate_file_features(df: pd.DataFrame) -> pd.DataFrame:
         any_imported_by_top=("is_imported_by_top", "any"),
         # RRF
         max_rrf_score=("rrf_score", "max"),
+        # SPLADE
+        max_splade_score=("splade_score", "max"),
+        # Cross-encoder (TinyBERT)
+        max_ce_tiny=("ce_score_tiny", "max"),
+        mean_ce_tiny=("ce_score_tiny", "mean"),
+        # Artifact kind
+        any_artifact_test=("artifact_test", "any"),
+        any_artifact_config=("artifact_config", "any"),
+        any_artifact_doc=("artifact_doc", "any"),
         # File metadata
         num_defs_in_file=("path", "count"),
         mean_hub_score=("hub_score", "mean"),
@@ -387,6 +467,8 @@ def _compute_gate_features(group: pd.DataFrame) -> dict:
     f["has_path"] = first.get("has_path", False)
     f["has_numbers"] = first.get("has_numbers", False)
     f["has_quoted_strings"] = first.get("has_quoted_strings", False)
+    f["is_stacktrace_driven"] = first.get("is_stacktrace_driven", False)
+    f["is_test_driven"] = first.get("is_test_driven", False)
 
     # Seed presence
     f["has_agent_seeds"] = (group["symbol_source"] == "agent_seed").any()
@@ -406,6 +488,10 @@ def _compute_gate_features(group: pd.DataFrame) -> dict:
     if n == 0:
         for k in ["top_score", "score_p25", "score_p50", "score_p75"]:
             f[k] = 0.0
+        f["max_splade_score"] = 0.0
+        f["max_bm25_score"] = 0.0
+        f["has_graph_candidates"] = False
+        f["has_explicit_candidates"] = False
         f["path_entropy"] = 0.0
         f["cluster_count"] = 0
         f["agreement_mean"] = 0.0
@@ -415,6 +501,16 @@ def _compute_gate_features(group: pd.DataFrame) -> dict:
         f["score_p25"] = float(pool_scores[min(int(n * 0.25), n - 1)])
         f["score_p50"] = float(pool_scores[min(int(n * 0.5), n - 1)])
         f["score_p75"] = float(pool_scores[min(int(n * 0.75), n - 1)])
+
+        # Continuous score peaks from best retrievers
+        f["max_splade_score"] = float(
+            group.get("splade_score", pd.Series(dtype=float)).fillna(0).max()
+        )
+        f["max_bm25_score"] = float(
+            group.get("bm25_file_score", pd.Series(dtype=float)).fillna(0).max()
+        )
+        f["has_graph_candidates"] = group["graph_edge_type"].notna().any()
+        f["has_explicit_candidates"] = group["symbol_source"].notna().any()
 
         # Path entropy
         dirs = group["parent_dir"].dropna().values
@@ -471,7 +567,13 @@ def _compute_n_star(scores: np.ndarray, labels: np.ndarray, max_n: int = 100) ->
 
 def _cutoff_features_from_scores(
     scores: np.ndarray, retriever_hits: np.ndarray,
-    query_len: int, has_identifier: bool, has_path: bool, n_candidates: int,
+    query_len: int, has_identifier: bool, has_path: bool,
+    has_numbers: bool, has_quoted_strings: bool,
+    is_stacktrace_driven: bool, is_test_driven: bool,
+    object_count: int, file_count: int,
+    n_candidates: int,
+    from_term_match: np.ndarray, from_graph: np.ndarray,
+    from_explicit: np.ndarray, splade_scores: np.ndarray,
 ) -> dict:
     """Compute query-level cutoff features from ranked score list."""
     n = len(scores)
@@ -479,19 +581,30 @@ def _cutoff_features_from_scores(
     f["query_len"] = query_len
     f["has_identifier"] = has_identifier
     f["has_path"] = has_path
+    f["has_numbers"] = has_numbers
+    f["has_quoted_strings"] = has_quoted_strings
+    f["is_stacktrace_driven"] = is_stacktrace_driven
+    f["is_test_driven"] = is_test_driven
+    f["object_count"] = object_count
+    f["file_count"] = file_count
     f["total_candidates"] = n_candidates
 
     if n == 0:
-        for k in ["top_score", "score_p25", "score_p50", "score_p75",
-                   "max_gap", "max_gap_pos", "score_var",
-                   "score_entropy", "cumulative_mass_top10", "agreement_mean"]:
+        for k in ["top_score", "score_p10", "score_p25", "score_p50", "score_p75",
+                   "score_p90", "max_gap", "max_gap_pos", "score_var",
+                   "score_entropy", "cumulative_mass_top10",
+                   "agreement_mean", "agreement_max",
+                   "fraction_from_term", "fraction_from_graph",
+                   "fraction_from_explicit", "fraction_from_splade"]:
             f[k] = 0.0
         return f
 
     f["top_score"] = float(scores[0])
+    f["score_p10"] = float(np.percentile(scores, 90))
     f["score_p25"] = float(np.percentile(scores, 75))
     f["score_p50"] = float(np.percentile(scores, 50))
     f["score_p75"] = float(np.percentile(scores, 25))
+    f["score_p90"] = float(np.percentile(scores, 10))
 
     gaps = np.diff(scores) if n > 1 else np.array([0.0])
     f["max_gap"] = float(np.abs(gaps).max()) if len(gaps) > 0 else 0.0
@@ -504,6 +617,14 @@ def _cutoff_features_from_scores(
     f["cumulative_mass_top10"] = float(scores[:10].sum()) / total if total > 0 else 0.0
 
     f["agreement_mean"] = float(retriever_hits.mean())
+    f["agreement_max"] = float(retriever_hits.max()) if len(retriever_hits) > 0 else 0.0
+
+    n_ranked = max(n, 1)
+    f["fraction_from_term"] = float(from_term_match.sum()) / n_ranked
+    f["fraction_from_graph"] = float(from_graph.sum()) / n_ranked
+    f["fraction_from_explicit"] = float(from_explicit.sum()) / n_ranked
+    f["fraction_from_splade"] = float((splade_scores > 0).sum()) / n_ranked
+
     return f
 
 
@@ -576,7 +697,7 @@ def _save_model(booster: lgb.Booster, path: Path) -> None:
 # ═══════════════════════════════════════════════════════════════════
 
 def train_all(data_dir: Path, output_dir: Path, skip_merge: bool = False) -> dict:
-    """Run the full 8-model training pipeline."""
+    """Run the full 4-model training pipeline."""
     merged_dir = data_dir / "merged"
 
     # Validate
@@ -609,30 +730,28 @@ def train_all(data_dir: Path, output_dir: Path, skip_merge: bool = False) -> dic
     print(f"  {len(rg_df)} candidates, "
           f"{rg_df['_group'].nunique()} query groups")
 
-    # ── 2. Train Def Ranker ────────────────────────────────────────────
-    name = "def_ranker"
-    features = DEF_RANKER_FEATURES
-    print(f"\n=== Training Def Ranker ===")
+    # ── 2. Train Def Ranker ───────────────────────────────────────
+    print(f"\n=== Training Def Ranker ({len(DEF_RANKER_FEATURES)} features) ===")
 
     df = rg_df.sort_values(["run_id", "query_id"]).reset_index(drop=True)
     group_col = df["run_id"].astype(str) + "__" + df["query_id"].astype(str)
     group_sizes = df.groupby(group_col, sort=True).size().values
 
-    X = df[features].fillna(0).values
+    X = df[DEF_RANKER_FEATURES].fillna(0).values
     y = df["label_relevant"].astype(int).values
 
-    booster = _train_lgb_ranker(X, y, group_sizes, features)
-    _save_model(booster, output_dir / f"{name}.lgbm")
+    booster = _train_lgb_ranker(X, y, group_sizes, DEF_RANKER_FEATURES)
+    _save_model(booster, output_dir / "def_ranker.lgbm")
 
-    summary[name] = {
+    summary["def_ranker"] = {
         "candidates": len(df),
         "groups": len(group_sizes),
         "positive_rate": float(y.mean()),
-        "features": len(features),
+        "features": len(DEF_RANKER_FEATURES),
     }
-    print(f"  {summary[name]}")
+    print(f"  {summary['def_ranker']}")
 
-    # ── 3. Train File Rankers ─────────────────────────────────────
+    # ── 3. Train File Ranker ──────────────────────────────────────
     import gc
     print("\n=== Building File-Level Data ===")
     file_df = _aggregate_file_features(rg_df)
@@ -646,27 +765,25 @@ def train_all(data_dir: Path, output_dir: Path, skip_merge: bool = False) -> dic
     file_df = _subsample_negatives(file_df, max_neg=50)
     print(f"  {len(file_df)} file rows, {file_df['_group'].nunique()} groups")
 
-    for variant, features in [("structural", FILE_RANKER_FEATURES)]:
-        name = f"file_ranker_{variant}"
-        print(f"\n=== Training File Ranker ({variant}) ===")
+    print(f"\n=== Training File Ranker ({len(FILE_RANKER_FEATURES)} features) ===")
 
-        df = file_df.sort_values(["run_id", "query_id"]).reset_index(drop=True)
-        group_col = df["run_id"].astype(str) + "__" + df["query_id"].astype(str)
-        group_sizes = df.groupby(group_col, sort=True).size().values
+    df = file_df.sort_values(["run_id", "query_id"]).reset_index(drop=True)
+    group_col = df["run_id"].astype(str) + "__" + df["query_id"].astype(str)
+    group_sizes = df.groupby(group_col, sort=True).size().values
 
-        X = df[features].fillna(0).values
-        y = df["label_relevant"].astype(int).values
+    X = df[FILE_RANKER_FEATURES].fillna(0).values
+    y = df["label_relevant"].astype(int).values
 
-        booster = _train_lgb_ranker(X, y, group_sizes, features)
-        _save_model(booster, output_dir / f"{name}.lgbm")
+    booster = _train_lgb_ranker(X, y, group_sizes, FILE_RANKER_FEATURES)
+    _save_model(booster, output_dir / "file_ranker.lgbm")
 
-        summary[name] = {
-            "files": len(df),
-            "groups": len(group_sizes),
-            "positive_rate": float(y.mean()),
-            "features": len(features),
-        }
-        print(f"  {summary[name]}")
+    summary["file_ranker"] = {
+        "files": len(df),
+        "groups": len(group_sizes),
+        "positive_rate": float(y.mean()),
+        "features": len(FILE_RANKER_FEATURES),
+    }
+    print(f"  {summary['file_ranker']}")
 
     # ── 4. Train Gate ─────────────────────────────────────────────
     del file_df; gc.collect()
@@ -681,23 +798,21 @@ def train_all(data_dir: Path, output_dir: Path, skip_merge: bool = False) -> dic
     gate_df = pd.DataFrame(gate_rows)
     print(f"  {len(gate_df)} gate queries")
 
-    for variant, features in [("structural", GATE_FEATURES)]:
-        name = f"gate_{variant}"
-        print(f"\n=== Training Gate ({variant}) ===")
+    print(f"\n=== Training Gate ({len(GATE_FEATURES)} features) ===")
 
-        X = gate_df[features].fillna(0).values
-        y = gate_df["label_gate"].map(GATE_LABELS).values
+    X = gate_df[GATE_FEATURES].fillna(0).values
+    y = gate_df["label_gate"].map(GATE_LABELS).values
 
-        booster = _train_lgb_classifier(X, y, features)
-        _save_model(booster, output_dir / f"{name}.lgbm")
+    booster = _train_lgb_classifier(X, y, GATE_FEATURES)
+    _save_model(booster, output_dir / "gate.lgbm")
 
-        label_counts = Counter(gate_df["label_gate"].values)
-        summary[name] = {
-            "queries": len(gate_df),
-            "label_distribution": dict(label_counts),
-            "features": len(features),
-        }
-        print(f"  {summary[name]}")
+    label_counts = Counter(gate_df["label_gate"].values)
+    summary["gate"] = {
+        "queries": len(gate_df),
+        "label_distribution": dict(label_counts),
+        "features": len(GATE_FEATURES),
+    }
+    print(f"  {summary['gate']}")
 
     # ── 5. Train Cutoff (depends on def ranker) ───────────────────
     del all_df, gate_df; gc.collect()
@@ -705,62 +820,68 @@ def train_all(data_dir: Path, output_dir: Path, skip_merge: bool = False) -> dic
     cutoff_src = _stream_def_data(merged_dir, repo_sets={"cutoff", "ranker-gate", "eval"}, ok_only=True, max_neg=50)
     print(f"  {len(cutoff_src)} cutoff candidates")
 
-    for variant, ranker_features in [("structural", DEF_RANKER_FEATURES)]:
-        name = f"cutoff_{variant}"
-        ranker_name = f"def_ranker_{variant}"
-        ranker_path = output_dir / f"{ranker_name}.lgbm"
-        print(f"\n=== Training Cutoff ({variant}) ===")
+    ranker_path = output_dir / "def_ranker.lgbm"
+    print(f"\n=== Training Cutoff ({len(CUTOFF_FEATURES)} features) ===")
 
-        ranker = lgb.Booster(model_file=str(ranker_path))
+    ranker = lgb.Booster(model_file=str(ranker_path))
 
-        # Score cutoff candidates with the trained ranker
-        X_score = cutoff_src[ranker_features].fillna(0).values
-        cutoff_src_copy = cutoff_src.copy()
-        cutoff_src_copy["ranker_score"] = ranker.predict(X_score)
+    # Score cutoff candidates with the trained ranker
+    X_score = cutoff_src[DEF_RANKER_FEATURES].fillna(0).values
+    cutoff_src_copy = cutoff_src.copy()
+    cutoff_src_copy["ranker_score"] = ranker.predict(X_score)
 
-        # Compute N* per query
-        cutoff_rows: list[dict] = []
-        for (run_id, query_id), qdf in cutoff_src_copy.groupby(
-            ["run_id", "query_id"], sort=False
-        ):
-            scores = qdf["ranker_score"].values
-            labels = qdf["label_relevant"].astype(int).values
-            order = np.argsort(-scores)
+    # Compute N* per query
+    cutoff_rows: list[dict] = []
+    for (run_id, query_id), qdf in cutoff_src_copy.groupby(
+        ["run_id", "query_id"], sort=False
+    ):
+        scores = qdf["ranker_score"].values
+        labels = qdf["label_relevant"].astype(int).values
+        order = np.argsort(-scores)
 
-            n_star = _compute_n_star(scores[order], labels[order])
-            feat = _cutoff_features_from_scores(
-                scores[order],
-                qdf["retriever_hits"].values[order],
-                query_len=int(qdf["query_len"].iloc[0]),
-                has_identifier=bool(qdf["has_identifier"].iloc[0]),
-                has_path=bool(qdf["has_path"].iloc[0]),
-                n_candidates=len(qdf),
-            )
-            feat["n_star"] = n_star
-            cutoff_rows.append(feat)
+        n_star = _compute_n_star(scores[order], labels[order])
+        feat = _cutoff_features_from_scores(
+            scores[order],
+            qdf["retriever_hits"].values[order],
+            query_len=int(qdf["query_len"].iloc[0]),
+            has_identifier=bool(qdf["has_identifier"].iloc[0]),
+            has_path=bool(qdf["has_path"].iloc[0]),
+            has_numbers=bool(qdf.get("has_numbers", pd.Series([False])).iloc[0]),
+            has_quoted_strings=bool(qdf.get("has_quoted_strings", pd.Series([False])).iloc[0]),
+            is_stacktrace_driven=bool(qdf.get("is_stacktrace_driven", pd.Series([False])).iloc[0]),
+            is_test_driven=bool(qdf.get("is_test_driven", pd.Series([False])).iloc[0]),
+            object_count=int(qdf.get("object_count", pd.Series([0])).iloc[0]),
+            file_count=int(qdf.get("file_count", pd.Series([0])).iloc[0]),
+            n_candidates=len(qdf),
+            from_term_match=qdf["from_term_match"].fillna(False).values[order],
+            from_graph=qdf["from_graph"].fillna(False).values[order],
+            from_explicit=qdf["from_explicit"].fillna(False).values[order],
+            splade_scores=qdf.get("splade_score", pd.Series(dtype=float)).fillna(0).values[order],
+        )
+        feat["n_star"] = n_star
+        cutoff_rows.append(feat)
 
-        if not cutoff_rows:
-            print(f"  [SKIP] No cutoff data for {variant}")
-            continue
-
+    if not cutoff_rows:
+        print("  [SKIP] No cutoff data")
+    else:
         cutoff_df = pd.DataFrame(cutoff_rows)
         X = cutoff_df[CUTOFF_FEATURES].fillna(0).values
         y = cutoff_df["n_star"].values
 
         booster = _train_lgb_regressor(X, y, CUTOFF_FEATURES)
-        _save_model(booster, output_dir / f"{name}.lgbm")
+        _save_model(booster, output_dir / "cutoff.lgbm")
 
-        summary[name] = {
+        summary["cutoff"] = {
             "rows": len(cutoff_df),
             "n_star_mean": float(y.mean()),
             "n_star_std": float(y.std()),
             "features": len(CUTOFF_FEATURES),
         }
-        print(f"  {summary[name]}")
+        print(f"  {summary['cutoff']}")
 
     # ── Done ──────────────────────────────────────────────────────
     (output_dir / "training_summary.json").write_text(json.dumps(summary, indent=2))
-    print(f"\n=== All 4 models saved to {output_dir}/ ===")
+    print(f"\n=== All {len(summary)} models saved to {output_dir}/ ===")
     for name in sorted(summary):
         print(f"  {name}.lgbm")
 
@@ -768,7 +889,7 @@ def train_all(data_dir: Path, output_dir: Path, skip_merge: bool = False) -> dic
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train all 8 ranking models")
+    parser = argparse.ArgumentParser(description="Train all ranking models")
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--skip-merge", action="store_true")

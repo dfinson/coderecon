@@ -12,7 +12,8 @@ Via Inspect CLI:
 
 Or via the recon-lab CLI:
     recon-lab eval
-    recon-lab eval --experiment llm
+    recon-lab eval --experiment diagnostic
+    recon-lab micro-eval
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from inspect_ai import eval as inspect_eval
 from cpl_lab.eval.tasks import (
     ranking_baseline,
     ranking_diagnostic,
+    ranking_micro,
     ranking_trained,
 )
 
@@ -35,6 +37,7 @@ def run(experiment: str | None = None) -> None:
     Args:
         experiment: Which experiment set to run.
             None or "ranking" → ranking pipeline (baseline + trained).
+            "micro" → offline sanity check from merged parquet.
     """
     log_dir = str(Path("~/.recon/recon-lab/eval/logs").expanduser())
 
@@ -42,10 +45,12 @@ def run(experiment: str | None = None) -> None:
         tasks = [ranking_baseline(), ranking_trained()]
     elif experiment == "diagnostic":
         tasks = [ranking_diagnostic()]
+    elif experiment == "micro":
+        tasks = [ranking_micro()]
     else:
         raise ValueError(
             f"Unknown experiment: {experiment!r}. "
-            "Use 'ranking' (default) or 'diagnostic'."
+            "Use 'ranking' (default), 'diagnostic', or 'micro'."
         )
 
     inspect_eval(

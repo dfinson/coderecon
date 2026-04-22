@@ -67,15 +67,26 @@ class CrossEncoderScorer:
         _gpu = any(p != "CPUExecutionProvider" for p in active)
         log.debug("cross_encoder.loaded", extra={"model": str(self.onnx_path), "providers": active, "gpu": _gpu})
 
+    # ONNX Runtime allocates O(batch × seq²) intermediate tensors for
+    # attention.  At seq_len=512 that's ~11 MB per candidate — a batch
+    # of 1 600 candidates consumes 18 GB.  Micro-batching keeps peak
+    # memory bounded: 64 × 11 MB ≈ 700 MB per micro-batch.
+    _MICRO_BATCH: int = 64
+
     def score_pairs(
         self,
         query: str,
         documents: list[str],
+        *,
+        micro_batch: int | None = None,
     ) -> NDArray[np.float32]:
         """Score (query, document) pairs. Returns array of relevance logits.
 
         Uses the tokenizer's built-in sequence-pair encoding to produce
         ``[CLS] query [SEP] document [SEP]`` token sequences.
+
+        Inference is split into micro-batches to keep ONNX Runtime's
+        intermediate memory bounded.
         """
         self.load()
         assert self._session is not None and self._tokenizer is not None
@@ -83,27 +94,35 @@ class CrossEncoderScorer:
         if not documents:
             return np.array([], dtype=np.float32)
 
-        # Encode all pairs — tokenizers lib handles pair encoding
-        encodings = self._tokenizer.encode_batch(
-            [(query, doc) for doc in documents],
-        )
+        bs = micro_batch or self._MICRO_BATCH
+        all_scores: list[NDArray[np.float32]] = []
 
-        ids = np.array([e.ids for e in encodings], dtype=np.int64)
-        mask = np.array([e.attention_mask for e in encodings], dtype=np.int64)
-        tids = np.array([e.type_ids for e in encodings], dtype=np.int64)
+        for start in range(0, len(documents), bs):
+            chunk = documents[start : start + bs]
 
-        (logits,) = self._session.run(
-            None,
-            {
-                "input_ids": ids,
-                "attention_mask": mask,
-                "token_type_ids": tids,
-            },
-        )
+            # Encode pairs — tokenizers lib handles pair encoding
+            encodings = self._tokenizer.encode_batch(
+                [(query, doc) for doc in chunk],
+            )
 
-        # logits shape: (batch, 1) or (batch,) — flatten to 1-D
-        scores = logits.squeeze(-1) if logits.ndim == 2 else logits
-        return scores.astype(np.float32)
+            ids = np.array([e.ids for e in encodings], dtype=np.int64)
+            mask = np.array([e.attention_mask for e in encodings], dtype=np.int64)
+            tids = np.array([e.type_ids for e in encodings], dtype=np.int64)
+
+            (logits,) = self._session.run(
+                None,
+                {
+                    "input_ids": ids,
+                    "attention_mask": mask,
+                    "token_type_ids": tids,
+                },
+            )
+
+            # logits shape: (batch, 1) or (batch,) — flatten to 1-D
+            scores = logits.squeeze(-1) if logits.ndim == 2 else logits
+            all_scores.append(scores.astype(np.float32))
+
+        return np.concatenate(all_scores)
 
 
 # ── Singleton ─────────────────────────────────────────────────────

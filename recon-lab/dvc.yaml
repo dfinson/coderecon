@@ -64,7 +64,7 @@ stages:
           cache: false
 
   non-ok-queries:
-    cmd: recon-lab non-ok-queries --set all
+    cmd: recon-lab non-ok-queries --set all && date -Iseconds > ${workspace}/data/non_ok_queries.stamp
     deps:
       - src/cpl_lab/pipeline/non_ok_queries.py
       - ${workspace}/data/pr_import.stamp
@@ -100,9 +100,24 @@ stages:
       - ${workspace}/data/merged/candidates_rank.parquet
     outs:
       - ${workspace}/models/def_ranker.lgbm
-      - ${workspace}/models/file_ranker_structural.lgbm
-      - ${workspace}/models/gate_structural.lgbm
-      - ${workspace}/models/cutoff_structural.lgbm
+      - ${workspace}/models/file_ranker.lgbm
+      - ${workspace}/models/gate.lgbm
+      - ${workspace}/models/cutoff.lgbm
+
+  micro-eval:
+    cmd: recon-lab micro-eval
+    deps:
+      - src/cpl_lab/eval/models/offline_ranking.py
+      - src/cpl_lab/eval/metrics/ranking.py
+      - src/cpl_lab/eval/metrics/gate.py
+      - src/cpl_lab/eval/datasets/eval_gt.py
+      - ${workspace}/data/merged/candidates_rank.parquet
+      - ${workspace}/models/def_ranker.lgbm
+      - ${workspace}/models/gate.lgbm
+      - ${workspace}/models/cutoff.lgbm
+    metrics:
+      - ${workspace}/eval/micro_metrics.json:
+          cache: false
 
   eval:
     cmd: recon-lab eval
@@ -113,9 +128,9 @@ stages:
       - src/cpl_lab/eval/metrics/gate.py
       - src/cpl_lab/eval/datasets/eval_gt.py
       - ${workspace}/models/def_ranker.lgbm
-      - ${workspace}/models/file_ranker_structural.lgbm
-      - ${workspace}/models/gate_structural.lgbm
-      - ${workspace}/models/cutoff_structural.lgbm
+      - ${workspace}/models/file_ranker.lgbm
+      - ${workspace}/models/gate.lgbm
+      - ${workspace}/models/cutoff.lgbm
     metrics:
       - ${workspace}/eval/metrics.json:
           cache: false

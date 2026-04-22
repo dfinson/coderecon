@@ -299,7 +299,7 @@ def merge(ctx: click.Context, what: str) -> None:
 @click.option("--skip-merge", is_flag=True, help="Skip signal merge step.")
 @click.pass_context
 def train(ctx: click.Context, output_dir: str | None, skip_merge: bool) -> None:
-    """Train all 8 models (gate, file-ranker, def-ranker, cutoff × structural/enhanced)."""
+    """Train all 4 models (gate, file-ranker, def-ranker, cutoff)."""
     from cpl_lab.training.train_all import train_all
 
     cfg = ctx.obj["config"]
@@ -325,6 +325,19 @@ def eval_cmd(ctx: click.Context, experiment: str | None) -> None:
     label = experiment or "ranking"
     click.echo(f"Running Inspect AI evaluation: {label}")
     run(experiment)
+
+
+# ── micro-eval ───────────────────────────────────────────────────
+
+
+@main.command("micro-eval")
+@click.pass_context
+def micro_eval_cmd(ctx: click.Context) -> None:
+    """Offline ranking sanity check on merged parquet — no daemon needed."""
+    from cpl_lab.eval.run import run
+
+    click.echo("Running micro-eval (offline, from merged parquet)")
+    run("micro")
 
 
 # ── validate ─────────────────────────────────────────────────────

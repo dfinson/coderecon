@@ -236,6 +236,15 @@ async def raw_signals_pipeline(
             "package_distance": package_distance,
         })
 
+    # Cross-encoder scoring (TinyBERT) — needed for training features
+    coordinator = app_ctx.coordinator
+    from coderecon.mcp.tools.recon.pipeline import _score_cross_encoder_tiny
+    candidates_out = _score_cross_encoder_tiny(candidates_out, query, coordinator.db)
+
+    # RRF fusion — attaches rrf_score to each candidate
+    from coderecon.ranking.rrf import rrf_fuse
+    candidates_out = rrf_fuse(candidates_out)
+
     elapsed_ms = round((time.monotonic() - t0) * 1000)
 
     # Query features
