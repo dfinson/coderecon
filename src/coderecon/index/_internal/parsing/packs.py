@@ -1281,10 +1281,13 @@ JAVA_PACK = LanguagePack(
     type_config=_JAVA_TYPES,
     import_query_config=ImportQueryConfig(
         query="""
+; import x.y.*;
+(import_declaration (scoped_identifier) @source (asterisk)) @node
 ; import x.y.z;
 (import_declaration (scoped_identifier) @source) @node
 """,
-        pattern_kinds={0: "java_import"},
+        pattern_kinds={0: "java_import", 1: "java_import"},
+        name_overrides={0: "*"},  # wildcard import
         name_from_source_segment=True,
         source_segment_sep=".",
     ),
@@ -1565,9 +1568,11 @@ KOTLIN_PACK = LanguagePack(
     import_query_config=ImportQueryConfig(
         query="""
 (import (qualified_identifier) @source (identifier) @alias) @node
+(import (qualified_identifier) @source "*") @node
 (import (qualified_identifier) @source) @node
 """,
-        pattern_kinds={0: "kotlin_import", 1: "kotlin_import"},
+        pattern_kinds={0: "kotlin_import", 1: "kotlin_import", 2: "kotlin_import"},
+        name_overrides={1: "*"},  # wildcard import
     ),
     declared_module_query="(package_header) @module_node",
     declared_module_handler="_declared_module_kotlin",
