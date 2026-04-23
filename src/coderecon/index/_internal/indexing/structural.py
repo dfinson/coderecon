@@ -367,10 +367,16 @@ def _apply_worktree_uid_remap(
         if old_target:
             r["target_def_uid"] = def_uid_remap.get(old_target, old_target)
 
-    # LocalBindFact — target_uid when target_kind == "DEF"
+    # LocalBindFact — target_uid points to either a def_uid or import_uid
     for b in extraction.binds:
-        if b.get("target_kind") == "DEF" and b.get("target_uid"):
-            b["target_uid"] = def_uid_remap.get(b["target_uid"], b["target_uid"])
+        target_uid = b.get("target_uid")
+        if not target_uid:
+            continue
+        kind = b.get("target_kind")
+        if kind == BindTargetKind.DEF.value:
+            b["target_uid"] = def_uid_remap.get(target_uid, target_uid)
+        elif kind == BindTargetKind.IMPORT.value:
+            b["target_uid"] = import_uid_remap.get(target_uid, target_uid)
 
     # ImportFact PKs
     for imp in extraction.imports:
