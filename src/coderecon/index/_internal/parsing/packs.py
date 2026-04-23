@@ -676,6 +676,38 @@ _JS_TS_TYPES = TypeExtractionConfig(
 """,
 )
 
+# Shared import/re-export query config for JS, TS, and TSX.
+# Patterns 0-4: regular imports.  Patterns 5-8: re-exports.
+_JS_IMPORT_QUERY = """
+(import_statement (import_clause (identifier) @name) source: (string) @source) @node
+(import_statement (import_clause (named_imports (import_specifier !alias name: (identifier) @name))) source: (string) @source) @node
+(import_statement (import_clause (named_imports (import_specifier name: (identifier) @name alias: (identifier) @alias))) source: (string) @source) @node
+(import_statement (import_clause (namespace_import (identifier) @alias)) source: (string) @source) @node
+(variable_declarator name: (identifier) @name value: (call_expression function: (identifier) @_fn arguments: (arguments (string) @source) (#eq? @_fn "require"))) @node
+(export_statement "*" source: (string) @source) @node
+(export_statement (export_clause (export_specifier !alias name: (identifier) @name)) source: (string) @source) @node
+(export_statement (export_clause (export_specifier name: (identifier) @name alias: (identifier) @alias)) source: (string) @source) @node
+(export_statement (namespace_export (identifier) @alias) source: (string) @source) @node
+"""
+
+_JS_IMPORT_KINDS: dict[int, str] = {
+    0: "js_import",
+    1: "js_import",
+    2: "js_import",
+    3: "js_import",
+    4: "js_require",
+    5: "js_reexport",  # export * from './foo'
+    6: "js_reexport",  # export { X } from './foo'
+    7: "js_reexport",  # export { X as Y } from './foo'
+    8: "js_reexport",  # export * as Y from './foo'
+}
+
+_JS_IMPORT_NAME_OVERRIDES: dict[int, str] = {
+    3: "*",  # namespace import: import * as X
+    5: "*",  # wildcard re-export: export * from './foo'
+    8: "*",  # namespace re-export: export * as Y from './foo'
+}
+
 JAVASCRIPT_PACK = LanguagePack(
     name="javascript",
     grammar_name="javascript",
@@ -688,21 +720,9 @@ JAVASCRIPT_PACK = LanguagePack(
     sem_query=_JS_SEM,
     type_config=_JS_TS_TYPES,
     import_query_config=ImportQueryConfig(
-        query="""
-(import_statement (import_clause (identifier) @name) source: (string) @source) @node
-(import_statement (import_clause (named_imports (import_specifier !alias name: (identifier) @name))) source: (string) @source) @node
-(import_statement (import_clause (named_imports (import_specifier name: (identifier) @name alias: (identifier) @alias))) source: (string) @source) @node
-(import_statement (import_clause (namespace_import (identifier) @alias)) source: (string) @source) @node
-(variable_declarator name: (identifier) @name value: (call_expression function: (identifier) @_fn arguments: (arguments (string) @source) (#eq? @_fn "require"))) @node
-""",
-        pattern_kinds={
-            0: "js_import",
-            1: "js_import",
-            2: "js_import",
-            3: "js_import",
-            4: "js_require",
-        },
-        name_overrides={3: "*"},  # namespace import: import * as X
+        query=_JS_IMPORT_QUERY,
+        pattern_kinds=_JS_IMPORT_KINDS,
+        name_overrides=_JS_IMPORT_NAME_OVERRIDES,
         strip_quotes=True,
     ),
     dynamic_query="""
@@ -776,21 +796,9 @@ TYPESCRIPT_PACK = LanguagePack(
     sem_query=_TS_SEM,
     type_config=_JS_TS_TYPES,
     import_query_config=ImportQueryConfig(
-        query="""
-(import_statement (import_clause (identifier) @name) source: (string) @source) @node
-(import_statement (import_clause (named_imports (import_specifier !alias name: (identifier) @name))) source: (string) @source) @node
-(import_statement (import_clause (named_imports (import_specifier name: (identifier) @name alias: (identifier) @alias))) source: (string) @source) @node
-(import_statement (import_clause (namespace_import (identifier) @alias)) source: (string) @source) @node
-(variable_declarator name: (identifier) @name value: (call_expression function: (identifier) @_fn arguments: (arguments (string) @source) (#eq? @_fn "require"))) @node
-""",
-        pattern_kinds={
-            0: "js_import",
-            1: "js_import",
-            2: "js_import",
-            3: "js_import",
-            4: "js_require",
-        },
-        name_overrides={3: "*"},  # namespace import: import * as X
+        query=_JS_IMPORT_QUERY,
+        pattern_kinds=_JS_IMPORT_KINDS,
+        name_overrides=_JS_IMPORT_NAME_OVERRIDES,
         strip_quotes=True,
     ),
     dynamic_query="""
@@ -813,21 +821,9 @@ TSX_PACK = LanguagePack(
     sem_query=_TS_SEM,
     type_config=_JS_TS_TYPES,
     import_query_config=ImportQueryConfig(
-        query="""
-(import_statement (import_clause (identifier) @name) source: (string) @source) @node
-(import_statement (import_clause (named_imports (import_specifier !alias name: (identifier) @name))) source: (string) @source) @node
-(import_statement (import_clause (named_imports (import_specifier name: (identifier) @name alias: (identifier) @alias))) source: (string) @source) @node
-(import_statement (import_clause (namespace_import (identifier) @alias)) source: (string) @source) @node
-(variable_declarator name: (identifier) @name value: (call_expression function: (identifier) @_fn arguments: (arguments (string) @source) (#eq? @_fn "require"))) @node
-""",
-        pattern_kinds={
-            0: "js_import",
-            1: "js_import",
-            2: "js_import",
-            3: "js_import",
-            4: "js_require",
-        },
-        name_overrides={3: "*"},  # namespace import: import * as X
+        query=_JS_IMPORT_QUERY,
+        pattern_kinds=_JS_IMPORT_KINDS,
+        name_overrides=_JS_IMPORT_NAME_OVERRIDES,
         strip_quotes=True,
     ),
     dynamic_query="""

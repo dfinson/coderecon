@@ -477,7 +477,7 @@ class ImportPathResolver:
         # Dispatch by import_kind
         if import_kind in ("python_import", "python_from"):
             return self._resolve_python(source_literal, importer_path)
-        elif import_kind in ("js_import", "js_require", "js_dynamic_import"):
+        elif import_kind in ("js_import", "js_require", "js_dynamic_import", "js_reexport"):
             return self._resolve_js(source_literal, importer_path)
         elif import_kind == "c_include":
             return self._resolve_c(source_literal, importer_path)

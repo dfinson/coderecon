@@ -416,6 +416,70 @@ class ReferenceResolver:
                     self._file_exports[bind.file_id] = {}
                 self._file_exports[bind.file_id][bind.name] = def_uid
 
+        # Step 3: Propagate JS/TS re-exports (export * from, export { X } from).
+        # Re-export ImportFacts with import_kind='js_reexport' forward exports
+        # from one module through another (barrel files).  Iterate until stable
+        # so chained barrel files propagate correctly.
+        reexport_rows = session.execute(  # type: ignore[attr-defined]
+            text(
+                "SELECT file_id, imported_name, alias, source_literal, resolved_path "
+                "FROM import_facts WHERE import_kind = 'js_reexport'"
+            )
+        ).fetchall()
+
+        if reexport_rows:
+            reexports_by_file: dict[int, list[tuple[str, str | None, str, str]]] = {}
+            for fid, imp_name, alias, src_lit, res_path in reexport_rows:
+                reexports_by_file.setdefault(fid, []).append(
+                    (imp_name or "", alias, src_lit or "", res_path or "")
+                )
+
+            # Converge iteratively — max depth = number of barrel files
+            # (each iteration can propagate one more link in the chain).
+            remaining_iters = len(reexports_by_file)
+            changed = True
+            while changed and remaining_iters > 0:
+                changed = False
+                remaining_iters -= 1
+                for fid, reexports in reexports_by_file.items():
+                    if fid not in self._file_exports:
+                        self._file_exports[fid] = {}
+                    current = self._file_exports[fid]
+
+                    for imp_name, alias, src_lit, res_path in reexports:
+                        target_fid = (
+                            self._path_to_file.get(res_path) if res_path else None
+                        )
+                        if target_fid is None:
+                            target_fid = self._find_module_file(
+                                src_lit, importing_file_id=fid
+                            )
+                        if target_fid is None:
+                            continue
+
+                        src_exports = self._file_exports.get(target_fid, {})
+
+                        if imp_name == "*" and alias is None:
+                            # export * from './foo' — forward all exports
+                            for name, def_uid in src_exports.items():
+                                if name not in current:
+                                    current[name] = def_uid
+                                    changed = True
+                        elif imp_name == "*":
+                            # export * as Y from './foo' — namespace binding,
+                            # individual names not forwarded
+                            pass
+                        elif alias is not None:
+                            # export { X as Y } from './foo'
+                            if imp_name in src_exports and alias not in current:
+                                current[alias] = src_exports[imp_name]
+                                changed = True
+                        else:
+                            # export { X } from './foo'
+                            if imp_name in src_exports and imp_name not in current:
+                                current[imp_name] = src_exports[imp_name]
+                                changed = True
+
     def _find_module_file(
         self,
         source_literal: str,
