@@ -1,5 +1,7 @@
 """Refactor MCP tools — semantic rename, move, impact analysis."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
 
 from fastmcp import Context
@@ -11,6 +13,7 @@ if TYPE_CHECKING:
     from fastmcp import FastMCP
 
     from coderecon.mcp.context import AppContext
+    from coderecon.mcp.session import SessionState
     from coderecon.refactor.ops import RefactorResult
 
 
@@ -216,23 +219,123 @@ def _serialize_impact_result(result: "RefactorResult") -> dict[str, Any]:
 
 
 # =============================================================================
+# Core Functions (transport-agnostic)
+# =============================================================================
+
+
+def _require_recon(session: "SessionState") -> None:
+    """Gate: recon must have been called before refactoring."""
+    if not session.candidate_maps:
+        raise MCPError(
+            code=MCPErrorCode.INVALID_PARAMS,
+            message="Recon required before refactoring.",
+            remediation=(
+                'Call recon(task="...") first to discover files, then use refactor tools.'
+            ),
+        )
+
+
+async def refactor_rename_core(
+    app_ctx: "AppContext",
+    session: "SessionState",
+    *,
+    symbol: str,
+    new_name: str,
+    include_comments: bool = True,
+    contexts: list[str] | None = None,
+) -> dict[str, Any]:
+    """Rename a symbol across the codebase (transport-agnostic)."""
+    _require_recon(session)
+    result = await app_ctx.refactor_ops.rename(
+        symbol, new_name, _include_comments=include_comments, _contexts=contexts,
+    )
+    session.mutation_ctx.pending_refactors[result.refactor_id] = "rename"
+    return _serialize_refactor_result(result)
+
+
+async def refactor_move_core(
+    app_ctx: "AppContext",
+    session: "SessionState",
+    *,
+    from_path: str,
+    to_path: str,
+    include_comments: bool = True,
+) -> dict[str, Any]:
+    """Move a file/module, updating imports (transport-agnostic)."""
+    _require_recon(session)
+    result = await app_ctx.refactor_ops.move(
+        from_path, to_path, include_comments=include_comments,
+    )
+    session.mutation_ctx.pending_refactors[result.refactor_id] = "move"
+    return _serialize_refactor_result(result)
+
+
+async def recon_impact_core(
+    app_ctx: "AppContext",
+    session: "SessionState",
+    *,
+    target: str,
+    include_comments: bool = True,
+) -> dict[str, Any]:
+    """Find all references to a symbol/file (transport-agnostic)."""
+    _require_recon(session)
+    result = await app_ctx.refactor_ops.impact(
+        target, include_comments=include_comments,
+    )
+    return _serialize_impact_result(result)
+
+
+async def refactor_commit_core(
+    app_ctx: "AppContext",
+    session: "SessionState",
+    *,
+    refactor_id: str,
+    inspect_path: str | None = None,
+    context_lines: int = 2,
+) -> dict[str, Any]:
+    """Apply or inspect a previewed refactoring (transport-agnostic)."""
+    if inspect_path is not None:
+        inspect_result = await app_ctx.refactor_ops.inspect(
+            refactor_id, inspect_path, context_lines=context_lines,
+        )
+        from coderecon.core.formatting import compress_path
+
+        return {
+            "path": inspect_result.path,
+            "matches": inspect_result.matches,
+            "summary": (
+                f"{len(inspect_result.matches)} matches in "
+                f"{compress_path(inspect_result.path, 35)}"
+            ),
+        }
+
+    async with app_ctx.router.mutation(app_ctx.worktree_name):
+        result = await app_ctx.refactor_ops.apply(refactor_id, app_ctx.mutation_ops)
+        if result.changed_paths:
+            await app_ctx.router.on_mutation(app_ctx.worktree_name, result.changed_paths)
+    session.mutation_ctx.pending_refactors.pop(refactor_id, None)
+    return _serialize_refactor_result(result)
+
+
+async def refactor_cancel_core(
+    app_ctx: "AppContext",
+    session: "SessionState",
+    *,
+    refactor_id: str,
+) -> dict[str, Any]:
+    """Cancel a pending refactoring (transport-agnostic)."""
+    result = await app_ctx.refactor_ops.cancel(refactor_id)
+    session.mutation_ctx.pending_refactors.pop(refactor_id, None)
+    return _serialize_refactor_result(result)
+
+
+# =============================================================================
 # Tool Registration
 # =============================================================================
 
 
 def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
     """Register refactor tools with FastMCP server."""
-
-    def _require_recon(session: Any) -> None:
-        """Gate: recon must have been called before refactoring."""
-        if not session.candidate_maps:
-            raise MCPError(
-                code=MCPErrorCode.INVALID_PARAMS,
-                message="Recon required before refactoring.",
-                remediation=(
-                    'Call recon(task="...") first to discover files, then use refactor tools.'
-                ),
-            )
 
     @mcp.tool(
         annotations={
@@ -259,16 +362,11 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
     ) -> dict[str, Any]:
         """Rename a symbol across the codebase."""
         session = app_ctx.session_manager.get_or_create(ctx.session_id)
-        _require_recon(session)
-
-        result = await app_ctx.refactor_ops.rename(
-            symbol,
-            new_name,
-            _include_comments=include_comments,
-            _contexts=contexts,
+        return await refactor_rename_core(
+            app_ctx, session,
+            symbol=symbol, new_name=new_name,
+            include_comments=include_comments, contexts=contexts,
         )
-        session.mutation_ctx.pending_refactors[result.refactor_id] = "rename"
-        return _serialize_refactor_result(result)
 
     @mcp.tool(
         annotations={
@@ -291,15 +389,11 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
     ) -> dict[str, Any]:
         """Move a file/module, updating imports."""
         session = app_ctx.session_manager.get_or_create(ctx.session_id)
-        _require_recon(session)
-
-        result = await app_ctx.refactor_ops.move(
-            from_path,
-            to_path,
+        return await refactor_move_core(
+            app_ctx, session,
+            from_path=from_path, to_path=to_path,
             include_comments=include_comments,
         )
-        session.mutation_ctx.pending_refactors[result.refactor_id] = "move"
-        return _serialize_refactor_result(result)
 
     @mcp.tool(
         annotations={
@@ -321,13 +415,10 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
     ) -> dict[str, Any]:
         """Find all references to a symbol/file for read-only impact analysis."""
         session = app_ctx.session_manager.get_or_create(ctx.session_id)
-        _require_recon(session)
-
-        result = await app_ctx.refactor_ops.impact(
-            target,
-            include_comments=include_comments,
+        return await recon_impact_core(
+            app_ctx, session,
+            target=target, include_comments=include_comments,
         )
-        return _serialize_impact_result(result)
 
     @mcp.tool(
         annotations={
@@ -359,34 +450,11 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
         With inspect_path: inspects matches in that file.
         """
         session = app_ctx.session_manager.get_or_create(ctx.session_id)
-
-        if inspect_path is not None:
-            inspect_result = await app_ctx.refactor_ops.inspect(
-                refactor_id,
-                inspect_path,
-                context_lines=context_lines,
-            )
-            from coderecon.core.formatting import compress_path
-
-            return {
-                "path": inspect_result.path,
-                "matches": inspect_result.matches,
-                "summary": (
-                    f"{len(inspect_result.matches)} matches in "
-                    f"{compress_path(inspect_result.path, 35)}"
-                ),
-            }
-
-        # Apply mode
-        async with app_ctx.router.mutation(app_ctx.worktree_name):
-            result = await app_ctx.refactor_ops.apply(refactor_id, app_ctx.mutation_ops)
-            if result.changed_paths:
-                await app_ctx.router.on_mutation(
-                    app_ctx.worktree_name, result.changed_paths
-                )
-        session.mutation_ctx.pending_refactors.pop(refactor_id, None)
-
-        return _serialize_refactor_result(result)
+        return await refactor_commit_core(
+            app_ctx, session,
+            refactor_id=refactor_id, inspect_path=inspect_path,
+            context_lines=context_lines,
+        )
 
     @mcp.tool(
         annotations={
@@ -403,7 +471,4 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
     ) -> dict[str, Any]:
         """Cancel a pending refactoring."""
         session = app_ctx.session_manager.get_or_create(ctx.session_id)
-
-        result = await app_ctx.refactor_ops.cancel(refactor_id)
-        session.mutation_ctx.pending_refactors.pop(refactor_id, None)
-        return _serialize_refactor_result(result)
+        return await refactor_cancel_core(app_ctx, session, refactor_id=refactor_id)

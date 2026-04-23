@@ -39,6 +39,41 @@ if TYPE_CHECKING:
 log = structlog.get_logger(__name__)
 
 
+# =============================================================================
+# Core Function (transport-agnostic)
+# =============================================================================
+
+
+async def semantic_diff_core(
+    app_ctx: "AppContext",
+    *,
+    base: str = "HEAD",
+    target: str | None = None,
+    paths: list[str] | None = None,
+    scope_id: str | None = None,
+) -> dict[str, Any]:
+    """Structural change summary (transport-agnostic).
+
+    Compares definitions between two states and reports what changed.
+    """
+    if base.startswith("epoch:"):
+        result = _run_epoch_diff(app_ctx, base, target, paths)
+    else:
+        result = _run_git_diff(app_ctx, base, target, paths)
+
+    from coderecon.mcp.delivery import wrap_response
+
+    return wrap_response(
+        _result_to_text(result),
+        resource_kind="semantic_diff",
+    )
+
+
+# =============================================================================
+# Tool Registration
+# =============================================================================
+
+
 def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
     """Register semantic_diff MCP tool."""
 
@@ -58,30 +93,10 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
         paths: list[str] | None = Field(None, description="Limit to specific paths"),
         scope_id: str | None = Field(None, description="Scope ID for budget tracking"),
     ) -> dict[str, Any]:
-        """Structural change summary from index facts.
-
-        Compares definitions between two states and reports what changed
-        structurally (added, removed, signature_changed, body_changed,
-        renamed) with blast-radius enrichment.
-
-        Modes:
-        - Git mode (default): base/target are git refs
-        - Epoch mode: base="epoch:N", target="epoch:M"
-        """
+        """Structural change summary from index facts."""
         _ = app_ctx.session_manager.get_or_create(ctx.session_id)
-
-        if base.startswith("epoch:"):
-            result = _run_epoch_diff(app_ctx, base, target, paths)
-        else:
-            result = _run_git_diff(app_ctx, base, target, paths)
-
-        from coderecon.mcp.delivery import wrap_response
-
-        result_dict = _result_to_text(result)
-
-        return wrap_response(
-            result_dict,
-            resource_kind="semantic_diff",
+        return await semantic_diff_core(
+            app_ctx, base=base, target=target, paths=paths, scope_id=scope_id,
         )
 
 

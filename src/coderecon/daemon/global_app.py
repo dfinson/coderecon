@@ -940,29 +940,17 @@ class _DynamicMcpRouter:
         raise NoMatchFound(name, path_params)
 
     async def handle(self, scope: Any, receive: Any, send: Any) -> None:
+        from coderecon.daemon.resolve import resolve_worktree
+
         path: str = scope.get("path", "")
         parts = path.lstrip("/").split("/", 4)
         repo_name = parts[1]
         wt_name = parts[3]
 
-        slot = self._daemon._slots.get(repo_name)
-        if slot is None:
-            # Lazy repo activation: spin up coordinator + watcher on first MCP request
-            slot = await self._daemon.lazy_activate_repo(repo_name)
-            if slot is None:
-                await _asgi_not_found(scope, receive, send)
-                return
-
-        wt_slot = slot.worktrees.get(wt_name)
+        wt_slot = await resolve_worktree(self._daemon, repo_name, wt_name)
         if wt_slot is None:
-            # Lazy activation: spin up watcher + MCP on first request
-            wt_slot = await self._daemon.lazy_activate_worktree(repo_name, wt_name)
-            if wt_slot is None:
-                await _asgi_not_found(scope, receive, send)
-                return
-
-        # Track activity for idle eviction
-        wt_slot.last_request_at = time.time()
+            await _asgi_not_found(scope, receive, send)
+            return
 
         # Strip /repos/{name}/worktrees/{wt} — leave /mcp/... for the MCP app.
         prefix = f"/repos/{repo_name}/worktrees/{wt_name}"

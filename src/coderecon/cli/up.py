@@ -77,11 +77,16 @@ def _print_banner(host: str, port: int, *, animate: bool = True) -> None:
     help="Port to bind to.",
 )
 @click.option(
+    "--stdio",
+    is_flag=True,
+    help="Start in stdio mode (child process of SDK). Mutually exclusive with --port.",
+)
+@click.option(
     "--dev-mode",
     is_flag=True,
     help="Enable development tools (recon_raw_signals endpoint)",
 )
-def up_command(port: int, dev_mode: bool) -> None:
+def up_command(port: int, stdio: bool, dev_mode: bool) -> None:
     """Start the global CodeRecon daemon.
 
     Activates all repositories already registered in the catalog.
@@ -91,6 +96,36 @@ def up_command(port: int, dev_mode: bool) -> None:
     from coderecon.catalog.db import _default_coderecon_home
     from coderecon.config.models import LoggingConfig, LogOutputConfig
     from coderecon.core.logging import configure_logging
+
+    if stdio:
+        # Stdio mode — NDJSON over stdin/stdout, no banner, no PID file.
+        from coderecon.daemon.global_lifecycle import run_global_server_stdio
+
+        home = _default_coderecon_home()
+        from datetime import datetime
+        from uuid import uuid4
+
+        now = datetime.now()
+        server_run_id = uuid4().hex[:6]
+        log_dir = home / "logs" / now.strftime("%Y-%m-%d")
+        log_file = log_dir / f"{now.strftime('%H%M%S')}-stdio-{server_run_id}.log"
+
+        # Log to file only — stdout is the wire protocol
+        configure_logging(
+            config=LoggingConfig(
+                level="DEBUG",
+                outputs=[
+                    LogOutputConfig(destination=str(log_file), format="json", level="DEBUG"),
+                ],
+            ),
+        )
+
+        try:
+            asyncio.run(run_global_server_stdio(dev_mode=dev_mode))
+        except KeyboardInterrupt:
+            pass
+        return
+
     from coderecon.daemon.global_lifecycle import (
         is_global_server_running,
         read_global_server_info,

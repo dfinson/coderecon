@@ -174,3 +174,40 @@ async def run_global_server(
         except asyncio.TimeoutError:
             log.warning("daemon_stop_all_timeout")
         remove_global_pid(home)
+
+
+async def run_global_server_stdio(
+    *,
+    dev_mode: bool = False,
+) -> None:
+    """Run the global daemon in stdio mode (child process of SDK).
+
+    Reads NDJSON requests from stdin, writes responses + events to stdout.
+    No HTTP server, no PID file — the SDK owns the process lifecycle.
+    """
+    from coderecon.daemon.global_app import GlobalDaemon
+    from coderecon.daemon.stdio_transport import run_stdio_loop
+
+    home = _coderecon_dir()
+    home.mkdir(parents=True, exist_ok=True)
+
+    catalog = CatalogDB(home)
+    registry = CatalogRegistry(catalog)
+    daemon = GlobalDaemon(registry)
+
+    log.info("stdio_daemon_starting", repos=len(registry.list_repos()))
+
+    await daemon.queue_startup_scans()
+
+    from coderecon.config.loader import load_config as _load_cfg
+
+    _cfg = _load_cfg(Path.cwd())
+    daemon.start_eviction_loop(_cfg.server.worktree_idle_timeout_sec)
+
+    try:
+        await run_stdio_loop(daemon, registry)
+    finally:
+        try:
+            await asyncio.wait_for(daemon.stop_all(), timeout=3.0)
+        except asyncio.TimeoutError:
+            log.warning("daemon_stop_all_timeout")

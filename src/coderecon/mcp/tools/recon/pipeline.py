@@ -518,6 +518,64 @@ def _build_output(
     }
 
 
+async def recon_map_core(app_ctx: "AppContext") -> dict[str, Any]:
+    """Repository structure map (transport-agnostic)."""
+    repo_map: dict[str, Any] = {}
+    try:
+        map_result = await app_ctx.coordinator.map_repo(
+            include=["structure", "languages", "entry_points"],
+            depth=3,
+            limit=100,
+        )
+        from coderecon.mcp.tools.index import _build_overview, _map_repo_sections_to_text
+
+        repo_map = {
+            "overview": _build_overview(map_result),
+            **_map_repo_sections_to_text(map_result),
+        }
+
+        try:
+            from coderecon.index._internal.analysis.code_graph import (
+                build_def_graph,
+                build_file_graph,
+                compute_file_pagerank,
+                compute_pagerank,
+            )
+
+            engine = app_ctx.coordinator.db.engine
+            fg = build_file_graph(engine)
+            if fg.number_of_nodes() > 0:
+                top_files = compute_file_pagerank(fg, top_k=10)
+                repo_map["pagerank_files"] = [
+                    {"path": path, "score": round(score, 6)}
+                    for path, score in top_files
+                ]
+
+            dg = build_def_graph(engine)
+            if dg.number_of_nodes() > 0:
+                top_defs = compute_pagerank(dg, top_k=10)
+                repo_map["pagerank_defs"] = [
+                    {
+                        "def_uid": s.def_uid,
+                        "name": s.name,
+                        "kind": s.kind,
+                        "file": s.file_path,
+                        "score": round(s.pagerank, 6),
+                    }
+                    for s in top_defs
+                ]
+        except Exception:  # noqa: BLE001
+            log.debug("recon_map.pagerank_skipped", exc_info=True)
+
+    except Exception:  # noqa: BLE001
+        log.warning("recon_map.failed", exc_info=True)
+        repo_map = {"error": "Failed to build repo map"}
+
+    from coderecon.mcp.delivery import wrap_response
+
+    return wrap_response(repo_map, resource_kind="repo_map")
+
+
 def register_tools(mcp: FastMCP, app_ctx: AppContext, *, dev_mode: bool = False) -> None:
     """Register recon tools with FastMCP server."""
 
@@ -635,67 +693,5 @@ def register_tools(mcp: FastMCP, app_ctx: AppContext, *, dev_mode: bool = False)
     async def recon_map(
         ctx: Context,  # noqa: ARG001
     ) -> dict[str, Any]:
-        """Repository structure map — file tree, languages, entry points.
-
-        Returns the repo's directory structure, language distribution,
-        and key entry points. Use this to orient before calling recon.
-        """
-        repo_map: dict[str, Any] = {}
-        try:
-            map_result = await app_ctx.coordinator.map_repo(
-                include=["structure", "languages", "entry_points"],
-                depth=3,
-                limit=100,
-            )
-            from coderecon.mcp.tools.index import _build_overview, _map_repo_sections_to_text
-
-            repo_map = {
-                "overview": _build_overview(map_result),
-                **_map_repo_sections_to_text(map_result),
-            }
-
-            # Inject PageRank top symbols + files
-            try:
-                from coderecon.index._internal.analysis.code_graph import (
-                    build_def_graph,
-                    build_file_graph,
-                    compute_file_pagerank,
-                    compute_pagerank,
-                )
-
-                engine = app_ctx.coordinator.db.engine
-                fg = build_file_graph(engine)
-                if fg.number_of_nodes() > 0:
-                    top_files = compute_file_pagerank(fg, top_k=10)
-                    repo_map["pagerank_files"] = [
-                        {"path": path, "score": round(score, 6)}
-                        for path, score in top_files
-                    ]
-
-                dg = build_def_graph(engine)
-                if dg.number_of_nodes() > 0:
-                    top_defs = compute_pagerank(dg, top_k=10)
-                    repo_map["pagerank_defs"] = [
-                        {
-                            "def_uid": s.def_uid,
-                            "name": s.name,
-                            "kind": s.kind,
-                            "file": s.file_path,
-                            "score": round(s.pagerank, 6),
-                        }
-                        for s in top_defs
-                    ]
-            except Exception:  # noqa: BLE001
-                log.debug("recon_map.pagerank_skipped", exc_info=True)
-
-        except Exception:  # noqa: BLE001
-            log.warning("recon_map.failed", exc_info=True)
-            repo_map = {"error": "Failed to build repo map"}
-
-        from coderecon.mcp.delivery import wrap_response
-
-        return wrap_response(
-            repo_map,
-            resource_kind="repo_map",
-            session_id=ctx.session_id,
-        )
+        """Repository structure map — file tree, languages, entry points."""
+        return await recon_map_core(app_ctx)

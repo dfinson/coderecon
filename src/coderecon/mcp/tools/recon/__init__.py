@@ -14,7 +14,7 @@ In-process APIs (no MCP server required):
 
 from __future__ import annotations
 
-from coderecon.mcp.tools.recon.pipeline import recon_pipeline, register_tools
+from coderecon.mcp.tools.recon.pipeline import recon_map_core, recon_pipeline, register_tools
 from coderecon.mcp.tools.recon.raw_signals import raw_signals_pipeline
 
-__all__ = ["raw_signals_pipeline", "recon_pipeline", "register_tools"]
+__all__ = ["raw_signals_pipeline", "recon_map_core", "recon_pipeline", "register_tools"]
