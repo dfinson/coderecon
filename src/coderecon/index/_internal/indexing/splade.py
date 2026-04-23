@@ -516,6 +516,10 @@ class SpladeEncoder:
         """
         opts = ort.SessionOptions()
         opts.enable_mem_pattern = False
+        # Suppress BFC arena fallback warnings — the allocator
+        # intentionally falls back to system malloc when a single
+        # allocation exceeds the arena's free capacity.
+        opts.log_severity_level = 3  # Error
         providers = _select_onnx_providers(vram_bytes=vram_bytes)
         return ort.InferenceSession(
             str(self.onnx_path),
@@ -623,6 +627,10 @@ class SpladeEncoder:
         if self._cpu_session is None:
             opts = ort.SessionOptions()
             opts.enable_mem_pattern = False
+            # Suppress BFC arena fallback warnings — the CPU arena
+            # intentionally falls back to system malloc when a single
+            # allocation exceeds the arena's free capacity.
+            opts.log_severity_level = 3  # Error
             self._cpu_session = ort.InferenceSession(
                 str(self.onnx_path),
                 sess_options=opts,
@@ -693,6 +701,8 @@ class SpladeEncoder:
 
         ordered_vecs: list[tuple[int, dict[int, float]]] = []
         pos = 0
+        batch_num = 0
+        encode_t0 = time.monotonic()
         while pos < len(indexed):
             remaining = len(indexed) - pos
             if _gpu_active and self._vram_bytes:
@@ -707,7 +717,16 @@ class SpladeEncoder:
 
             batch_items = indexed[pos : pos + bs]
             batch_texts = [t for _, t in batch_items]
+            bt0 = time.monotonic()
             batch_vecs = self._encode_batch_safe(batch_texts) if _gpu_active else self._encode_batch(batch_texts)
+            bt1 = time.monotonic()
+            batch_num += 1
+            log.info(
+                "splade.batch batch=%d size=%d pos=%d/%d longest_tok=%d elapsed=%.3fs cumul=%.1fs",
+                batch_num, bs, pos, len(indexed),
+                tok_lengths[batch_items[-1][0]],
+                bt1 - bt0, bt1 - encode_t0,
+            )
             for (orig_idx, _), vec in zip(batch_items, batch_vecs):
                 ordered_vecs.append((orig_idx, vec))
             pos += bs
@@ -851,21 +870,19 @@ def index_splade_vectors(
     texts = [scaffolds[uid] for uid in uid_order]
 
     # Encode in batches
-    log.info("splade.encode_start", extra={"n_defs": len(texts)})
+    log.info("splade.encode_start n_defs=%d", len(texts))
     t0 = time.monotonic()
     all_vecs = encoder.encode_documents(texts)
     elapsed = time.monotonic() - t0
     log.info(
-        "splade.encode_done",
-        extra={
-            "n_defs": len(texts),
-            "elapsed_s": round(elapsed, 1),
-            "throughput": round(len(texts) / elapsed, 1) if elapsed > 0 else 0,
-        },
+        "splade.encode_done n_defs=%d elapsed=%.1fs throughput=%.1f/s",
+        len(texts), elapsed,
+        len(texts) / elapsed if elapsed > 0 else 0,
     )
 
     # Persist to splade_vecs table
     stored = 0
+    persist_t0 = time.monotonic()
     with db.session() as session:
         # Delete existing vectors for these defs (upsert)
         existing_uids = set(uid_order)
@@ -880,6 +897,7 @@ def index_splade_vectors(
                     session.delete(existing)
             session.flush()
 
+        merge_t0 = time.monotonic()
         for uid, vec in zip(uid_order, all_vecs):
             if not vec:
                 continue
@@ -892,10 +910,18 @@ def index_splade_vectors(
             )
             session.merge(row)
             stored += 1
-            if progress_cb and stored % 500 == 0:
-                progress_cb(stored, len(uid_order))
+            if stored % 500 == 0:
+                log.info(
+                    "splade.persist_progress stored=%d/%d merge_elapsed=%.1fs",
+                    stored, len(uid_order), time.monotonic() - merge_t0,
+                )
+                if progress_cb:
+                    progress_cb(stored, len(uid_order))
 
+        commit_t0 = time.monotonic()
+        log.info("splade.commit_start stored=%d merge_elapsed=%.1fs", stored, commit_t0 - merge_t0)
         session.commit()
+        log.info("splade.commit_done commit_elapsed=%.1fs", time.monotonic() - commit_t0)
 
     log.info("splade.stored", extra={"count": stored})
     return stored

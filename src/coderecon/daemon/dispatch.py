@@ -20,6 +20,7 @@ from coderecon.daemon.resolve import resolve_worktree
 
 if TYPE_CHECKING:
     from coderecon.catalog.registry import CatalogRegistry
+    from coderecon.daemon.event_bus import EventBus
     from coderecon.daemon.global_app import GlobalDaemon
     from coderecon.mcp.context import AppContext
     from coderecon.mcp.session import SessionState
@@ -189,6 +190,7 @@ async def _handle_reindex(
     daemon: "GlobalDaemon",
     params: dict[str, Any],
     request_id: str | None,
+    event_bus: "EventBus | None" = None,
 ) -> dict[str, Any]:
     repo_name = params.get("repo")
     if not repo_name:
@@ -200,8 +202,31 @@ async def _handle_reindex(
             request_id, "NOT_FOUND",
             f"No repo '{repo_name}' / worktree '{worktree or 'default'}'",
         )
-    await wt_slot.app_ctx.ops.reindex_full()
-    return _success_response(request_id, {"reindexed": True})
+    coordinator = wt_slot.app_ctx.coordinator
+
+    # Progress callback → emits index.progress events over the wire.
+    # Uses emit_sync because initialize() blocks the event loop —
+    # async emit would never flush until the blocking code finishes.
+    def _on_progress(indexed: int, total: int, by_ext: dict, phase: str) -> None:
+        if event_bus is not None:
+            event_bus.emit_sync("index.progress", {
+                "repo": repo_name,
+                "indexed": indexed,
+                "total": total,
+                "phase": phase,
+            })
+
+    if not coordinator._initialized:
+        result = await coordinator.initialize(_on_progress)
+        return _success_response(request_id, {
+            "reindexed": True,
+            "files_indexed": result.files_indexed,
+        })
+    stats = await coordinator.reindex_full()
+    return _success_response(request_id, {
+        "reindexed": True,
+        "files_indexed": getattr(stats, "files_indexed", 0),
+    })
 
 
 async def _handle_session_close(
@@ -233,6 +258,8 @@ async def dispatch(
     daemon: "GlobalDaemon",
     registry: "CatalogRegistry",
     request: dict[str, Any],
+    *,
+    event_bus: "EventBus | None" = None,
 ) -> dict[str, Any]:
     """Route a single stdio request to the appropriate handler.
 
@@ -261,7 +288,7 @@ async def dispatch(
         if method == "unregister":
             return await _handle_unregister(registry, params, request_id)
         if method == "reindex":
-            return await _handle_reindex(daemon, params, request_id)
+            return await _handle_reindex(daemon, params, request_id, event_bus)
 
         # ── Tool methods — resolve repo + worktree ──
         repo_name = params.pop("repo", None)

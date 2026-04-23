@@ -38,9 +38,10 @@ from coderecon.index.models import (
     RefFact,
     RefTier,
     ResolutionMethod,
+    Role,
     SpladeVec,
 )
-from coderecon.ranking.cross_encoder import get_scorer
+from coderecon.ranking.cross_encoder import CrossEncoderScorer, get_tiny_scorer
 
 if TYPE_CHECKING:
     from coderecon.index._internal.db.database import Database
@@ -110,6 +111,8 @@ def _ce_rerank(
     query: str,
     candidates: list[tuple[str, str]],  # (def_uid, scaffold_text)
     threshold: float,
+    *,
+    scorer: CrossEncoderScorer | None = None,
 ) -> list[tuple[str, float]]:
     """CE rerank candidates, return those above threshold.
 
@@ -118,7 +121,8 @@ def _ce_rerank(
     if not candidates:
         return []
 
-    scorer = get_scorer()
+    if scorer is None:
+        scorer = get_tiny_scorer()
     scaffolds = [scaffold for _, scaffold in candidates]
     scores = scorer.score_pairs(query, scaffolds)
 
@@ -128,6 +132,93 @@ def _ce_rerank(
             results.append((uid, float(score)))
 
     results.sort(key=lambda x: -x[1])
+    return results
+
+
+# ── Batched SPLADE retrieval ─────────────────────────────────────
+
+
+def _batch_splade_retrieve(
+    queries: list[str],
+    all_vecs: dict[str, dict[int, float]],
+    *,
+    pool_size: int = _CANDIDATE_POOL,
+) -> list[list[tuple[str, float]]]:
+    """Batch-encode queries and retrieve top candidates for each.
+
+    Encodes all queries in one batched GPU call, then computes all dot
+    products as a single sparse matrix multiply using scipy.
+
+    Returns a list of candidate lists, one per query.
+    """
+    if not queries or not all_vecs:
+        return [[] for _ in queries]
+
+    from scipy.sparse import csr_matrix
+
+    encoder = _get_encoder()
+    q_vecs = encoder.encode_queries(queries)
+
+    # Build sparse matrices for vectorized dot product
+    uid_list = list(all_vecs.keys())
+
+    # Find vocabulary size (max term id + 1)
+    max_tid = 0
+    for v in all_vecs.values():
+        if v:
+            max_tid = max(max_tid, max(v.keys()))
+    for v in q_vecs:
+        if v:
+            max_tid = max(max_tid, max(v.keys()))
+    vocab_size = max_tid + 1
+
+    # Build doc matrix (n_docs × vocab)
+    doc_rows, doc_cols, doc_vals = [], [], []
+    for i, uid in enumerate(uid_list):
+        vec = all_vecs[uid]
+        for tid, w in vec.items():
+            doc_rows.append(i)
+            doc_cols.append(tid)
+            doc_vals.append(w)
+    doc_matrix = csr_matrix(
+        (doc_vals, (doc_rows, doc_cols)),
+        shape=(len(uid_list), vocab_size),
+        dtype=np.float32,
+    )
+
+    # Build query matrix (n_queries × vocab)
+    q_rows, q_cols, q_vals = [], [], []
+    for i, qv in enumerate(q_vecs):
+        if qv:
+            for tid, w in qv.items():
+                q_rows.append(i)
+                q_cols.append(tid)
+                q_vals.append(w)
+    query_matrix = csr_matrix(
+        (q_vals, (q_rows, q_cols)),
+        shape=(len(queries), vocab_size),
+        dtype=np.float32,
+    )
+
+    # scores: (n_queries × n_docs) sparse or dense
+    # For moderate sizes, dense is fine; for large, use sparse multiply
+    scores = (query_matrix @ doc_matrix.T).toarray()  # (n_queries, n_docs)
+
+    log.info("semantic_resolver.batch_retrieve queries=%d docs=%d", len(queries), len(uid_list))
+
+    results: list[list[tuple[str, float]]] = []
+    for qi in range(len(queries)):
+        row = scores[qi]
+        # Get indices where score > 0.5
+        mask = row > 0.5
+        if not mask.any():
+            results.append([])
+            continue
+        idxs = np.where(mask)[0]
+        scored = [(uid_list[j], float(row[j])) for j in idxs]
+        scored.sort(key=lambda x: -x[1])
+        results.append(scored[:pool_size])
+
     return results
 
 
@@ -151,7 +242,7 @@ def resolve_unresolved_refs(db: Database, *, file_ids: list[int] | None = None) 
         stmt = (
             select(RefFact)
             .where(RefFact.target_def_uid.is_(None))  # type: ignore[union-attr]
-            .where(RefFact.role == "REFERENCE")
+            .where(RefFact.role == Role.REFERENCE)
         )
         if file_ids is not None:
             stmt = stmt.where(col(RefFact.file_id).in_(file_ids))
@@ -186,37 +277,52 @@ def resolve_unresolved_refs(db: Database, *, file_ids: list[int] | None = None) 
                     docstring=d.docstring,
                 )
 
-    log.info("semantic_resolver.refs_start", extra={"count": len(unresolved)})
+    log.info("semantic_resolver.refs_start count=%d", len(unresolved))
     t0 = time.monotonic()
+
+    # Build all queries upfront
+    queries: list[str] = []
+    for ref in unresolved:
+        file = files.get(ref.file_id)
+        file_path = file.path if file else ""
+        queries.append(f"{' '.join(word_split(ref.token_text))} in {_path_to_phrase(file_path)}")
+
+    # Batch SPLADE retrieval — one GPU call for all queries
+    all_candidates = _batch_splade_retrieve(queries, all_vecs, pool_size=_CANDIDATE_POOL)
+    log.info("semantic_resolver.refs_splade_done elapsed=%.1fs", time.monotonic() - t0)
+
+    # Collect ALL CE pairs and bulk-score with TinyBERT
+    ce_pairs: list[tuple[str, str]] = []
+    ce_meta: list[tuple[int, str]] = []  # (item_idx, def_uid)
+
+    for i, candidates in enumerate(all_candidates):
+        if not candidates:
+            continue
+        for uid, _ in candidates:
+            scaffold = scaffold_cache.get(uid, "")
+            if not scaffold:
+                continue
+            ce_pairs.append((queries[i], scaffold))
+            ce_meta.append((i, uid))
+
+    ce_scores = get_tiny_scorer().score_bulk_pairs(ce_pairs) if ce_pairs else np.array([])
+    log.info("semantic_resolver.refs_ce_done pairs=%d elapsed=%.1fs",
+             len(ce_pairs), time.monotonic() - t0)
+
+    # Best CE match per item above threshold
+    item_results: dict[int, list[tuple[str, float]]] = {}
+    for (idx, uid), score in zip(ce_meta, ce_scores):
+        s = float(score)
+        if s >= TAU_REF:
+            item_results.setdefault(idx, []).append((uid, s))
+
     resolved = 0
-
     with db.session() as session:
-        for ref in unresolved:
-            # Build query from ref context
-            file = files.get(ref.file_id)
-            file_path = file.path if file else ""
-            query = f"{' '.join(word_split(ref.token_text))} in {_path_to_phrase(file_path)}"
-
-            # SPLADE retrieve
-            candidates = _splade_retrieve(query, all_vecs, pool_size=_CANDIDATE_POOL)
-            if not candidates:
-                continue
-
-            # Build CE pairs
-            ce_pairs = [
-                (uid, scaffold_cache.get(uid, ""))
-                for uid, _ in candidates
-                if uid in scaffold_cache
-            ]
-
-            # CE rerank
-            matches = _ce_rerank(query, ce_pairs, TAU_REF)
-            if not matches:
-                continue
-
+        for idx, matches in item_results.items():
+            matches.sort(key=lambda x: -x[1])
             best_uid, best_score = matches[0]
+            ref = unresolved[idx]
 
-            # Persist
             db_ref = session.get(RefFact, ref.ref_id)
             if db_ref is not None:
                 db_ref.target_def_uid = best_uid
@@ -225,14 +331,14 @@ def resolve_unresolved_refs(db: Database, *, file_ids: list[int] | None = None) 
                 session.add(db_ref)
                 resolved += 1
 
-                if resolved % 100 == 0:
+                if resolved % 500 == 0:
                     session.commit()
 
         session.commit()
 
     elapsed = time.monotonic() - t0
-    log.info("semantic_resolver.refs_done", extra={"resolved": resolved,
-             "total": len(unresolved), "elapsed_s": round(elapsed, 1)})
+    log.info("semantic_resolver.refs_done resolved=%d total=%d elapsed=%.1fs",
+             resolved, len(unresolved), elapsed)
     return resolved
 
 
@@ -292,40 +398,80 @@ def resolve_unresolved_accesses(db: Database, *, file_ids: list[int] | None = No
         for uid, d in def_map.items():
             name_to_uids.setdefault(d.name, []).append(uid)
 
-    log.info("semantic_resolver.accesses_start", extra={"count": len(unresolved)})
+    log.info("semantic_resolver.accesses_start count=%d", len(unresolved))
     t0 = time.monotonic()
+
+    # Build all queries upfront
+    queries: list[str] = []
+    for access in unresolved:
+        file = files.get(access.file_id)
+        file_path = file.path if file else ""
+        parts = [' '.join(word_split(access.final_member))]
+        if access.receiver_declared_type:
+            parts.append(f"on {' '.join(word_split(access.receiver_declared_type))}")
+        parts.append(f"in {_path_to_phrase(file_path)}")
+        if access.receiver_name:
+            parts.append(f"receiver {' '.join(word_split(access.receiver_name))}")
+        queries.append(" ".join(parts))
+
+    # Batch SPLADE retrieval — one GPU call for all queries
+    all_candidates = _batch_splade_retrieve(queries, all_vecs, pool_size=_CANDIDATE_POOL)
+    log.info("semantic_resolver.accesses_splade_done elapsed=%.1fs", time.monotonic() - t0)
+
+    # Collect ALL CE pairs and bulk-score with TinyBERT
+    # Also build per-query uid→splade_rank map for diagnostics
+    ce_pairs: list[tuple[str, str]] = []
+    ce_meta: list[tuple[int, str]] = []  # (item_idx, def_uid)
+    splade_rank_map: dict[int, dict[str, int]] = {}  # item_idx → {uid → rank}
+
+    for i, candidates in enumerate(all_candidates):
+        if not candidates:
+            continue
+        uid_ranks = {uid: rank for rank, (uid, _) in enumerate(candidates)}
+        splade_rank_map[i] = uid_ranks
+        for uid, _ in candidates:
+            scaffold = scaffold_cache.get(uid, "")
+            if not scaffold:
+                continue
+            ce_pairs.append((queries[i], scaffold))
+            ce_meta.append((i, uid))
+
+    ce_scores = get_tiny_scorer().score_bulk_pairs(ce_pairs) if ce_pairs else np.array([])
+    log.info("semantic_resolver.accesses_ce_done pairs=%d elapsed=%.1fs",
+             len(ce_pairs), time.monotonic() - t0)
+
+    # Best CE match per item above threshold
+    item_results: dict[int, list[tuple[str, float]]] = {}
+    for (idx, uid), score in zip(ce_meta, ce_scores):
+        s = float(score)
+        if s >= TAU_ACCESS:
+            item_results.setdefault(idx, []).append((uid, s))
+
+    # Log SPLADE rank of CE winners
+    winner_ranks: list[int] = []
+    for idx, matches in item_results.items():
+        matches.sort(key=lambda x: -x[1])
+        best_uid = matches[0][0]
+        ranks = splade_rank_map.get(idx, {})
+        rank = ranks.get(best_uid)
+        if rank is not None:
+            winner_ranks.append(rank)
+    if winner_ranks:
+        r_arr = np.array(winner_ranks)
+        pcts = np.percentile(r_arr, [50, 75, 90, 95, 99])
+        log.info(
+            "semantic_resolver.accesses_ce_winner_splade_rank n=%d "
+            "p50=%d p75=%d p90=%d p95=%d p99=%d max=%d",
+            len(r_arr), *[int(p) for p in pcts], int(r_arr.max()),
+        )
+
+    # Persist
     resolved = 0
-
     with db.session() as session:
-        for access in unresolved:
-            file = files.get(access.file_id)
-            file_path = file.path if file else ""
-
-            # Build query from access context
-            parts = [' '.join(word_split(access.final_member))]
-            if access.receiver_declared_type:
-                parts.append(f"on {' '.join(word_split(access.receiver_declared_type))}")
-            parts.append(f"in {_path_to_phrase(file_path)}")
-            if access.receiver_name:
-                parts.append(f"receiver {' '.join(word_split(access.receiver_name))}")
-            query = " ".join(parts)
-
-            # SPLADE retrieve — prefer defs matching final_member name
-            candidates = _splade_retrieve(query, all_vecs, pool_size=_CANDIDATE_POOL)
-            if not candidates:
-                continue
-
-            ce_pairs = [
-                (uid, scaffold_cache.get(uid, ""))
-                for uid, _ in candidates
-                if uid in scaffold_cache
-            ]
-
-            matches = _ce_rerank(query, ce_pairs, TAU_ACCESS)
-            if not matches:
-                continue
-
+        for idx, matches in item_results.items():
+            matches.sort(key=lambda x: -x[1])
             best_uid, best_score = matches[0]
+            access = unresolved[idx]
 
             db_access = session.get(MemberAccessFact, access.access_id)
             if db_access is not None:
@@ -335,14 +481,14 @@ def resolve_unresolved_accesses(db: Database, *, file_ids: list[int] | None = No
                 session.add(db_access)
                 resolved += 1
 
-                if resolved % 100 == 0:
+                if resolved % 500 == 0:
                     session.commit()
 
         session.commit()
 
     elapsed = time.monotonic() - t0
-    log.info("semantic_resolver.accesses_done", extra={"resolved": resolved,
-             "total": len(unresolved), "elapsed_s": round(elapsed, 1)})
+    log.info("semantic_resolver.accesses_done resolved=%d total=%d elapsed=%.1fs pairs=%d",
+             resolved, len(unresolved), elapsed, len(ce_pairs))
     return resolved
 
 
@@ -405,52 +551,74 @@ def resolve_unresolved_shapes(db: Database, *, file_ids: list[int] | None = None
     if not type_vecs:
         return 0
 
-    log.info("semantic_resolver.shapes_start", extra={"count": len(unresolved),
-             "type_candidates": len(type_vecs)})
+    log.info("semantic_resolver.shapes_start count=%d type_candidates=%d",
+             len(unresolved), len(type_vecs))
     t0 = time.monotonic()
+
+    # Build all queries upfront
+    queries: list[str] = []
+    valid_indices: list[int] = []  # indices into unresolved that have non-empty queries
+    for idx, shape in enumerate(unresolved):
+        members = shape.get_observed_members()
+        fields = members.get("fields", [])
+        methods = members.get("methods", [])
+
+        query_parts = []
+        if fields:
+            query_parts.append(f"fields {' '.join(fields[:10])}")
+        if methods:
+            query_parts.append(f"methods {' '.join(methods[:10])}")
+        if shape.receiver_name:
+            query_parts.append(f"receiver {' '.join(word_split(shape.receiver_name))}")
+
+        query = " ".join(query_parts)
+        if query:
+            queries.append(query)
+            valid_indices.append(idx)
+
+    if not queries:
+        return 0
+
+    # Batch SPLADE retrieval against type defs only
+    all_candidates = _batch_splade_retrieve(queries, type_vecs, pool_size=_CANDIDATE_POOL)
+    log.info("semantic_resolver.shapes_splade_done elapsed=%.1fs", time.monotonic() - t0)
+
+    # Collect ALL CE pairs and bulk-score with TinyBERT
+    ce_pairs: list[tuple[str, str]] = []
+    ce_meta: list[tuple[int, str]] = []  # (q_idx, def_uid)
+
+    for q_idx, candidates in enumerate(all_candidates):
+        if not candidates:
+            continue
+        for uid, _ in candidates:
+            scaffold = scaffold_cache.get(uid, "")
+            if not scaffold:
+                continue
+            ce_pairs.append((queries[q_idx], scaffold))
+            ce_meta.append((q_idx, uid))
+
+    ce_scores = get_tiny_scorer().score_bulk_pairs(ce_pairs) if ce_pairs else np.array([])
+    log.info("semantic_resolver.shapes_ce_done pairs=%d elapsed=%.1fs",
+             len(ce_pairs), time.monotonic() - t0)
+
+    # Best CE match per item above threshold
+    item_results: dict[int, list[tuple[str, float]]] = {}
+    for (q_idx, uid), score in zip(ce_meta, ce_scores):
+        s = float(score)
+        if s >= TAU_SHAPE:
+            item_results.setdefault(q_idx, []).append((uid, s))
+
     resolved = 0
-
     with db.session() as session:
-        for shape in unresolved:
-            # Build query from observed shape
-            members = shape.get_observed_members()
-            fields = members.get("fields", [])
-            methods = members.get("methods", [])
-
-            query_parts = []
-            if fields:
-                query_parts.append(f"fields {' '.join(fields[:10])}")
-            if methods:
-                query_parts.append(f"methods {' '.join(methods[:10])}")
-            if shape.receiver_name:
-                query_parts.append(f"receiver {' '.join(word_split(shape.receiver_name))}")
-
-            query = " ".join(query_parts)
-            if not query:
-                continue
-
-            # SPLADE retrieve against type defs only
-            candidates = _splade_retrieve(
-                query, type_vecs, pool_size=_CANDIDATE_POOL
-            )
-            if not candidates:
-                continue
-
-            ce_pairs = [
-                (uid, scaffold_cache.get(uid, ""))
-                for uid, _ in candidates
-                if uid in scaffold_cache
-            ]
-
-            matches = _ce_rerank(query, ce_pairs, TAU_SHAPE)
-            if not matches:
-                continue
-
+        for q_idx, matches in item_results.items():
+            matches.sort(key=lambda x: -x[1])
             best_uid, best_score = matches[0]
             matched_def = def_map.get(best_uid)
             if matched_def is None:
                 continue
 
+            orig_idx = valid_indices[q_idx]
+            shape = unresolved[orig_idx]
             db_shape = session.get(ReceiverShapeFact, shape.shape_id)
             if db_shape is not None:
                 db_shape.best_match_type = matched_def.qualified_name or matched_def.name
@@ -458,14 +626,14 @@ def resolve_unresolved_shapes(db: Database, *, file_ids: list[int] | None = None
                 session.add(db_shape)
                 resolved += 1
 
-                if resolved % 100 == 0:
+                if resolved % 500 == 0:
                     session.commit()
 
         session.commit()
 
     elapsed = time.monotonic() - t0
-    log.info("semantic_resolver.shapes_done", extra={"resolved": resolved,
-             "total": len(unresolved), "elapsed_s": round(elapsed, 1)})
+    log.info("semantic_resolver.shapes_done resolved=%d total=%d elapsed=%.1fs",
+             resolved, len(unresolved), elapsed)
     return resolved
 
 

@@ -27,6 +27,8 @@ from cpl_lab.eval.tasks import (
     ranking_baseline,
     ranking_diagnostic,
     ranking_micro,
+    ranking_micro_ce_only,
+    ranking_micro_rrf,
     ranking_trained,
 )
 
@@ -47,10 +49,12 @@ def run(experiment: str | None = None) -> None:
         tasks = [ranking_diagnostic()]
     elif experiment == "micro":
         tasks = [ranking_micro()]
+    elif experiment == "micro-compare":
+        tasks = [ranking_micro(), ranking_micro_rrf(), ranking_micro_ce_only()]
     else:
         raise ValueError(
             f"Unknown experiment: {experiment!r}. "
-            "Use 'ranking' (default), 'diagnostic', or 'micro'."
+            "Use 'ranking' (default), 'diagnostic', 'micro', or 'micro-compare'."
         )
 
     inspect_eval(

@@ -140,7 +140,7 @@ class GitOps:
 
         try:
             result = subprocess.run(
-                ["git", "-C", str(self._access.repo_root), "diff", "--name-only",
+                ["git", "-C", str(self._access.path), "diff", "--name-only",
                  f"{base_ref}...HEAD"],
                 capture_output=True,
                 text=True,
@@ -274,7 +274,7 @@ class GitOps:
         """
         import subprocess
 
-        repo = str(self._access.repo_root)
+        repo = str(self._access.path)
 
         # 1. In the main worktree HEAD is usually the default branch.
         branch = self._access.current_branch_name()

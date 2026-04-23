@@ -55,8 +55,14 @@ class CrossEncoderScorer:
         from coderecon.index._internal.indexing.splade import _select_onnx_providers
 
         providers = _select_onnx_providers()
+        opts = ort.SessionOptions()
+        # Suppress BFC arena fallback warnings — the allocator
+        # intentionally falls back to system malloc when a single
+        # allocation exceeds the arena's free capacity.
+        opts.log_severity_level = 3  # Error
         self._session = ort.InferenceSession(
             str(self.onnx_path),
+            sess_options=opts,
             providers=providers,
         )
         active = self._session.get_providers()
@@ -119,6 +125,50 @@ class CrossEncoderScorer:
             )
 
             # logits shape: (batch, 1) or (batch,) — flatten to 1-D
+            scores = logits.squeeze(-1) if logits.ndim == 2 else logits
+            all_scores.append(scores.astype(np.float32))
+
+        return np.concatenate(all_scores)
+
+    def score_bulk_pairs(
+        self,
+        pairs: list[tuple[str, str]],
+        *,
+        micro_batch: int | None = None,
+    ) -> NDArray[np.float32]:
+        """Score pre-built (query, document) pairs in bulk.
+
+        Unlike score_pairs() which takes one query and N docs, this
+        accepts N arbitrary (query, doc) tuples — suitable for batching
+        CE across many different queries at once.
+        """
+        self.load()
+        assert self._session is not None and self._tokenizer is not None
+
+        if not pairs:
+            return np.array([], dtype=np.float32)
+
+        bs = micro_batch or self._MICRO_BATCH
+        all_scores: list[NDArray[np.float32]] = []
+
+        for start in range(0, len(pairs), bs):
+            chunk = pairs[start : start + bs]
+
+            encodings = self._tokenizer.encode_batch(chunk)
+
+            ids = np.array([e.ids for e in encodings], dtype=np.int64)
+            mask = np.array([e.attention_mask for e in encodings], dtype=np.int64)
+            tids = np.array([e.type_ids for e in encodings], dtype=np.int64)
+
+            (logits,) = self._session.run(
+                None,
+                {
+                    "input_ids": ids,
+                    "attention_mask": mask,
+                    "token_type_ids": tids,
+                },
+            )
+
             scores = logits.squeeze(-1) if logits.ndim == 2 else logits
             all_scores.append(scores.astype(np.float32))
 

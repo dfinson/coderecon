@@ -29,15 +29,14 @@ log = structlog.get_logger(__name__)
 
 async def _write_message(
     data: dict[str, Any],
-    stdout: asyncio.StreamWriter,
+    transport: asyncio.WriteTransport,
     lock: asyncio.Lock,
 ) -> None:
-    """Serialise *data* as a single NDJSON line to *stdout*."""
+    """Serialise *data* as a single NDJSON line to stdout."""
     line = json.dumps(data, separators=(",", ":"), default=str) + "\n"
     raw = line.encode("utf-8")
     async with lock:
-        stdout.write(raw)
-        await stdout.drain()
+        transport.write(raw)
 
 
 async def _handle_request(
@@ -45,10 +44,11 @@ async def _handle_request(
     registry: "CatalogRegistry",
     request: dict[str, Any],
     write_message: Any,
+    bus: EventBus,
 ) -> None:
     """Dispatch a single request and write the response."""
     try:
-        response = await dispatch(daemon, registry, request)
+        response = await dispatch(daemon, registry, request, event_bus=bus)
         await write_message(response)
     except Exception:
         log.error("stdio.dispatch_error", exc_info=True)
@@ -73,22 +73,19 @@ async def run_stdio_loop(
     reader = asyncio.StreamReader()
     protocol = asyncio.StreamReaderProtocol(reader)
     loop = asyncio.get_event_loop()
-    await loop.connect_read_pipe(lambda: protocol, sys.stdin)
+    await loop.connect_read_pipe(lambda: protocol, sys.stdin.buffer)
 
     transport, _proto = await loop.connect_write_pipe(
-        asyncio.BaseProtocol, sys.stdout,
-    )
-    stdout = asyncio.StreamWriter(
-        transport, _proto, reader=None, loop=loop,
+        asyncio.BaseProtocol, sys.stdout.buffer,
     )
 
     write_lock = asyncio.Lock()
 
     async def write_message(data: dict[str, Any]) -> None:
-        await _write_message(data, stdout, write_lock)
+        await _write_message(data, transport, write_lock)
 
     # Wire up event bus
-    bus = EventBus(write_message)
+    bus = EventBus(write_message, transport=transport)
     wire_event_hooks(daemon, bus)
 
     # Emit daemon.ready
@@ -122,4 +119,4 @@ async def run_stdio_loop(
             continue
 
         # Dispatch concurrently — multiple requests can be in flight
-        asyncio.create_task(_handle_request(daemon, registry, request, write_message))
+        asyncio.create_task(_handle_request(daemon, registry, request, write_message, bus))

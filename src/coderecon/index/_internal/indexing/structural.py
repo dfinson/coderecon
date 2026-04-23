@@ -361,6 +361,12 @@ def _apply_worktree_uid_remap(
         if iface_uid:
             impl["interface_def_uid"] = def_uid_remap.get(iface_uid, iface_uid)
 
+    # RefFact — target_def_uid when already resolved during extraction
+    for r in extraction.refs:
+        old_target = r.get("target_def_uid")
+        if old_target:
+            r["target_def_uid"] = def_uid_remap.get(old_target, old_target)
+
     # LocalBindFact — target_uid when target_kind == "DEF"
     for b in extraction.binds:
         if b.get("target_kind") == "DEF" and b.get("target_uid"):

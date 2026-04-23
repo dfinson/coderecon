@@ -340,6 +340,16 @@ def micro_eval_cmd(ctx: click.Context) -> None:
     run("micro")
 
 
+@main.command("micro-compare")
+@click.pass_context
+def micro_compare_cmd(ctx: click.Context) -> None:
+    """Compare LGBM ranker vs RRF-only vs CE-only baselines (offline)."""
+    from cpl_lab.eval.run import run
+
+    click.echo("Running micro-compare: LGBM vs RRF vs CE-only")
+    run("micro-compare")
+
+
 # ── validate ─────────────────────────────────────────────────────
 
 

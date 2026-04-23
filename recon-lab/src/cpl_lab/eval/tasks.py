@@ -18,7 +18,11 @@ from inspect_ai import Task, task
 from cpl_lab.eval.datasets.eval_gt import eval_gt_dataset
 from cpl_lab.eval.metrics.gate import gate_scorer
 from cpl_lab.eval.metrics.ranking import diagnostic_ranking_scorer, ranking_scorer
-from cpl_lab.eval.models.offline_ranking import offline_ranking_solver
+from cpl_lab.eval.models.offline_ranking import (
+    offline_ce_only_solver,
+    offline_ranking_solver,
+    offline_rrf_solver,
+)
 from cpl_lab.eval.models.ranking import diagnostic_ranking_solver, ranking_solver
 
 # ── Ranking pipeline tasks ────────────────────────────────────────────────
@@ -96,6 +100,34 @@ def ranking_micro(
             merged_dir=merged_dir,
             models_dir=models_dir,
         ),
+        scorer=[ranking_scorer(), gate_scorer()],
+        max_messages=1,
+    )
+
+
+@task
+def ranking_micro_rrf(
+    data_dir: str = "~/.recon/recon-lab/data",
+) -> Task:
+    """Baseline: rank by RRF score only, no learned models."""
+    merged_dir = str(data_dir.rstrip("/") + "/merged") if isinstance(data_dir, str) else str(data_dir / "merged")
+    return Task(
+        dataset=eval_gt_dataset(data_dir=data_dir),
+        solver=offline_rrf_solver(merged_dir=merged_dir),
+        scorer=[ranking_scorer(), gate_scorer()],
+        max_messages=1,
+    )
+
+
+@task
+def ranking_micro_ce_only(
+    data_dir: str = "~/.recon/recon-lab/data",
+) -> Task:
+    """Baseline: rank by cross-encoder (TinyBERT) score only."""
+    merged_dir = str(data_dir.rstrip("/") + "/merged") if isinstance(data_dir, str) else str(data_dir / "merged")
+    return Task(
+        dataset=eval_gt_dataset(data_dir=data_dir),
+        solver=offline_ce_only_solver(merged_dir=merged_dir),
         scorer=[ranking_scorer(), gate_scorer()],
         max_messages=1,
     )

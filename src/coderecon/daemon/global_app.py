@@ -149,6 +149,7 @@ class GlobalDaemon:
         config = load_config(repo_root)
 
         recon_dir = repo_root / ".recon"
+        recon_dir.mkdir(exist_ok=True)
         db_path = recon_dir / "index.db"
         tantivy_path = recon_dir / "tantivy"
 

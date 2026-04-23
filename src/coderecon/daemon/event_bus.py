@@ -28,8 +28,13 @@ WriteMessageFn = Callable[[dict[str, Any]], Coroutine[Any, Any, None]]
 class EventBus:
     """Collects events and writes them as NDJSON to the stdio transport."""
 
-    def __init__(self, write_message: WriteMessageFn) -> None:
+    def __init__(
+        self,
+        write_message: WriteMessageFn,
+        transport: Any | None = None,
+    ) -> None:
         self._write = write_message
+        self._transport = transport  # raw asyncio.WriteTransport for sync writes
 
     async def emit(self, event_type: str, data: dict[str, Any] | None = None) -> None:
         """Emit a single event to stdout."""
@@ -42,7 +47,30 @@ class EventBus:
         try:
             await self._write(msg)
         except Exception:  # noqa: BLE001
-            log.debug("event_bus.emit_failed", event=event_type, exc_info=True)
+            log.debug("event_bus.emit_failed", event_name=event_type, exc_info=True)
+
+    def emit_sync(self, event_type: str, data: dict[str, Any] | None = None) -> None:
+        """Emit an event synchronously — for use inside blocking code paths.
+
+        Writes directly to the transport without acquiring the async lock.
+        Safe when the caller is the only writer (e.g. inside a blocking
+        ``initialize()`` that holds the event loop).
+        """
+        if self._transport is None:
+            return
+        import json as _json
+
+        msg: dict[str, Any] = {
+            "event": event_type,
+            "ts": time.time(),
+        }
+        if data:
+            msg["data"] = data
+        raw = (_json.dumps(msg, separators=(",", ":"), default=str) + "\n").encode("utf-8")
+        try:
+            self._transport.write(raw)
+        except Exception:  # noqa: BLE001
+            log.debug("event_bus.emit_sync_failed", event_name=event_type, exc_info=True)
 
 
 def wire_event_hooks(daemon: "GlobalDaemon", bus: EventBus) -> None:
