@@ -103,6 +103,8 @@ Each function is an **async callable** with a typed signature. These are what ge
 
 Every tool function requires a `repo` parameter — the registered repo name (or path). This replaces the URL path routing (`/repos/{name}/worktrees/{wt}/mcp/...`) from the HTTP daemon.
 
+**Worktree defaults to `None`**, which resolves to the repo's registered default worktree — whatever branch `HEAD` pointed at when the repo was registered (stored as `is_main=True` in the catalog). Repos using `master`, `develop`, `trunk`, or any other default branch work without the integrator ever specifying a worktree name.
+
 ```python
 # ── Context Retrieval ──────────────────────────────────────
 
@@ -111,7 +113,7 @@ await sdk.recon(
     task: str,                      # Natural language query
     seeds: list[str] = [],          # Explicit file/symbol hints
     pins: list[str] = [],           # Files to always include
-    worktree: str = "main",         # Worktree name
+    worktree: str | None = None,         # Worktree name
 ) -> ReconResult
 
 await sdk.recon_map(
@@ -119,7 +121,7 @@ await sdk.recon_map(
     include: list[str] = [],        # "structure", "languages", "entry_points", etc.
     depth: int = 3,
     limit: int = 100,
-    worktree: str = "main",
+    worktree: str | None = None,
 ) -> MapResult
 
 await sdk.recon_impact(
@@ -127,12 +129,12 @@ await sdk.recon_impact(
     target: str,                    # Symbol or file path to analyze
     justification: str,
     include_comments: bool = True,
-    worktree: str = "main",
+    worktree: str | None = None,
 ) -> ImpactResult
 
 await sdk.recon_understand(
     repo: str,
-    worktree: str = "main",
+    worktree: str | None = None,
 ) -> UnderstandResult
 
 # ── Refactoring ────────────────────────────────────────────
@@ -144,7 +146,7 @@ await sdk.refactor_rename(
     justification: str,
     include_comments: bool = True,
     contexts: list[str] | None = None,
-    worktree: str = "main",
+    worktree: str | None = None,
 ) -> RefactorResult
 
 await sdk.refactor_move(
@@ -153,7 +155,7 @@ await sdk.refactor_move(
     to_path: str,
     justification: str,
     include_comments: bool = True,
-    worktree: str = "main",
+    worktree: str | None = None,
 ) -> RefactorResult
 
 await sdk.refactor_commit(
@@ -161,13 +163,13 @@ await sdk.refactor_commit(
     refactor_id: str,
     inspect_path: str | None = None,
     context_lines: int = 2,
-    worktree: str = "main",
+    worktree: str | None = None,
 ) -> RefactorCommitResult
 
 await sdk.refactor_cancel(
     repo: str,
     refactor_id: str,
-    worktree: str = "main",
+    worktree: str | None = None,
 ) -> RefactorCancelResult
 
 # ── Analysis ───────────────────────────────────────────────
@@ -178,27 +180,27 @@ await sdk.semantic_diff(
     target: str | None = None,
     paths: list[str] | None = None,
     scope_id: str | None = None,
-    worktree: str = "main",
+    worktree: str | None = None,
 ) -> DiffResult
 
 await sdk.graph_cycles(
     repo: str,
     level: str = "file",           # "file" or "def"
-    worktree: str = "main",
+    worktree: str | None = None,
 ) -> CyclesResult
 
 await sdk.graph_communities(
     repo: str,
     level: str = "file",
     resolution: float = 1.0,
-    worktree: str = "main",
+    worktree: str | None = None,
 ) -> CommunitiesResult
 
 await sdk.graph_export(
     repo: str,
     output_path: str = "",
     resolution: float = 1.0,
-    worktree: str = "main",
+    worktree: str | None = None,
 ) -> GraphExportResult
 
 # ── Checkpoint ─────────────────────────────────────────────
@@ -213,7 +215,7 @@ await sdk.checkpoint(
     max_test_hops: int | None = None,
     commit_message: str | None = None,
     push: bool = False,
-    worktree: str = "main",
+    worktree: str | None = None,
 ) -> CheckpointResult
 
 # ── Raw Signals (training / evaluation) ────────────────────
@@ -223,7 +225,7 @@ await sdk.raw_signals(
     query: str,                    # Same as recon task
     seeds: list[str] = [],
     pins: list[str] = [],
-    worktree: str = "main",
+    worktree: str | None = None,
 ) -> RawSignalsResult
 
 # ── Introspection ──────────────────────────────────────────
@@ -240,7 +242,7 @@ await sdk.register(path: str | Path) -> RegisterResult
 await sdk.unregister(path: str | Path) -> bool
 await sdk.catalog() -> list[CatalogEntry]
 await sdk.status(repo: str | None = None) -> StatusResult
-await sdk.reindex(repo: str, worktree: str = "main") -> None
+await sdk.reindex(repo: str, worktree: str | None = None) -> None
 ```
 
 ### 4.3 Functions as Agent Tools
@@ -715,7 +717,7 @@ async def dispatch(daemon: GlobalDaemon, registry: CatalogRegistry, request: dic
         
         # Tool methods — resolve repo + worktree via shared helper
         repo_name = params.pop("repo")
-        worktree = params.pop("worktree", "main")
+        worktree = params.pop("worktree", None)  # None → repo's default
         
         wt_slot = await resolve_worktree(daemon, repo_name, worktree)
         if wt_slot is None:
@@ -781,11 +783,14 @@ The repo/worktree lazy-activation logic currently lives inline in `_DynamicMcpRo
 async def resolve_worktree(
     daemon: GlobalDaemon,
     repo_name: str,
-    worktree: str = "main",
+    worktree: str | None = None,
 ) -> WorktreeSlot | None:
     """Resolve repo + worktree with lazy activation.
     
     Shared by both HTTP (_DynamicMcpRouter) and stdio (dispatch.py).
+    
+    If worktree is None, resolves to the repo's default worktree
+    (the one registered with is_main=True in the catalog).
     Returns None if the repo or worktree can't be found/activated.
     """
     slot = daemon.get_slot(repo_name)
@@ -793,6 +798,10 @@ async def resolve_worktree(
         slot = await daemon.lazy_activate_repo(repo_name)
     if slot is None:
         return None
+
+    # None → repo's default worktree (is_main=True from catalog)
+    if worktree is None:
+        worktree = slot.default_worktree_name
 
     wt_slot = slot.worktrees.get(worktree)
     if wt_slot is None:
@@ -913,14 +922,14 @@ class CodeRecon:
         but all calls use session_id "ext_{name}" instead of the auto-generated one.
         """
     
-    async def close_session(self, repo: str, worktree: str = "main") -> None:
+    async def close_session(self, repo: str, worktree: str | None = None) -> None:
         """Explicitly close the auto-generated session for a (repo, worktree) pair.
         
         Clears candidate_maps, mutation_ctx, and exclusive locks on the daemon side.
         A new session is auto-created on the next call to that (repo, worktree).
         """
     
-    def repo(self, name: str, worktree: str = "main") -> RepoHandle:
+    def repo(self, name: str, worktree: str | None = None) -> RepoHandle:
         """Return a repo-bound handle with pre-bound tool methods."""
     
     # ── Event subscription (see §5.3) ──
@@ -954,7 +963,7 @@ class CodeRecon:
     async def unregister(self, path: str | Path) -> bool: ...
     async def catalog(self) -> list[CatalogEntry]: ...
     async def status(self, repo: str | None = None) -> StatusResult: ...
-    async def reindex(self, repo: str, worktree: str = "main") -> None: ...
+    async def reindex(self, repo: str, worktree: str | None = None) -> None: ...
     
     # ── Framework adapters ──
     def as_openai_tools(self, repo: str, ...) -> list[dict]: ...
@@ -1043,7 +1052,7 @@ async def _call(self, method: str, params: dict,
     # Attach session_id for tool methods (not management methods)
     if session_id is _SENTINEL:
         repo = params.get("repo")
-        worktree = params.get("worktree", "main")
+        worktree = params.get("worktree")  # None is fine — keyed by (repo, None)
         if repo is not None:
             request["session_id"] = self._resolve_session_id(repo, worktree)
     elif session_id is not None:
@@ -1107,7 +1116,7 @@ async def recon(
     task: str,
     seeds: list[str] | None = None,
     pins: list[str] | None = None,
-    worktree: str = "main",
+    worktree: str | None = None,
 ) -> ReconResult:
     """Search the repository index for code relevant to a task.
     
@@ -1149,7 +1158,7 @@ class SessionHandle:
         self._client = client
         self._explicit_session = f"ext_{name}"
     
-    def repo(self, name: str, worktree: str = "main") -> RepoHandle:
+    def repo(self, name: str, worktree: str | None = None) -> RepoHandle:
         """Repo-bound handle that inherits this explicit session."""
     
     # All tool methods delegate to client._call with self._explicit_session:
@@ -1319,7 +1328,7 @@ class Event:
 ### 9.1 OpenAI Function Calling
 
 ```python
-def as_openai_tools(self, repo: str, worktree: str = "main") -> list[dict]:
+def as_openai_tools(self, repo: str, worktree: str | None = None) -> list[dict]:
     """Generate OpenAI-compatible tool definitions with repo pre-bound.
     
     Returns a list of dicts suitable for the `tools` parameter of
@@ -1333,7 +1342,7 @@ Generates JSON schemas from the typed signatures. The `repo` and `worktree` para
 ### 9.2 LangChain
 
 ```python
-def as_langchain_tools(self, repo: str, worktree: str = "main") -> list[StructuredTool]:
+def as_langchain_tools(self, repo: str, worktree: str | None = None) -> list[StructuredTool]:
     """Generate LangChain StructuredTool instances with repo pre-bound."""
 ```
 
@@ -1342,7 +1351,7 @@ def as_langchain_tools(self, repo: str, worktree: str = "main") -> list[Structur
 For any framework that takes `(name, description, schema, callable)`:
 
 ```python
-def tool_definitions(self, repo: str, worktree: str = "main") -> list[ToolDef]:
+def tool_definitions(self, repo: str, worktree: str | None = None) -> list[ToolDef]:
     """Return framework-agnostic tool definitions.
     
     Each ToolDef has:

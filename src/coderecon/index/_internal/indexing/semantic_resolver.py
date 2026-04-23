@@ -134,8 +134,11 @@ def _ce_rerank(
 # ── #1: Unresolved RefFact resolution ────────────────────────────
 
 
-def resolve_unresolved_refs(db: Database) -> int:
+def resolve_unresolved_refs(db: Database, *, file_ids: list[int] | None = None) -> int:
     """Find unresolved refs and attempt SPLADE+CE resolution.
+
+    When *file_ids* is given, only resolve refs belonging to those files
+    (incremental mode).  Otherwise resolves across the entire repo.
 
     Returns number of refs resolved.
     """
@@ -145,12 +148,14 @@ def resolve_unresolved_refs(db: Database) -> int:
 
     # Load unresolved refs
     with db.session() as session:
-        unresolved = list(session.exec(
+        stmt = (
             select(RefFact)
             .where(RefFact.target_def_uid.is_(None))  # type: ignore[union-attr]
             .where(RefFact.role == "REFERENCE")
-            .limit(10000)
-        ).all())
+        )
+        if file_ids is not None:
+            stmt = stmt.where(col(RefFact.file_id).in_(file_ids))
+        unresolved = list(session.exec(stmt.limit(10000)).all())
 
         if not unresolved:
             return 0
@@ -234,8 +239,11 @@ def resolve_unresolved_refs(db: Database) -> int:
 # ── #2: Unresolved MemberAccessFact resolution ──────────────────
 
 
-def resolve_unresolved_accesses(db: Database) -> int:
+def resolve_unresolved_accesses(db: Database, *, file_ids: list[int] | None = None) -> int:
     """Find unresolved member access chains and attempt SPLADE+CE resolution.
+
+    When *file_ids* is given, only resolve accesses belonging to those files
+    (incremental mode).  Otherwise resolves across the entire repo.
 
     Returns number of accesses resolved.
     """
@@ -244,11 +252,13 @@ def resolve_unresolved_accesses(db: Database) -> int:
         return 0
 
     with db.session() as session:
-        unresolved = list(session.exec(
+        stmt = (
             select(MemberAccessFact)
             .where(MemberAccessFact.final_target_def_uid.is_(None))  # type: ignore[union-attr]
-            .limit(10000)
-        ).all())
+        )
+        if file_ids is not None:
+            stmt = stmt.where(col(MemberAccessFact.file_id).in_(file_ids))
+        unresolved = list(session.exec(stmt.limit(10000)).all())
 
         if not unresolved:
             return 0
@@ -339,8 +349,11 @@ def resolve_unresolved_accesses(db: Database) -> int:
 # ── #3: Unresolved ReceiverShapeFact resolution ─────────────────
 
 
-def resolve_unresolved_shapes(db: Database) -> int:
+def resolve_unresolved_shapes(db: Database, *, file_ids: list[int] | None = None) -> int:
     """Find unresolved receiver shapes and attempt SPLADE+CE type matching.
+
+    When *file_ids* is given, only resolve shapes belonging to those files
+    (incremental mode).  Otherwise resolves across the entire repo.
 
     Returns number of shapes resolved.
     """
@@ -349,11 +362,13 @@ def resolve_unresolved_shapes(db: Database) -> int:
         return 0
 
     with db.session() as session:
-        unresolved = list(session.exec(
+        stmt = (
             select(ReceiverShapeFact)
             .where(ReceiverShapeFact.best_match_type.is_(None))  # type: ignore[union-attr]
-            .limit(5000)
-        ).all())
+        )
+        if file_ids is not None:
+            stmt = stmt.where(col(ReceiverShapeFact.file_id).in_(file_ids))
+        unresolved = list(session.exec(stmt.limit(5000)).all())
 
         if not unresolved:
             return 0

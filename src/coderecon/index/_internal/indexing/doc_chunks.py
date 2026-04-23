@@ -268,17 +268,27 @@ def index_doc_chunk_vectors(
 def link_doc_chunks_to_defs(
     db: Database,
     *,
+    file_ids: list[int] | None = None,
     sigma_floor: float = SIGMA_DOC_FLOOR,
     max_per_chunk: int = MAX_EDGES_PER_CHUNK,
 ) -> int:
     """Compute doc-chunk → code-def edges via SPLADE dot product.
+
+    When *file_ids* is given, only re-link chunks belonging to those files
+    (incremental mode) and only delete/replace their edges.  Otherwise
+    re-links all chunks globally.
 
     Returns number of edges written.
     """
     # Load all def vectors (uses binary cache)
     all_vecs = load_all_vectors_fast(db)
     with db.session() as session:
-        chunk_rows = list(session.exec(select(FileChunkVec)).all())
+        if file_ids is not None:
+            chunk_rows = list(session.exec(
+                select(FileChunkVec).where(col(FileChunkVec.file_id).in_(file_ids))
+            ).all())
+        else:
+            chunk_rows = list(session.exec(select(FileChunkVec)).all())
 
     if not all_vecs or not chunk_rows:
         return 0
@@ -292,11 +302,16 @@ def link_doc_chunks_to_defs(
     edges_written = 0
 
     with db.session() as session:
-        # Clear existing edges
-        existing_count = session.exec(
-            select(DocCodeEdgeFact)
-        ).all()
-        for e in existing_count:
+        # Clear existing edges (scoped to affected files when incremental)
+        if file_ids is not None:
+            existing_edges = session.exec(
+                select(DocCodeEdgeFact).where(col(DocCodeEdgeFact.file_id).in_(file_ids))
+            ).all()
+        else:
+            existing_edges = session.exec(
+                select(DocCodeEdgeFact)
+            ).all()
+        for e in existing_edges:
             session.delete(e)
         session.flush()
 

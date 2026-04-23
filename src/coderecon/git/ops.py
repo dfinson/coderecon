@@ -264,6 +264,49 @@ class GitOps:
         """Current branch name, or None if detached or unborn."""
         return self._access.current_branch_name()
 
+    def default_branch(self) -> str:
+        """Resolve the repo's default branch name.
+
+        Checks ``HEAD`` of the main worktree first (works for non-bare
+        clones).  Falls back to ``origin/HEAD`` symbolic ref, then to
+        common names (``main``, ``master``).  Returns ``"main"`` as a
+        last resort.
+        """
+        import subprocess
+
+        repo = str(self._access.repo_root)
+
+        # 1. In the main worktree HEAD is usually the default branch.
+        branch = self._access.current_branch_name()
+        if branch:
+            return branch
+
+        # 2. origin/HEAD → origin/<default>
+        try:
+            result = subprocess.run(
+                ["git", "-C", repo, "symbolic-ref", "refs/remotes/origin/HEAD"],
+                capture_output=True, text=True, timeout=5, check=False,
+            )
+            if result.returncode == 0:
+                ref = result.stdout.strip()  # refs/remotes/origin/main
+                return ref.rsplit("/", 1)[-1]
+        except Exception:
+            pass
+
+        # 3. Probe common branch names
+        for candidate in ("main", "master"):
+            try:
+                result = subprocess.run(
+                    ["git", "-C", repo, "rev-parse", "--verify", candidate],
+                    capture_output=True, text=True, timeout=5, check=False,
+                )
+                if result.returncode == 0:
+                    return candidate
+            except Exception:
+                continue
+
+        return "main"
+
     def tracked_files(self) -> list[str]:
         """List all files tracked in the git index."""
         result = self._access.git.run("ls-files")

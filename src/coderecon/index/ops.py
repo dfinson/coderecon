@@ -1084,10 +1084,7 @@ class IndexCoordinatorEngine:
                 # SPLADE: re-encode vectors for changed files
                 self._reindex_splade_vectors(changed_file_ids)
 
-                # Passes 5-7: run global semantic passes when vectors
-                # exist.  These are global (not file-scoped) because
-                # changing one def's vector can affect its similarity
-                # to every other def.
+                # Passes 5-7: semantic passes scoped to changed files.
                 self._reindex_semantic_passes(changed_file_ids)
 
                 # Mark successfully indexed files as indexed
@@ -2965,8 +2962,9 @@ class IndexCoordinatorEngine:
     def _reindex_semantic_passes(self, changed_file_ids: list[int]) -> None:
         """Run Passes 5-7 after incremental SPLADE re-encode.
 
-        These are global passes (not file-scoped) but only run when
-        SPLADE vectors exist and files have actually changed.
+        All passes are scoped to *changed_file_ids* so that incremental
+        reindexing only resolves edges belonging to the files that actually
+        changed, rather than rescanning the entire repo.
         """
         if not changed_file_ids:
             return
@@ -2984,11 +2982,11 @@ class IndexCoordinatorEngine:
             resolve_unresolved_shapes,
         )
 
-        # Pass 5: Semantic resolution — try to resolve remaining edges.
+        # Pass 5: Semantic resolution — resolve edges in changed files.
         try:
-            refs = resolve_unresolved_refs(self.db)
-            accesses = resolve_unresolved_accesses(self.db)
-            shapes = resolve_unresolved_shapes(self.db)
+            refs = resolve_unresolved_refs(self.db, file_ids=changed_file_ids)
+            accesses = resolve_unresolved_accesses(self.db, file_ids=changed_file_ids)
+            shapes = resolve_unresolved_shapes(self.db, file_ids=changed_file_ids)
             log.debug("reindex.semantic_resolve.complete",
                       extra={"refs": refs, "accesses": accesses, "shapes": shapes})
         except Exception:
@@ -3010,8 +3008,8 @@ class IndexCoordinatorEngine:
             if doc_file_ids:
                 chunks = index_doc_chunk_vectors(self.db, file_ids=doc_file_ids)
                 log.debug("reindex.doc_chunks.encode", extra={"chunks": chunks})
-            # Re-link all chunks against updated def vectors
-            edges = link_doc_chunks_to_defs(self.db)
+            # Re-link chunks in changed doc files against updated def vectors
+            edges = link_doc_chunks_to_defs(self.db, file_ids=doc_file_ids)
             log.debug("reindex.doc_chunks.link", extra={"edges": edges})
         except Exception:
             log.warning("reindex.doc_chunks.failed", exc_info=True)

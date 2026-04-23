@@ -523,11 +523,42 @@ class SpladeEncoder:
             providers=providers,
         )
 
+    @staticmethod
+    def _validate_model_batch_axis(onnx_path: Path) -> None:
+        """Verify the ONNX model has a dynamic batch axis on its output.
+
+        Models with a hardcoded batch dimension (e.g. ``[1, seq, vocab]``)
+        cause CUDA buffer-reuse failures when batch > 1.  Fail fast with
+        a clear message instead of surfacing a cryptic shape-mismatch
+        error at inference time.
+        """
+        try:
+            import onnx
+        except ImportError:
+            return
+        try:
+            model = onnx.load(str(onnx_path), load_external_data=False)
+        except Exception:
+            return
+        for out in model.graph.output:
+            dims = out.type.tensor_type.shape.dim
+            if not dims:
+                continue
+            first = dims[0]
+            if first.dim_value and first.dim_value > 0:
+                raise RuntimeError(
+                    f"SPLADE ONNX model has hardcoded batch dimension "
+                    f"({first.dim_value}) on output '{out.name}'. "
+                    f"The model must use a dynamic batch axis (dim_param). "
+                    f"Re-export the model or update the coderecon-models-splade package."
+                )
+
     def load(self) -> None:
         """Load ONNX session + tokenizer (lazy, auto-detect GPU)."""
         global _gpu_active, BATCH_SIZE  # noqa: PLW0603
         if self._session is not None:
             return
+        self._validate_model_batch_axis(self.onnx_path)
         # Query VRAM *before* session creation so we can configure
         # gpu_mem_limit on the first session.
         self._vram_bytes = _query_gpu_vram_bytes()
@@ -621,7 +652,10 @@ class SpladeEncoder:
                 or "failed to allocate memory" in err_msg
                 or "smaller than requested" in err_msg
             )
-            if not _gpu_active or not is_oom:
+            # ONNX buffer reuse fails when batch/sequence dims change
+            # between runs.  Treat as transient and halve → CPU-fallback.
+            is_shape = "shape mismatch" in err_msg
+            if not _gpu_active or not (is_oom or is_shape):
                 raise
             log.warning(
                 "splade.gpu_oom",

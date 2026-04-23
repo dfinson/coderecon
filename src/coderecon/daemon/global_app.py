@@ -193,6 +193,9 @@ class GlobalDaemon:
         except Exception:
             worktrees = []
 
+        # Resolve the repo's default branch once for all worktree diffs.
+        base_branch = git_ops.default_branch()
+
         if not worktrees:
             # Single worktree (no git worktree setup) — always activate main
             wt_slot = await self._activate_worktree(
@@ -221,7 +224,7 @@ class GlobalDaemon:
                         wt_git = GitOps(wt_path)
                         loop = asyncio.get_event_loop()
                         diff_paths = await loop.run_in_executor(
-                            None, wt_git.files_changed_vs, "main",
+                            None, wt_git.files_changed_vs, base_branch,
                         )
                         if diff_paths:
                             abs_paths = [wt_path / p for p in diff_paths]
@@ -550,18 +553,27 @@ class GlobalDaemon:
         For the main worktree: uses ``changed_since_last_index()`` (git-diff
         based) to find files changed since the last indexed commit.
 
-        For non-main worktrees: uses ``git diff main...HEAD`` to find files
-        that differ from main, then queues only those files under the worktree's
-        own tag (the diff-only strategy — unchanged files fall through to the
-        main worktree's entries in overlay queries).
+        For non-main worktrees: diffs against the repo's default branch to
+        find files that differ, then queues only those files under the
+        worktree's own tag (the diff-only strategy — unchanged files fall
+        through to the main worktree's entries in overlay queries).
         """
         from coderecon.git.ops import GitOps
 
         for name, slot in self._slots.items():
             loop = asyncio.get_event_loop()
 
-            # Main worktree: use the coordinator's reconciler (indexed-commit based).
+            # Resolve default branch once per repo.
             main_slot = slot.worktrees.get("main")
+            base_branch: str | None = None
+            if main_slot is not None:
+                try:
+                    _main_git = GitOps(main_slot.repo_root)
+                    base_branch = _main_git.default_branch()
+                except Exception:
+                    base_branch = "main"
+
+            # Main worktree: use the coordinator's reconciler (indexed-commit based).
             if main_slot is not None:
                 changed = await loop.run_in_executor(
                     None, slot.coordinator.changed_since_last_index
@@ -577,14 +589,14 @@ class GlobalDaemon:
                 else:
                     log.debug("startup_scan_clean", repo=name, worktree="main")
 
-            # Non-main worktrees: queue files that diff from main.
+            # Non-main worktrees: queue files that diff from default branch.
             for wt_name, wt_slot in slot.worktrees.items():
                 if wt_name == "main":
                     continue
                 try:
                     git_ops = GitOps(wt_slot.repo_root)
                     diff_paths = await loop.run_in_executor(
-                        None, git_ops.files_changed_vs, "main"
+                        None, git_ops.files_changed_vs, base_branch or "main"
                     )
                     if diff_paths:
                         abs_paths = [wt_slot.repo_root / p for p in diff_paths]
@@ -632,6 +644,8 @@ class GlobalDaemon:
         except Exception:
             return []
 
+        base_branch = git_ops.default_branch()
+
         new_names: list[str] = []
         for wt in worktrees:
             # Skip already-activated AND already-known (freshness gate set)
@@ -653,12 +667,12 @@ class GlobalDaemon:
             )
             new_names.append(wt.name)
 
-            # Queue diff-only reindex: files that differ from main.
+            # Queue diff-only reindex: files that differ from default branch.
             try:
                 loop = asyncio.get_event_loop()
                 wt_git = GitOps(wt_path)
                 diff_paths = await loop.run_in_executor(
-                    None, wt_git.files_changed_vs, "main"
+                    None, wt_git.files_changed_vs, base_branch
                 )
                 if diff_paths:
                     abs_paths = [wt_path / p for p in diff_paths]

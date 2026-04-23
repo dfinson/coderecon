@@ -135,8 +135,10 @@ class Reconciler:
         else:
             files_to_check = [self._normalize_path(p, _effective_root) for p in paths]
 
-        # Get current hashes from database
-        db_hashes = self._get_db_hashes(files_to_check)
+        # Get current hashes from database — scoped to this worktree so
+        # files that exist in *other* worktrees are correctly treated as
+        # "added" (with language detection) rather than "modified".
+        db_hashes = self._get_db_hashes(files_to_check, worktree_id=worktree_id)
 
         # Compute current hashes and detect changes
         added: list[dict[str, str | float | None]] = []
@@ -175,6 +177,7 @@ class Reconciler:
                         {
                             "path": rel_path,
                             "content_hash": content_hash,
+                            "language_family": self._detect_language(rel_path),
                             "worktree_id": worktree_id,
                             "indexed_at": None,
                         }
@@ -198,7 +201,7 @@ class Reconciler:
                     File,
                     modified,
                     conflict_columns=["worktree_id", "path"],
-                    update_columns=["content_hash", "indexed_at"],
+                    update_columns=["content_hash", "language_family", "indexed_at"],
                 )
 
             # Remove deleted files (CASCADE deletes dependent facts automatically)
@@ -289,15 +292,22 @@ class Reconciler:
         """Get all files tracked by git."""
         return self.git.tracked_files()
 
-    def _get_db_hashes(self, paths: list[str]) -> dict[str, str]:
-        """Get content hashes from database for given paths."""
+    def _get_db_hashes(self, paths: list[str], *, worktree_id: int = 0) -> dict[str, str]:
+        """Get content hashes from database for given paths.
+
+        Scoped to *worktree_id* so that files belonging to other worktrees
+        don't shadow new files in this worktree.
+        """
         if not paths:
             return {}
 
         with self.db.session() as session:
             from sqlmodel import col, select
 
-            stmt = select(File.path, File.content_hash).where(col(File.path).in_(paths))
+            stmt = (
+                select(File.path, File.content_hash)
+                .where(col(File.path).in_(paths), File.worktree_id == worktree_id)
+            )
             results = session.exec(stmt)
             return {row[0]: row[1] for row in results if row[1] is not None}
 
