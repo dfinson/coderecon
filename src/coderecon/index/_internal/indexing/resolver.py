@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import text
 from sqlmodel import col, select
 
+from coderecon.core.languages import exportable_kinds_for_language
 from coderecon.index.models import (
     BindTargetKind,
     Certainty,
@@ -185,13 +186,20 @@ class ReferenceResolver:
         if imp is None:
             return None
 
-        imp_file_id, source_literal, imported_name = imp
+        imp_file_id, source_literal, imported_name, resolved_path = imp
         if not source_literal:
             return None
 
-        target_file_id = self._find_module_file(
-            source_literal, importing_file_id=imp_file_id
+        # Prefer resolved_path from ImportPathResolver (handles all
+        # language-specific resolution: extension remapping, tsconfig paths,
+        # go.mod, cargo aliases, etc.)
+        target_file_id = (
+            self._path_to_file.get(resolved_path) if resolved_path else None
         )
+        if target_file_id is None:
+            target_file_id = self._find_module_file(
+                source_literal, importing_file_id=imp_file_id
+            )
         if target_file_id is None:
             return None
 
@@ -294,18 +302,27 @@ class ReferenceResolver:
             self._bind_cache[(file_id, name)] = (target_kind, target_uid)
 
     def _build_import_cache(self, session: object) -> None:
-        """Pre-cache import_uid -> (file_id, source_literal, imported_name)."""
+        """Pre-cache import_uid -> (file_id, source_literal, imported_name, resolved_path)."""
         self._import_cache = {}
         rows = session.execute(  # type: ignore[attr-defined]
-            text("SELECT import_uid, file_id, source_literal, imported_name FROM import_facts")
+            text(
+                "SELECT import_uid, file_id, source_literal, imported_name, resolved_path "
+                "FROM import_facts"
+            )
         ).fetchall()
-        for import_uid, file_id, source_literal, imported_name in rows:
-            self._import_cache[import_uid] = (file_id, source_literal or "", imported_name or "")
+        for import_uid, file_id, source_literal, imported_name, resolved_path in rows:
+            self._import_cache[import_uid] = (
+                file_id,
+                source_literal or "",
+                imported_name or "",
+                resolved_path or "",
+            )
 
     def _build_module_cache(self, session: object) -> None:
         """Build mapping from module path to file_id, and file_id to path."""
         self._module_to_file = {}  # reset
         self._file_paths = {}  # reset
+        self._path_to_file: dict[str, int] = {}  # path -> file_id reverse lookup
 
         stmt = select(File.id, File.path)
         files = session.exec(stmt).all()  # type: ignore[attr-defined]
@@ -314,6 +331,7 @@ class ReferenceResolver:
             if file_id is None:
                 continue
             self._file_paths[file_id] = path
+            self._path_to_file[path] = file_id
             # Convert path to module path (e.g., src/foo/bar.py -> src.foo.bar)
             module_path = self._path_to_module(path)
             if module_path:
@@ -335,13 +353,25 @@ class ReferenceResolver:
         """
         self._file_exports = {}
 
-        # Step 1: Get all top-level definitions
-        stmt = select(DefFact).where(
-            col(DefFact.kind).in_(["function", "class", "variable"]),
-        )
+        # Build file_id -> language_family lookup for kind filtering
+        file_lang: dict[int, str] = {}
+        rows = session.execute(  # type: ignore[attr-defined]
+            text("SELECT id, language_family FROM files")
+        ).fetchall()
+        for fid, lang in rows:
+            if fid is not None and lang:
+                file_lang[fid] = lang
+
+        # Step 1: Get all top-level definitions, filtered by per-language
+        # exportable kinds (defined in core.languages)
+        stmt = select(DefFact)
         defs = session.exec(stmt).all()  # type: ignore[attr-defined]
 
         for d in defs:
+            lang = file_lang.get(d.file_id, "")
+            if d.kind not in exportable_kinds_for_language(lang):
+                continue
+
             if d.file_id not in self._file_exports:
                 self._file_exports[d.file_id] = {}
 

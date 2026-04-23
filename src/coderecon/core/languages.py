@@ -64,6 +64,7 @@ class Language:
     markers_package: tuple[str, ...] = ()
     grammar: str | None = None
     test_patterns: tuple[str, ...] = ()
+    exportable_kinds: frozenset[str] = field(default_factory=lambda: frozenset({"function", "class"}))
     ambient: bool = False
     priority: int = 50
 
@@ -112,6 +113,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         markers_workspace=("pnpm-workspace.yaml", "lerna.json", "nx.json", "turbo.json"),
         markers_package=("package.json", "deno.json", "tsconfig.json"),
         grammar="typescript",  # TypeScript grammar handles JS/TS/JSX/TSX
+        exportable_kinds=frozenset({"function", "class", "interface", "type_alias", "enum"}),
         test_patterns=(
             "*.test.js",
             "*.test.ts",
@@ -144,6 +146,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         markers_package=("go.mod",),
         grammar="go",
         test_patterns=("*_test.go",),
+        exportable_kinds=frozenset({"function", "type", "interface"}),
         priority=80,
     ),
     Language(
@@ -155,6 +158,9 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         markers_package=("cargo.toml",),
         grammar="rust",
         test_patterns=("test_*.rs", "*_test.rs", "tests/*.rs"),
+        exportable_kinds=frozenset(
+            {"function", "struct", "enum", "trait", "type_alias", "constant", "variable", "module"}
+        ),
         priority=80,
     ),
     # =========================================================================
@@ -174,6 +180,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
             "src/test/*.java",
             "*/src/test/*.java",
         ),
+        exportable_kinds=frozenset({"class", "interface", "enum", "record"}),
         priority=80,
     ),
     Language(
@@ -192,6 +199,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
             "src/*Test/*.kt",
             "*/src/*Test/*.kt",
         ),
+        exportable_kinds=frozenset({"function", "class", "object"}),
         priority=75,
     ),
     Language(
@@ -209,6 +217,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
             "src/test/*.scala",
             "*/src/test/*.scala",
         ),
+        exportable_kinds=frozenset({"function", "class", "object", "trait", "val", "var"}),
         priority=75,
     ),
     Language(
@@ -233,6 +242,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         markers_package=(),
         grammar="c_sharp",
         test_patterns=("*Tests.cs", "*Test.cs"),
+        exportable_kinds=frozenset({"class", "interface", "struct", "enum", "record", "delegate"}),
         priority=80,
     ),
     Language(
@@ -273,6 +283,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
             "tests/*.cpp",
             "tests/*.c",
         ),
+        exportable_kinds=frozenset({"function", "class", "struct", "enum", "type_alias"}),
         priority=60,
     ),
     # =========================================================================
@@ -312,6 +323,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         markers_package=("gemfile",),
         grammar="ruby",
         test_patterns=("*_spec.rb", "*_test.rb", "spec_*.rb"),
+        exportable_kinds=frozenset({"function", "class", "module"}),
         priority=70,
     ),
     Language(
@@ -322,6 +334,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         markers_package=("composer.json",),
         grammar="php",
         test_patterns=("*Test.php",),
+        exportable_kinds=frozenset({"function", "class", "interface", "trait", "enum"}),
         priority=70,
     ),
     Language(
@@ -332,6 +345,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         markers_package=("package.swift",),
         grammar="swift",
         test_patterns=("*Tests.swift",),
+        exportable_kinds=frozenset({"class", "struct", "enum", "protocol", "function"}),
         priority=70,
     ),
     # =========================================================================
@@ -345,6 +359,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         markers_package=("mix.exs",),
         grammar="elixir",
         test_patterns=("*_test.exs",),
+        exportable_kinds=frozenset({"module", "function", "macro", "protocol", "struct"}),
         priority=70,
     ),
     Language(
@@ -364,6 +379,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         markers_package=("stack.yaml", "package.yaml"),
         grammar="haskell",
         test_patterns=("*Spec.hs", "*Test.hs", "test/*.hs", "tests/*.hs"),
+        exportable_kinds=frozenset({"function", "type_alias", "data", "newtype", "type_class"}),
         priority=70,
     ),
     Language(
@@ -374,6 +390,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         markers_package=("dune-project", "dune"),
         grammar="ocaml",
         test_patterns=("test_*.ml", "*_test.ml", "test/*.ml", "tests/*.ml"),
+        exportable_kinds=frozenset({"function", "variable", "type", "module", "module_type"}),
         priority=70,
     ),
     Language(
@@ -445,6 +462,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         markers_package=(),
         grammar="lua",
         test_patterns=("*_spec.lua", "*_test.lua", "spec/*.lua", "tests/*.lua", "test/*.lua"),
+        exportable_kinds=frozenset({"function", "variable"}),
         priority=60,
     ),
     Language(
@@ -474,6 +492,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         markers_package=("project.toml",),
         grammar="julia",
         test_patterns=("runtests.jl", "test_*.jl", "*_test.jl", "test/*.jl", "tests/*.jl"),
+        exportable_kinds=frozenset({"function", "macro", "struct", "module", "abstract_type", "constant"}),
         priority=70,
     ),
     # =========================================================================
@@ -486,6 +505,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         markers_workspace=(),
         markers_package=("build.zig",),
         grammar="zig",
+        exportable_kinds=frozenset({"function", "variable"}),
         priority=70,
     ),
     Language(
@@ -541,6 +561,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         markers_package=("pubspec.yaml",),
         grammar="dart",
         test_patterns=("*_test.dart",),
+        exportable_kinds=frozenset({"function", "class", "enum"}),
         priority=70,
     ),
     Language(
@@ -842,6 +863,16 @@ ALL_LANGUAGES: tuple[Language, ...] = (
 # =============================================================================
 
 LANGUAGES_BY_NAME: dict[str, Language] = {lang.name: lang for lang in ALL_LANGUAGES}
+
+_DEFAULT_EXPORTABLE_KINDS: frozenset[str] = frozenset({"function", "class"})
+
+
+def exportable_kinds_for_language(language_name: str) -> frozenset[str]:
+    """Return the set of def kinds that are top-level exportable for a language."""
+    lang = LANGUAGES_BY_NAME.get(language_name)
+    if lang is not None:
+        return lang.exportable_kinds
+    return _DEFAULT_EXPORTABLE_KINDS
 
 
 def _build_extension_multimap() -> dict[str, tuple[str, ...]]:
