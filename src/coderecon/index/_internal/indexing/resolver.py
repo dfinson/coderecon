@@ -79,6 +79,8 @@ class ReferenceResolver:
         self._file_exports: dict[int, dict[str, str]] = {}  # name -> def_uid
         # Cache (file_id, name) -> LocalBindFact fields
         self._bind_cache: dict[tuple[int, str], tuple[str, str]] = {}  # -> (target_kind, target_uid)
+        # Cache file_id -> list of import_uids for wildcard imports (from X import *)
+        self._wildcard_imports: dict[int, list[str]] = {}
         # Cache import_uid -> ImportFact fields
         self._import_cache: dict[str, tuple[int, str, str]] = {}  # -> (file_id, source_literal, imported_name)
 
@@ -152,6 +154,49 @@ class ReferenceResolver:
                 )
                 session.commit()
 
+        # Second pass: resolve UNKNOWN refs in files with wildcard imports.
+        # Wildcard imports (from X import *) don't create per-name binds,
+        # so refs stay at UNKNOWN tier.  We only scan files that actually
+        # have wildcard imports to avoid processing the full UNKNOWN set.
+        if self._wildcard_imports:
+            wc_fids = list(self._wildcard_imports.keys())
+            with self._db.session() as session:
+                placeholders = ", ".join(f":wf_{i}" for i in range(len(wc_fids)))
+                binds = {f"wf_{i}": fid for i, fid in enumerate(wc_fids)}
+                wc_rows = session.execute(
+                    text(
+                        f"SELECT ref_id, file_id, token_text "
+                        f"FROM ref_facts "
+                        f"WHERE ref_tier = :tier AND target_def_uid IS NULL "
+                        f"AND file_id IN ({placeholders})"
+                    ),
+                    {"tier": RefTier.UNKNOWN.value, **binds},
+                ).fetchall()
+
+            wc_updates: list[tuple[str, str, int]] = []
+            for ref_id, file_id, token_text in wc_rows:
+                for imp_uid in self._wildcard_imports.get(file_id, ()):
+                    result = self._resolve_wildcard_inmem(imp_uid, token_text)
+                    if result is not None:
+                        wc_updates.append((result[0], result[1], ref_id))
+                        stats.refs_resolved += 1
+                        break
+
+            if wc_updates:
+                with self._db.session() as session:
+                    session.execute(
+                        text(
+                            "UPDATE ref_facts "
+                            "SET target_def_uid = :def_uid, certainty = :certainty "
+                            "WHERE ref_id = :ref_id"
+                        ),
+                        [
+                            {"def_uid": uid, "certainty": cert, "ref_id": rid}
+                            for uid, cert, rid in wc_updates
+                        ],
+                    )
+                    session.commit()
+
         if on_progress and total > 0:
             on_progress(total, total)
 
@@ -165,16 +210,50 @@ class ReferenceResolver:
         Returns (target_def_uid, certainty) or None.
         """
         bind = self._bind_cache.get((file_id, token_text))
-        if bind is None:
+        if bind is not None:
+            target_kind, target_uid = bind
+
+            if target_kind == BindTargetKind.DEF.value:
+                return (target_uid, Certainty.CERTAIN.value)
+
+            if target_kind == BindTargetKind.IMPORT.value:
+                return self._resolve_import_inmem(file_id, target_uid)
+
+        # Fallback: check wildcard imports (from X import *, import * from)
+        # The bind for "*" can't match individual names, so we try each
+        # wildcard source module's exports for this token.
+        for imp_uid in self._wildcard_imports.get(file_id, ()):
+            result = self._resolve_wildcard_inmem(imp_uid, token_text)
+            if result is not None:
+                return result
+
+        return None
+
+    def _resolve_wildcard_inmem(
+        self, import_uid: str, token_text: str
+    ) -> tuple[str, str] | None:
+        """Resolve a name via wildcard import (from X import *)."""
+        imp = self._import_cache.get(import_uid)
+        if imp is None:
             return None
 
-        target_kind, target_uid = bind
+        imp_file_id, source_literal, _imported_name, resolved_path = imp
+        if not source_literal:
+            return None
 
-        if target_kind == BindTargetKind.DEF.value:
-            return (target_uid, Certainty.CERTAIN.value)
+        target_file_id = (
+            self._path_to_file.get(resolved_path) if resolved_path else None
+        )
+        if target_file_id is None:
+            target_file_id = self._find_module_file(
+                source_literal, importing_file_id=imp_file_id
+            )
+        if target_file_id is None:
+            return None
 
-        if target_kind == BindTargetKind.IMPORT.value:
-            return self._resolve_import_inmem(file_id, target_uid)
+        exports = self._file_exports.get(target_file_id, {})
+        if token_text in exports:
+            return (exports[token_text], Certainty.UNCERTAIN.value)
 
         return None
 
@@ -276,6 +355,46 @@ class ReferenceResolver:
                 )
                 session.commit()
 
+        # Second pass: wildcard imports in the target files
+        wc_fids = [fid for fid in file_ids if fid in self._wildcard_imports]
+        if wc_fids:
+            with self._db.session() as session:
+                ph = ", ".join(f":wf_{i}" for i in range(len(wc_fids)))
+                wc_binds = {f"wf_{i}": fid for i, fid in enumerate(wc_fids)}
+                wc_rows = session.execute(
+                    text(
+                        f"SELECT ref_id, file_id, token_text "
+                        f"FROM ref_facts "
+                        f"WHERE ref_tier = :tier AND target_def_uid IS NULL "
+                        f"AND file_id IN ({ph})"
+                    ),
+                    {"tier": RefTier.UNKNOWN.value, **wc_binds},
+                ).fetchall()
+
+            wc_updates: list[tuple[str, str, int]] = []
+            for ref_id, file_id, token_text in wc_rows:
+                for imp_uid in self._wildcard_imports.get(file_id, ()):
+                    result = self._resolve_wildcard_inmem(imp_uid, token_text)
+                    if result is not None:
+                        wc_updates.append((result[0], result[1], ref_id))
+                        stats.refs_resolved += 1
+                        break
+
+            if wc_updates:
+                with self._db.session() as session:
+                    session.execute(
+                        text(
+                            "UPDATE ref_facts "
+                            "SET target_def_uid = :def_uid, certainty = :certainty "
+                            "WHERE ref_id = :ref_id"
+                        ),
+                        [
+                            {"def_uid": uid, "certainty": cert, "ref_id": rid}
+                            for uid, cert, rid in wc_updates
+                        ],
+                    )
+                    session.commit()
+
         if on_progress and total > 0:
             on_progress(total, total)
 
@@ -300,6 +419,8 @@ class ReferenceResolver:
             ).fetchall()
         for file_id, name, target_kind, target_uid in rows:
             self._bind_cache[(file_id, name)] = (target_kind, target_uid)
+            if name == "*" and target_kind == BindTargetKind.IMPORT.value:
+                self._wildcard_imports.setdefault(file_id, []).append(target_uid)
 
     def _build_import_cache(self, session: object) -> None:
         """Pre-cache import_uid -> (file_id, source_literal, imported_name, resolved_path)."""
@@ -407,14 +528,26 @@ class ReferenceResolver:
             if source_file_id is None:
                 continue
 
-            # Look up the def_uid from the source module's exports
             source_exports = self._file_exports.get(source_file_id, {})
-            if imp.imported_name in source_exports:
-                def_uid = source_exports[imp.imported_name]
-                # Add to this file's exports
+
+            if bind.name == "*":
+                # Wildcard re-export (from X import *) — merge all public
+                # source exports into this file's exports.
+                if not source_exports:
+                    continue
                 if bind.file_id not in self._file_exports:
                     self._file_exports[bind.file_id] = {}
-                self._file_exports[bind.file_id][bind.name] = def_uid
+                current = self._file_exports[bind.file_id]
+                for name, def_uid in source_exports.items():
+                    if not name.startswith("_"):
+                        current.setdefault(name, def_uid)
+            else:
+                # Named re-export: look up the def_uid from source module
+                if imp.imported_name in source_exports:
+                    def_uid = source_exports[imp.imported_name]
+                    if bind.file_id not in self._file_exports:
+                        self._file_exports[bind.file_id] = {}
+                    self._file_exports[bind.file_id][bind.name] = def_uid
 
         # Step 3: Propagate JS/TS re-exports (export * from, export { X } from).
         # Re-export ImportFacts with import_kind='js_reexport' forward exports
