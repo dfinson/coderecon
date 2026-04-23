@@ -879,7 +879,11 @@ class IndexCoordinatorEngine:
             removed_paths: list[Path] = []
 
             with self.db.session() as session:
-                indexed_set = set(session.exec(select(File.path)).all())
+                indexed_set = set(
+                    session.exec(
+                        select(File.path).where(File.worktree_id == _wt_id)
+                    ).all()
+                )
 
             for path in changed_paths:
                 full_path = _effective_root / path
@@ -985,17 +989,16 @@ class IndexCoordinatorEngine:
                                     continue
                                 file_to_context[str_path] = root_id
 
-                    # Collect file IDs for scoped resolution passes (batch query)
-                    # Filter by worktree_id to avoid picking up stale rows from other worktrees.
+                    # Populate file_id_map for existing files so index_files()
+                    # reuses them instead of querying _ensure_file_id() per file.
+                    # NOTE: changed_file_ids is computed AFTER the extraction loop
+                    # so it captures File rows created by _ensure_file_id() for new files.
                     files = session.exec(
                         select(File).where(
                             col(File.path).in_(str_changed),
                             File.worktree_id == _wt_id,
                         )
                     ).all()
-                    changed_file_ids: list[int] = [f.id for f in files if f.id is not None]
-                    # Populate file_id_map for existing files so index_files()
-                    # reuses them instead of querying _ensure_file_id() per file
                     for f in files:
                         if f.id is not None:
                             file_id_map[f.path] = f.id
@@ -1074,6 +1077,17 @@ class IndexCoordinatorEngine:
 
                 # Reload searcher to see committed changes
                 self._lexical.reload()
+
+                # Collect file IDs for scoped resolution passes AFTER extraction
+                # so that File rows created by _ensure_file_id() are included.
+                with self.db.session() as session:
+                    _id_rows = session.exec(
+                        select(File.id).where(
+                            col(File.path).in_(str_changed),
+                            File.worktree_id == _wt_id,
+                        )
+                    ).all()
+                    changed_file_ids: list[int] = [fid for fid in _id_rows if fid is not None]
 
                 # Pass 1.5 / 2 / 3: cross-file resolution (scoped to changed files)
                 if changed_file_ids:
