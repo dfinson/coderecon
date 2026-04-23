@@ -291,14 +291,20 @@ def resolve_unresolved_refs(db: Database, *, file_ids: list[int] | None = None) 
     all_candidates = _batch_splade_retrieve(queries, all_vecs, pool_size=_CANDIDATE_POOL)
     log.info("semantic_resolver.refs_splade_done elapsed=%.1fs", time.monotonic() - t0)
 
-    # Collect ALL CE pairs and bulk-score with TinyBERT
+    # Collect CE pairs — restrict to same-file candidates only.
+    # Cross-file semantic edges are redundant with live SPLADE retrieval
+    # at query time and dominated by test↔test noise (90%+ on httpx).
     ce_pairs: list[tuple[str, str]] = []
     ce_meta: list[tuple[int, str]] = []  # (item_idx, def_uid)
 
     for i, candidates in enumerate(all_candidates):
         if not candidates:
             continue
+        ref_file_id = unresolved[i].file_id
         for uid, _ in candidates:
+            d = def_map.get(uid)
+            if d is None or d.file_id != ref_file_id:
+                continue
             scaffold = scaffold_cache.get(uid, "")
             if not scaffold:
                 continue
