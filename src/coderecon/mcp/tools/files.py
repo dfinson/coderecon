@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from coderecon.core.languages import EXTENSION_TO_NAME
+from coderecon.core.languages import CONSTANT_KINDS, CONTAINER_KINDS, EXTENSION_TO_NAME
 
 if TYPE_CHECKING:
     from coderecon.mcp.context import AppContext
@@ -153,8 +153,7 @@ async def _build_scaffold(
         imports_out.append(f"{source}: {', '.join(names)}")
 
     # Filter defs based on include_constants
-    constant_kinds = frozenset({"variable", "constant", "val", "var", "property", "field"})
-    filtered_defs = [d for d in defs if include_constants or d.kind not in constant_kinds]
+    filtered_defs = [d for d in defs if include_constants or d.kind not in CONSTANT_KINDS]
 
     # Build symbol tree (hierarchical)
     symbols_out = _build_symbol_tree(
@@ -203,22 +202,7 @@ def _build_symbol_tree(
     # Sort by start_line for stable ordering
     sorted_defs = sorted(defs, key=lambda d: (d.start_line, d.start_col))
 
-    container_kinds = frozenset(
-        {
-            "class",
-            "struct",
-            "enum",
-            "interface",
-            "trait",
-            "module",
-            "namespace",
-            "impl",
-            "protocol",
-            "object",
-            "record",
-            "type_class",
-        }
-    )
+    container_kinds = CONTAINER_KINDS
 
     lines: list[str] = []
     # Stack of (end_line, depth) for nesting
@@ -342,8 +326,7 @@ async def _build_lite_scaffold(
     import_sources = sorted(sources)
 
     # Symbol names only — "kind name", skip constants/variables
-    constant_kinds = frozenset({"variable", "constant", "val", "var", "property", "field"})
-    symbol_names = [f"{d.kind} {d.name}" for d in defs if d.kind not in constant_kinds]
+    symbol_names = [f"{d.kind} {d.name}" for d in defs if d.kind not in CONSTANT_KINDS]
 
     return {
         "total_lines": total_lines,

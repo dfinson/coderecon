@@ -149,18 +149,25 @@ def compute_semantic_neighbors(
         for blk_start in range(0, len(changed_indices), block_size):
             blk_end = min(blk_start + block_size, len(changed_indices))
             blk_idxs = changed_arr[blk_start:blk_end]
-            sim = (M[blk_idxs] @ MT).toarray()  # sparse→dense (blk_size, n)
+            sim = (M[blk_idxs] @ MT).tocsr()  # keep sparse (blk_size, n)
 
             for local_i, global_i in enumerate(blk_idxs):
-                row = sim[local_i]
-                row[global_i] = 0.0  # Zero self-similarity
+                row_start = sim.indptr[local_i]
+                row_end = sim.indptr[local_i + 1]
+                cols = sim.indices[row_start:row_end]
+                vals = sim.data[row_start:row_end]
 
-                mask = row >= sigma_floor
+                # Remove self-similarity
+                keep = cols != global_i
+                cols = cols[keep]
+                vals = vals[keep]
+
+                mask = vals >= sigma_floor
                 if not mask.any():
                     continue
 
-                indices = np.where(mask)[0]
-                scores = row[indices]
+                indices = cols[mask]
+                scores = vals[mask]
 
                 if len(indices) > max_per_def:
                     top_k_idx = np.argpartition(scores, -max_per_def)[-max_per_def:]
@@ -224,19 +231,26 @@ def compute_semantic_neighbors(
 
         for start in range(0, n, block_size):
             end = min(start + block_size, n)
-            sim = (M[start:end] @ MT).toarray()  # sparse→dense (blk_size, n)
+            sim = (M[start:end] @ MT).tocsr()  # keep sparse (blk_size, n)
 
             for local_i in range(end - start):
                 global_i = start + local_i
-                row = sim[local_i]
-                row[global_i] = 0.0
+                row_start = sim.indptr[local_i]
+                row_end = sim.indptr[local_i + 1]
+                cols = sim.indices[row_start:row_end]
+                vals = sim.data[row_start:row_end]
 
-                mask = row >= sigma_floor
+                # Remove self-similarity
+                keep = cols != global_i
+                cols = cols[keep]
+                vals = vals[keep]
+
+                mask = vals >= sigma_floor
                 if not mask.any():
                     continue
 
-                indices = np.where(mask)[0]
-                scores = row[indices]
+                indices = cols[mask]
+                scores = vals[mask]
 
                 if len(indices) > max_per_def:
                     top_k_idx = np.argpartition(scores, -max_per_def)[-max_per_def:]

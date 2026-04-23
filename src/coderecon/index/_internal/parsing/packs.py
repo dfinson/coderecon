@@ -702,6 +702,7 @@ JAVASCRIPT_PACK = LanguagePack(
             3: "js_import",
             4: "js_require",
         },
+        name_overrides={3: "*"},  # namespace import: import * as X
         strip_quotes=True,
     ),
     dynamic_query="""
@@ -789,6 +790,7 @@ TYPESCRIPT_PACK = LanguagePack(
             3: "js_import",
             4: "js_require",
         },
+        name_overrides={3: "*"},  # namespace import: import * as X
         strip_quotes=True,
     ),
     dynamic_query="""
@@ -825,6 +827,7 @@ TSX_PACK = LanguagePack(
             3: "js_import",
             4: "js_require",
         },
+        name_overrides={3: "*"},  # namespace import: import * as X
         strip_quotes=True,
     ),
     dynamic_query="""

@@ -875,6 +875,36 @@ def exportable_kinds_for_language(language_name: str) -> frozenset[str]:
     return _DEFAULT_EXPORTABLE_KINDS
 
 
+# ── Cross-language kind taxonomies ───────────────────────────────
+#
+# These are UNIVERSAL sets covering all languages.  Extra entries that
+# don't appear in a particular language's def table are harmless —
+# they simply never match.  Keeping them here satisfies the rule that
+# *all* language knowledge lives in this module.
+
+TYPE_KINDS: frozenset[str] = frozenset({
+    "class", "struct", "interface", "trait", "enum", "record",
+    "protocol", "object", "data", "newtype", "type_class",
+    "abstract_type", "type",
+})
+"""Def kinds that represent type declarations (participate in type
+hierarchy, receiver shape matching, co-implementor edges)."""
+
+CONTAINER_KINDS: frozenset[str] = frozenset({
+    "class", "struct", "enum", "interface", "trait",
+    "module", "namespace", "impl", "protocol", "object",
+    "record", "type_class",
+})
+"""Def kinds that can contain nested symbol definitions (used for
+hierarchical symbol tree display)."""
+
+CONSTANT_KINDS: frozenset[str] = frozenset({
+    "variable", "constant", "val", "var", "property", "field",
+})
+"""Def kinds that are low-signal for display purposes (constants,
+variables, fields).  Used as an exclusion filter in scaffolds."""
+
+
 def _build_extension_multimap() -> dict[str, tuple[str, ...]]:
     """Build extension -> families mapping, sorted by priority (highest first).
 

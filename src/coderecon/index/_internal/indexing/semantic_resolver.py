@@ -23,6 +23,7 @@ import numpy as np
 from sqlalchemy import text
 from sqlmodel import col, select
 
+from coderecon.core.languages import TYPE_KINDS
 from coderecon.index._internal.indexing.splade import (
     _get_encoder,
     build_def_scaffold,
@@ -200,22 +201,25 @@ def _batch_splade_retrieve(
         dtype=np.float32,
     )
 
-    # scores: (n_queries × n_docs) sparse or dense
-    # For moderate sizes, dense is fine; for large, use sparse multiply
-    scores = (query_matrix @ doc_matrix.T).toarray()  # (n_queries, n_docs)
+    # scores: (n_queries × n_docs) — keep sparse to avoid OOM on large repos
+    scores_sparse = (query_matrix @ doc_matrix.T).tocsr()
 
     log.info("semantic_resolver.batch_retrieve queries=%d docs=%d", len(queries), len(uid_list))
 
     results: list[list[tuple[str, float]]] = []
     for qi in range(len(queries)):
-        row = scores[qi]
+        row_start = scores_sparse.indptr[qi]
+        row_end = scores_sparse.indptr[qi + 1]
+        cols = scores_sparse.indices[row_start:row_end]
+        vals = scores_sparse.data[row_start:row_end]
         # Get indices where score > 0.5
-        mask = row > 0.5
+        mask = vals > 0.5
         if not mask.any():
             results.append([])
             continue
-        idxs = np.where(mask)[0]
-        scored = [(uid_list[j], float(row[j])) for j in idxs]
+        idxs = cols[mask]
+        filtered_vals = vals[mask]
+        scored = [(uid_list[j], float(v)) for j, v in zip(idxs, filtered_vals)]
         scored.sort(key=lambda x: -x[1])
         results.append(scored[:pool_size])
 
@@ -530,8 +534,8 @@ def resolve_unresolved_shapes(db: Database, *, file_ids: list[int] | None = None
             select(File).where(col(File.id).in_(file_ids))
         ).all() if f.id is not None}
 
-        # Only consider class/struct/interface defs as type candidates
-        type_kinds = {"class", "struct", "interface", "trait"}
+        # Only consider type-declaration defs as type candidates
+        type_kinds = TYPE_KINDS
         all_def_uids = list(all_vecs.keys())
         def_map: dict[str, DefFact] = {}
         scaffold_cache: dict[str, str] = {}

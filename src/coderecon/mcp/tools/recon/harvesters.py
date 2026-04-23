@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 
+from coderecon.core.languages import CONSTANT_KINDS, TYPE_KINDS
 from coderecon.mcp.tools.recon.models import (
     EvidenceRecord,
     HarvestCandidate,
@@ -382,7 +383,7 @@ async def _harvest_graph(
                 for sd in sibling_defs:
                     if sd.def_uid == seed_uid:
                         continue
-                    if sd.kind not in ("function", "method", "class"):
+                    if sd.kind in CONSTANT_KINDS:
                         continue
                     raw_edges.append((
                         sd.def_uid, sd, "sibling", seed_idx,
@@ -390,7 +391,7 @@ async def _harvest_graph(
                     ))
 
             # (d) Type hierarchy — co-implementors of same interface
-            if seed_def.kind in ("class", "struct", "interface", "trait"):
+            if seed_def.kind in TYPE_KINDS:
                 co_impl_uids = fq.list_co_implementors(seed_uid)
                 if co_impl_uids:
                     co_defs = fq.batch_get_defs(co_impl_uids)
