@@ -77,12 +77,17 @@ class ReferenceResolver:
         self._file_paths: dict[int, str] = {}
         # Cache file_id -> exported symbols
         self._file_exports: dict[int, dict[str, str]] = {}  # name -> def_uid
-        # Cache (file_id, name) -> LocalBindFact fields
-        self._bind_cache: dict[tuple[int, str], tuple[str, str]] = {}  # -> (target_kind, target_uid)
+        # Cache (file_id, name) -> list of binds with scope context.
+        # Each entry: (scope_id, target_kind, target_uid).
+        # Sorted innermost-first by scope_id descending so the first match
+        # at or above the ref's scope is the correct one.
+        self._bind_cache: dict[tuple[int, str], list[tuple[int, str, str]]] = {}
         # Cache file_id -> list of import_uids for wildcard imports (from X import *)
         self._wildcard_imports: dict[int, list[str]] = {}
         # Cache import_uid -> ImportFact fields
         self._import_cache: dict[str, tuple[int, str, str]] = {}  # -> (file_id, source_literal, imported_name)
+        # Scope parent chain: scope_id -> parent_scope_id (0 = module-level)
+        self._scope_parents: dict[int, int] = {}
 
     def resolve_all(
         self,
@@ -105,7 +110,7 @@ class ReferenceResolver:
             # Load unresolved refs as lightweight tuples (avoid ORM overhead)
             rows = session.execute(
                 text(
-                    "SELECT ref_id, file_id, token_text "
+                    "SELECT ref_id, file_id, token_text, scope_id "
                     "FROM ref_facts "
                     "WHERE ref_tier = :tier AND target_def_uid IS NULL"
                 ),
@@ -118,6 +123,7 @@ class ReferenceResolver:
                 return stats
 
             # Build all caches
+            self._build_scope_parents(session)
             self._build_module_cache(session)
             self._build_export_cache(session)
             self._build_bind_cache(session)
@@ -126,8 +132,8 @@ class ReferenceResolver:
         # Resolve in-memory — all lookups are dict operations, no DB needed
         resolved_updates: list[tuple[str, str, int]] = []  # (def_uid, certainty, ref_id)
 
-        for i, (ref_id, file_id, token_text) in enumerate(rows):
-            result = self._resolve_ref_inmem(file_id, token_text)
+        for i, (ref_id, file_id, token_text, scope_id) in enumerate(rows):
+            result = self._resolve_ref_inmem(file_id, token_text, scope_id)
             if result is not None:
                 def_uid, certainty = result
                 resolved_updates.append((def_uid, certainty, ref_id))
@@ -203,21 +209,26 @@ class ReferenceResolver:
         return stats
 
     def _resolve_ref_inmem(
-        self, file_id: int, token_text: str
+        self, file_id: int, token_text: str, scope_id: int | None = None,
     ) -> tuple[str, str] | None:
         """Resolve a single ref using only in-memory caches.
 
+        When *scope_id* is provided, walks the scope chain from innermost
+        to outermost (module-level = 0) to find the closest matching bind.
+        Falls back to any bind in the file when scope walk finds nothing.
+
         Returns (target_def_uid, certainty) or None.
         """
-        bind = self._bind_cache.get((file_id, token_text))
-        if bind is not None:
-            target_kind, target_uid = bind
-
-            if target_kind == BindTargetKind.DEF.value:
-                return (target_uid, Certainty.CERTAIN.value)
-
-            if target_kind == BindTargetKind.IMPORT.value:
-                return self._resolve_import_inmem(file_id, target_uid)
+        binds = self._bind_cache.get((file_id, token_text))
+        if binds is not None:
+            # Scope-aware lookup: walk from the ref's scope outward
+            match = self._find_bind_in_scope(binds, scope_id)
+            if match is not None:
+                target_kind, target_uid = match
+                if target_kind == BindTargetKind.DEF.value:
+                    return (target_uid, Certainty.CERTAIN.value)
+                if target_kind == BindTargetKind.IMPORT.value:
+                    return self._resolve_import_inmem(file_id, target_uid)
 
         # Fallback: check wildcard imports (from X import *, import * from)
         # The bind for "*" can't match individual names, so we try each
@@ -228,6 +239,50 @@ class ReferenceResolver:
                 return result
 
         return None
+
+    def _find_bind_in_scope(
+        self,
+        binds: list[tuple[int, str, str]],
+        scope_id: int | None,
+    ) -> tuple[str, str] | None:
+        """Walk from *scope_id* outward to find the innermost matching bind.
+
+        Each bind is ``(bind_scope_id, target_kind, target_uid)``.
+        Returns ``(target_kind, target_uid)`` or None.
+        """
+        if len(binds) == 1:
+            # Fast path: only one bind, no need to walk scopes.
+            return (binds[0][1], binds[0][2])
+
+        if scope_id is None:
+            # No scope info on the ref — prefer module-level (0) bind,
+            # then fall back to the first bind.
+            for bid, tk, tu in binds:
+                if bid == 0:
+                    return (tk, tu)
+            return (binds[0][1], binds[0][2])
+
+        # Build set of scope ids from ref scope to module-level
+        chain: list[int] = []
+        current = scope_id
+        _visited: set[int] = set()
+        while current and current not in _visited:
+            chain.append(current)
+            _visited.add(current)
+            current = self._scope_parents.get(current, 0)
+        chain.append(0)  # module-level sentinel
+
+        # Index binds by scope_id for O(1) lookup per chain step
+        bind_by_scope: dict[int, tuple[str, str]] = {}
+        for bid, tk, tu in binds:
+            bind_by_scope.setdefault(bid, (tk, tu))
+
+        for sid in chain:
+            if sid in bind_by_scope:
+                return bind_by_scope[sid]
+
+        # No match on the chain — fall back to first bind
+        return (binds[0][1], binds[0][2])
 
     def _resolve_wildcard_inmem(
         self, import_uid: str, token_text: str
@@ -309,7 +364,7 @@ class ReferenceResolver:
             binds = {f"fid_{i}": fid for i, fid in enumerate(file_ids)}
             rows = session.execute(
                 text(
-                    f"SELECT ref_id, file_id, token_text "
+                    f"SELECT ref_id, file_id, token_text, scope_id "
                     f"FROM ref_facts "
                     f"WHERE ref_tier = :tier AND target_def_uid IS NULL "
                     f"AND file_id IN ({placeholders})"
@@ -322,6 +377,7 @@ class ReferenceResolver:
             if not rows:
                 return stats
 
+            self._build_scope_parents(session)
             self._build_module_cache(session)
             self._build_export_cache(session)
             self._build_bind_cache(session, file_ids=file_ids)
@@ -329,8 +385,8 @@ class ReferenceResolver:
 
         # Resolve in-memory
         resolved_updates: list[tuple[str, str, int]] = []
-        for i, (ref_id, file_id, token_text) in enumerate(rows):
-            result = self._resolve_ref_inmem(file_id, token_text)
+        for i, (ref_id, file_id, token_text, scope_id) in enumerate(rows):
+            result = self._resolve_ref_inmem(file_id, token_text, scope_id)
             if result is not None:
                 def_uid, certainty = result
                 resolved_updates.append((def_uid, certainty, ref_id))
@@ -400,25 +456,40 @@ class ReferenceResolver:
 
         return stats
 
+    def _build_scope_parents(self, session: object) -> None:
+        """Pre-cache scope_id -> parent_scope_id from scope_facts."""
+        self._scope_parents = {}
+        rows = session.execute(  # type: ignore[attr-defined]
+            text("SELECT scope_id, parent_scope_id FROM scope_facts")
+        ).fetchall()
+        for scope_id, parent_scope_id in rows:
+            self._scope_parents[scope_id] = parent_scope_id or 0
+
     def _build_bind_cache(
         self, session: object, *, file_ids: list[int] | None = None
     ) -> None:
-        """Pre-cache (file_id, name) -> (target_kind, target_uid) from LocalBindFact."""
+        """Pre-cache (file_id, name) -> [(scope_id, target_kind, target_uid)]."""
         self._bind_cache = {}
         if file_ids:
             placeholders = ", ".join(str(fid) for fid in file_ids)
             rows = session.execute(  # type: ignore[attr-defined]
                 text(
-                    f"SELECT file_id, name, target_kind, target_uid "
+                    f"SELECT file_id, name, scope_id, target_kind, target_uid "
                     f"FROM local_bind_facts WHERE file_id IN ({placeholders})"
                 )
             ).fetchall()
         else:
             rows = session.execute(  # type: ignore[attr-defined]
-                text("SELECT file_id, name, target_kind, target_uid FROM local_bind_facts")
+                text(
+                    "SELECT file_id, name, scope_id, target_kind, target_uid "
+                    "FROM local_bind_facts"
+                )
             ).fetchall()
-        for file_id, name, target_kind, target_uid in rows:
-            self._bind_cache[(file_id, name)] = (target_kind, target_uid)
+        for file_id, name, scope_id, target_kind, target_uid in rows:
+            key = (file_id, name)
+            self._bind_cache.setdefault(key, []).append(
+                (scope_id or 0, target_kind, target_uid)
+            )
             if name == "*" and target_kind == BindTargetKind.IMPORT.value:
                 self._wildcard_imports.setdefault(file_id, []).append(target_uid)
 

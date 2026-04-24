@@ -56,6 +56,26 @@ from coderecon.index.models import (
     TypeMemberFact,
 )
 
+# Canonical list of per-file fact tables (keyed by file_id).
+# Used by both the insertion loop and the removal path so they stay in sync.
+# ORDER MATTERS for deletion: ScopeFact must come LAST because RefFact,
+# LocalBindFact, ImportFact, TypeAnnotationFact, MemberAccessFact, and
+# ReceiverShapeFact all have FK references to scope_facts.scope_id.
+_FILE_FACT_TABLES: tuple[type, ...] = (
+    DefFact,
+    RefFact,
+    LocalBindFact,
+    ImportFact,
+    DynamicAccessSite,
+    TypeAnnotationFact,
+    TypeMemberFact,
+    MemberAccessFact,
+    InterfaceImplFact,
+    ReceiverShapeFact,
+    EndpointFact,
+    ScopeFact,  # LAST — other tables FK → scope_facts.scope_id
+)
+
 # Maximum file size for tree-sitter parsing (bytes).  Files above this are
 # still recorded in the file table for lexical search, but no structural
 # facts are extracted.  Prevents pathological parse times on huge generated /
@@ -635,7 +655,7 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
             }
             result.refs.append(ref_dict)
 
-            # Create LocalBindFact for the definition binding (scope_id omitted - not tracking scopes in DB yet)
+            # Create LocalBindFact for the definition binding
             bind_dict = {
                 "unit_id": unit_id,
                 "name": sym.name,
@@ -643,6 +663,7 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                 "target_uid": def_uid,
                 "certainty": Certainty.CERTAIN.value,
                 "reason_code": BindReasonCode.DEF_IN_SCOPE.value,
+                "local_scope_id": containing_scope,
             }
             result.binds.append(bind_dict)
 
@@ -709,7 +730,7 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
             local_name = imp.alias or imp.imported_name
             import_uid_by_alias[local_name] = imp.import_uid
 
-            # Create LocalBindFact for import binding (scope_id omitted - not tracking scopes in DB yet)
+            # Create LocalBindFact for import binding
             bind_dict = {
                 "unit_id": unit_id,
                 "name": local_name,
@@ -717,6 +738,7 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                 "target_uid": imp.import_uid,
                 "certainty": Certainty.CERTAIN.value,
                 "reason_code": BindReasonCode.IMPORT_ALIAS.value,
+                "local_scope_id": imp.scope_id or 0,
             }
             result.binds.append(bind_dict)
 
@@ -1104,40 +1126,30 @@ class StructuralIndexer:
                     continue
 
                 # Delete existing facts for this file (idempotent re-indexing)
-                for fact_model in (
-                    DefFact,
-                    RefFact,
-                    ScopeFact,
-                    ImportFact,
-                    LocalBindFact,
-                    DynamicAccessSite,
-                    TypeAnnotationFact,
-                    TypeMemberFact,
-                    MemberAccessFact,
-                    InterfaceImplFact,
-                    ReceiverShapeFact,
-                    EndpointFact,
-                ):
+                for fact_model in _FILE_FACT_TABLES:
                     writer.delete_where(fact_model, "file_id = :fid", {"fid": file_id})
                 # DocCrossRef uses source_file_id, not file_id
                 writer.delete_where(DocCrossRef, "source_file_id = :fid", {"fid": file_id})
 
-                # Build local_scope_id -> db_scope_id mapping
+                # Build local_scope_id -> db_scope_id mapping.
+                # Scopes are extracted in dependency order (parent before child),
+                # so parent_scope_id is always resolvable from the map.
                 scope_id_map: dict[int, int] = {}  # local_scope_id -> db scope_id
+                from sqlalchemy import text as _sa_text
 
-                # Insert ScopeFacts first (need IDs for refs/binds)
                 for scope_dict in extraction.scopes:
-                    scope_dict.pop("local_scope_id")
+                    local_id = scope_dict.pop("local_scope_id")
                     parent_local_id = scope_dict.pop("parent_local_scope_id")
                     scope_dict["file_id"] = file_id
-                    # Parent scope ID will be resolved after all scopes are inserted
                     scope_dict["parent_scope_id"] = (
-                        scope_id_map.get(parent_local_id) if parent_local_id is not None else None
+                        scope_id_map[parent_local_id]
+                        if parent_local_id is not None and parent_local_id in scope_id_map
+                        else None
                     )
                     writer.insert_many(ScopeFact, [scope_dict])
-                    # Note: For proper parent_scope_id resolution, we'd need to insert
-                    # in dependency order. For now, leave parent_scope_id as None
-                    # and update later if needed.
+                    row = writer.conn.execute(_sa_text("SELECT last_insert_rowid()")).fetchone()
+                    if row is not None:
+                        scope_id_map[local_id] = row[0]
                     result.scopes_extracted += 1
 
                 # Insert DefFacts
@@ -1146,11 +1158,13 @@ class StructuralIndexer:
                     writer.insert_many(DefFact, [def_dict])
                     result.defs_extracted += 1
 
-                # Insert RefFacts
+                # Insert RefFacts — resolve local_scope_id to DB scope_id
                 for ref_dict in extraction.refs:
                     ref_dict["file_id"] = file_id
-                    # Remove local_scope_id (not a DB column, used for internal tracking)
-                    ref_dict.pop("local_scope_id", None)
+                    local_sid = ref_dict.pop("local_scope_id", None)
+                    ref_dict["scope_id"] = (
+                        scope_id_map.get(local_sid) if local_sid else None
+                    )
                     writer.insert_many(RefFact, [ref_dict])
                     result.refs_extracted += 1
 
@@ -1173,11 +1187,13 @@ class StructuralIndexer:
                     writer.insert_many(ImportFact, [import_dict])
                     result.imports_extracted += 1
 
-                # Insert LocalBindFacts
+                # Insert LocalBindFacts — resolve local_scope_id to DB scope_id
                 for bind_dict in extraction.binds:
                     bind_dict["file_id"] = file_id
-                    # scope_id is nullable - leave as None until we properly track scopes
-                    bind_dict["scope_id"] = None
+                    local_sid = bind_dict.pop("local_scope_id", None)
+                    bind_dict["scope_id"] = (
+                        scope_id_map.get(local_sid) if local_sid else None
+                    )
                     writer.insert_many(LocalBindFact, [bind_dict])
                     result.binds_extracted += 1
 

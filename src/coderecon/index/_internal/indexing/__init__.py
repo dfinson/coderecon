@@ -7,6 +7,12 @@ from coderecon.index._internal.indexing.lexical import (
     SearchResults,
     create_index,
 )
+from coderecon.index._internal.indexing.materialize import (
+    materialize_all,
+    materialize_anchor_groups,
+    materialize_exports,
+    materialize_thunks,
+)
 from coderecon.index._internal.indexing.resolver import (
     CrossFileResolutionStats,
     ReferenceResolver,
@@ -53,6 +59,11 @@ __all__ = [
     "ReferenceResolver",
     "ResolutionStats",
     "resolve_references",
+    # Materialization (post-resolution)
+    "materialize_all",
+    "materialize_anchor_groups",
+    "materialize_exports",
+    "materialize_thunks",
     # Cross-file resolution (Pass 1.5 - DB-backed)
     "CrossFileResolutionStats",
     "resolve_namespace_refs",

@@ -55,6 +55,7 @@ from coderecon.index._internal.indexing import (
     FactQueries,
     LexicalIndex,
     StructuralIndexer,
+    materialize_all,
     resolve_references,
     resolve_type_traced,
     run_pass_1_5,
@@ -68,15 +69,20 @@ from coderecon.index.models import (
     Context,
     ContextMarker,
     DefFact,
+    DocCrossRef,
     File,
     ImportFact,
     IndexedCoverageCapability,
     IndexedLintTool,
     ProbeStatus,
     RefFact,
+    RefTier,
+    SemanticNeighborFact,
+    TestCoverageFact,
     TestTarget,
     Worktree,
 )
+from coderecon.index._internal.indexing.structural import _FILE_FACT_TABLES
 from coderecon.lint.tools import registry as lint_registry
 from coderecon.testing.runner_pack import runner_registry
 from coderecon.testing.runtime import ContextRuntime, RuntimeResolver
@@ -1065,7 +1071,9 @@ class IndexCoordinatorEngine:
 
                         # Purge stale structural facts for failed extractions
                         if failed_paths:
-                            self._remove_structural_facts_for_paths(failed_paths)
+                            self._remove_structural_facts_for_paths(
+                                failed_paths, worktree_id=_wt_id,
+                            )
 
                     # Stage removals
                     for path in removed_paths:
@@ -1091,9 +1099,27 @@ class IndexCoordinatorEngine:
 
                 # Pass 1.5 / 2 / 3: cross-file resolution (scoped to changed files)
                 if changed_file_ids:
-                    run_pass_1_5(self.db, None, file_ids=changed_file_ids)
-                    resolve_references(self.db, file_ids=changed_file_ids)
-                    resolve_type_traced(self.db, file_ids=changed_file_ids)
+                    # Invalidate dangling target_def_uid refs: when defs in changed
+                    # files get new UIDs, refs in OTHER files still point at the
+                    # old UID.  NULL them out and widen the resolution scope.
+                    _extra_file_ids = self._invalidate_dangling_refs(changed_file_ids)
+                    _resolve_fids = list(
+                        dict.fromkeys(changed_file_ids + _extra_file_ids)
+                    )
+                    run_pass_1_5(self.db, None, file_ids=_resolve_fids)
+                    resolve_references(self.db, file_ids=_resolve_fids)
+                    resolve_type_traced(self.db, file_ids=_resolve_fids)
+
+                # Sweep orphaned edge rows after resolution
+                self._sweep_orphaned_edges()
+
+                # Materialize ExportSurface/ExportThunk/AnchorGroup tables
+                materialize_all(self.db)
+
+                # Mark coverage facts as stale for defs in changed files
+                # (def body may have changed even if UID survived).
+                if changed_file_ids:
+                    self._mark_coverage_stale(changed_file_ids)
 
                 # SPLADE: re-encode vectors for changed files
                 self._reindex_splade_vectors(changed_file_ids)
@@ -1127,13 +1153,19 @@ class IndexCoordinatorEngine:
 
             # Remove structural facts for removed files
             if removed_paths:
-                self._remove_structural_facts_for_paths([str(p) for p in removed_paths])
+                self._remove_structural_facts_for_paths(
+                    [str(p) for p in removed_paths], worktree_id=_wt_id,
+                )
 
             # Remove File records for removed paths
             if removed_paths:
                 with self.db.bulk_writer() as writer:
                     for path in removed_paths:
-                        writer.delete_where(File, "path = :p", {"p": str(path)})
+                        writer.delete_where(
+                            File,
+                            "path = :p AND worktree_id = :wt",
+                            {"p": str(path), "wt": _wt_id},
+                        )
 
             # Incrementally update test targets for changed test files
             await self._update_test_targets_incremental(new_paths, existing_paths, removed_paths)
@@ -1297,15 +1329,37 @@ class IndexCoordinatorEngine:
             # Resolve type-traced member accesses (Pass 3 - follows type annotations)
             resolve_type_traced(self.db)
 
+        # Sweep orphaned edge rows after resolution
+        self._sweep_orphaned_edges()
+
+        # Materialize ExportSurface/ExportThunk/AnchorGroup tables
+        materialize_all(self.db)
+
         # Remove structural facts for removed files
         if to_remove:
-            self._remove_structural_facts_for_paths(list(to_remove))
+            _ri_wt_id = self._get_or_create_worktree_id(
+                self._freshness_worktree or "main"
+            )
+            self._remove_structural_facts_for_paths(
+                list(to_remove), worktree_id=_ri_wt_id,
+            )
 
         # Remove File records for removed paths
         if to_remove:
             with self.db.bulk_writer() as writer:
                 for rel_path in to_remove:
-                    writer.delete_where(File, "path = :p", {"p": rel_path})
+                    writer.delete_where(
+                        File,
+                        "path = :p AND worktree_id = :wt",
+                        {"p": rel_path, "wt": _ri_wt_id},
+                    )
+
+        # Update test targets for files entering/leaving the index
+        await self._update_test_targets_incremental(
+            new_paths=[Path(p) for p in to_add],
+            existing_paths=[],
+            removed_paths=[Path(p) for p in to_remove],
+        )
 
         duration = time.time() - start_time
 
@@ -1318,11 +1372,21 @@ class IndexCoordinatorEngine:
             duration_seconds=duration,
         )
 
-    def _remove_structural_facts_for_paths(self, paths: list[str]) -> None:
-        """Remove all structural facts for the given file paths."""
+    def _remove_structural_facts_for_paths(
+        self, paths: list[str], *, worktree_id: int | None = None,
+    ) -> None:
+        """Remove all structural facts for the given file paths.
+
+        Args:
+            paths: Relative file paths to purge.
+            worktree_id: If set, only match File rows for this worktree.
+        """
         with self.db.session() as session:
             for str_path in paths:
-                file = session.exec(select(File).where(File.path == str_path)).first()
+                stmt = select(File).where(File.path == str_path)
+                if worktree_id is not None:
+                    stmt = stmt.where(File.worktree_id == worktree_id)
+                file = session.exec(stmt).first()
                 if file and file.id is not None:
                     file_id = file.id
                     # Remove SPLADE vectors for defs in this file
@@ -1333,30 +1397,134 @@ class IndexCoordinatorEngine:
                             "(SELECT def_uid FROM def_facts WHERE file_id = :fid)"
                         ).bindparams(fid=file_id)
                     )  # type: ignore[call-overload]
+                    # Remove test coverage facts targeting defs in this file
                     session.exec(
-                        text("DELETE FROM def_facts WHERE file_id = :fid").bindparams(fid=file_id)
+                        text(
+                            "DELETE FROM test_coverage_facts WHERE target_def_uid IN "
+                            "(SELECT def_uid FROM def_facts WHERE file_id = :fid)"
+                        ).bindparams(fid=file_id)
                     )  # type: ignore[call-overload]
+                    # Remove doc cross-refs originating from this file
                     session.exec(
-                        text("DELETE FROM ref_facts WHERE file_id = :fid").bindparams(fid=file_id)
+                        text(
+                            "DELETE FROM doc_cross_refs WHERE source_file_id = :fid"
+                        ).bindparams(fid=file_id)
                     )  # type: ignore[call-overload]
-                    session.exec(
-                        text("DELETE FROM scope_facts WHERE file_id = :fid").bindparams(fid=file_id)
-                    )  # type: ignore[call-overload]
-                    session.exec(
-                        text("DELETE FROM import_facts WHERE file_id = :fid").bindparams(
-                            fid=file_id
-                        )
-                    )  # type: ignore[call-overload]
-                    session.exec(
-                        text("DELETE FROM local_bind_facts WHERE file_id = :fid").bindparams(
-                            fid=file_id
-                        )
-                    )  # type: ignore[call-overload]
-                    session.exec(
-                        text("DELETE FROM dynamic_access_sites WHERE file_id = :fid").bindparams(
-                            fid=file_id
-                        )
-                    )  # type: ignore[call-overload]
+                    # Remove all per-file fact tables
+                    for fact_model in _FILE_FACT_TABLES:
+                        tname = fact_model.__tablename__  # type: ignore[attr-defined]
+                        session.exec(
+                            text(f"DELETE FROM {tname} WHERE file_id = :fid").bindparams(
+                                fid=file_id
+                            )
+                        )  # type: ignore[call-overload]
+            session.commit()
+
+    def _invalidate_dangling_refs(self, changed_file_ids: list[int]) -> list[int]:
+        """NULL out target_def_uid on refs whose target no longer exists.
+
+        When files are reindexed, their defs may get new UIDs.  Refs in
+        *other* files that pointed at the old UIDs become dangling.  This
+        method NULLs those out and returns the file_ids that were affected
+        so the caller can widen the resolution scope.
+        """
+        if not changed_file_ids:
+            return []
+        with self.db.session() as session:
+            # Find refs in OTHER files that point to defs that were in the
+            # changed files but no longer exist with that UID.
+            ph = ", ".join(f":cf_{i}" for i in range(len(changed_file_ids)))
+            binds: dict[str, int] = {f"cf_{i}": fid for i, fid in enumerate(changed_file_ids)}
+            # Refs whose target_def_uid once belonged to a changed file's defs
+            # but is no longer present in def_facts.
+            affected_rows = session.execute(
+                text(
+                    f"SELECT DISTINCT r.file_id FROM ref_facts r "
+                    f"WHERE r.target_def_uid IS NOT NULL "
+                    f"AND r.file_id NOT IN ({ph}) "
+                    f"AND NOT EXISTS ("
+                    f"  SELECT 1 FROM def_facts d "
+                    f"  WHERE d.def_uid = r.target_def_uid"
+                    f")"
+                ),
+                binds,
+            ).fetchall()
+            extra_file_ids = [row[0] for row in affected_rows]
+
+            if extra_file_ids:
+                eph = ", ".join(f":ef_{i}" for i in range(len(extra_file_ids)))
+                ebinds: dict[str, int] = {
+                    f"ef_{i}": fid for i, fid in enumerate(extra_file_ids)
+                }
+                session.execute(
+                    text(
+                        f"UPDATE ref_facts "
+                        f"SET target_def_uid = NULL "
+                        f"WHERE file_id IN ({eph}) "
+                        f"AND target_def_uid IS NOT NULL "
+                        f"AND NOT EXISTS ("
+                        f"  SELECT 1 FROM def_facts d "
+                        f"  WHERE d.def_uid = ref_facts.target_def_uid"
+                        f")"
+                    ),
+                    ebinds,
+                )
+                session.commit()
+                log.debug(
+                    "invalidated dangling refs",
+                    affected_files=len(extra_file_ids),
+                )
+            return extra_file_ids
+
+    def _sweep_orphaned_edges(self) -> None:
+        """Delete semantic_neighbor_facts and test_coverage_facts rows that
+        reference def_uids no longer present in def_facts.
+
+        Run after resolution passes so that any newly-created defs are visible.
+        """
+        with self.db.session() as session:
+            session.execute(
+                text(
+                    "DELETE FROM semantic_neighbor_facts WHERE "
+                    "source_def_uid NOT IN (SELECT def_uid FROM def_facts) "
+                    "OR neighbor_def_uid NOT IN (SELECT def_uid FROM def_facts)"
+                )
+            )
+            session.execute(
+                text(
+                    "DELETE FROM test_coverage_facts WHERE "
+                    "target_def_uid NOT IN (SELECT def_uid FROM def_facts)"
+                )
+            )
+            session.execute(
+                text(
+                    "DELETE FROM doc_cross_refs WHERE "
+                    "target_def_uid NOT IN (SELECT def_uid FROM def_facts)"
+                )
+            )
+            session.commit()
+
+    def _mark_coverage_stale(self, changed_file_ids: list[int]) -> None:
+        """Mark test_coverage_facts as stale for defs in changed files.
+
+        When a source file is reindexed, defs that survived with the same UID
+        may have different bodies.  Coverage data is no longer accurate and
+        must be re-collected.
+        """
+        if not changed_file_ids:
+            return
+        with self.db.session() as session:
+            ph = ", ".join(f":cf_{i}" for i in range(len(changed_file_ids)))
+            binds = {f"cf_{i}": fid for i, fid in enumerate(changed_file_ids)}
+            session.execute(
+                text(
+                    f"UPDATE test_coverage_facts SET stale = 1 "
+                    f"WHERE target_def_uid IN ("
+                    f"  SELECT def_uid FROM def_facts WHERE file_id IN ({ph})"
+                    f")"
+                ),
+                binds,
+            )
             session.commit()
 
     async def reindex_full(self) -> IndexStats:
@@ -1517,15 +1685,37 @@ class IndexCoordinatorEngine:
                 resolve_references(self.db)
                 resolve_type_traced(self.db)
 
+            # Sweep orphaned edge rows after resolution
+            self._sweep_orphaned_edges()
+
+            # Materialize ExportSurface/ExportThunk/AnchorGroup tables
+            materialize_all(self.db)
+
             # Remove structural facts for removed files
             if to_remove:
-                self._remove_structural_facts_for_paths(list(to_remove))
+                _full_wt_id = self._get_or_create_worktree_id(
+                    self._freshness_worktree or "main"
+                )
+                self._remove_structural_facts_for_paths(
+                    list(to_remove), worktree_id=_full_wt_id,
+                )
 
             # Remove File records for removed paths
             if to_remove:
                 with self.db.bulk_writer() as writer:
                     for rel_path in to_remove:
-                        writer.delete_where(File, "path = :p", {"p": rel_path})
+                        writer.delete_where(
+                            File,
+                            "path = :p AND worktree_id = :wt",
+                            {"p": rel_path, "wt": _full_wt_id},
+                        )
+
+            # Update test targets for files entering/leaving the index
+            await self._update_test_targets_incremental(
+                new_paths=[Path(p) for p in to_add],
+                existing_paths=[],
+                removed_paths=[Path(p) for p in to_remove],
+            )
 
             # Publish epoch
             if self._epoch_manager is not None:
@@ -2603,6 +2793,14 @@ class IndexCoordinatorEngine:
                     session.execute(delete(TestTarget).where(col(TestTarget.path) == rel_path))
                     # Also try selector match (some targets use selector=path)
                     session.execute(delete(TestTarget).where(col(TestTarget.selector) == rel_path))
+                    # Delete coverage facts whose test_id starts with this file path
+                    session.execute(
+                        text(
+                            "DELETE FROM test_coverage_facts "
+                            "WHERE test_id LIKE :prefix"
+                        ),
+                        {"prefix": f"{rel_path}::%"},
+                    )
                     targets_changed += 1
 
             # For new/modified test files, detect runner and create target
@@ -2928,6 +3126,12 @@ class IndexCoordinatorEngine:
                 _resolve_elapsed = time.time() - _resolve_start
                 log.info("index.stage.resolve_complete",
                          extra={"elapsed_sec": round(_resolve_elapsed, 1)})
+
+                # Sweep orphaned edge rows after resolution
+                self._sweep_orphaned_edges()
+
+                # Materialize ExportSurface/ExportThunk/AnchorGroup tables
+                materialize_all(self.db)
 
                 # SPLADE sparse vector encoding (after all resolution passes
                 # so callees/type-refs are available for scaffold building).

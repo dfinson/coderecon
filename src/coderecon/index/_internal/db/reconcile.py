@@ -208,7 +208,12 @@ class Reconciler:
             if removed_paths:
                 placeholders = ", ".join(f":p{i}" for i in range(len(removed_paths)))
                 params = {f"p{i}": p for i, p in enumerate(removed_paths)}
-                writer.delete_where(File, f"path IN ({placeholders})", params)
+                params["wt_id"] = worktree_id
+                writer.delete_where(
+                    File,
+                    f"path IN ({placeholders}) AND worktree_id = :wt_id",
+                    params,
+                )
 
         result.duration_ms = (time.perf_counter() - start_time) * 1000
         return result
