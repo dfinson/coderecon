@@ -775,6 +775,12 @@ class TestDocCrossRefQueries:
 
     def test_list_doc_xrefs_from(self, seeded_db: Database) -> None:
         with seeded_db.session() as session:
+            session.add(DefFact(
+                def_uid="def_target", file_id=1, unit_id=1, name="target",
+                kind="function", lexical_path="target",
+                start_line=1, start_col=0, end_line=1, end_col=0,
+            ))
+            session.flush()
             xref = DocCrossRef(
                 source_file_id=1,
                 source_def_uid="def_src",
@@ -793,6 +799,12 @@ class TestDocCrossRefQueries:
 
     def test_list_doc_xrefs_to(self, seeded_db: Database) -> None:
         with seeded_db.session() as session:
+            session.add(DefFact(
+                def_uid="def_target", file_id=1, unit_id=1, name="target",
+                kind="function", lexical_path="target",
+                start_line=1, start_col=0, end_line=1, end_col=0,
+            ))
+            session.flush()
             xref = DocCrossRef(
                 source_file_id=1,
                 source_def_uid="def_src",
@@ -821,6 +833,12 @@ class TestEndpointQueries:
 
     def test_batch_get_endpoints(self, seeded_db: Database) -> None:
         with seeded_db.session() as session:
+            session.add(DefFact(
+                def_uid="def_get_users", file_id=1, unit_id=1, name="get_users",
+                kind="function", lexical_path="get_users",
+                start_line=1, start_col=0, end_line=1, end_col=0,
+            ))
+            session.flush()
             ep = EndpointFact(
                 file_id=1,
                 kind="server",
@@ -851,6 +869,12 @@ class TestCoverageQueries:
 
     def test_batch_count_test_coverage(self, seeded_db: Database) -> None:
         with seeded_db.session() as session:
+            session.add(DefFact(
+                def_uid="def_covered", file_id=1, unit_id=1, name="covered",
+                kind="function", lexical_path="covered",
+                start_line=1, start_col=0, end_line=1, end_col=0,
+            ))
+            session.flush()
             for test_name in ["test_a", "test_b"]:
                 session.add(TestCoverageFact(
                     test_id=f"tests/{test_name}.py::{test_name}",

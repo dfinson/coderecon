@@ -92,7 +92,7 @@ if __name__ == "__main__":
 
         # Index the file
         indexer = StructuralIndexer(test_db, tmp_path)
-        result = indexer.index_files([rel(main_py, tmp_path)], context_id=1)
+        result = indexer.index_files([rel(main_py, tmp_path)], context_id=1, worktree_id=1)
 
         # Verify indexing succeeded
         assert result.files_processed == 1
@@ -160,6 +160,7 @@ if __name__ == "__main__":
         result = indexer.index_files(
             [rel(init_py, tmp_path), rel(core_py, tmp_path), rel(main_py, tmp_path)],
             context_id=1,
+            worktree_id=1,
         )
 
         assert result.files_processed == 3
@@ -190,7 +191,7 @@ if __name__ == "__main__":
         indexer = StructuralIndexer(test_db, tmp_path)
 
         # Initial index
-        result1 = indexer.index_files([rel(test_py, tmp_path)], context_id=1)
+        result1 = indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
         assert result1.defs_extracted >= 1
 
         with test_db.session() as session:
@@ -206,7 +207,7 @@ def new_func():
 """)
 
         # Re-index
-        result2 = indexer.index_files([rel(test_py, tmp_path)], context_id=1)
+        result2 = indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
         assert result2.defs_extracted >= 2
 
         with test_db.session() as session:
@@ -234,7 +235,7 @@ def new_func():
 """)
 
         indexer = StructuralIndexer(test_db, tmp_path)
-        result = indexer.index_files([rel(test_py, tmp_path)], context_id=1)
+        result = indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
 
         assert result.scopes_extracted >= 3  # class, class, method, nested
 
@@ -261,7 +262,7 @@ class MyClass:
 """)
 
         indexer = StructuralIndexer(test_db, tmp_path)
-        result = indexer.index_files([rel(test_py, tmp_path)], context_id=1)
+        result = indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
 
         assert result.refs_extracted >= 1
 
@@ -402,7 +403,7 @@ class TestFactQueries:
         test_py.write_text("\n".join([f"def func_{i}(): pass" for i in range(20)]))
 
         indexer = StructuralIndexer(test_db, tmp_path)
-        indexer.index_files([rel(test_py, tmp_path)], context_id=1)
+        indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
 
         with test_db.session() as session:
             facts = FactQueries(session)
@@ -422,7 +423,7 @@ class TestFactQueries:
         test_py.write_text("def my_function(): pass")
 
         indexer = StructuralIndexer(test_db, tmp_path)
-        indexer.index_files([rel(test_py, tmp_path)], context_id=1)
+        indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
 
         with test_db.session() as session:
             facts = FactQueries(session)
@@ -459,7 +460,7 @@ def decorated_function():
 """)
 
         indexer = StructuralIndexer(test_db, tmp_path)
-        result = indexer.index_files([rel(test_py, tmp_path)], context_id=1)
+        result = indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
 
         assert result.defs_extracted >= 3  # decorator, wrapper, decorated
 
@@ -482,7 +483,7 @@ async def main():
 """)
 
         indexer = StructuralIndexer(test_db, tmp_path)
-        result = indexer.index_files([rel(test_py, tmp_path)], context_id=1)
+        result = indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
 
         assert result.defs_extracted >= 2
 
@@ -517,7 +518,7 @@ class Point:
 """)
 
         indexer = StructuralIndexer(test_db, tmp_path)
-        indexer.index_files([rel(test_py, tmp_path)], context_id=1)
+        indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
 
         with test_db.session() as session:
             facts = FactQueries(session)
@@ -560,7 +561,7 @@ def process(
 """)
 
         indexer = StructuralIndexer(test_db, tmp_path)
-        result = indexer.index_files([rel(test_py, tmp_path)], context_id=1)
+        result = indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
 
         assert result.defs_extracted >= 2
 
@@ -596,7 +597,7 @@ class FileManager:
 """)
 
         indexer = StructuralIndexer(test_db, tmp_path)
-        indexer.index_files([rel(test_py, tmp_path)], context_id=1)
+        indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
 
         with test_db.session() as session:
             facts = FactQueries(session)
@@ -635,6 +636,6 @@ if __name__ == "__main__":
 ''')
 
         indexer = StructuralIndexer(test_db, tmp_path)
-        result = indexer.index_files([rel(test_py, tmp_path)], context_id=1)
+        result = indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
 
         assert result.defs_extracted >= 1  # At least the function

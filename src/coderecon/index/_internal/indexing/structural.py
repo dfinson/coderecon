@@ -1054,8 +1054,8 @@ class StructuralIndexer:
         context_id: int,
         file_id_map: dict[str, int] | None = None,
         workers: int = 1,
-        worktree_id: int = 1,
         *,
+        worktree_id: int,
         is_main_worktree: bool = True,
         _extractions: list[ExtractionResult] | None = None,
     ) -> BatchResult:
@@ -1585,7 +1585,8 @@ class StructuralIndexer:
         _context_id: int,
         language_family: str | None = None,
         declared_module: str | None = None,
-        worktree_id: int = 1,
+        *,
+        worktree_id: int,
     ) -> int:
         """Ensure file exists in database and return its ID."""
         import time
@@ -1645,7 +1646,8 @@ def index_context(
     context_id: int,
     file_paths: list[str],
     workers: int = os.cpu_count() or 1,
-    worktree_id: int = 1,
+    *,
+    worktree_id: int,
 ) -> BatchResult:
     """Convenience function to index all files in a context."""
     indexer = StructuralIndexer(db, repo_path)

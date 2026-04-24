@@ -1164,7 +1164,9 @@ class TestCoverageFact(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     test_id: str = Field(index=True)  # e.g. "tests/test_auth.py::test_login_valid"
-    target_def_uid: str = Field(index=True)  # DefFact.def_uid being covered
+    target_def_uid: str = Field(
+        sa_column=Column(String, ForeignKey("def_facts.def_uid", ondelete="CASCADE"), index=True)
+    )
     target_file_path: str = Field(index=True)  # Denormalized for fast queries
     covered_lines: int  # Lines within def range that were hit
     total_lines: int  # Total lines in def range
@@ -1212,7 +1214,10 @@ class EndpointFact(SQLModel, table=True):
     kind: str = Field(index=True)  # "server" or "client"
     http_method: str | None = None  # GET, POST, PUT, DELETE, PATCH, *
     url_pattern: str = Field(index=True)  # "/api/users", "/api/users/:id"
-    handler_def_uid: str | None = Field(default=None, index=True)  # DefFact for handler/caller
+    handler_def_uid: str | None = Field(
+        default=None,
+        sa_column=Column(String, ForeignKey("def_facts.def_uid", ondelete="SET NULL"), nullable=True, index=True),
+    )
     start_line: int | None = None
     end_line: int | None = None
     framework: str | None = None  # "flask", "fastapi", "express", "gin", etc.
@@ -1234,7 +1239,9 @@ class DocCrossRef(SQLModel, table=True):
     source_def_uid: str | None = Field(default=None, index=True)  # Def containing the docstring
     source_line: int  # Line of the cross-reference
     raw_text: str  # Original reference text ("See also FooClass")
-    target_def_uid: str = Field(index=True)  # Resolved DefFact.def_uid
+    target_def_uid: str = Field(
+        sa_column=Column(String, ForeignKey("def_facts.def_uid", ondelete="CASCADE"), index=True)
+    )
     confidence: str = Field(default="high")  # "high", "medium", "low"
 
 
@@ -1269,8 +1276,12 @@ class SemanticNeighborFact(SQLModel, table=True):
     __tablename__ = "semantic_neighbor_facts"
 
     id: int | None = Field(default=None, primary_key=True)
-    source_def_uid: str = Field(index=True)
-    neighbor_def_uid: str = Field(index=True)
+    source_def_uid: str = Field(
+        sa_column=Column(String, ForeignKey("def_facts.def_uid", ondelete="CASCADE"), index=True)
+    )
+    neighbor_def_uid: str = Field(
+        sa_column=Column(String, ForeignKey("def_facts.def_uid", ondelete="CASCADE"), index=True)
+    )
     score: float  # SPLADE dot-product similarity
     model_version: str = Field(index=True)
 

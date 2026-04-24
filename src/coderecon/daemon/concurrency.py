@@ -100,12 +100,12 @@ class MutationRouter:
 
     Two sessions on the same worktree cannot interleave mutations.
     Two sessions on different worktrees CAN mutate concurrently — they
-    serialize at the coordinator's ``_reconcile_lock``, but the async
+    serialize at per-worktree locks in the coordinator, but the async
     layer stays responsive.
 
     Lock hierarchy (callers must acquire in this order):
         session._exclusive_lock  →  MutationRouter.mutation()
-        →  _reindex_semaphore  →  coordinator._reconcile_lock
+        →  _reindex_semaphore  →  coordinator._get_worktree_lock()
         →  coordinator._tantivy_write_lock
     """
 
@@ -156,4 +156,8 @@ class MutationRouter:
                 finally:
                     self._gate.mark_fresh(worktree)
 
-        asyncio.create_task(_reindex())
+        task = asyncio.create_task(_reindex())
+        task.add_done_callback(
+            lambda t: log.exception("reindex_task_failed", exc_info=t.exception())
+            if t.exception() else None
+        )

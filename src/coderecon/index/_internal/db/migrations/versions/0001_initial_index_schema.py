@@ -561,7 +561,11 @@ def upgrade() -> None:
             "test_coverage_facts",
             sa.Column("id", sa.Integer, primary_key=True),
             sa.Column("test_id", sa.String, nullable=False, index=True),
-            sa.Column("target_def_uid", sa.String, nullable=False, index=True),
+            sa.Column(
+                "target_def_uid", sa.String,
+                sa.ForeignKey("def_facts.def_uid", ondelete="CASCADE"),
+                nullable=False, index=True,
+            ),
             sa.Column("target_file_path", sa.String, nullable=False, index=True),
             sa.Column("covered_lines", sa.Integer, nullable=False),
             sa.Column("total_lines", sa.Integer, nullable=False),
@@ -598,7 +602,11 @@ def upgrade() -> None:
             sa.Column("kind", sa.String, nullable=False, index=True),
             sa.Column("http_method", sa.String, nullable=True),
             sa.Column("url_pattern", sa.String, nullable=False, index=True),
-            sa.Column("handler_def_uid", sa.String, nullable=True, index=True),
+            sa.Column(
+                "handler_def_uid", sa.String,
+                sa.ForeignKey("def_facts.def_uid", ondelete="SET NULL"),
+                nullable=True, index=True,
+            ),
             sa.Column("start_line", sa.Integer, nullable=True),
             sa.Column("end_line", sa.Integer, nullable=True),
             sa.Column("framework", sa.String, nullable=True),
@@ -616,7 +624,11 @@ def upgrade() -> None:
             sa.Column("source_def_uid", sa.String, nullable=True, index=True),
             sa.Column("source_line", sa.Integer, nullable=False),
             sa.Column("raw_text", sa.String, nullable=False),
-            sa.Column("target_def_uid", sa.String, nullable=False, index=True),
+            sa.Column(
+                "target_def_uid", sa.String,
+                sa.ForeignKey("def_facts.def_uid", ondelete="CASCADE"),
+                nullable=False, index=True,
+            ),
             sa.Column("confidence", sa.String, nullable=False, server_default="high"),
         )
 
@@ -638,8 +650,16 @@ def upgrade() -> None:
         op.create_table(
             "semantic_neighbor_facts",
             sa.Column("id", sa.Integer, primary_key=True),
-            sa.Column("source_def_uid", sa.String, nullable=False, index=True),
-            sa.Column("neighbor_def_uid", sa.String, nullable=False, index=True),
+            sa.Column(
+                "source_def_uid", sa.String,
+                sa.ForeignKey("def_facts.def_uid", ondelete="CASCADE"),
+                nullable=False, index=True,
+            ),
+            sa.Column(
+                "neighbor_def_uid", sa.String,
+                sa.ForeignKey("def_facts.def_uid", ondelete="CASCADE"),
+                nullable=False, index=True,
+            ),
             sa.Column("score", sa.Float, nullable=False),
             sa.Column("model_version", sa.String, nullable=False, index=True),
         )

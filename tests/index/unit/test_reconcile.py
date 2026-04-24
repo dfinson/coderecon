@@ -74,7 +74,7 @@ class TestReconcilerBasics:
         (repo_path / "new.py").write_text("# new file\n")
 
         # Run reconciliation
-        result = reconciler.reconcile(paths=[Path("new.py")])
+        result = reconciler.reconcile(worktree_id=1, paths=[Path("new.py")])
 
         assert result.files_added == 1
         assert result.files_modified == 0
@@ -94,7 +94,7 @@ class TestReconcilerBasics:
 
         # First reconcile to add the file
         (repo_path / "modify.py").write_text("# version 1\n")
-        result1 = reconciler.reconcile(paths=[Path("modify.py")])
+        result1 = reconciler.reconcile(worktree_id=1, paths=[Path("modify.py")])
         assert result1.files_added == 1
 
         # Get original hash
@@ -107,7 +107,7 @@ class TestReconcilerBasics:
         (repo_path / "modify.py").write_text("# version 2 - modified\n")
 
         # Reconcile again
-        result2 = reconciler.reconcile(paths=[Path("modify.py")])
+        result2 = reconciler.reconcile(worktree_id=1, paths=[Path("modify.py")])
         assert result2.files_added == 0
         assert result2.files_modified == 1
 
@@ -125,11 +125,11 @@ class TestReconcilerBasics:
 
         # Add file
         (repo_path / "unchanged.py").write_text("# stable content\n")
-        result1 = reconciler.reconcile(paths=[Path("unchanged.py")])
+        result1 = reconciler.reconcile(worktree_id=1, paths=[Path("unchanged.py")])
         assert result1.files_added == 1
 
         # Reconcile again without changes
-        result2 = reconciler.reconcile(paths=[Path("unchanged.py")])
+        result2 = reconciler.reconcile(worktree_id=1, paths=[Path("unchanged.py")])
         assert result2.files_added == 0
         assert result2.files_modified == 0
         assert result2.files_unchanged == 1
@@ -141,14 +141,14 @@ class TestReconcilerBasics:
         # Add file
         file_path = repo_path / "delete_me.py"
         file_path.write_text("# to be deleted\n")
-        result1 = reconciler.reconcile(paths=[Path("delete_me.py")])
+        result1 = reconciler.reconcile(worktree_id=1, paths=[Path("delete_me.py")])
         assert result1.files_added == 1
 
         # Delete the file
         file_path.unlink()
 
         # Reconcile
-        result2 = reconciler.reconcile(paths=[Path("delete_me.py")])
+        result2 = reconciler.reconcile(worktree_id=1, paths=[Path("delete_me.py")])
         assert result2.files_removed == 1
 
 
@@ -167,10 +167,10 @@ class TestReconcilerIdempotency:
         subprocess.run(["git", "add", "a.py", "b.py"], cwd=repo_path, capture_output=True, check=True)
 
         # First reconcile
-        reconciler.reconcile()
+        reconciler.reconcile(worktree_id=1)
 
         # Second reconcile (no changes)
-        result2 = reconciler.reconcile()
+        result2 = reconciler.reconcile(worktree_id=1)
 
         # Should have same total files, all unchanged
         assert result2.files_added == 0
@@ -186,15 +186,15 @@ class TestReconcilerIdempotency:
 
         # Add file
         (repo_path / "idempotent.py").write_text("# content\n")
-        reconciler.reconcile(paths=[Path("idempotent.py")])
+        reconciler.reconcile(worktree_id=1, paths=[Path("idempotent.py")])
 
         # Modify
         (repo_path / "idempotent.py").write_text("# new content\n")
-        result1 = reconciler.reconcile(paths=[Path("idempotent.py")])
+        result1 = reconciler.reconcile(worktree_id=1, paths=[Path("idempotent.py")])
         assert result1.files_modified == 1
 
         # Reconcile again - should be unchanged
-        result2 = reconciler.reconcile(paths=[Path("idempotent.py")])
+        result2 = reconciler.reconcile(worktree_id=1, paths=[Path("idempotent.py")])
         assert result2.files_modified == 0
         assert result2.files_unchanged == 1
 
@@ -209,7 +209,7 @@ class TestRepoStateManagement:
         repo_path, db, reconciler = reconciler_setup
 
         # Run reconciliation
-        reconciler.reconcile()
+        reconciler.reconcile(worktree_id=1)
 
         # Verify RepoState was created/updated
         with db.session() as session:
@@ -225,7 +225,7 @@ class TestRepoStateManagement:
         _, db, reconciler = reconciler_setup
 
         before = time.time()
-        reconciler.reconcile()
+        reconciler.reconcile(worktree_id=1)
         after = time.time()
 
         with db.session() as session:
@@ -239,7 +239,7 @@ class TestRepoStateManagement:
         repo_path, db, reconciler = reconciler_setup
 
         # First reconcile
-        result1 = reconciler.reconcile()
+        result1 = reconciler.reconcile(worktree_id=1)
         head1 = result1.head_after
 
         # Make a new commit
@@ -248,7 +248,7 @@ class TestRepoStateManagement:
         subprocess.run(["git", "commit", "-m", "Second commit"], cwd=repo_path, capture_output=True, check=True)
 
         # Second reconcile
-        result2 = reconciler.reconcile()
+        result2 = reconciler.reconcile(worktree_id=1)
 
         # HEAD should have changed
         assert result2.head_before == head1
@@ -301,7 +301,7 @@ class TestErrorHandling:
             os.chmod(file_path, 0o000)  # Remove all permissions
 
             # Reconcile should not crash
-            result = reconciler.reconcile(paths=[Path("unreadable.py")])
+            result = reconciler.reconcile(worktree_id=1, paths=[Path("unreadable.py")])
 
             # Should have an error recorded
             # Note: This behavior depends on implementation
@@ -318,7 +318,7 @@ class TestErrorHandling:
         _, _, reconciler = reconciler_setup
 
         # Reconcile with non-existent path - should not crash
-        result = reconciler.reconcile(paths=[Path("does_not_exist.py")])
+        result = reconciler.reconcile(worktree_id=1, paths=[Path("does_not_exist.py")])
 
         # Should complete without error
         assert result.files_checked >= 0
@@ -363,7 +363,7 @@ class TestCplignoreChangeDetection:
         coderecon_dir.mkdir(exist_ok=True)
 
         # First reconcile without .reconignore - hash should be None
-        result1 = reconciler.reconcile(paths=[Path("initial.py")])
+        result1 = reconciler.reconcile(worktree_id=1, paths=[Path("initial.py")])
         assert result1.reconignore_changed is False  # None -> None is not a change
 
         # Create .reconignore
@@ -371,7 +371,7 @@ class TestCplignoreChangeDetection:
         reconignore_path.write_text("*.log\n")
 
         # Reconcile again - should detect the change
-        result2 = reconciler.reconcile(paths=[Path("initial.py")])
+        result2 = reconciler.reconcile(worktree_id=1, paths=[Path("initial.py")])
         assert result2.reconignore_changed is True
 
         # Verify hash stored in RepoState
@@ -393,18 +393,18 @@ class TestCplignoreChangeDetection:
         reconignore_path.write_text("*.log\n")
 
         # First reconcile
-        result1 = reconciler.reconcile(paths=[Path("initial.py")])
+        result1 = reconciler.reconcile(worktree_id=1, paths=[Path("initial.py")])
         assert result1.reconignore_changed is True  # First time seeing it
 
         # Reconcile again without changes
-        result2 = reconciler.reconcile(paths=[Path("initial.py")])
+        result2 = reconciler.reconcile(worktree_id=1, paths=[Path("initial.py")])
         assert result2.reconignore_changed is False
 
         # Modify .reconignore
         reconignore_path.write_text("*.log\n*.tmp\n")
 
         # Reconcile again - should detect the change
-        result3 = reconciler.reconcile(paths=[Path("initial.py")])
+        result3 = reconciler.reconcile(worktree_id=1, paths=[Path("initial.py")])
         assert result3.reconignore_changed is True
 
     def test_no_change_on_same_content(
@@ -420,12 +420,12 @@ class TestCplignoreChangeDetection:
         reconignore_path.write_text("*.log\n")
 
         # First reconcile
-        result1 = reconciler.reconcile(paths=[Path("initial.py")])
+        result1 = reconciler.reconcile(worktree_id=1, paths=[Path("initial.py")])
         assert result1.reconignore_changed is True
 
         # Multiple reconciles with same content
         for _ in range(3):
-            result = reconciler.reconcile(paths=[Path("initial.py")])
+            result = reconciler.reconcile(worktree_id=1, paths=[Path("initial.py")])
             assert result.reconignore_changed is False
 
     def test_detects_reconignore_deletion(
@@ -441,7 +441,7 @@ class TestCplignoreChangeDetection:
         reconignore_path.write_text("*.log\n")
 
         # First reconcile
-        result1 = reconciler.reconcile(paths=[Path("initial.py")])
+        result1 = reconciler.reconcile(worktree_id=1, paths=[Path("initial.py")])
         assert result1.reconignore_changed is True
 
         # Verify hash is stored
@@ -454,7 +454,7 @@ class TestCplignoreChangeDetection:
         reconignore_path.unlink()
 
         # Reconcile again - should detect the change (hash -> None)
-        result2 = reconciler.reconcile(paths=[Path("initial.py")])
+        result2 = reconciler.reconcile(worktree_id=1, paths=[Path("initial.py")])
         assert result2.reconignore_changed is True
 
         # Verify hash is now None

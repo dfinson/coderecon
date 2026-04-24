@@ -318,7 +318,7 @@ def hello():
             session.commit()
             context_id = ctx.id
 
-        result = indexer.index_files(["test.py"], context_id=context_id or 1)
+        result = indexer.index_files(["test.py"], context_id=context_id or 1, worktree_id=1)
 
         assert result.files_processed == 1
         assert result.defs_extracted >= 1  # hello function
@@ -342,7 +342,7 @@ def hello():
             session.commit()
             context_id = ctx.id
 
-        result = indexer.index_files(["a.py", "b.py"], context_id=context_id or 1)
+        result = indexer.index_files(["a.py", "b.py"], context_id=context_id or 1, worktree_id=1)
 
         assert result.files_processed == 2
         assert result.defs_extracted >= 2  # foo and bar
@@ -364,7 +364,7 @@ def hello():
             session.commit()
             context_id = ctx.id
 
-        result = indexer.index_files(["good.py", "nonexistent.py"], context_id=context_id or 1)
+        result = indexer.index_files(["good.py", "nonexistent.py"], context_id=context_id or 1, worktree_id=1)
 
         assert result.files_processed == 2
         assert result.defs_extracted >= 1  # From good.py
@@ -570,7 +570,7 @@ namespace App {
             context_id = ctx.id
 
         indexer = StructuralIndexer(db, temp_dir)
-        indexer.index_files(["Resolver.cs", "Client.cs"], context_id=context_id or 1)
+        indexer.index_files(["Resolver.cs", "Client.cs"], context_id=context_id or 1, worktree_id=1)
 
         # Before resolution: the ref to DefaultContractResolver in Client.cs is UNKNOWN
         with db.session() as session:
@@ -637,7 +637,7 @@ namespace App {
             context_id = ctx.id
 
         indexer = StructuralIndexer(db, temp_dir)
-        indexer.index_files(["Client.cs"], context_id=context_id or 1)
+        indexer.index_files(["Client.cs"], context_id=context_id or 1, worktree_id=1)
 
         from coderecon.index._internal.indexing.resolver import resolve_namespace_refs
 
@@ -689,7 +689,7 @@ y = Utility()
             context_id = ctx.id
 
         indexer = StructuralIndexer(db, temp_dir)
-        indexer.index_files(["utils.py", "main.py"], context_id=context_id or 1)
+        indexer.index_files(["utils.py", "main.py"], context_id=context_id or 1, worktree_id=1)
 
         # Before resolution: helper and Utility refs should be UNKNOWN
         with db.session() as session:
@@ -765,7 +765,7 @@ x = exists("/tmp")
             context_id = ctx.id
 
         indexer = StructuralIndexer(db, temp_dir)
-        indexer.index_files(["main.py"], context_id=context_id or 1)
+        indexer.index_files(["main.py"], context_id=context_id or 1, worktree_id=1)
 
         from coderecon.index._internal.indexing.resolver import resolve_star_import_refs
 
@@ -824,9 +824,9 @@ namespace App {
 
         indexer = StructuralIndexer(db, temp_dir)
         # Critically: index in SEPARATE batches (simulates the 25-file batching)
-        indexer.index_files(["A.cs"], context_id=context_id or 1)
-        indexer.index_files(["B.cs"], context_id=context_id or 1)
-        indexer.index_files(["Consumer.cs"], context_id=context_id or 1)
+        indexer.index_files(["A.cs"], context_id=context_id or 1, worktree_id=1)
+        indexer.index_files(["B.cs"], context_id=context_id or 1, worktree_id=1)
+        indexer.index_files(["Consumer.cs"], context_id=context_id or 1, worktree_id=1)
 
         from coderecon.index._internal.indexing.resolver import resolve_namespace_refs
 
@@ -870,7 +870,7 @@ namespace App {
             context_id = ctx.id
 
         indexer = StructuralIndexer(db, temp_dir)
-        indexer.index_files(["test.cs"], context_id=context_id or 1)
+        indexer.index_files(["test.cs"], context_id=context_id or 1, worktree_id=1)
 
         with db.session() as session:
             from sqlmodel import select
@@ -910,7 +910,7 @@ namespace App {
             context_id = ctx.id
 
         indexer = StructuralIndexer(db, temp_dir)
-        indexer.index_files(["JsonSerializer.cs", "JsonConvert.cs"], context_id=context_id or 1)
+        indexer.index_files(["JsonSerializer.cs", "JsonConvert.cs"], context_id=context_id or 1, worktree_id=1)
 
         # Before resolution: the ref should be UNKNOWN (no using directive)
         with db.session() as session:
@@ -989,7 +989,7 @@ namespace App {
             context_id = ctx.id
 
         indexer = StructuralIndexer(db, temp_dir)
-        indexer.index_files(["JsonSerializer.cs", "RegexConverter.cs"], context_id=context_id or 1)
+        indexer.index_files(["JsonSerializer.cs", "RegexConverter.cs"], context_id=context_id or 1, worktree_id=1)
 
         # Before: UNKNOWN (no using directive)
         with db.session() as session:
@@ -1062,7 +1062,7 @@ namespace App {
             context_id = ctx.id
 
         indexer = StructuralIndexer(db, temp_dir)
-        indexer.index_files(["A.cs", "B.cs"], context_id=context_id or 1)
+        indexer.index_files(["A.cs", "B.cs"], context_id=context_id or 1, worktree_id=1)
 
         from coderecon.index._internal.indexing.resolver import resolve_same_namespace_refs
 
@@ -1254,7 +1254,7 @@ class TestPrecomputedExtractions:
         assert extractions[0].content_text == content
 
         # Index with pre-computed extractions
-        result = indexer.index_files(["a.py"], context_id=context_id or 1, _extractions=extractions)
+        result = indexer.index_files(["a.py"], context_id=context_id or 1, _extractions=extractions, worktree_id=1)
 
         assert result.files_processed == 1
         assert result.defs_extracted >= 2  # foo and bar
@@ -1280,7 +1280,7 @@ class TestPrecomputedExtractions:
         indexer = StructuralIndexer(db, temp_dir)
 
         # Direct indexing (extracts internally)
-        direct_result = indexer.index_files(["a.py"], context_id=context_id or 1)
+        direct_result = indexer.index_files(["a.py"], context_id=context_id or 1, worktree_id=1)
 
         with db.session() as session:
             direct_def_count = len(list(session.exec(select(DefFact)).all()))
@@ -1289,7 +1289,8 @@ class TestPrecomputedExtractions:
         # Re-index with pre-computed extractions (idempotent overwrite)
         extractions = indexer.extract_files(["a.py"], context_id=context_id or 1)
         precomputed_result = indexer.index_files(
-            ["a.py"], context_id=context_id or 1, _extractions=extractions
+            ["a.py"], context_id=context_id or 1, _extractions=extractions,
+            worktree_id=1,
         )
 
         with db.session() as session:

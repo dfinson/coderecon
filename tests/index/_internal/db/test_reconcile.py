@@ -332,5 +332,5 @@ class TestReconciler:
         """_get_db_hashes returns empty dict for empty paths."""
         mock_db = MagicMock()
         reconciler = Reconciler(mock_db, Path("/test"))
-        result = reconciler._get_db_hashes([])
+        result = reconciler._get_db_hashes([], worktree_id=1)
         assert result == {}

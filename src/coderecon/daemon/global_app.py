@@ -158,6 +158,7 @@ class GlobalDaemon:
             repo_root=repo_root,
             db_path=db_path,
             tantivy_path=tantivy_path,
+            busy_timeout_ms=config.database.busy_timeout_ms,
         )
         await coordinator.load_existing()
 

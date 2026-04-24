@@ -349,7 +349,7 @@ y = Utility()
             context_id = ctx.id
 
         indexer = StructuralIndexer(db, temp_dir)
-        indexer.index_files(["utils.py", "main.py"], context_id=context_id or 1)
+        indexer.index_files(["utils.py", "main.py"], context_id=context_id or 1, worktree_id=1)
 
         # Before resolution: refs should be UNKNOWN
         with db.session() as session:
@@ -399,7 +399,7 @@ result = join("/a", "b")
             context_id = ctx.id
 
         indexer = StructuralIndexer(db, temp_dir)
-        indexer.index_files(["consumer.py"], context_id=context_id or 1)
+        indexer.index_files(["consumer.py"], context_id=context_id or 1, worktree_id=1)
 
         stats = resolve_star_import_refs(db, context_id)
         assert stats.refs_upgraded == 0
@@ -430,7 +430,7 @@ y = public()
             context_id = ctx.id
 
         indexer = StructuralIndexer(db, temp_dir)
-        indexer.index_files(["lib.py", "app.py"], context_id=context_id or 1)
+        indexer.index_files(["lib.py", "app.py"], context_id=context_id or 1, worktree_id=1)
 
         resolve_star_import_refs(db, context_id)
 
@@ -478,6 +478,7 @@ y = public()
         indexer.index_files(
             ["mod_a.py", "mod_b.py", "consumer_a.py", "consumer_b.py"],
             context_id=context_id or 1,
+            worktree_id=1,
         )
 
         # Only resolve for consumer_a's file
@@ -541,7 +542,7 @@ b = beta()
             context_id = ctx.id or 1
 
         indexer = StructuralIndexer(db, temp_dir)
-        indexer.index_files(["defs.py", "use.py"], context_id=context_id)
+        indexer.index_files(["defs.py", "use.py"], context_id=context_id, worktree_id=1)
 
         stats = resolve_star_import_refs(db, context_id)
         assert stats.refs_upgraded >= 2
@@ -560,7 +561,7 @@ b = beta()
             context_id = ctx.id or 1
 
         indexer = StructuralIndexer(db, temp_dir)
-        indexer.index_files(["empty.py", "importer.py"], context_id=context_id)
+        indexer.index_files(["empty.py", "importer.py"], context_id=context_id, worktree_id=1)
 
         # Should not raise
         stats = resolve_star_import_refs(db, context_id)
@@ -592,7 +593,7 @@ class TestPaginatedReferencesIntegration:
             context_id = ctx.id or 1
 
         indexer = StructuralIndexer(db, temp_dir)
-        indexer.index_files(["utils.py", "heavy.py"], context_id=context_id)
+        indexer.index_files(["utils.py", "heavy.py"], context_id=context_id, worktree_id=1)
 
         # Resolve Pass 2 references
         from coderecon.index._internal.indexing.resolver import (
@@ -665,9 +666,9 @@ class TestRootFallbackContextDefault:
 
         indexer = StructuralIndexer(db, temp_dir)
         # Index file in specific context
-        indexer.index_files(["project_a/module.py"], context_id=specific_id or 1)
+        indexer.index_files(["project_a/module.py"], context_id=specific_id or 1, worktree_id=1)
         # Index file that has no specific context
-        indexer.index_files(["utils.py"], context_id=root_id or 2)
+        indexer.index_files(["utils.py"], context_id=root_id or 2, worktree_id=1)
 
         # Verify facts were created with correct unit_ids
         with db.session() as session:
@@ -705,7 +706,7 @@ class TestRootFallbackContextDefault:
         (temp_dir / "app.py").write_text("from lib import *\nx = helper()\n")
 
         indexer = StructuralIndexer(db, temp_dir)
-        indexer.index_files(["lib.py", "app.py"], context_id=root_id or 1)
+        indexer.index_files(["lib.py", "app.py"], context_id=root_id or 1, worktree_id=1)
 
         # Run star-import resolver with root context ID
         stats = resolve_star_import_refs(db, root_id)
@@ -751,7 +752,7 @@ class TestRootFallbackContextDefault:
         (temp_dir / "project_a" / "module.py").write_text("def func(): pass\n")
 
         indexer = StructuralIndexer(db, temp_dir)
-        indexer.index_files(["project_a/module.py"], context_id=specific_id or 1)
+        indexer.index_files(["project_a/module.py"], context_id=specific_id or 1, worktree_id=1)
 
         with db.session() as session:
             func_def = session.exec(select(DefFact).where(DefFact.name == "func")).first()
@@ -819,10 +820,12 @@ namespace Acme.Services {
         indexer.index_files(
             ["project_a/User.cs", "project_a/Service.cs"],
             context_id=ctx1_id or 1,
+            worktree_id=1,
         )
         indexer.index_files(
             ["project_b/User.cs"],
             context_id=ctx2_id or 2,
+            worktree_id=1,
         )
 
         # Resolve scoped to context 1 only
@@ -897,10 +900,12 @@ namespace Acme.Services {
         indexer.index_files(
             ["project_a/Serializer.cs", "project_a/Convert.cs"],
             context_id=ctx1_id or 1,
+            worktree_id=1,
         )
         indexer.index_files(
             ["project_b/Serializer.cs"],
             context_id=ctx2_id or 2,
+            worktree_id=1,
         )
 
         stats = resolve_same_namespace_refs(db, ctx1_id)
@@ -954,10 +959,12 @@ namespace Acme.Services {
         indexer.index_files(
             ["project_a/utils.py", "project_a/main.py"],
             context_id=ctx1_id or 1,
+            worktree_id=1,
         )
         indexer.index_files(
             ["project_b/utils.py"],
             context_id=ctx2_id or 2,
+            worktree_id=1,
         )
 
         stats = resolve_star_import_refs(db, ctx1_id)
@@ -1003,7 +1010,7 @@ namespace Client {
         )
 
         indexer = StructuralIndexer(db, temp_dir)
-        indexer.index_files(["Types.cs", "Consumer.cs"], context_id=context_id or 1)
+        indexer.index_files(["Types.cs", "Consumer.cs"], context_id=context_id or 1, worktree_id=1)
 
         stats = resolve_namespace_refs(db, None)
         assert stats.refs_upgraded >= 1
@@ -1035,7 +1042,7 @@ namespace App {
         )
 
         indexer = StructuralIndexer(db, temp_dir)
-        indexer.index_files(["Defs.cs", "Use.cs"], context_id=context_id or 1)
+        indexer.index_files(["Defs.cs", "Use.cs"], context_id=context_id or 1, worktree_id=1)
 
         with db.session() as session:
             use_file = session.exec(select(File).where(File.path == "Use.cs")).first()

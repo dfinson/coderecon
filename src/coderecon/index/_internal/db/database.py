@@ -70,11 +70,13 @@ class Database:
         max_retries: int = DEFAULT_MAX_RETRIES,
         retry_base_delay: float = DEFAULT_RETRY_BASE_DELAY,
         retry_max_delay: float = DEFAULT_RETRY_MAX_DELAY,
+        busy_timeout_ms: int = 30_000,
     ) -> None:
         self.db_path = db_path
         self._max_retries = max_retries
         self._retry_base_delay = retry_base_delay
         self._retry_max_delay = retry_max_delay
+        self._busy_timeout_ms = busy_timeout_ms
         self.engine = self._create_engine()
 
     def _create_engine(self) -> Engine:
@@ -83,7 +85,12 @@ class Database:
             connect_args={"check_same_thread": False},
             pool_pre_ping=True,
         )
-        event.listen(engine, "connect", _configure_pragmas)
+        busy_timeout_ms = self._busy_timeout_ms
+        event.listen(
+            engine,
+            "connect",
+            lambda conn, rec: _configure_pragmas(conn, rec, busy_timeout_ms),
+        )
         return engine
 
     def create_all(self) -> None:
@@ -201,11 +208,13 @@ class Database:
             logger.debug("wal_checkpoint_completed", mode=mode)
 
 
-def _configure_pragmas(dbapi_conn: Any, _connection_record: Any) -> None:
+def _configure_pragmas(
+    dbapi_conn: Any, _connection_record: Any, busy_timeout_ms: int = 30_000
+) -> None:
     """Configure SQLite for concurrent access and performance."""
     cursor = dbapi_conn.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA busy_timeout=30000")  # 30 second wait
+    cursor.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
     cursor.execute("PRAGMA synchronous=NORMAL")  # Safe with WAL
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.execute("PRAGMA cache_size=-64000")  # 64MB cache

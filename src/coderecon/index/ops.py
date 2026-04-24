@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from sqlalchemy import case, delete, func, text
+from sqlalchemy import bindparam, case, delete, func, text
 from sqlmodel import col, select
 
 log = structlog.get_logger(__name__)
@@ -297,8 +297,8 @@ class IndexCoordinatorEngine:
     High-level orchestration with serialization guarantees.
 
     SERIALIZATION:
-    - _reconcile_lock: Only ONE reconcile() at a time
-    - _tantivy_write_lock: Only ONE Tantivy write batch at a time
+    - Per-worktree locks via _get_worktree_lock(): Only ONE reconcile per worktree
+    - _tantivy_write_lock: Only ONE Tantivy write batch at a time (global)
 
     These locks prevent:
     - RepoState corruption from concurrent reconciliations
@@ -321,6 +321,7 @@ class IndexCoordinatorEngine:
         repo_root: Path,
         db_path: Path,
         tantivy_path: Path,
+        busy_timeout_ms: int = 30_000,
     ) -> None:
         """Initialize coordinator with paths."""
         self.repo_root = repo_root
@@ -328,10 +329,11 @@ class IndexCoordinatorEngine:
         self.tantivy_path = tantivy_path
 
         # Database
-        self.db = Database(db_path)
+        self.db = Database(db_path, busy_timeout_ms=busy_timeout_ms)
 
         # Serialization locks
-        self._reconcile_lock = threading.Lock()
+        self._worktree_locks: dict[str, threading.Lock] = {}
+        self._worktree_locks_guard = threading.Lock()
         self._tantivy_write_lock = threading.Lock()
 
         # Freshness gating — injected by daemon layer.
@@ -358,12 +360,31 @@ class IndexCoordinatorEngine:
 
         # Cache of worktree name → DB row ID, populated by _get_or_create_worktree_id.
         self._worktree_id_cache: dict[str, int] = {}
+        # Cache of worktree name → is_main flag from DB.
+        self._worktree_is_main_cache: dict[str, bool] = {}
         # Cache of worktree name → filesystem root path (non-main worktrees only).
         self._worktree_root_cache: dict[str, Path] = {}
 
         # Optional in-memory cache of all DefFacts (keyed by def_uid).
         # Lazy-loaded on first batch_get_defs() call; cleared on close().
         self._def_cache: dict[str, DefFact] | None = None
+
+    def _get_worktree_lock(self, worktree: str) -> threading.Lock:
+        """Return a per-worktree lock, creating it on first access."""
+        with self._worktree_locks_guard:
+            if worktree not in self._worktree_locks:
+                self._worktree_locks[worktree] = threading.Lock()
+            return self._worktree_locks[worktree]
+
+    def _is_main_worktree(self, worktree: str) -> bool:
+        """Return True if *worktree* is the main checkout (from DB flag)."""
+        if worktree in self._worktree_is_main_cache:
+            return self._worktree_is_main_cache[worktree]
+        with self.db.session() as session:
+            wt = session.exec(select(Worktree).where(Worktree.name == worktree)).first()
+            is_main = wt.is_main if wt else (worktree == "main")
+            self._worktree_is_main_cache[worktree] = is_main
+            return is_main
 
     def _get_or_create_worktree_id(self, name: str, root_path: str | None = None) -> int:
         """Return the `worktrees.id` for *name*, inserting the row if absent.
@@ -375,25 +396,31 @@ class IndexCoordinatorEngine:
         """
         if name in self._worktree_id_cache:
             return self._worktree_id_cache[name]
-        with self.db.session() as session:
-            stmt = select(Worktree).where(Worktree.name == name)
-            existing = session.exec(stmt).first()
-            if existing and existing.id is not None:
-                self._worktree_id_cache[name] = existing.id
-                return existing.id
-            effective_root = root_path if root_path is not None else str(self.repo_root)
-            wt = Worktree(
-                name=name,
-                root_path=effective_root,
-                is_main=(name == "main"),
-            )
-            session.add(wt)
-            session.commit()
-            session.refresh(wt)
-            if wt.id is None:
-                raise RuntimeError(f"Failed to allocate worktree id for {name!r}")
-            self._worktree_id_cache[name] = wt.id
-            return wt.id
+        with self._worktree_locks_guard:
+            # Double-check after acquiring lock
+            if name in self._worktree_id_cache:
+                return self._worktree_id_cache[name]
+            with self.db.session() as session:
+                stmt = select(Worktree).where(Worktree.name == name)
+                existing = session.exec(stmt).first()
+                if existing and existing.id is not None:
+                    self._worktree_id_cache[name] = existing.id
+                    self._worktree_is_main_cache[name] = existing.is_main
+                    return existing.id
+                effective_root = root_path if root_path is not None else str(self.repo_root)
+                wt = Worktree(
+                    name=name,
+                    root_path=effective_root,
+                    is_main=(name == "main"),
+                )
+                session.add(wt)
+                session.commit()
+                session.refresh(wt)
+                if wt.id is None:
+                    raise RuntimeError(f"Failed to allocate worktree id for {name!r}")
+                self._worktree_id_cache[name] = wt.id
+                self._worktree_is_main_cache[name] = wt.is_main
+                return wt.id
 
     def set_freshness_gate(
         self, gate: FreshnessGate, worktree: str, worktree_root: str | None = None
@@ -845,7 +872,7 @@ class IndexCoordinatorEngine:
         files_removed = 0
         symbols_indexed = 0
 
-        with self._reconcile_lock:
+        with self._get_worktree_lock(worktree):
             # Reconcile changes
             _wt_id = self._get_or_create_worktree_id(worktree)
             if self._reconciler is not None:
@@ -1045,7 +1072,7 @@ class IndexCoordinatorEngine:
                             ctx_id,
                             file_id_map=file_id_map,
                             worktree_id=self._get_or_create_worktree_id(worktree),
-                            is_main_worktree=(worktree == "main"),
+                            is_main_worktree=self._is_main_worktree(worktree),
                             _extractions=ok_extractions,
                         )
 
@@ -1054,6 +1081,19 @@ class IndexCoordinatorEngine:
                             self._remove_structural_facts_for_paths(
                                 failed_paths, worktree_id=_wt_id,
                             )
+                            # NULL content_hash so reconcile retries these files
+                            with self.db.session() as session:
+                                session.exec(
+                                    text(
+                                        "UPDATE files SET content_hash = NULL "
+                                        "WHERE path IN :paths AND worktree_id = :wt"
+                                    ).bindparams(
+                                        bindparam("paths", expanding=True),
+                                        wt=_wt_id,
+                                    ),
+                                    params={"paths": failed_paths},
+                                )  # type: ignore[call-overload]
+                                session.commit()
 
                     # Stage removals
                     for path in removed_paths:
@@ -1061,7 +1101,25 @@ class IndexCoordinatorEngine:
                         files_removed += 1
 
                     # Commit all staged changes atomically
-                    self._lexical.commit_staged()
+                    try:
+                        self._lexical.commit_staged()
+                    except Exception:
+                        logger.exception("tantivy_commit_failed")
+                        # NULL content_hash for all changed files so reconcile
+                        # retries them — DB facts are already committed.
+                        with self.db.session() as session:
+                            session.exec(
+                                text(
+                                    "UPDATE files SET content_hash = NULL "
+                                    "WHERE path IN :paths AND worktree_id = :wt"
+                                ).bindparams(
+                                    bindparam("paths", expanding=True),
+                                    wt=_wt_id,
+                                ),
+                                params={"paths": list(str_changed)},
+                            )  # type: ignore[call-overload]
+                            session.commit()
+                        raise
 
                 # Reload searcher to see committed changes
                 self._lexical.reload()
@@ -1131,6 +1189,9 @@ class IndexCoordinatorEngine:
                 if self._lexical is not None:
                     self._lexical.reload()
 
+            # Propagate def changes to sibling worktrees
+            self._propagate_def_changes(_wt_id)
+
             # Remove structural facts for removed files
             if removed_paths:
                 self._remove_structural_facts_for_paths(
@@ -1152,6 +1213,12 @@ class IndexCoordinatorEngine:
 
             # Incrementally update lint tools if config files changed
             await self._update_lint_tools_incremental(changed_paths)
+
+        # WAL checkpoint to keep WAL file bounded after bulk writes
+        try:
+            self.db.checkpoint("PASSIVE")
+        except Exception:
+            logger.debug("wal_checkpoint_skipped_after_reindex")
 
         duration = time.time() - start_time
 
@@ -1287,7 +1354,7 @@ class IndexCoordinatorEngine:
                     context_id=ctx_id,
                     file_id_map=file_id_map,
                     worktree_id=self._get_or_create_worktree_id(_wt),
-                    is_main_worktree=(_wt == "main"),
+                    is_main_worktree=self._is_main_worktree(_wt),
                     _extractions=extractions,
                 )
 
@@ -1457,6 +1524,42 @@ class IndexCoordinatorEngine:
                 )
             return extra_file_ids
 
+    def _propagate_def_changes(self, worktree_id: int) -> int:
+        """Mark files in OTHER worktrees stale when their refs point to
+        def_uids that no longer exist.
+
+        After a worktree reindex, defs may have been removed or renamed
+        (new UIDs).  Files in sibling worktrees that reference the old
+        UIDs need re-reconciliation so their refs can be re-resolved.
+
+        Sets ``content_hash = NULL`` on affected File rows so the next
+        reconcile pass picks them up.
+
+        Returns the number of files marked stale.
+        """
+        with self.db.session() as session:
+            # Find files in OTHER worktrees whose refs point at now-missing defs
+            result = session.execute(
+                text(
+                    "UPDATE files SET content_hash = NULL "
+                    "WHERE worktree_id != :wt "
+                    "AND id IN ("
+                    "  SELECT DISTINCT r.file_id FROM ref_facts r "
+                    "  WHERE r.target_def_uid IS NOT NULL "
+                    "  AND NOT EXISTS ("
+                    "    SELECT 1 FROM def_facts d "
+                    "    WHERE d.def_uid = r.target_def_uid"
+                    "  )"
+                    ")"
+                ),
+                {"wt": worktree_id},
+            )
+            count = result.rowcount  # type: ignore[union-attr]
+            if count:
+                session.commit()
+                log.debug("propagated_def_changes", stale_files=count)
+            return count
+
     def _sweep_orphaned_edges(self) -> None:
         """Delete semantic_neighbor_facts and test_coverage_facts rows that
         reference def_uids no longer present in def_facts.
@@ -1536,7 +1639,7 @@ class IndexCoordinatorEngine:
         files_removed = 0
         symbols_indexed = 0
 
-        with self._reconcile_lock:
+        with self._get_worktree_lock("main"):
             # Get currently indexed files from database
             with self.db.session() as session:
                 file_stmt = select(File.path)
@@ -1658,7 +1761,7 @@ class IndexCoordinatorEngine:
                         context_id=ctx_id,
                         file_id_map=file_id_map,
                         worktree_id=self._get_or_create_worktree_id(_wt2),
-                        is_main_worktree=(_wt2 == "main"),
+is_main_worktree=self._is_main_worktree(_wt2),
                         _extractions=extractions,
                     )
 
@@ -3061,8 +3164,8 @@ class IndexCoordinatorEngine:
                             worktree_id=self._get_or_create_worktree_id(
                                 self._freshness_worktree or "main"
                             ),
-                            is_main_worktree=(
-                                (self._freshness_worktree or "main") == "main"
+                            is_main_worktree=self._is_main_worktree(
+                                self._freshness_worktree or "main"
                             ),
                             _extractions=extractions,
                         )

@@ -166,7 +166,7 @@ def indexed_project(
                 file_id_map[py_file] = file_record.id
         session.commit()
 
-    result = indexer.index_files(py_files, context_id=1, file_id_map=file_id_map)
+    result = indexer.index_files(py_files, context_id=1, file_id_map=file_id_map, worktree_id=1)
     # Note: Grammar-unavailable errors are expected if tree-sitter-python isn't installed
     # The lexical index will still work for refactoring tests
     real_errors = [e for e in result.errors if "Language not available" not in e]

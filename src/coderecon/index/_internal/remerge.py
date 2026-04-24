@@ -193,55 +193,63 @@ def remerge_worktree(
 def drop_worktree_data(engine: Engine, worktree_id: int) -> int:
     """Remove all data for a deleted worktree.
 
-    Cascades: files → def_facts, ref_facts, import_facts, etc.
+    Relies on FK CASCADE from files → all file_id-based fact tables.
+    UID-based tables (semantic_neighbor_facts, test_coverage_facts) are
+    swept separately since they lack file_id FKs.
+
     Returns number of files removed.
     """
     with engine.connect() as conn:
-        # Get file IDs for this worktree
-        rows = conn.execute(text(
-            f"SELECT id FROM files WHERE worktree_id = {worktree_id}"  # noqa: S608
-        )).fetchall()
-        file_ids = [r[0] for r in rows]
+        count = conn.execute(
+            text("SELECT COUNT(*) FROM files WHERE worktree_id = :wt_id"),
+            {"wt_id": worktree_id},
+        ).scalar() or 0
 
-        if not file_ids:
+        if count == 0:
+            conn.execute(
+                text("DELETE FROM worktrees WHERE id = :wt_id"),
+                {"wt_id": worktree_id},
+            )
+            conn.commit()
             return 0
 
-        id_list = ",".join(str(fid) for fid in file_ids)
+        # CASCADE handles: def_facts, ref_facts, import_facts, scope_facts,
+        # local_bind_facts, dynamic_access_sites, type_annotation_facts,
+        # type_member_facts, interface_impl_facts, endpoint_facts,
+        # doc_cross_refs, file_chunk_vecs, splade_vecs (via def_facts).
+        conn.execute(
+            text("DELETE FROM files WHERE worktree_id = :wt_id"),
+            {"wt_id": worktree_id},
+        )
+        conn.execute(
+            text("DELETE FROM worktrees WHERE id = :wt_id"),
+            {"wt_id": worktree_id},
+        )
 
-        # Delete facts referencing these files
-        for table in (
-            "def_facts", "ref_facts", "import_facts", "scope_facts",
-            "local_bind_facts", "dynamic_access_sites", "type_annotation_facts",
-        ):
-            conn.execute(text(f"DELETE FROM {table} WHERE file_id IN ({id_list})"))  # noqa: S608
-
-        # Delete the files themselves
+        # Sweep UID-based tables that lack FK constraints
         conn.execute(text(
-            f"DELETE FROM files WHERE worktree_id = {worktree_id}"  # noqa: S608
+            "DELETE FROM semantic_neighbor_facts WHERE "
+            "source_def_uid NOT IN (SELECT def_uid FROM def_facts)"
         ))
-
-        # Delete the worktree record
         conn.execute(text(
-            f"DELETE FROM worktrees WHERE id = {worktree_id}"  # noqa: S608
+            "DELETE FROM test_coverage_facts WHERE "
+            "target_def_uid NOT IN (SELECT def_uid FROM def_facts)"
         ))
-
         conn.commit()
 
-    log.info("worktree_data_dropped", extra={"worktree_id": worktree_id, "files": len(file_ids)})
-    return len(file_ids)
+    log.info("worktree_data_dropped", worktree_id=worktree_id, files=count)
+    return count
 
 
 # --- Internal helpers ---
 
 def _prune_file(engine: Engine, file_id: int) -> None:
-    """Remove a single file and all its facts."""
+    """Remove a single file and all its facts.
+
+    Relies on FK CASCADE from files → all file_id-based fact tables.
+    """
     with engine.connect() as conn:
-        for table in (
-            "def_facts", "ref_facts", "import_facts", "scope_facts",
-            "local_bind_facts", "dynamic_access_sites",
-        ):
-            conn.execute(text(f"DELETE FROM {table} WHERE file_id = {file_id}"))  # noqa: S608
-        conn.execute(text(f"DELETE FROM files WHERE id = {file_id}"))  # noqa: S608
+        conn.execute(text("DELETE FROM files WHERE id = :fid"), {"fid": file_id})
         conn.commit()
 
 
