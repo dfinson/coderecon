@@ -213,7 +213,7 @@ class RepoMapper:
         sorted by path.  All sections that need File data share this
         result set.  Path ordering is essential so that ``limit``-based
         truncation in ``_build_structure`` produces a balanced cross-section
-        of the repo (e.g. ``benchmarking/ → src/ → tests/``) instead of
+        of the repo (e.g. ``docs/ → src/ → tests/``) instead of
         being biased by SQLite insertion order.
         """
         stmt = select(File.path, File.language_family, File.line_count).order_by(File.path)

@@ -208,9 +208,6 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# Benchmark raw chatreplay exports (large)
-benchmarking/**/results/*_raw.json
-
 # CodeRecon runtime state and artifacts (regenerated on `recon init`)
 .recon/
 
@@ -223,7 +220,6 @@ recon-lab/infra/.terraform/
 recon-lab/infra/terraform.tfstate*
 recon-lab/infra/coderecon_wheel/
 recon-lab/infra/.terraform.lock.hcl
-.tower-worktrees/
 output/
 recon-lab/src/cpl_lab/eval/output/
 

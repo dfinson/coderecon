@@ -124,11 +124,7 @@ packages = ["src/coderecon"]
 target-version = "py312"
 line-length = 100
 src = ["src"]
-extend-exclude = [
-    "benchmarking/data",
-    "benchmarking/experiments",
-    "benchmarking/vendor",
-]
+extend-exclude = []
 
 [tool.ruff.lint]
 select = [
@@ -151,9 +147,6 @@ ignore = [
 "src/coderecon/mcp/tools/*.py" = ["B008", "ARG001"]
 # E2E test fixtures require parameters for pytest dependency injection even if unused
 "tests/e2e/*.py" = ["ARG001"]
-# EVEE decorators pass extra kwargs to __init__; benchmarking scripts are not library code
-"benchmarking/**/*.py" = ["ARG002"]
-
 [tool.ruff.lint.isort]
 known-first-party = ["coderecon"]
 
@@ -198,11 +191,6 @@ module = "tests.*"
 disallow_untyped_defs = false
 strict = false
 warn_return_any = false
-
-[[tool.mypy.overrides]]
-module = "benchmarking.*"
-ignore_errors = true
-follow_imports = "skip"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
