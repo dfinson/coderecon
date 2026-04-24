@@ -7,9 +7,9 @@ rendered as a numbered list of scaffold entries (path + signature_text),
 then a single LLM call asks for a reordered index array.  Candidates
 outside the top-N window are appended after the reranked pool unchanged.
 
-Three backends:
+Two backends:
 - ``passthrough`` — return candidates in baseline_rank order (no LLM).
-- ``github``      — GitHub Models REST API (e.g. GPT-4.1-mini).
+- ``azure``       — Azure OpenAI (e.g. GPT-4.1-mini via AAD token).
 - ``local``       — OpenAI-compatible local endpoint (ollama, llama.cpp).
 
 Fallback: if the LLM call fails or produces unparseable output, the
@@ -169,25 +169,6 @@ def _call_azure_openai(
     return choices[0].get("message", {}).get("content", "")
 
 
-def _call_github_models(
-    model_name: str,
-    system_prompt: str,
-    user_prompt: str,
-    max_tokens: int,
-    timeout: int,
-) -> str:
-    from cpl_lab.llm.llm_client import response_text, run_chat_completion
-
-    resp = run_chat_completion(
-        model=model_name,
-        system_prompt=system_prompt,
-        user_prompt=user_prompt,
-        max_tokens=max_tokens,
-        timeout=timeout,
-    )
-    return response_text(resp)
-
-
 def _call_local_openai(
     endpoint: str,
     model_name: str,
@@ -260,11 +241,6 @@ class _LLMRerankerPipeline:
     def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
         if self._backend == "azure":
             return _call_azure_openai(
-                self._model_name, system_prompt, user_prompt,
-                self._max_tokens, self._timeout,
-            )
-        if self._backend == "github":
-            return _call_github_models(
                 self._model_name, system_prompt, user_prompt,
                 self._max_tokens, self._timeout,
             )

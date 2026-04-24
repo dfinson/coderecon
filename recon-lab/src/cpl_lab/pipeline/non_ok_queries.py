@@ -439,12 +439,11 @@ def run_non_ok_queries(
     ``data/{repo_id}/ground_truth/non_ok_queries.json``.
     """
     if not _HAS_COPILOT_SDK:
-        click.echo(
-            "WARNING: Copilot SDK not installed — skipping non-ok-queries stage.\n"
-            "  The gate model will train without UNSAT/BROAD/AMBIG discrimination.\n"
+        raise click.ClickException(
+            "Copilot SDK is required for non-ok-queries but not installed.\n"
+            "  The gate model needs UNSAT/BROAD/AMBIG data to train.\n"
             "  Install with: pip install github-copilot-sdk"
         )
-        return
 
     from cpl_lab.pipeline.clone import REPO_MANIFEST
 

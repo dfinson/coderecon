@@ -31,9 +31,9 @@ from cpl_lab.config import get_config
 # ── Preflight checks ────────────────────────────────────────────
 
 # Stages that need specific credentials/tools.
-_NEEDS_GITHUB_TOKEN = frozenset({"pr-select", "pr-import"})
+_NEEDS_GITHUB_TOKEN = frozenset({"pr-select"})
 _NEEDS_RECON_BINARY = frozenset({"index-main", "index-worktrees", "collect"})
-_NEEDS_LLM = frozenset({"pr-import"})
+_NEEDS_AZURE_LLM = frozenset({"pr-import", "non-ok-queries"})
 
 
 def _preflight(ctx: click.Context) -> None:
@@ -43,29 +43,12 @@ def _preflight(ctx: click.Context) -> None:
 
     if cmd in _NEEDS_GITHUB_TOKEN:
         import os
-        import shutil
 
         token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
         if not token:
-            # Try gh CLI as fallback
-            if shutil.which("gh"):
-                import subprocess
-
-                result = subprocess.run(
-                    ["gh", "auth", "token"],
-                    capture_output=True,
-                    text=True,
-                )
-                if result.returncode != 0 or not result.stdout.strip():
-                    issues.append(
-                        "GITHUB_TOKEN not set and `gh auth token` failed. "
-                        "Set GITHUB_TOKEN or run `gh auth login`."
-                    )
-            else:
-                issues.append(
-                    "GITHUB_TOKEN not set and `gh` CLI not found. "
-                    "Export GITHUB_TOKEN or install GitHub CLI."
-                )
+            issues.append(
+                "GITHUB_TOKEN not set. Export GITHUB_TOKEN for GitHub API access."
+            )
 
     if cmd in _NEEDS_RECON_BINARY:
         try:
@@ -75,15 +58,20 @@ def _preflight(ctx: click.Context) -> None:
         except FileNotFoundError as e:
             issues.append(str(e))
 
-    if cmd in _NEEDS_LLM:
+    if cmd in _NEEDS_AZURE_LLM:
         import os
+        import shutil
 
-        token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
         endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
-        if not token and not endpoint:
+        if not endpoint:
             issues.append(
-                "LLM access not configured. Set GITHUB_TOKEN for GitHub Models "
-                "or AZURE_OPENAI_ENDPOINT for Azure OpenAI."
+                "AZURE_OPENAI_ENDPOINT not set. "
+                "Export it to point at your Azure OpenAI resource."
+            )
+        if not shutil.which("az"):
+            issues.append(
+                "Azure CLI not found. Install it and run `az login` "
+                "for AAD token auth."
             )
 
     if issues:

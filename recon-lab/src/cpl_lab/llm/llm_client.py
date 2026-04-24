@@ -1,41 +1,65 @@
-"""GitHub Models REST helpers for recon-lab LLM calls."""
+"""Azure OpenAI REST helpers for recon-lab LLM calls."""
 
 from __future__ import annotations
 
 import json
 import os
 import subprocess
+import threading
+import time
 import urllib.error
 import urllib.request
 from typing import Any
 
 
-_API_URL = "https://models.github.ai/inference/chat/completions"
-_API_VERSION = "2026-03-10"
+# ── Azure AAD token cache ────────────────────────────────────────
+
+_azure_token: str | None = None
+_azure_token_expires: float = 0.0
+_azure_token_lock = threading.Lock()
 
 
-def _token_from_env_or_gh() -> str | None:
-    for key in ("GITHUB_TOKEN", "GH_TOKEN"):
-        value = os.environ.get(key)
-        if value:
-            return value
+def _get_azure_token() -> str | None:
+    """Return a valid Azure AAD token, refreshing if needed.
 
-    try:
-        result = subprocess.run(
-            ["gh", "auth", "token"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return None
+    Uses ``az account get-access-token`` which returns both the token
+    and its expiry timestamp.  Thread-safe via lock.
+    """
+    global _azure_token, _azure_token_expires
 
-    if result.returncode == 0:
-        token = result.stdout.strip()
-        if token:
-            return token
-    return None
+    if _azure_token and time.monotonic() < (_azure_token_expires - 300):
+        return _azure_token
+
+    with _azure_token_lock:
+        if _azure_token and time.monotonic() < (_azure_token_expires - 300):
+            return _azure_token
+
+        try:
+            result = subprocess.run(
+                ["az", "account", "get-access-token",
+                 "--resource", "https://cognitiveservices.azure.com",
+                 "--output", "json"],
+                capture_output=True, text=True, timeout=30, check=True,
+            )
+            body = json.loads(result.stdout)
+            token = body.get("accessToken", "").strip()
+            if not token:
+                return None
+
+            expires_on = body.get("expires_on")
+            ttl = int(expires_on) - int(time.time()) if expires_on else 3600
+
+            _azure_token = token
+            _azure_token_expires = time.monotonic() + max(ttl, 60)
+            return _azure_token
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+                FileNotFoundError, json.JSONDecodeError, ValueError):
+            _azure_token = None
+            _azure_token_expires = 0.0
+            return None
+
+
+# ── Helpers ──────────────────────────────────────────────────────
 
 
 def _token_budget_field(model: str) -> str:
@@ -51,7 +75,6 @@ def _build_payload(
     token_budget_field: str,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
-        "model": model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -61,26 +84,28 @@ def _build_payload(
     return payload
 
 
-def _post_json(*, token: str, payload: dict[str, Any], timeout: int) -> dict[str, Any]:
-    request = urllib.request.Request(
-        _API_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "X-GitHub-Api-Version": _API_VERSION,
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(body or f"GitHub Models request failed with HTTP {exc.code}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"GitHub Models request failed: {exc.reason}") from exc
+# ── Azure OpenAI transport ───────────────────────────────────────
+
+
+def _resolve_endpoint_and_token() -> tuple[str, str]:
+    """Resolve Azure OpenAI endpoint and auth token.
+
+    Raises RuntimeError if AZURE_OPENAI_ENDPOINT is not set or AAD
+    token cannot be obtained.
+    """
+    endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "").rstrip("/")
+    if not endpoint:
+        raise RuntimeError(
+            "AZURE_OPENAI_ENDPOINT is not set. "
+            "Export it to point at your Azure OpenAI resource."
+        )
+
+    token = _get_azure_token()
+    if not token:
+        raise RuntimeError(
+            "Could not obtain Azure AAD token. Run: az login"
+        )
+    return endpoint, token
 
 
 def run_chat_completion(
@@ -91,41 +116,48 @@ def run_chat_completion(
     max_tokens: int,
     timeout: int = 90,
 ) -> dict[str, Any]:
-    token = _token_from_env_or_gh()
-    if not token:
-        raise RuntimeError("No GitHub token available for GitHub Models")
+    """Send a chat completion request to Azure OpenAI."""
+    endpoint, token = _resolve_endpoint_and_token()
+    api_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
+    deployment = model.split("/")[-1] if "/" in model else model
+    url = f"{endpoint}/openai/deployments/{deployment}/chat/completions?api-version={api_version}"
 
-    token_budget_field = _token_budget_field(model)
+    token_budget = _token_budget_field(model)
     payload = _build_payload(
         model=model,
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         max_tokens=max_tokens,
-        token_budget_field=token_budget_field,
+        token_budget_field=token_budget,
+    )
+
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
     )
     try:
-        return _post_json(token=token, payload=payload, timeout=timeout)
-    except RuntimeError as exc:
-        message = str(exc)
-        if token_budget_field == "max_tokens" and "max_completion_tokens" in message:
-            retry_payload = _build_payload(
-                model=model,
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                max_tokens=max_tokens,
-                token_budget_field="max_completion_tokens",
-            )
-            return _post_json(token=token, payload=retry_payload, timeout=timeout)
-        raise
+        with urllib.request.urlopen(request, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(body or f"Azure OpenAI request failed with HTTP {exc.code}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Azure OpenAI request failed: {exc.reason}") from exc
 
 
 def response_text(body: dict[str, Any]) -> str:
+    """Extract text content from an OpenAI chat completion response."""
     choices = body.get("choices")
     if not isinstance(choices, list) or not choices:
-        raise RuntimeError("GitHub Models response did not include choices")
+        raise RuntimeError("Response did not include choices")
     message = choices[0].get("message")
     if not isinstance(message, dict):
-        raise RuntimeError("GitHub Models response did not include a message")
+        raise RuntimeError("Response did not include a message")
     content = message.get("content", "")
     if isinstance(content, str):
         return content
@@ -138,4 +170,4 @@ def response_text(body: dict[str, Any]) -> str:
                     parts.append(text)
         if parts:
             return "".join(parts)
-    raise RuntimeError("GitHub Models response content was not text")
+    raise RuntimeError("Response content was not text")

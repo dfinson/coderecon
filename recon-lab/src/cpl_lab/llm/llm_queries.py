@@ -27,8 +27,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from cpl_lab.llm.llm_client import response_text, run_chat_completion
-
 logger = logging.getLogger(__name__)
 
 OK_QUERY_TYPES = (
@@ -998,10 +996,7 @@ def _call_llm_json(
 ) -> dict[str, Any]:
     """Call LLM and parse response as JSON.
 
-    Transport priority:
-      1. Azure OpenAI (AZURE_OPENAI_ENDPOINT + AAD token via ``az``)
-      2. GitHub Models (models.github.ai)
-      3. Anthropic (ANTHROPIC_API_KEY)
+    Requires AZURE_OPENAI_ENDPOINT + AAD token via ``az login``.
     """
     import time as _time
 
