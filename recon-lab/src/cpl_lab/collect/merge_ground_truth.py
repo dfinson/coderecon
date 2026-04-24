@@ -17,8 +17,8 @@ Writes: ``data/merged/runs.parquet``
 
 from __future__ import annotations
 
+import asyncio
 import json
-import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -38,41 +38,27 @@ from cpl_lab.data_manifest import (
 
 
 def _resolve_end_line(
-    cursor: sqlite3.Cursor,
+    defs_by_coords: dict[tuple[str, str, str, int], int],
     path: str,
     name: str,
     kind: str,
     start_line: int,
 ) -> int | None:
-    """Look up end_line for a def in the index by (path, name, kind, start_line)."""
-    row = cursor.execute(
-        """
-        SELECT d.end_line
-        FROM def_facts d
-        JOIN files f ON d.file_id = f.id
-        WHERE f.path = ? AND d.name = ? AND d.kind = ?
-          AND d.start_line = ?
-        LIMIT 1
-        """,
-        (path, name, kind, start_line),
-    ).fetchone()
-    if row is not None:
-        return row[0]
+    """Look up end_line for a def from the pre-fetched defs map.
 
-    row = cursor.execute(
-        """
-        SELECT d.end_line
-        FROM def_facts d
-        JOIN files f ON d.file_id = f.id
-        WHERE f.path = ? AND d.name = ? AND d.kind = ?
-          AND ABS(d.start_line - ?) <= 5
-        ORDER BY ABS(d.start_line - ?)
-        LIMIT 1
-        """,
-        (path, name, kind, start_line, start_line),
-    ).fetchone()
-    if row is not None:
-        return row[0]
+    Tries exact start_line match first, then fuzzy ±5 lines.
+    """
+    # Exact match
+    key = (path, name, kind, start_line)
+    if key in defs_by_coords:
+        return defs_by_coords[key]
+
+    # Fuzzy: within ±5 lines
+    for delta in range(1, 6):
+        for sl in (start_line + delta, start_line - delta):
+            key = (path, name, kind, sl)
+            if key in defs_by_coords:
+                return defs_by_coords[key]
 
     return None
 
@@ -100,8 +86,9 @@ def collect_ground_truth(
     if not task_files:
         raise FileNotFoundError(f"No ground truth JSON files in {gt_dir}")
 
-    con = sqlite3.connect(str(index_db))
-    cur = con.cursor()
+    # Pre-fetch all defs from the index via SDK
+    main_clone_dir = index_db.parent.parent  # .recon/index.db → repo_root
+    defs_by_coords = _fetch_defs_map(main_clone_dir)
 
     runs: list[dict[str, Any]] = []
     touched: list[dict[str, Any]] = []
@@ -128,7 +115,7 @@ def collect_ground_truth(
         ]:
             for rd in task.get(tier_key, []):
                 end_line = _resolve_end_line(
-                    cur, rd["path"], rd["name"], rd["kind"],
+                    defs_by_coords, rd["path"], rd["name"], rd["kind"],
                     start_line=rd["start_line"],
                 )
                 if end_line is None:
@@ -178,8 +165,6 @@ def collect_ground_truth(
                 "pins": q.get("pins", []),
                 "label_gate": label,
             })
-
-    con.close()
 
     # Non-OK queries (UNSAT/BROAD/AMBIG) are per-repo, stored in the main
     # repo's data dir.  For PR worktrees, resolve via manifest.json.
@@ -366,29 +351,63 @@ def _collect_repo_features(
     data_dir: Path,
     clones_dir: Path,
 ) -> list[dict[str, Any]]:
-    """Query each repo's index.db for object_count and file_count."""
+    """Query each repo's index for object_count and file_count via SDK."""
+    from coderecon.sdk.dev import CodeReconDev
+
     rows: list[dict[str, Any]] = []
-    for repo_dir in iter_repo_data_dirs(data_dir):
-        repo_id = repo_dir.name
-        manifest = load_repo_manifest(repo_dir)
-        clone = main_clone_dir_for_dir(repo_dir, clones_dir)
-        if clone is None:
-            continue
-        index_db = clone / ".recon" / "index.db"
-        if not index_db.exists():
-            continue
-        con = sqlite3.connect(str(index_db))
-        try:
-            obj_count = con.execute("SELECT COUNT(*) FROM def_facts").fetchone()[0]
-            file_count = con.execute("SELECT COUNT(*) FROM files").fetchone()[0]
-        except Exception:
-            obj_count = file_count = 0
-        finally:
-            con.close()
-        rows.append({
-            "repo_id": repo_id,
-            "logical_repo_id": manifest.get("logical_repo_id", repo_id),
-            "object_count": obj_count,
-            "file_count": file_count,
-        })
+
+    async def _gather() -> None:
+        from cpl_lab.config import recon_binary
+        async with CodeReconDev(binary=recon_binary()) as sdk:
+            for repo_dir in iter_repo_data_dirs(data_dir):
+                repo_id = repo_dir.name
+                manifest = load_repo_manifest(repo_dir)
+                clone = main_clone_dir_for_dir(repo_dir, clones_dir)
+                if clone is None:
+                    continue
+                index_db = clone / ".recon" / "index.db"
+                if not index_db.exists():
+                    continue
+                try:
+                    reg = await sdk.register(str(clone))
+                    status = await sdk.index_status(reg.repo)
+                    rows.append({
+                        "repo_id": repo_id,
+                        "logical_repo_id": manifest.get("logical_repo_id", repo_id),
+                        "object_count": status.def_count,
+                        "file_count": status.file_count,
+                    })
+                except Exception:
+                    rows.append({
+                        "repo_id": repo_id,
+                        "logical_repo_id": manifest.get("logical_repo_id", repo_id),
+                        "object_count": 0,
+                        "file_count": 0,
+                    })
+
+    asyncio.run(_gather())
     return rows
+
+
+def _fetch_defs_map(
+    main_clone_dir: Path,
+) -> dict[tuple[str, str, str, int], int]:
+    """Fetch all defs from a repo's index via SDK and return lookup map.
+
+    Returns: {(path, name, kind, start_line): end_line}
+    """
+    from coderecon.sdk.dev import CodeReconDev
+
+    result: dict[tuple[str, str, str, int], int] = {}
+
+    async def _fetch() -> None:
+        from cpl_lab.config import recon_binary
+        async with CodeReconDev(binary=recon_binary()) as sdk:
+            reg = await sdk.register(str(main_clone_dir))
+            defs = await sdk.lookup_defs(reg.repo)
+            for d in defs:
+                key = (d.path, d.name, d.kind, d.start_line)
+                result[key] = d.end_line
+
+    asyncio.run(_fetch())
+    return result

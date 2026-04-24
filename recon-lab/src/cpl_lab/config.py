@@ -21,12 +21,27 @@ else:
 
 # Repo-local paths (versioned source).
 LAB_ROOT = Path(__file__).resolve().parent.parent.parent  # recon-lab/
+CODERECON_ROOT = LAB_ROOT.parent  # coderecon/
 REPOS_DIR = LAB_ROOT / "repos"
 ROLES_DIR = LAB_ROOT / "roles"
 INFRA_DIR = LAB_ROOT / "infra"
 
 # Default lab.toml location.
 _DEFAULT_CONFIG = LAB_ROOT / "lab.toml"
+
+
+def recon_binary() -> str:
+    """Resolve the ``recon`` CLI binary from the coderecon venv."""
+    venv_bin = CODERECON_ROOT / ".venv" / "bin" / "recon"
+    if venv_bin.is_file():
+        return str(venv_bin)
+    import shutil
+    found = shutil.which("recon")
+    if found:
+        return found
+    raise FileNotFoundError(
+        f"recon binary not found at {venv_bin} or on PATH"
+    )
 
 
 def _load_toml(path: Path) -> dict:

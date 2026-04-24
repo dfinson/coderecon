@@ -284,109 +284,113 @@ def _worker_inner(args: tuple[str, str, str, str, str], queue: mp.Queue) -> None
     # Post initial progress
     queue.put(("progress", repo_id, 0, len(queries)))
 
-    from coderecon.mcp.context import AppContext
-    from coderecon.mcp.tools.recon.raw_signals import raw_signals_pipeline
+    from coderecon.sdk.dev import CodeReconDev
 
-    # index.db and tantivy live in the main repo's .recon/;
-    # repo_root points at the instance worktree for correct file reads.
-    # worktree_name enables the overlay so worktree-specific files shadow main.
-    recon_dir = main_clone_dir / ".recon"
-    worktree_name = instance_clone_dir.name if instance_clone_dir != main_clone_dir else "main"
-    ctx = AppContext.standalone(
-        repo_root=instance_clone_dir,
-        db_path=recon_dir / "index.db",
-        tantivy_path=recon_dir / "tantivy",
-        worktree_name=worktree_name,
-    )
+    worktree_name = instance_clone_dir.name if instance_clone_dir != main_clone_dir else None
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(ctx.coordinator.load_existing())
-    except Exception as e:
-        queue.put(("done", repo_id, {
-            "repo_id": repo_id, "status": "error", "queries_processed": 0,
-            "total_candidates": 0, "error": str(e), "elapsed_sec": 0,
-        }))
-        return
+
+    async def _run_collection() -> None:
+        nonlocal n_cand, n_q, n_err
+        from cpl_lab.config import recon_binary
+
+        async with CodeReconDev(binary=recon_binary()) as sdk:
+            reg = await sdk.register(str(main_clone_dir))
+            repo_name = reg.repo
+
+            sig_dir = data_dir / "signals"
+            sig_dir.mkdir(parents=True, exist_ok=True)
+            out_path = sig_dir / "candidates_rank.parquet"
+
+            writer: pq.ParquetWriter | None = None
+
+            for q in queries:
+                tr = rel_map.get(q["task_id"], {})
+                try:
+                    res = await sdk.raw_signals(
+                        repo_name,
+                        q["query_text"],
+                        seeds=q["seeds"] or None,
+                        pins=q["pins"] or None,
+                        worktree=worktree_name,
+                    )
+                except Exception:
+                    n_err += 1
+                    n_q += 1
+                    if n_q % 5 == 0 or n_q == len(queries):
+                        queue.put(("progress", repo_id, n_q, len(queries)))
+                    continue
+
+                rows: list[dict] = []
+                qf = res.query_features
+                for c in res.candidates:
+                    cand_key = f"{c.get('path', '')}:{c.get('kind', '')}:{c.get('name', '')}:{c.get('start_line', 0)}"
+                    grade = tr.get(cand_key, 0)
+                    row = {
+                        "task_id": q["task_id"], "query_id": q["query_id"],
+                        "query_type": q["query_type"],
+                        "candidate_key": cand_key, **c,
+                        "query_len": qf.get("query_len", 0),
+                        "has_identifier": qf.get("has_identifier", False),
+                        "has_path": qf.get("has_path", False),
+                        "identifier_density": qf.get("identifier_density", 0.0),
+                        "has_numbers": qf.get("has_numbers", False),
+                        "has_quoted_strings": qf.get("has_quoted_strings", False),
+                        "term_count": qf.get("term_count", 0),
+                        "intent": qf.get("intent", ""),
+                        "is_stacktrace_driven": qf.get("is_stacktrace_driven", False),
+                        "is_test_driven": qf.get("is_test_driven", False),
+                        "label_relevant": grade,
+                    }
+                    for field in _SIGNALS_SCHEMA:
+                        if field.name not in row:
+                            if pa.types.is_floating(field.type):
+                                row[field.name] = 0.0
+                            elif pa.types.is_integer(field.type):
+                                row[field.name] = 0
+                            elif pa.types.is_boolean(field.type):
+                                row[field.name] = False
+                            elif pa.types.is_string(field.type):
+                                row[field.name] = ""
+                    rows.append(row)
+
+                if rows:
+                    batch_table = pa.Table.from_pandas(
+                        pd.DataFrame(rows), schema=_SIGNALS_SCHEMA, preserve_index=False,
+                    )
+                    if writer is None:
+                        writer = pq.ParquetWriter(out_path, _SIGNALS_SCHEMA)
+                    writer.write_table(batch_table)
+                    n_cand += len(rows)
+                    del batch_table, rows
+
+                n_q += 1
+                if n_q % 5 == 0 or n_q == len(queries):
+                    queue.put(("progress", repo_id, n_q, len(queries)))
+
+            if writer is not None:
+                writer.close()
 
     sig_dir = data_dir / "signals"
-    sig_dir.mkdir(parents=True, exist_ok=True)
-    out_path = sig_dir / "candidates_rank.parquet"
-
     n_cand = n_q = n_err = 0
     t0 = time.monotonic()
 
-    writer: pq.ParquetWriter | None = None
+    try:
+        loop.run_until_complete(_run_collection())
+    except Exception as e:
+        queue.put(("done", repo_id, {
+            "repo_id": repo_id, "status": "error", "queries_processed": n_q,
+            "total_candidates": n_cand, "error": str(e), "elapsed_sec": round(time.monotonic() - t0, 1),
+        }))
+        return
+    finally:
+        loop.close()
 
-    for q in queries:
-        tr = rel_map.get(q["task_id"], {})
-        try:
-            res = loop.run_until_complete(
-                raw_signals_pipeline(ctx, q["query_text"],
-                                     seeds=q["seeds"] or None,
-                                     pins=q["pins"] or None))
-        except Exception:
-            n_err += 1
-            n_q += 1
-            queue.put(("progress", repo_id, n_q, len(queries)))
-            continue
-
-        rows: list[dict] = []
-        qf = res.get("query_features", {})
-        for c in res.get("candidates", []):
-            cand_key = f"{c.get('path', '')}:{c.get('kind', '')}:{c.get('name', '')}:{c.get('start_line', 0)}"
-            grade = tr.get(cand_key, 0)
-            row = {
-                "task_id": q["task_id"], "query_id": q["query_id"],
-                "query_type": q["query_type"],
-                "candidate_key": cand_key, **c,
-                "query_len": qf.get("query_len", 0),
-                "has_identifier": qf.get("has_identifier", False),
-                "has_path": qf.get("has_path", False),
-                "identifier_density": qf.get("identifier_density", 0.0),
-                "has_numbers": qf.get("has_numbers", False),
-                "has_quoted_strings": qf.get("has_quoted_strings", False),
-                "term_count": qf.get("term_count", 0),
-                "intent": qf.get("intent", ""),
-                "is_stacktrace_driven": qf.get("is_stacktrace_driven", False),
-                "is_test_driven": qf.get("is_test_driven", False),
-                "label_relevant": grade,
-            }
-            # Fill defaults for schema fields not provided by the pipeline
-            for field in _SIGNALS_SCHEMA:
-                if field.name not in row:
-                    if pa.types.is_floating(field.type):
-                        row[field.name] = 0.0
-                    elif pa.types.is_integer(field.type):
-                        row[field.name] = 0
-                    elif pa.types.is_boolean(field.type):
-                        row[field.name] = False
-                    elif pa.types.is_string(field.type):
-                        row[field.name] = ""
-            rows.append(row)
-
-        if rows:
-            batch_table = pa.Table.from_pandas(
-                pd.DataFrame(rows), schema=_SIGNALS_SCHEMA, preserve_index=False,
-            )
-            if writer is None:
-                writer = pq.ParquetWriter(out_path, _SIGNALS_SCHEMA)
-            writer.write_table(batch_table)
-            n_cand += len(rows)
-            del batch_table, rows
-
-        n_q += 1
-        # Throttle progress updates (every 5 queries)
-        if n_q % 5 == 0 or n_q == len(queries):
-            queue.put(("progress", repo_id, n_q, len(queries)))
-
-    if writer is not None:
-        writer.close()
-
-    loop.close()
     elapsed = round(time.monotonic() - t0, 1)
     summary = {"repo_id": repo_id, "status": "ok", "queries_processed": n_q,
                "total_candidates": n_cand, "errors": n_err, "elapsed_sec": elapsed}
+    sig_dir.mkdir(parents=True, exist_ok=True)
     (sig_dir / "summary.json").write_text(json.dumps(summary, indent=2))
     queue.put(("done", repo_id, summary))
 

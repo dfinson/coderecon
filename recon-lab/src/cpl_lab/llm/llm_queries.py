@@ -19,7 +19,6 @@ import json
 import logging
 import os
 import re
-import sqlite3
 import subprocess
 import threading
 import urllib.request
@@ -95,61 +94,35 @@ def _extract_index_facts(index_db: Path) -> str:
     definition names by kind, and external dependencies.  Used as the
     grounding set for UNSAT query generation and validation.
     """
-    con = sqlite3.connect(str(index_db))
-    cur = con.cursor()
+    from coderecon.sdk.dev import CodeReconDev
 
-    # Top-level directories (first path component)
-    rows = cur.execute(
-        "SELECT DISTINCT SUBSTR(path, 1, INSTR(path, '/') - 1) "
-        "FROM files WHERE INSTR(path, '/') > 0"
-    ).fetchall()
-    top_dirs = sorted({r[0] for r in rows if r[0]})
+    main_clone_dir = index_db.parent.parent  # .recon/index.db → repo_root
 
-    # Languages
-    rows = cur.execute(
-        "SELECT language_family, COUNT(*) FROM files "
-        "GROUP BY language_family ORDER BY COUNT(*) DESC"
-    ).fetchall()
-    languages = [(r[0], r[1]) for r in rows if r[0]]
+    async def _fetch() -> str:
+        from cpl_lab.config import recon_binary
+        async with CodeReconDev(binary=recon_binary()) as sdk:
+            reg = await sdk.register(str(main_clone_dir))
+            facts = await sdk.index_facts(reg.repo)
+            parts = []
+            if facts.top_dirs:
+                parts.append(f"Top-level directories: {', '.join(facts.top_dirs)}")
+            if facts.languages:
+                lang_str = ", ".join(
+                    f"{l['language']} ({l['count']} files)"
+                    for l in facts.languages
+                )
+                parts.append(f"Languages: {lang_str}")
+            if facts.classes:
+                parts.append(f"Classes: {', '.join(facts.classes)}")
+            if facts.functions:
+                parts.append(f"Functions/methods: {', '.join(facts.functions)}")
+            if facts.external_deps:
+                parts.append(
+                    f"External dependencies: {', '.join(facts.external_deps)}"
+                )
+            return "\n".join(parts)
 
-    # Class names (sample up to 50)
-    rows = cur.execute(
-        "SELECT DISTINCT name FROM def_facts WHERE kind = 'class' "
-        "ORDER BY name LIMIT 50"
-    ).fetchall()
-    classes = [r[0] for r in rows]
-
-    # Function/method names (sample up to 50)
-    rows = cur.execute(
-        "SELECT DISTINCT name FROM def_facts WHERE kind IN ('function', 'method') "
-        "ORDER BY name LIMIT 50"
-    ).fetchall()
-    functions = [r[0] for r in rows]
-
-    # External dependencies (top imports by frequency)
-    rows = cur.execute(
-        "SELECT source_literal, COUNT(*) FROM import_facts "
-        "WHERE resolved_path IS NULL OR resolved_path = '' "
-        "GROUP BY source_literal ORDER BY COUNT(*) DESC LIMIT 30"
-    ).fetchall()
-    deps = [r[0] for r in rows if r[0]]
-
-    con.close()
-
-    parts = []
-    if top_dirs:
-        parts.append(f"Top-level directories: {', '.join(top_dirs)}")
-    if languages:
-        lang_str = ", ".join(f"{lang} ({count} files)" for lang, count in languages)
-        parts.append(f"Languages: {lang_str}")
-    if classes:
-        parts.append(f"Classes: {', '.join(classes)}")
-    if functions:
-        parts.append(f"Functions/methods: {', '.join(functions)}")
-    if deps:
-        parts.append(f"External dependencies: {', '.join(deps)}")
-
-    return "\n".join(parts)
+    return asyncio.run(_fetch())
 
 
 # ── Public entry point ───────────────────────────────────────────

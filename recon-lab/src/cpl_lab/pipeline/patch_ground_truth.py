@@ -7,8 +7,8 @@ hunk).  Labels are binary: relevant (1) vs irrelevant (0).
 
 from __future__ import annotations
 
+import asyncio
 import re
-import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -109,46 +109,42 @@ def map_hunks_to_defs(
 ) -> list[DefEntry]:
     """Map changed hunks to indexed definitions for a worktree.
 
-    Queries ``def_facts`` from the main repo's index.db, filtered by
-    ``worktree_name`` via the ``files.worktree_id`` → ``worktrees.name``
-    join.  Returns only minimum_sufficient defs (definitions whose spans
+    Uses the CodeRecon SDK to look up definitions, filtering by
+    worktree so that PR-specific defs are used (not main HEAD defs).
+    Returns only minimum_sufficient defs (definitions whose spans
     overlap a changed hunk).
     """
-    con = sqlite3.connect(str(index_db))
-    cur = con.cursor()
+    from coderecon.sdk.dev import CodeReconDev
 
-    # Resolve worktree_id — require the specific worktree to be indexed.
-    # Do NOT fall back to main: main has HEAD defs, not the PR-commit defs,
-    # which would poison training data with wrong line ranges.
-    row = cur.execute(
-        "SELECT id FROM worktrees WHERE name = ?", (worktree_name,)
-    ).fetchone()
-    if row is not None:
-        has_files = cur.execute(
-            "SELECT 1 FROM files WHERE worktree_id = ? LIMIT 1", (row[0],)
-        ).fetchone()
-        if not has_files:
-            con.close()
-            return []  # registered but not indexed
-    if row is None:
-        con.close()
-        return []  # worktree not found
-    wt_id = row[0]
+    main_clone_dir = index_db.parent.parent  # .recon/index.db → repo_root
 
-    # Build lookup: relative path → list of (name, kind, start_line, end_line)
+    # Fetch defs for this worktree via SDK
     defs_by_path: dict[str, list[tuple[str, str, int, int]]] = {}
-    for name, kind, start_line, end_line, path in cur.execute(
-        """
-        SELECT d.name, d.kind, d.start_line, d.end_line, f.path
-        FROM def_facts d
-        JOIN files f ON d.file_id = f.id
-        WHERE f.worktree_id = ?
-        """,
-        (wt_id,),
-    ):
-        defs_by_path.setdefault(path, []).append((name, kind, start_line, end_line))
 
-    con.close()
+    async def _fetch_defs() -> None:
+        from cpl_lab.config import recon_binary
+        async with CodeReconDev(binary=recon_binary()) as sdk:
+            reg = await sdk.register(str(main_clone_dir))
+
+            # Check if worktree is indexed
+            try:
+                status = await sdk.index_status(reg.repo, worktree=worktree_name)
+            except Exception:
+                return
+            if status.file_count == 0:
+                return
+
+            # Fetch all defs for this worktree
+            defs = await sdk.lookup_defs(reg.repo, worktree=worktree_name)
+            for d in defs:
+                defs_by_path.setdefault(d.path, []).append(
+                    (d.name, d.kind, d.start_line, d.end_line)
+                )
+
+    asyncio.run(_fetch_defs())
+
+    if not defs_by_path:
+        return []
 
     min_suff: list[DefEntry] = []
     changed_def_keys: set[tuple[str, str, int]] = set()
@@ -197,9 +193,15 @@ def expand_defs_via_coverage(
 
     Only non-stale coverage facts are used.  Returns new DefEntry objects
     not already in the minimum_sufficient set.
+
+    NOTE: This still uses direct DB access for test_coverage_facts queries
+    which involve complex joins not exposed via the SDK. This is acceptable
+    as coverage expansion is only used when test coverage data exists.
     """
     if not minimum_sufficient:
         return []
+
+    import sqlite3
 
     con = sqlite3.connect(str(index_db))
     cur = con.cursor()
