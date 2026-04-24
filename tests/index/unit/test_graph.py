@@ -39,6 +39,7 @@ from coderecon.index.models import (
     ScopeFact,
     ScopeKind,
     TestCoverageFact,
+    Worktree,
 )
 
 
@@ -48,6 +49,9 @@ def db(temp_dir: Path) -> Database:
     db_path = temp_dir / "test_graph.db"
     db = Database(db_path)
     db.create_all()
+    with db.session() as session:
+        session.add(Worktree(id=1, name="main", root_path="/test", is_main=True))
+        session.commit()
     create_additional_indexes(db.engine)
     return db
 
@@ -67,8 +71,8 @@ def seeded_db(db: Database) -> Database:
         context_id = ctx.id
 
         # Create files
-        file1 = File(path="src/main.py", language_family="python")
-        file2 = File(path="src/utils.py", language_family="python")
+        file1 = File(path="src/main.py", language_family="python", worktree_id=1)
+        file2 = File(path="src/utils.py", language_family="python", worktree_id=1)
         session.add(file1)
         session.add(file2)
         session.commit()

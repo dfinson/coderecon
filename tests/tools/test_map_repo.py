@@ -22,7 +22,11 @@ def db_session() -> Session:
     """Create an in-memory database session with schema."""
     engine = create_engine("sqlite:///:memory:")
     SQLModel.metadata.create_all(engine)
-    return Session(engine)
+    session = Session(engine)
+    from coderecon.index.models import Worktree
+    session.add(Worktree(name="main", root_path="/test", is_main=True))
+    session.commit()
+    return session
 
 
 class TestRepoMapper:
@@ -42,9 +46,9 @@ class TestRepoMapper:
         db_session.flush()
 
         files = [
-            File(path="src/main.py", language_family="python", line_count=100),
-            File(path="src/utils.py", language_family="python", line_count=50),
-            File(path="tests/test_main.py", language_family="python", line_count=75),
+            File(path="src/main.py", language_family="python", line_count=100, worktree_id=1),
+            File(path="src/utils.py", language_family="python", line_count=50, worktree_id=1),
+            File(path="tests/test_main.py", language_family="python", line_count=75, worktree_id=1),
         ]
         for f in files:
             db_session.add(f)
@@ -73,9 +77,9 @@ class TestRepoMapper:
         """Map languages groups by language_family."""
         # Given
         files = [
-            File(path="app.py", language_family="python"),
-            File(path="util.py", language_family="python"),
-            File(path="index.js", language_family="javascript"),
+            File(path="app.py", language_family="python", worktree_id=1),
+            File(path="util.py", language_family="python", worktree_id=1),
+            File(path="index.js", language_family="javascript", worktree_id=1),
         ]
         for f in files:
             db_session.add(f)
@@ -105,7 +109,7 @@ class TestRepoMapper:
         db_session.add(ctx)
         db_session.flush()
 
-        f = File(path="app.py", language_family="python")
+        f = File(path="app.py", language_family="python", worktree_id=1)
         db_session.add(f)
         db_session.flush()
 
@@ -157,9 +161,9 @@ class TestRepoMapper:
         """Map test_layout finds test files by path pattern."""
         # Given
         files = [
-            File(path="tests/test_foo.py", language_family="python"),
-            File(path="tests/test_bar.py", language_family="python"),
-            File(path="src/main.py", language_family="python"),
+            File(path="tests/test_foo.py", language_family="python", worktree_id=1),
+            File(path="tests/test_bar.py", language_family="python", worktree_id=1),
+            File(path="src/main.py", language_family="python", worktree_id=1),
         ]
         for f in files:
             db_session.add(f)
@@ -188,7 +192,7 @@ class TestRepoMapper:
         db_session.add(ctx)
         db_session.flush()
 
-        f = File(path="app.py", language_family="python")
+        f = File(path="app.py", language_family="python", worktree_id=1)
         db_session.add(f)
         db_session.flush()
 
@@ -301,6 +305,7 @@ class TestRepoMapper:
                     path=f"tests/test_{i:02d}.py",
                     language_family="python",
                     line_count=10,
+                    worktree_id=1,
                 )
             )
         for i in range(5):
@@ -309,6 +314,7 @@ class TestRepoMapper:
                     path=f"src/mod_{i:02d}.py",
                     language_family="python",
                     line_count=20,
+                    worktree_id=1,
                 )
             )
         db_session.commit()

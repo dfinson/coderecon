@@ -9,7 +9,7 @@ import pytest
 
 from coderecon.index._internal.db import Database
 from coderecon.index._internal.state.filestate import FileStateService, MutationGateResult
-from coderecon.index.models import Certainty, File, FileState, Freshness
+from coderecon.index.models import Certainty, File, FileState, Freshness, Worktree
 
 
 @pytest.fixture
@@ -18,6 +18,9 @@ def db(tmp_path: Path) -> Database:
     db_path = tmp_path / "test.db"
     database = Database(db_path)
     database.create_all()
+    with database.session() as session:
+        session.add(Worktree(id=1, name="main", root_path="/test", is_main=True))
+        session.commit()
     return database
 
 
@@ -47,6 +50,7 @@ class TestGetFileState:
                 path="test.py",
                 content_hash="abc123",
                 indexed_at=None,
+                worktree_id=1,
             )
             session.add(file)
             session.commit()
@@ -68,6 +72,7 @@ class TestGetFileState:
                 path="test.py",
                 content_hash="abc123",
                 indexed_at=time.time(),
+                worktree_id=1,
             )
             session.add(file)
             session.commit()
@@ -89,6 +94,7 @@ class TestGetFileState:
                 path="test.py",
                 content_hash="abc123",
                 indexed_at=time.time(),
+                worktree_id=1,
             )
             session.add(file)
             session.commit()
@@ -119,6 +125,7 @@ class TestGetFileStatesBatch:
                     path=f"test{i}.py",
                     content_hash=f"hash{i}",
                     indexed_at=time.time() if i < 2 else None,
+                    worktree_id=1,
                 )
                 session.add(file)
                 session.commit()
@@ -153,6 +160,7 @@ class TestCheckMutationGate:
                     path=f"test{i}.py",
                     content_hash=f"hash{i}",
                     indexed_at=time.time(),
+                    worktree_id=1,
                 )
                 session.add(file)
                 session.commit()
@@ -174,6 +182,7 @@ class TestCheckMutationGate:
                 path="test.py",
                 content_hash="hash",
                 indexed_at=None,
+                worktree_id=1,
             )
             session.add(file)
             session.commit()
@@ -208,6 +217,7 @@ class TestCheckMutationGate:
                 path="indexed.py",
                 content_hash="hash1",
                 indexed_at=time.time(),
+                worktree_id=1,
             )
             session.add(indexed)
             session.commit()
@@ -219,6 +229,7 @@ class TestCheckMutationGate:
                 path="unindexed.py",
                 content_hash="hash2",
                 indexed_at=None,
+                worktree_id=1,
             )
             session.add(unindexed)
             session.commit()

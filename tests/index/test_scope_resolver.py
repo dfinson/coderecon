@@ -87,6 +87,7 @@ class TestFindEnclosingScope:
                 path="src/example.py",
                 language_family="python",
                 line_count=100,
+                worktree_id=1,
             )
             session.add(file)
             session.commit()
@@ -226,7 +227,7 @@ class TestFindEnclosingScope:
             session.commit()
             session.refresh(context)
 
-            file = File(path="lambda.py", language_family="python", line_count=10)
+            file = File(path="lambda.py", language_family="python", line_count=10, worktree_id=1)
             session.add(file)
             session.commit()
             session.refresh(file)
@@ -278,6 +279,7 @@ class TestResolveScopeRegion:
                 path="src/resolver_test.py",
                 language_family="python",
                 line_count=12,
+                worktree_id=1,
             )
             session.add(file)
             session.commit()
@@ -362,6 +364,7 @@ class TestResolveScopeRegion:
                 path="nonexistent/file.py",
                 language_family="python",
                 line_count=10,
+                worktree_id=1,
             )
             session.add(file)
             session.commit()
@@ -397,6 +400,7 @@ class TestResolveScopeRegionForPath:
                 path="indexed.py",
                 language_family="python",
                 line_count=5,
+                worktree_id=1,
             )
             session.add(file)
             session.commit()

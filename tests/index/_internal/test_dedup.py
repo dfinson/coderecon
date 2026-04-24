@@ -40,18 +40,27 @@ class TestFindReusableFiles:
         db = Database(tmp_path / "test.db")
         db.create_all()
 
-        # Insert a file in worktree 0 (main)
+        # Create two worktrees
         with db.engine.connect() as conn:
             conn.execute(text(
+                "INSERT INTO worktrees (id, name, root_path, is_main) "
+                "VALUES (1, 'main', '/main', 1)"
+            ))
+            conn.execute(text(
+                "INSERT INTO worktrees (id, name, root_path, is_main) "
+                "VALUES (2, 'feature', '/feature', 0)"
+            ))
+            # Insert a file in worktree 1 (main)
+            conn.execute(text(
                 "INSERT INTO files (id, worktree_id, path, content_hash) "
-                "VALUES (1, 0, 'src/foo.py', 'abc123')"
+                "VALUES (1, 1, 'src/foo.py', 'abc123')"
             ))
             conn.commit()
 
-        # Query from worktree 1 — should find the match
+        # Query from worktree 2 — should find the match
         result = find_reusable_files(
             db.engine,
-            worktree_id=1,
+            worktree_id=2,
             file_hashes={"src/foo.py": "abc123"},
         )
         assert "src/foo.py" in result
@@ -65,8 +74,13 @@ class TestFindReusableFiles:
         db = Database(tmp_path / "test.db")
         db.create_all()
 
-        # Insert a file in worktree 1
+        # Create worktree
         with db.engine.connect() as conn:
+            conn.execute(text(
+                "INSERT INTO worktrees (id, name, root_path, is_main) "
+                "VALUES (1, 'main', '/main', 1)"
+            ))
+            # Insert a file in worktree 1
             conn.execute(text(
                 "INSERT INTO files (id, worktree_id, path, content_hash) "
                 "VALUES (1, 1, 'src/foo.py', 'abc123')"

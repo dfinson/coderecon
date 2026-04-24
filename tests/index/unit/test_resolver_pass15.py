@@ -32,6 +32,7 @@ from coderecon.index.models import (
     RefFact,
     RefTier,
     Role,
+    Worktree,
 )
 
 # ---------------------------------------------------------------------------
@@ -46,6 +47,9 @@ def db(temp_dir: Path) -> Database:
     db = Database(db_path)
     db.create_all()
     create_additional_indexes(db.engine)
+    with db.session() as session:
+        session.add(Worktree(id=1, name="main", root_path="/test", is_main=True))
+        session.commit()
     return db
 
 
@@ -57,7 +61,7 @@ def seeded_db(db: Database) -> Database:
         session.add(ctx)
         session.commit()
 
-        f = File(path="test.py", language_family="python")
+        f = File(path="test.py", language_family="python", worktree_id=1)
         session.add(f)
         session.commit()
         file_id = f.id

@@ -21,7 +21,7 @@ from coderecon.index._internal.indexing.import_graph import (
     ImportGraph,
     ImportGraphResult,
 )
-from coderecon.index.models import Context, File, ImportFact
+from coderecon.index.models import Context, File, ImportFact, Worktree
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -35,6 +35,9 @@ def db(temp_dir: Path) -> Database:
     db = Database(db_path)
     db.create_all()
     create_additional_indexes(db.engine)
+    with db.session() as session:
+        session.add(Worktree(id=1, name="main", root_path="/test", is_main=True))
+        session.commit()
     return db
 
 
@@ -67,6 +70,7 @@ def _seed_data(
                 language="python",
                 line_count=10,
                 byte_size=100,
+                worktree_id=1,
             )
             session.add(f)
             file_map[fp] = i

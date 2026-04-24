@@ -24,7 +24,7 @@ from coderecon.index._internal.indexing.config_refs import (
     _try_resolve,
     resolve_config_file_refs,
 )
-from coderecon.index.models import Context, DefFact, File, ImportFact
+from coderecon.index.models import Context, DefFact, File, ImportFact, Worktree
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -38,6 +38,9 @@ def db(temp_dir: Path) -> Database:
     db = Database(db_path)
     db.create_all()
     create_additional_indexes(db.engine)
+    with db.session() as session:
+        session.add(Worktree(id=1, name="main", root_path="/test", is_main=True))
+        session.commit()
     return db
 
 
@@ -289,13 +292,13 @@ class TestResolveConfigFileRefs:
             assert ctx_id is not None
 
             # Add source files
-            f_init = File(path="src/mylib/__init__.py", language_family="python")
+            f_init = File(path="src/mylib/__init__.py", language_family="python", worktree_id=1)
             session.add(f_init)
-            f_core = File(path="src/mylib/core.py", language_family="python")
+            f_core = File(path="src/mylib/core.py", language_family="python", worktree_id=1)
             session.add(f_core)
 
             # Add config file
-            f_config = File(path="pyproject.toml", language_family="toml")
+            f_config = File(path="pyproject.toml", language_family="toml", worktree_id=1)
             session.add(f_config)
             session.commit()
 
@@ -387,7 +390,7 @@ class TestResolveConfigFileRefs:
             session.add(ctx)
             session.commit()
 
-            f = File(path="src/main.py", language_family="python")
+            f = File(path="src/main.py", language_family="python", worktree_id=1)
             session.add(f)
             session.commit()
 
@@ -446,11 +449,11 @@ class TestResolveConfigFileRefs:
             ctx_id = ctx.id
             assert ctx_id is not None
 
-            f_test = File(path="tests/unit/test_core.py", language_family="python")
+            f_test = File(path="tests/unit/test_core.py", language_family="python", worktree_id=1)
             session.add(f_test)
-            f_build = File(path="tools/build/build.sh", language_family="shell")
+            f_build = File(path="tools/build/build.sh", language_family="shell", worktree_id=1)
             session.add(f_build)
-            f_makefile = File(path="Makefile", language_family="make")
+            f_makefile = File(path="Makefile", language_family="make", worktree_id=1)
             session.add(f_makefile)
             session.commit()
 

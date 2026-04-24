@@ -4,7 +4,9 @@ These indexes complement the basic indexes defined in SQLModel Field()
 declarations. They are composite indexes for common query patterns that
 cannot be expressed via Field(index=True).
 
-Call create_additional_indexes() after Database.create_all().
+NOTE: These indexes are now also created by the Alembic 0001 migration.
+The create_additional_indexes() function is kept for backward compatibility
+but is effectively idempotent (CREATE INDEX IF NOT EXISTS).
 """
 
 from __future__ import annotations

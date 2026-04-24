@@ -24,7 +24,7 @@ from sqlmodel import select
 import pytest
 
 from coderecon.index._internal.db import Database, Reconciler, ReconcileResult
-from coderecon.index.models import File, RepoState
+from coderecon.index.models import File, RepoState, Worktree
 
 if TYPE_CHECKING:
     pass
@@ -54,6 +54,9 @@ def reconciler_setup(
     db = Database(db_path)
     db.create_all()
     create_additional_indexes(db.engine)
+    with db.session() as session:
+        session.add(Worktree(id=1, name="main", root_path=str(repo_path), is_main=True))
+        session.commit()
 
     reconciler = Reconciler(db, repo_path)
 

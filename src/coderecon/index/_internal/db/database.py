@@ -42,6 +42,21 @@ def _is_database_locked_error(error: Exception) -> bool:
     return "database is locked" in error_str or "database is busy" in error_str
 
 
+def _run_index_migrations(engine: "Engine") -> None:
+    """Run Alembic migrations to bring the index DB up to date."""
+    from alembic import command
+    from alembic.config import Config
+
+    migrations_dir = str(Path(__file__).parent / "migrations")
+
+    cfg = Config()
+    cfg.set_main_option("script_location", migrations_dir)
+
+    with engine.begin() as connection:
+        cfg.attributes["connection"] = connection
+        command.upgrade(cfg, "head")
+
+
 class Database:
     """SQLite connection manager with WAL mode for concurrent access.
 
@@ -72,30 +87,15 @@ class Database:
         return engine
 
     def create_all(self) -> None:
-        """Create all tables from SQLModel metadata."""
-        SQLModel.metadata.create_all(self.engine)
-        self._migrate_schema()
-
-    def _migrate_schema(self) -> None:
-        """Apply lightweight column additions for existing SQLite databases."""
-        migrations = [
-            ("splade_vecs", "scaffold_text", "TEXT"),
-            ("splade_vecs", "vector_blob", "BLOB"),
-        ]
-        with self.engine.connect() as conn:
-            for table, column, col_type in migrations:
-                try:
-                    conn.execute(
-                        text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
-                    )
-                    conn.commit()
-                except OperationalError:
-                    # Column already exists — expected for new or already-migrated DBs
-                    conn.rollback()
+        """Apply Alembic migrations to bring index schema up to date."""
+        _run_index_migrations(self.engine)
 
     def drop_all(self) -> None:
-        """Drop all tables. Use with caution."""
+        """Drop all tables including alembic_version. Use with caution."""
         SQLModel.metadata.drop_all(self.engine)
+        with self.engine.connect() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
+            conn.commit()
 
     @contextmanager
     def session(self) -> Generator[Session, None, None]:

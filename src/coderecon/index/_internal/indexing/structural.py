@@ -334,7 +334,7 @@ def _compute_def_uid(
 
 
 def _apply_worktree_uid_remap(
-    extraction: "ExtractionResult", worktree_id: int
+    extraction: "ExtractionResult", worktree_id: int, *, is_main_worktree: bool = True
 ) -> None:
     """Remap def_uid and import_uid values to be scoped to a worktree.
 
@@ -345,9 +345,10 @@ def _apply_worktree_uid_remap(
     preserving all intra-extraction cross-references.
 
     Call this once per extraction, after extraction and before bulk insert.
+    The main worktree keeps canonical UIDs; secondary worktrees get remapped.
     """
-    if worktree_id == 0:
-        return  # 0 is the "not set" sentinel; no remap needed
+    if is_main_worktree:
+        return  # main worktree keeps canonical UIDs
 
     def _remap(uid: str) -> str:
         return hashlib.sha256(f"{worktree_id}:{uid}".encode()).hexdigest()[:16]
@@ -1015,7 +1016,7 @@ class StructuralIndexer:
     Usage::
 
         indexer = StructuralIndexer(db, repo_path)
-        result = indexer.index_files(file_paths, context_id=1)
+        result = indexer.index_files(file_paths, context_id=1, worktree_id=wt_id)
     """
 
     def __init__(self, db: Database, repo_path: Path | str):
@@ -1053,8 +1054,9 @@ class StructuralIndexer:
         context_id: int,
         file_id_map: dict[str, int] | None = None,
         workers: int = 1,
-        worktree_id: int = 0,
+        worktree_id: int = 1,
         *,
+        is_main_worktree: bool = True,
         _extractions: list[ExtractionResult] | None = None,
     ) -> BatchResult:
         """Index a batch of files.
@@ -1105,7 +1107,9 @@ class StructuralIndexer:
         # worktrees indexing the same file don't collide on PK constraints.
         for extraction in extractions:
             if not extraction.error:
-                _apply_worktree_uid_remap(extraction, worktree_id)
+                _apply_worktree_uid_remap(
+                    extraction, worktree_id, is_main_worktree=is_main_worktree
+                )
 
         with self.db.bulk_writer() as writer:
             for extraction in extractions:
@@ -1581,7 +1585,7 @@ class StructuralIndexer:
         _context_id: int,
         language_family: str | None = None,
         declared_module: str | None = None,
-        worktree_id: int = 0,
+        worktree_id: int = 1,
     ) -> int:
         """Ensure file exists in database and return its ID."""
         import time
@@ -1615,7 +1619,9 @@ class StructuralIndexer:
             session.add(file)
             session.commit()
             session.refresh(file)
-            return file.id if file.id is not None else 0
+            if file.id is None:
+                raise RuntimeError(f"Failed to allocate file id for {file_path!r}")
+            return file.id
 
     def extract_single(self, file_path: str, unit_id: int = 0) -> ExtractionResult:
         """Extract facts from a single file without storing."""
@@ -1639,7 +1645,8 @@ def index_context(
     context_id: int,
     file_paths: list[str],
     workers: int = os.cpu_count() or 1,
+    worktree_id: int = 1,
 ) -> BatchResult:
     """Convenience function to index all files in a context."""
     indexer = StructuralIndexer(db, repo_path)
-    return indexer.index_files(file_paths, context_id, workers=workers)
+    return indexer.index_files(file_paths, context_id, workers=workers, worktree_id=worktree_id)

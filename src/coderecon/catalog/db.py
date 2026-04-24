@@ -7,9 +7,17 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
-from sqlalchemy import Engine
+from sqlalchemy import Engine, event
 from sqlmodel import Session, SQLModel, create_engine
+
+
+def _configure_catalog_pragmas(dbapi_conn: Any, _connection_record: Any) -> None:
+    """Configure SQLite pragmas for the catalog database."""
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
 
 
 def _default_coderecon_home() -> Path:
@@ -56,6 +64,7 @@ class CatalogDB:
                 echo=False,
                 connect_args={"check_same_thread": False},
             )
+            event.listen(self._engine, "connect", _configure_catalog_pragmas)
         return self._engine
 
     def create_all(self) -> None:

@@ -390,9 +390,10 @@ class IndexCoordinatorEngine:
             session.add(wt)
             session.commit()
             session.refresh(wt)
-            wt_id = wt.id if wt.id is not None else 0
-            self._worktree_id_cache[name] = wt_id
-            return wt_id
+            if wt.id is None:
+                raise RuntimeError(f"Failed to allocate worktree id for {name!r}")
+            self._worktree_id_cache[name] = wt.id
+            return wt.id
 
     def set_freshness_gate(
         self, gate: FreshnessGate, worktree: str, worktree_root: str | None = None
@@ -742,29 +743,7 @@ class IndexCoordinatorEngine:
             self._lexical.reload()
 
         # Ensure the main worktree row exists (idempotent).
-        main_wt_id = self._get_or_create_worktree_id("main")
-
-        # Migration: existing DBs indexed before the worktree_id fix have all
-        # files at worktree_id=0 (the column default).  Promote them to the
-        # real main worktree ID so queries that filter by worktree_id work.
-        if main_wt_id and main_wt_id != 0:
-            with self.db.session() as session:
-                stale = session.exec(
-                    select(File).where(File.worktree_id == 0)
-                ).all()
-                if stale:
-                    log.info(
-                        "worktree_migration",
-                        extra={
-                            "files": len(stale),
-                            "from_id": 0,
-                            "to_id": main_wt_id,
-                        },
-                    )
-                    for f in stale:
-                        f.worktree_id = main_wt_id
-                        session.add(f)
-                    session.commit()
+        self._get_or_create_worktree_id("main")
 
         self._initialized = True
         return True
@@ -1066,6 +1045,7 @@ class IndexCoordinatorEngine:
                             ctx_id,
                             file_id_map=file_id_map,
                             worktree_id=self._get_or_create_worktree_id(worktree),
+                            is_main_worktree=(worktree == "main"),
                             _extractions=ok_extractions,
                         )
 
@@ -1307,6 +1287,7 @@ class IndexCoordinatorEngine:
                     context_id=ctx_id,
                     file_id_map=file_id_map,
                     worktree_id=self._get_or_create_worktree_id(_wt),
+                    is_main_worktree=(_wt == "main"),
                     _extractions=extractions,
                 )
 
@@ -1677,6 +1658,7 @@ class IndexCoordinatorEngine:
                         context_id=ctx_id,
                         file_id_map=file_id_map,
                         worktree_id=self._get_or_create_worktree_id(_wt2),
+                        is_main_worktree=(_wt2 == "main"),
                         _extractions=extractions,
                     )
 
@@ -3078,6 +3060,9 @@ class IndexCoordinatorEngine:
                             paths, ctx_id,
                             worktree_id=self._get_or_create_worktree_id(
                                 self._freshness_worktree or "main"
+                            ),
+                            is_main_worktree=(
+                                (self._freshness_worktree or "main") == "main"
                             ),
                             _extractions=extractions,
                         )

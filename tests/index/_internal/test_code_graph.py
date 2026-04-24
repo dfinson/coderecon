@@ -16,6 +16,11 @@ def graph_db(tmp_path: Path) -> Database:
     db.create_all()
     create_additional_indexes(db.engine)
 
+    from coderecon.index.models import Worktree
+    with db.session() as session:
+        session.add(Worktree(name="main", root_path=str(tmp_path), is_main=True))
+        session.commit()
+
     from sqlmodel import Session
 
     from coderecon.index.models import Context, DefFact, File, ImportFact, RefFact
@@ -25,10 +30,10 @@ def graph_db(tmp_path: Path) -> Database:
         session.add(ctx)
         session.flush()
 
-        fa = File(id=1, path="a.py", content_hash="h1")
-        fb = File(id=2, path="b.py", content_hash="h2")
-        fc = File(id=3, path="c.py", content_hash="h3")
-        fd = File(id=4, path="d.py", content_hash="h4")
+        fa = File(id=1, path="a.py", content_hash="h1", worktree_id=1)
+        fb = File(id=2, path="b.py", content_hash="h2", worktree_id=1)
+        fc = File(id=3, path="c.py", content_hash="h3", worktree_id=1)
+        fd = File(id=4, path="d.py", content_hash="h4", worktree_id=1)
         session.add_all([fa, fb, fc, fd])
         session.flush()
 

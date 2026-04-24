@@ -24,11 +24,18 @@ def temp_dir() -> Generator[Path, None, None]:
 def temp_db(temp_dir: Path) -> Generator[Database, None, None]:
     """Create a temporary database with schema."""
     from coderecon.index._internal.db import Database, create_additional_indexes
+    from coderecon.index.models import Worktree
 
     db_path = temp_dir / "test.db"
     db = Database(db_path)
     db.create_all()
     create_additional_indexes(db.engine)
+
+    # Seed the main worktree (id=1) — required FK for File rows.
+    with db.session() as session:
+        session.add(Worktree(name="main", root_path=str(temp_dir), is_main=True))
+        session.commit()
+
     yield db
 
 
@@ -59,11 +66,17 @@ def temp_repo_with_db(
 ) -> Generator[tuple[Path, Database], None, None]:
     """Create a temporary repo with an associated database."""
     from coderecon.index._internal.db import Database, create_additional_indexes
+    from coderecon.index.models import Worktree
 
     db_path = temp_dir / "index.db"
     db = Database(db_path)
     db.create_all()
     create_additional_indexes(db.engine)
+
+    with db.session() as session:
+        session.add(Worktree(name="main", root_path=str(temp_repo), is_main=True))
+        session.commit()
+
     yield temp_repo, db
 
 

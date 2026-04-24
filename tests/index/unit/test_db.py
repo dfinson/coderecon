@@ -15,7 +15,7 @@ import pytest
 from sqlmodel import select
 
 from coderecon.index._internal.db import Database
-from coderecon.index.models import Context, DefFact, File, ProbeStatus
+from coderecon.index.models import Context, DefFact, File, ProbeStatus, Worktree
 
 
 class TestDatabaseEngine:
@@ -109,7 +109,11 @@ class TestSession:
         db.create_all()
 
         with db.session() as session:
-            file = File(path="test.py", content_hash="abc123")
+            session.add(Worktree(id=1, name="main", root_path="/test", is_main=True))
+            session.commit()
+
+        with db.session() as session:
+            file = File(path="test.py", content_hash="abc123", worktree_id=1)
             session.add(file)
             session.commit()
 
@@ -124,11 +128,15 @@ class TestSession:
         db = Database(db_path)
         db.create_all()
 
+        with db.session() as session:
+            session.add(Worktree(id=1, name="main", root_path="/test", is_main=True))
+            session.commit()
+
         class TestError(Exception):
             pass
 
         with pytest.raises(TestError), db.session() as session:
-            file = File(path="rollback.py", content_hash="xyz789")
+            file = File(path="rollback.py", content_hash="xyz789", worktree_id=1)
             session.add(file)
             raise TestError("Test error")
 
@@ -146,12 +154,16 @@ class TestBulkWriter:
         db = Database(db_path)
         db.create_all()
 
+        with db.session() as session:
+            session.add(Worktree(name="main", root_path=str(temp_dir), is_main=True))
+            session.commit()
+
         with db.bulk_writer() as writer:
             writer.insert_many(
                 File,
                 [
-                    {"path": "a.py", "content_hash": "hash_a"},
-                    {"path": "b.py", "content_hash": "hash_b"},
+                    {"path": "a.py", "content_hash": "hash_a", "worktree_id": 1},
+                    {"path": "b.py", "content_hash": "hash_b", "worktree_id": 1},
                 ],
             )
 
@@ -169,7 +181,11 @@ class TestBulkWriter:
 
         # Create file and context first
         with db.session() as session:
-            file = File(path="test.py", content_hash="abc")
+            session.add(Worktree(id=1, name="main", root_path=".", is_main=True))
+            session.commit()
+
+        with db.session() as session:
+            file = File(path="test.py", content_hash="abc", worktree_id=1)
             session.add(file)
             session.commit()
             file_id = file.id
@@ -309,13 +325,17 @@ class TestBulkWriterAdvanced:
         db = Database(db_path)
         db.create_all()
 
+        with db.session() as session:
+            session.add(Worktree(name="main", root_path=str(temp_dir), is_main=True))
+            session.commit()
+
         class TestError(Exception):
             pass
 
         with pytest.raises(TestError), db.bulk_writer() as writer:
             writer.insert_many(
                 File,
-                [{"path": "a.py", "content_hash": "hash_a"}],
+                [{"path": "a.py", "content_hash": "hash_a", "worktree_id": 1}],
             )
             raise TestError("Test error")
 
@@ -339,12 +359,16 @@ class TestBulkWriterAdvanced:
         db = Database(db_path)
         db.create_all()
 
+        with db.session() as session:
+            session.add(Worktree(name="main", root_path=str(temp_dir), is_main=True))
+            session.commit()
+
         with db.bulk_writer() as writer:
             id_map = writer.insert_many_returning_ids(
                 File,
                 [
-                    {"path": "x.py", "content_hash": "hash_x"},
-                    {"path": "y.py", "content_hash": "hash_y"},
+                    {"path": "x.py", "content_hash": "hash_x", "worktree_id": 1},
+                    {"path": "y.py", "content_hash": "hash_y", "worktree_id": 1},
                 ],
                 key_columns=["path"],
             )
@@ -373,14 +397,18 @@ class TestBulkWriterAdvanced:
         db = Database(db_path)
         db.create_all()
 
+        with db.session() as session:
+            session.add(Worktree(name="main", root_path=str(temp_dir), is_main=True))
+            session.commit()
+
         # Insert files
         with db.bulk_writer() as writer:
             writer.insert_many(
                 File,
                 [
-                    {"path": "a.py", "content_hash": "hash_a"},
-                    {"path": "b.py", "content_hash": "hash_b"},
-                    {"path": "c.py", "content_hash": "hash_c"},
+                    {"path": "a.py", "content_hash": "hash_a", "worktree_id": 1},
+                    {"path": "b.py", "content_hash": "hash_b", "worktree_id": 1},
+                    {"path": "c.py", "content_hash": "hash_c", "worktree_id": 1},
                 ],
             )
 
@@ -406,11 +434,15 @@ class TestBulkWriterAdvanced:
         db = Database(db_path)
         db.create_all()
 
+        with db.session() as session:
+            session.add(Worktree(name="main", root_path=str(temp_dir), is_main=True))
+            session.commit()
+
         with db.bulk_writer() as writer:
             count = writer.upsert_many(
                 File,
                 [
-                    {"path": "new.py", "content_hash": "hash_new"},
+                    {"path": "new.py", "content_hash": "hash_new", "worktree_id": 1},
                 ],
                 conflict_columns=["worktree_id", "path"],
                 update_columns=["content_hash"],
@@ -431,15 +463,19 @@ class TestBulkWriterAdvanced:
         db = Database(db_path)
         db.create_all()
 
+        with db.session() as session:
+            session.add(Worktree(name="main", root_path=str(temp_dir), is_main=True))
+            session.commit()
+
         # Insert original
         with db.bulk_writer() as writer:
-            writer.insert_many(File, [{"path": "exist.py", "content_hash": "old_hash"}])
+            writer.insert_many(File, [{"path": "exist.py", "content_hash": "old_hash", "worktree_id": 1}])
 
         # Upsert with updated hash
         with db.bulk_writer() as writer:
             writer.upsert_many(
                 File,
-                [{"path": "exist.py", "content_hash": "new_hash"}],
+                [{"path": "exist.py", "content_hash": "new_hash", "worktree_id": 1}],
                 conflict_columns=["worktree_id", "path"],
                 update_columns=["content_hash"],
             )
@@ -471,10 +507,14 @@ class TestBulkWriterAdvanced:
         db = Database(db_path)
         db.create_all()
 
+        with db.session() as session:
+            session.add(Worktree(name="main", root_path=str(temp_dir), is_main=True))
+            session.commit()
+
         # Insert using raw SQL
         db.execute_raw(
-            "INSERT INTO files (path, content_hash) VALUES (:p, :h)",
-            {"p": "raw.py", "h": "hash_raw"},
+            "INSERT INTO files (path, content_hash, worktree_id) VALUES (:p, :h, :wt)",
+            {"p": "raw.py", "h": "hash_raw", "wt": 1},
         )
 
         # Verify

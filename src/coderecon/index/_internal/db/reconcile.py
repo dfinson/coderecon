@@ -78,7 +78,7 @@ class Reconciler:
             self._git = GitOps(self.repo_root)
         return self._git
 
-    def reconcile(self, paths: list[Path] | None = None, worktree_id: int = 0,
+    def reconcile(self, paths: list[Path] | None = None, worktree_id: int = 1,
                   worktree_root: Path | None = None) -> ReconcileResult:
         """
         Compare file content hashes and mark changed files.
@@ -297,7 +297,7 @@ class Reconciler:
         """Get all files tracked by git."""
         return self.git.tracked_files()
 
-    def _get_db_hashes(self, paths: list[str], *, worktree_id: int = 0) -> dict[str, str]:
+    def _get_db_hashes(self, paths: list[str], *, worktree_id: int = 1) -> dict[str, str]:
         """Get content hashes from database for given paths.
 
         Scoped to *worktree_id* so that files belonging to other worktrees

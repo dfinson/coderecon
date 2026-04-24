@@ -24,6 +24,7 @@ from coderecon.index.models import (
     DefFact,
     DefSnapshotRecord,
     File,
+    Worktree,
 )
 
 
@@ -33,6 +34,9 @@ def db(temp_dir: Path) -> Database:
     db_path = temp_dir / "test_sources.db"
     db = Database(db_path)
     db.create_all()
+    with db.session() as session:
+        session.add(Worktree(id=1, name="main", root_path="/test", is_main=True))
+        session.commit()
     return db
 
 
@@ -48,7 +52,7 @@ def seeded_db(db: Database) -> Database:
         session.add(ctx)
         session.commit()
 
-        f = File(path="src/main.py", language_family="python")
+        f = File(path="src/main.py", language_family="python", worktree_id=1)
         session.add(f)
         session.commit()
 

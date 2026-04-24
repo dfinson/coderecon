@@ -15,7 +15,7 @@ import json
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Column, ForeignKey, Integer, UniqueConstraint
+from sqlalchemy import Column, ForeignKey, Integer, String, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
@@ -451,7 +451,14 @@ class File(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    worktree_id: int = Field(default=0, index=True, sa_column_kwargs={"server_default": "0"})
+    worktree_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("worktrees.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
     path: str = Field(index=True)
     language_family: str | None = None
     content_hash: str | None = None
@@ -483,7 +490,9 @@ class TestTarget(SQLModel, table=True):
     __tablename__ = "test_targets"
 
     id: int | None = Field(default=None, primary_key=True)
-    context_id: int = Field(foreign_key="contexts.id", index=True)
+    context_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
+    )
     target_id: str = Field(unique=True, index=True)  # Stable ID for run()
     selector: str  # Path or pattern
     kind: str = Field(index=True)  # "file", "directory", "module"
@@ -579,7 +588,9 @@ class ContextMarker(SQLModel, table=True):
     __tablename__ = "context_markers"
 
     id: int | None = Field(default=None, primary_key=True)
-    context_id: int = Field(foreign_key="contexts.id", index=True)
+    context_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
+    )
     marker_path: str
     marker_tier: str
     detected_at: float | None = None
@@ -597,7 +608,9 @@ class DefFact(SQLModel, table=True):
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
     )
-    unit_id: int = Field(foreign_key="contexts.id", index=True)
+    unit_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
+    )
     kind: str = Field(index=True)  # function, class, method, variable, etc.
     name: str = Field(index=True)  # Simple name
     qualified_name: str | None = None  # Full nesting path (e.g., Class.method) — populated from lexical_path
@@ -630,8 +643,12 @@ class RefFact(SQLModel, table=True):
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
     )
-    unit_id: int = Field(foreign_key="contexts.id", index=True)
-    scope_id: int | None = Field(default=None, foreign_key="scope_facts.scope_id", index=True)
+    unit_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
+    )
+    scope_id: int | None = Field(
+        sa_column=Column(Integer, ForeignKey("scope_facts.scope_id", ondelete="CASCADE"), nullable=True, index=True)
+    )
     token_text: str = Field(index=True)  # Exact text slice from source
     start_line: int
     start_col: int
@@ -661,8 +678,12 @@ class ScopeFact(SQLModel, table=True):
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
     )
-    unit_id: int = Field(foreign_key="contexts.id", index=True)
-    parent_scope_id: int | None = Field(default=None, index=True)  # NULL for file scope
+    unit_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
+    )
+    parent_scope_id: int | None = Field(
+        sa_column=Column(Integer, ForeignKey("scope_facts.scope_id", ondelete="CASCADE"), nullable=True, index=True)
+    )  # NULL for file scope
     kind: str = Field(index=True)  # file, class, function, block, etc.
     start_line: int
     start_col: int
@@ -684,8 +705,12 @@ class LocalBindFact(SQLModel, table=True):
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
     )
-    unit_id: int = Field(foreign_key="contexts.id", index=True)
-    scope_id: int | None = Field(default=None, foreign_key="scope_facts.scope_id", index=True)
+    unit_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
+    )
+    scope_id: int | None = Field(
+        sa_column=Column(Integer, ForeignKey("scope_facts.scope_id", ondelete="CASCADE"), nullable=True, index=True)
+    )
     name: str = Field(index=True)  # Bound identifier name
     target_kind: str  # DEF, IMPORT, UNKNOWN
     target_uid: str | None = None  # def_uid or import_uid or NULL
@@ -708,8 +733,12 @@ class ImportFact(SQLModel, table=True):
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
     )
-    unit_id: int = Field(foreign_key="contexts.id", index=True)
-    scope_id: int | None = Field(default=None, foreign_key="scope_facts.scope_id", index=True)
+    unit_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
+    )
+    scope_id: int | None = Field(
+        sa_column=Column(Integer, ForeignKey("scope_facts.scope_id", ondelete="CASCADE"), nullable=True, index=True)
+    )
     imported_name: str = Field(index=True)  # Name being imported
     alias: str | None = None  # Local alias (NULL if none)
     source_literal: str | None = None  # Import source string literal (if extractable)
@@ -738,7 +767,9 @@ class ExportSurface(SQLModel, table=True):
     __tablename__ = "export_surfaces"
 
     surface_id: int | None = Field(default=None, primary_key=True)
-    unit_id: int = Field(foreign_key="contexts.id", index=True, unique=True)
+    unit_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), unique=True, index=True)
+    )
     surface_hash: str | None = None  # Hash of all entries for invalidation
     epoch_id: int | None = None  # Epoch when surface was computed
 
@@ -752,7 +783,9 @@ class ExportEntry(SQLModel, table=True):
     __tablename__ = "export_entries"
 
     entry_id: int | None = Field(default=None, primary_key=True)
-    surface_id: int = Field(foreign_key="export_surfaces.surface_id", index=True)
+    surface_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("export_surfaces.surface_id", ondelete="CASCADE"), index=True)
+    )
     exported_name: str = Field(index=True)  # Public name
     def_uid: str | None = None  # Target definition (NULL if unresolved)
     certainty: str = Field(default=Certainty.CERTAIN.value)
@@ -768,8 +801,12 @@ class ExportThunk(SQLModel, table=True):
     __tablename__ = "export_thunks"
 
     thunk_id: int | None = Field(default=None, primary_key=True)
-    source_unit: int = Field(foreign_key="contexts.id", index=True)  # Unit doing the re-export
-    target_unit: int = Field(foreign_key="contexts.id", index=True)  # Unit being re-exported from
+    source_unit: int = Field(
+        sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
+    )  # Unit doing the re-export
+    target_unit: int = Field(
+        sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
+    )  # Unit being re-exported from
     mode: str  # REEXPORT_ALL, EXPLICIT_NAMES, ALIAS_MAP
     explicit_names: str | None = None  # JSON array of names (if EXPLICIT_NAMES)
     alias_map: str | None = None  # JSON object of name→alias (if ALIAS_MAP)
@@ -796,7 +833,9 @@ class AnchorGroup(SQLModel, table=True):
     __tablename__ = "anchor_groups"
 
     group_id: int | None = Field(default=None, primary_key=True)
-    unit_id: int = Field(foreign_key="contexts.id", index=True)
+    unit_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
+    )
     member_token: str = Field(index=True)  # The identifier text (e.g., 'foo')
     receiver_shape: str | None = None  # Receiver pattern (e.g., 'self.', 'obj.', 'None')
     total_count: int = Field(default=0)  # Total refs in this group
@@ -819,7 +858,9 @@ class DynamicAccessSite(SQLModel, table=True):
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
     )
-    unit_id: int = Field(foreign_key="contexts.id", index=True)
+    unit_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
+    )
     start_line: int
     start_col: int
     pattern_type: str  # bracket_access, getattr, reflect, eval, etc.
@@ -855,8 +896,12 @@ class TypeAnnotationFact(SQLModel, table=True):
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
     )
-    unit_id: int = Field(foreign_key="contexts.id", index=True)
-    scope_id: int | None = Field(default=None, foreign_key="scope_facts.scope_id", index=True)
+    unit_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
+    )
+    scope_id: int | None = Field(
+        sa_column=Column(Integer, ForeignKey("scope_facts.scope_id", ondelete="CASCADE"), nullable=True, index=True)
+    )
 
     # What's annotated
     target_kind: str  # AnnotationTargetKind value
@@ -901,7 +946,9 @@ class TypeMemberFact(SQLModel, table=True):
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
     )
-    unit_id: int = Field(foreign_key="contexts.id", index=True)
+    unit_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
+    )
 
     # Parent type
     parent_def_uid: str = Field(index=True)  # DefFact.def_uid of class/struct/interface
@@ -939,8 +986,12 @@ class MemberAccessFact(SQLModel, table=True):
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
     )
-    unit_id: int = Field(foreign_key="contexts.id", index=True)
-    scope_id: int | None = Field(default=None, foreign_key="scope_facts.scope_id", index=True)
+    unit_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
+    )
+    scope_id: int | None = Field(
+        sa_column=Column(Integer, ForeignKey("scope_facts.scope_id", ondelete="CASCADE"), nullable=True, index=True)
+    )
 
     # Access pattern
     access_style: str  # AccessStyle value: dot, arrow, scope
@@ -983,7 +1034,9 @@ class InterfaceImplFact(SQLModel, table=True):
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
     )
-    unit_id: int = Field(foreign_key="contexts.id", index=True)
+    unit_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
+    )
 
     # The implementing type
     implementor_def_uid: str = Field(index=True)
@@ -1013,8 +1066,12 @@ class ReceiverShapeFact(SQLModel, table=True):
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
     )
-    unit_id: int = Field(foreign_key="contexts.id", index=True)
-    scope_id: int | None = Field(default=None, foreign_key="scope_facts.scope_id", index=True)
+    unit_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
+    )
+    scope_id: int | None = Field(
+        sa_column=Column(Integer, ForeignKey("scope_facts.scope_id", ondelete="CASCADE"), nullable=True, index=True)
+    )
 
     receiver_name: str = Field(index=True)  # "ctx", "self", "obj"
     declared_type: str | None = Field(default=None, index=True)  # If annotated
@@ -1191,7 +1248,9 @@ class SpladeVec(SQLModel, table=True):
 
     __tablename__ = "splade_vecs"
 
-    def_uid: str = Field(primary_key=True)  # Matches DefFact.def_uid
+    def_uid: str = Field(
+        sa_column=Column(String, ForeignKey("def_facts.def_uid", ondelete="CASCADE"), primary_key=True)
+    )
     vector_json: str  # Compact JSON: {"term_idx": weight, ...}
     model_version: str = Field(index=True)  # e.g. "splade-mini-v1"
     scaffold_text: str | None = Field(default=None)  # Anglicised scaffold text

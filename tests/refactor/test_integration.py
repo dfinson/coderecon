@@ -43,6 +43,11 @@ def test_db(tmp_path: Path) -> Generator[Database, None, None]:
     db.create_all()
     create_additional_indexes(db.engine)
 
+    from coderecon.index.models import Worktree
+    with db.session() as session:
+        session.add(Worktree(name="main", root_path=str(tmp_path), is_main=True))
+        session.commit()
+
     # Create a context (required for foreign key constraints)
     # Use root_path that matches the project structure
     with db.session() as session:
@@ -153,6 +158,7 @@ def indexed_project(
                 path=py_file,
                 content_hash=content_hash,
                 language_family="python",
+                worktree_id=1,
             )
             session.add(file_record)
             session.flush()

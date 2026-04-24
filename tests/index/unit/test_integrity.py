@@ -9,7 +9,7 @@ from sqlalchemy import text
 
 from coderecon.index._internal.db import Database, IndexRecovery, IntegrityChecker, IntegrityReport
 from coderecon.index._internal.indexing import LexicalIndex
-from coderecon.index.models import Context, DefFact, File, RefFact
+from coderecon.index.models import Context, DefFact, File, RefFact, Worktree
 
 
 class TestIntegrityChecker:
@@ -23,6 +23,10 @@ class TestIntegrityChecker:
 
         # Create valid data
         with db.session() as session:
+            session.add(Worktree(id=1, name="main", root_path="src", is_main=True))
+            session.commit()
+
+        with db.session() as session:
             context = Context(
                 name="test",
                 language_family="python",
@@ -31,7 +35,7 @@ class TestIntegrityChecker:
             session.add(context)
             session.flush()
 
-            file = File(path="src/main.py", language_family="python")
+            file = File(path="src/main.py", language_family="python", worktree_id=1)
             session.add(file)
             session.flush()
 
@@ -156,7 +160,10 @@ class TestIntegrityChecker:
 
         # Create a file record without the actual file
         with db.session() as session:
-            file = File(path="src/missing.py", language_family="python")
+            session.add(Worktree(id=1, name="main", root_path="src", is_main=True))
+            session.commit()
+        with db.session() as session:
+            file = File(path="src/missing.py", language_family="python", worktree_id=1)
             session.add(file)
             session.commit()
 
@@ -175,8 +182,11 @@ class TestIntegrityChecker:
 
         # Create files in SQLite
         with db.session() as session:
+            session.add(Worktree(id=1, name="main", root_path="src", is_main=True))
+            session.commit()
+        with db.session() as session:
             for i in range(20):
-                file = File(path=f"src/file{i}.py", language_family="python")
+                file = File(path=f"src/file{i}.py", language_family="python", worktree_id=1)
                 session.add(file)
             session.commit()
 
@@ -215,13 +225,16 @@ class TestIndexRecovery:
 
         # Add some data
         with db.session() as session:
+            session.add(Worktree(id=1, name="main", root_path="src", is_main=True))
+            session.commit()
+        with db.session() as session:
             context = Context(
                 name="test",
                 language_family="python",
                 root_path="src",
             )
             session.add(context)
-            file = File(path="src/main.py", language_family="python")
+            file = File(path="src/main.py", language_family="python", worktree_id=1)
             session.add(file)
             session.commit()
 

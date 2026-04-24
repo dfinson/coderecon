@@ -25,6 +25,7 @@ from coderecon.index.models import (
     File,
     ImportFact,
     ScopeFact,
+    Worktree,
 )
 
 
@@ -48,6 +49,8 @@ def test_db(tmp_path: Path) -> Generator[Database, None, None]:
             root_path=str(tmp_path),
         )
         session.add(ctx)
+        session.commit()
+        session.add(Worktree(id=1, name="main", root_path=str(tmp_path), is_main=True))
         session.commit()
 
     yield db
@@ -298,11 +301,13 @@ def another_function():
                 path=rel(file1, tmp_path),
                 content_hash="hash1",
                 indexed_at=time.time(),
+                worktree_id=1,
             )
             f2 = File(
                 path=rel(file2, tmp_path),
                 content_hash="hash2",
                 indexed_at=time.time(),
+                worktree_id=1,
             )
             session.add(f1)
             session.add(f2)
@@ -345,6 +350,7 @@ def another_function():
                 path="dynamic.py",
                 content_hash="hash1",
                 indexed_at=time.time(),
+                worktree_id=1,
             )
             session.add(f)
             session.commit()

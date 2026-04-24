@@ -16,6 +16,11 @@ def blast_db(tmp_path: Path) -> Database:
     db.create_all()
     create_additional_indexes(db.engine)
 
+    from coderecon.index.models import Worktree
+    with db.session() as session:
+        session.add(Worktree(name="main", root_path=str(tmp_path), is_main=True))
+        session.commit()
+
     from sqlalchemy import text
     from sqlmodel import Session
 
@@ -27,9 +32,9 @@ def blast_db(tmp_path: Path) -> Database:
         session.flush()
 
         session.add_all([
-            File(id=1, path="src/foo.py", content_hash="h1"),
-            File(id=2, path="src/bar.py", content_hash="h2"),
-            File(id=3, path="tests/test_foo.py", content_hash="h3"),
+            File(id=1, path="src/foo.py", content_hash="h1", worktree_id=1),
+            File(id=2, path="src/bar.py", content_hash="h2", worktree_id=1),
+            File(id=3, path="tests/test_foo.py", content_hash="h3", worktree_id=1),
         ])
         session.flush()
 

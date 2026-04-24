@@ -30,11 +30,17 @@ from coderecon.index.models import Context, DefFact, RefFact, RefTier, Role
 def db(temp_dir: Path) -> Database:
     """Create a test database with schema."""
     from coderecon.index._internal.db import create_additional_indexes
+    from coderecon.index.models import Worktree
 
     db_path = temp_dir / "test_structural.db"
     db = Database(db_path)
     db.create_all()
     create_additional_indexes(db.engine)
+
+    with db.session() as session:
+        session.add(Worktree(name="main", root_path=str(temp_dir), is_main=True))
+        session.commit()
+
     return db
 
 
@@ -1322,13 +1328,13 @@ def _make_extraction(
 class TestApplyWorktreeUidRemap:
     """Unit tests for _apply_worktree_uid_remap."""
 
-    def test_worktree_id_zero_is_noop(self) -> None:
-        """worktree_id=0 must not change any UIDs (0 is the sentinel for main/unset)."""
+    def test_main_worktree_is_noop(self) -> None:
+        """Main worktree must not change any UIDs (canonical identifiers)."""
         ex = _make_extraction()
         original_def_uid = ex.defs[0]["def_uid"]
         original_import_uid = ex.imports[0]["import_uid"]
 
-        _apply_worktree_uid_remap(ex, worktree_id=0)
+        _apply_worktree_uid_remap(ex, worktree_id=1, is_main_worktree=True)
 
         assert ex.defs[0]["def_uid"] == original_def_uid
         assert ex.imports[0]["import_uid"] == original_import_uid
@@ -1339,7 +1345,7 @@ class TestApplyWorktreeUidRemap:
 
         old_uid = "aabbccdd11223344"
         ex = _make_extraction(def_uid=old_uid)
-        _apply_worktree_uid_remap(ex, worktree_id=3)
+        _apply_worktree_uid_remap(ex, worktree_id=3, is_main_worktree=False)
 
         expected = hashlib.sha256(f"3:{old_uid}".encode()).hexdigest()[:16]
         assert ex.defs[0]["def_uid"] == expected
@@ -1351,7 +1357,7 @@ class TestApplyWorktreeUidRemap:
 
         old_uid = "eeff00112233aabb"
         ex = _make_extraction(import_uid=old_uid)
-        _apply_worktree_uid_remap(ex, worktree_id=2)
+        _apply_worktree_uid_remap(ex, worktree_id=2, is_main_worktree=False)
 
         expected = hashlib.sha256(f"2:{old_uid}".encode()).hexdigest()[:16]
         assert ex.imports[0]["import_uid"] == expected
@@ -1362,8 +1368,8 @@ class TestApplyWorktreeUidRemap:
         ex1 = _make_extraction(def_uid=old_uid)
         ex2 = _make_extraction(def_uid=old_uid)
 
-        _apply_worktree_uid_remap(ex1, worktree_id=1)
-        _apply_worktree_uid_remap(ex2, worktree_id=2)
+        _apply_worktree_uid_remap(ex1, worktree_id=1, is_main_worktree=False)
+        _apply_worktree_uid_remap(ex2, worktree_id=2, is_main_worktree=False)
 
         assert ex1.defs[0]["def_uid"] != ex2.defs[0]["def_uid"]
         assert ex1.defs[0]["def_uid"] != old_uid
@@ -1373,7 +1379,7 @@ class TestApplyWorktreeUidRemap:
         """TypeMemberFact.parent_def_uid and member_def_uid must track the remapped def_uid."""
         old_uid = "aabbccdd11223344"
         ex = _make_extraction(def_uid=old_uid)
-        _apply_worktree_uid_remap(ex, worktree_id=1)
+        _apply_worktree_uid_remap(ex, worktree_id=1, is_main_worktree=False)
 
         new_uid = ex.defs[0]["def_uid"]
         assert ex.type_members[0]["parent_def_uid"] == new_uid
@@ -1383,7 +1389,7 @@ class TestApplyWorktreeUidRemap:
         """InterfaceImplFact.implementor_def_uid and interface_def_uid must be remapped."""
         old_uid = "aabbccdd11223344"
         ex = _make_extraction(def_uid=old_uid)
-        _apply_worktree_uid_remap(ex, worktree_id=1)
+        _apply_worktree_uid_remap(ex, worktree_id=1, is_main_worktree=False)
 
         new_uid = ex.defs[0]["def_uid"]
         assert ex.interface_impls[0]["implementor_def_uid"] == new_uid
@@ -1393,7 +1399,7 @@ class TestApplyWorktreeUidRemap:
         """LocalBindFact.target_uid must be remapped when target_kind == 'DEF'."""
         old_uid = "aabbccdd11223344"
         ex = _make_extraction(def_uid=old_uid)
-        _apply_worktree_uid_remap(ex, worktree_id=1)
+        _apply_worktree_uid_remap(ex, worktree_id=1, is_main_worktree=False)
 
         new_uid = ex.defs[0]["def_uid"]
         # First bind has target_kind=def — must be remapped via def_uid_remap
@@ -1405,6 +1411,6 @@ class TestApplyWorktreeUidRemap:
     def test_uid_length_stays_16_chars(self) -> None:
         """Remapped UIDs must be exactly 16 hex chars (same format as originals)."""
         ex = _make_extraction()
-        _apply_worktree_uid_remap(ex, worktree_id=5)
+        _apply_worktree_uid_remap(ex, worktree_id=5, is_main_worktree=False)
         assert len(ex.defs[0]["def_uid"]) == 16
         assert len(ex.imports[0]["import_uid"]) == 16

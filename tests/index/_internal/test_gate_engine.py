@@ -16,6 +16,11 @@ def gate_db(tmp_path: Path) -> Database:
     db.create_all()
     create_additional_indexes(db.engine)
 
+    from coderecon.index.models import Worktree
+    with db.session() as session:
+        session.add(Worktree(name="main", root_path=str(tmp_path), is_main=True))
+        session.commit()
+
     from sqlalchemy import text
     from sqlmodel import Session
 
@@ -26,7 +31,7 @@ def gate_db(tmp_path: Path) -> Database:
         session.add(ctx)
         session.flush()
 
-        session.add(File(id=1, path="src/a.py", content_hash="h1"))
+        session.add(File(id=1, path="src/a.py", content_hash="h1", worktree_id=1))
         session.flush()
 
         session.add(

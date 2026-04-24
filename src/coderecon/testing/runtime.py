@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from sqlalchemy import Column, ForeignKey, Integer
 from sqlmodel import Field, SQLModel
 
 if TYPE_CHECKING:
@@ -46,7 +47,9 @@ class ContextRuntime(SQLModel, table=True):
     __tablename__ = "context_runtimes"
 
     id: int | None = Field(default=None, primary_key=True)
-    context_id: int = Field(foreign_key="contexts.id", unique=True, index=True)
+    context_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), unique=True, index=True)
+    )
 
     # Python runtime
     python_executable: str | None = None  # Full path: /repo/.venv/bin/python
