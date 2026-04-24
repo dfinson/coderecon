@@ -24,8 +24,14 @@ from pathlib import Path
 from typing import Any
 
 import click
-from copilot import CopilotClient
-from copilot.session import PermissionRequestResult
+
+try:
+    from copilot import CopilotClient
+    from copilot.session import PermissionRequestResult
+
+    _HAS_COPILOT_SDK = True
+except ImportError:
+    _HAS_COPILOT_SDK = False
 
 from cpl_lab.pipeline.clone import clone_dir_for
 
@@ -154,8 +160,8 @@ query before outputting the final JSON.
 # ── Permission handler (auto-approve built-in tools) ───────────
 
 
-def _auto_approve(_request: Any, _context: dict[str, str]) -> PermissionRequestResult:
-    return PermissionRequestResult(kind="approved")
+def _auto_approve(_request: Any, _context: dict[str, str]) -> PermissionRequestResult:  # type: ignore[name-defined]
+    return PermissionRequestResult(kind="approved")  # type: ignore[name-defined]
 
 
 # ── Copilot SDK session runner ──────────────────────────────────
@@ -190,7 +196,12 @@ async def _run_copilot_session(
     working_directory: str,
 ) -> str:
     """Run a Copilot SDK agent session and return the final assistant text."""
-    client = CopilotClient()
+    if not _HAS_COPILOT_SDK:
+        raise RuntimeError(
+            "Copilot SDK not installed. Install with: "
+            "pip install github-copilot-sdk"
+        )
+    client = CopilotClient()  # type: ignore[name-defined]
     try:
         await client.start()
 
@@ -427,6 +438,14 @@ def run_non_ok_queries(
     can explore the repository index with tools.  Output is written to
     ``data/{repo_id}/ground_truth/non_ok_queries.json``.
     """
+    if not _HAS_COPILOT_SDK:
+        click.echo(
+            "WARNING: Copilot SDK not installed — skipping non-ok-queries stage.\n"
+            "  The gate model will train without UNSAT/BROAD/AMBIG discrimination.\n"
+            "  Install with: pip install github-copilot-sdk"
+        )
+        return
+
     from cpl_lab.pipeline.clone import REPO_MANIFEST
 
     if repo:

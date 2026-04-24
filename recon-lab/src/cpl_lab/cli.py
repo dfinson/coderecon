@@ -27,6 +27,71 @@ import click
 
 from cpl_lab.config import get_config
 
+
+# ── Preflight checks ────────────────────────────────────────────
+
+# Stages that need specific credentials/tools.
+_NEEDS_GITHUB_TOKEN = frozenset({"pr-select", "pr-import"})
+_NEEDS_RECON_BINARY = frozenset({"index-main", "index-worktrees", "collect"})
+_NEEDS_LLM = frozenset({"pr-import"})
+
+
+def _preflight(ctx: click.Context) -> None:
+    """Validate credentials and tools BEFORE burning compute time."""
+    cmd = ctx.info_name or ""
+    issues: list[str] = []
+
+    if cmd in _NEEDS_GITHUB_TOKEN:
+        import os
+        import shutil
+
+        token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+        if not token:
+            # Try gh CLI as fallback
+            if shutil.which("gh"):
+                import subprocess
+
+                result = subprocess.run(
+                    ["gh", "auth", "token"],
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode != 0 or not result.stdout.strip():
+                    issues.append(
+                        "GITHUB_TOKEN not set and `gh auth token` failed. "
+                        "Set GITHUB_TOKEN or run `gh auth login`."
+                    )
+            else:
+                issues.append(
+                    "GITHUB_TOKEN not set and `gh` CLI not found. "
+                    "Export GITHUB_TOKEN or install GitHub CLI."
+                )
+
+    if cmd in _NEEDS_RECON_BINARY:
+        try:
+            from cpl_lab.config import recon_binary
+
+            recon_binary()
+        except FileNotFoundError as e:
+            issues.append(str(e))
+
+    if cmd in _NEEDS_LLM:
+        import os
+
+        token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+        endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
+        if not token and not endpoint:
+            issues.append(
+                "LLM access not configured. Set GITHUB_TOKEN for GitHub Models "
+                "or AZURE_OPENAI_ENDPOINT for Azure OpenAI."
+            )
+
+    if issues:
+        click.echo("Preflight check FAILED:", err=True)
+        for issue in issues:
+            click.echo(f"  ✗ {issue}", err=True)
+        raise SystemExit(1)
+
 SETS = ("ranker-gate", "cutoff", "eval", "all")
 MERGE_TARGETS = ("gt", "signals", "all")
 
@@ -77,6 +142,7 @@ def clone(ctx: click.Context, repo_set: str, jobs: int | None) -> None:
 @click.pass_context
 def index_main(ctx: click.Context, repo_set: str) -> None:
     """Start daemon, register + index all main repos."""
+    _preflight(ctx)
     from cpl_lab.pipeline.pr_index import run_index_main
 
     import json, time
@@ -105,6 +171,7 @@ def index_main(ctx: click.Context, repo_set: str) -> None:
 def pr_select(ctx: click.Context, repo_set: str, repo: str | None,
               prs_per_repo: int | None) -> None:
     """Select merged PRs from GitHub for each repo."""
+    _preflight(ctx)
     from cpl_lab.pipeline.pr_select import run_pr_select
 
     cfg = ctx.obj["config"]
@@ -156,6 +223,7 @@ def pr_checkout(ctx: click.Context, repo_set: str, repo: str | None) -> None:
 @click.pass_context
 def index_worktrees(ctx: click.Context, repo_set: str, repo: str | None) -> None:
     """Run recon init on each PR worktree and register with daemon."""
+    _preflight(ctx)
     import json, time
     from cpl_lab.pipeline.pr_index import run_index_worktrees
 
@@ -189,6 +257,7 @@ def index_worktrees(ctx: click.Context, repo_set: str, repo: str | None) -> None
 def pr_import(ctx: click.Context, repo_set: str, repo: str | None,
               max_instances: int, llm_model: str | None, workers: int) -> None:
     """Import PR instances: diff → GT defs + LLM query generation."""
+    _preflight(ctx)
     from cpl_lab.pipeline.pr_import import run_pr_import
 
     cfg = ctx.obj["config"]
@@ -246,6 +315,7 @@ def non_ok_queries(ctx: click.Context, repo_set: str, repo: str | None,
 @click.pass_context
 def collect(ctx: click.Context, repo_set: str, repo: str | None, workers: int) -> None:
     """Collect retrieval signals (direct, no MCP server needed)."""
+    _preflight(ctx)
     from cpl_lab.collect.collect import run_collect
 
     cfg = ctx.obj["config"]
