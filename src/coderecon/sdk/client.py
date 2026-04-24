@@ -39,7 +39,6 @@ from coderecon.sdk.types import (
     GraphExportResult,
     ImpactResult,
     MapResult,
-    RawSignalsResult,
     ReconResult,
     RefactorCancelResult,
     RefactorCommitResult,
@@ -55,7 +54,6 @@ from coderecon.sdk.types import (
     _to_graph_export_result,
     _to_impact_result,
     _to_map_result,
-    _to_raw_signals_result,
     _to_recon_result,
     _to_refactor_cancel_result,
     _to_refactor_commit_result,
@@ -346,22 +344,6 @@ class CodeRecon:
             params["commit_message"] = commit_message
         return _to_checkpoint_result(await self._tool_call("checkpoint", params))
 
-    async def raw_signals(
-        self,
-        repo: str,
-        query: str,
-        *,
-        seeds: list[str] | None = None,
-        pins: list[str] | None = None,
-        worktree: str | None = None,
-    ) -> RawSignalsResult:
-        params: dict[str, Any] = {"repo": repo, "query": query, "worktree": worktree}
-        if seeds:
-            params["seeds"] = seeds
-        if pins:
-            params["pins"] = pins
-        return _to_raw_signals_result(await self._tool_call("raw_signals", params))
-
     async def describe(
         self,
         action: str,
@@ -442,6 +424,7 @@ class CodeRecon:
         method: str,
         params: dict[str, Any],
         session_id: str | None = _SENTINEL,  # type: ignore[assignment]
+        timeout: float | None = None,
     ) -> dict[str, Any]:
         """Send a request and await the response."""
         if self._process is None or self._process.returncode is not None:
@@ -457,7 +440,7 @@ class CodeRecon:
         self._process.stdin.write(line)
         await self._process.stdin.drain()
 
-        return await asyncio.wait_for(fut, timeout=_CALL_TIMEOUT_SEC)
+        return await asyncio.wait_for(fut, timeout=timeout)
 
     async def _wait_ready(self, timeout: float) -> None:
         """Wait for the daemon.ready event."""

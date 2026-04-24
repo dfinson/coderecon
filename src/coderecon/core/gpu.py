@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -46,7 +47,14 @@ class GpuProbeResult:
         if not self.gpu_available_but_not_configured:
             return None
         if GpuVendor.NVIDIA in self.detected_gpus:
-            return "pip install --force-reinstall onnxruntime-gpu"
+            if sys.platform == "darwin":
+                return None
+            if sys.platform == "win32":
+                return (
+                    "Install the CUDA Toolkit from https://developer.nvidia.com "
+                    "then: pip install --force-reinstall onnxruntime-gpu"
+                )
+            return "pip install coderecon[gpu]"
         if GpuVendor.AMD in self.detected_gpus:
             return "pip install onnxruntime-rocm"
         return None

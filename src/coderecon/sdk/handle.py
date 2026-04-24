@@ -15,7 +15,6 @@ if TYPE_CHECKING:
         GraphExportResult,
         ImpactResult,
         MapResult,
-        RawSignalsResult,
         ReconResult,
         RefactorCancelResult,
         RefactorCommitResult,
@@ -119,9 +118,6 @@ class SessionHandle:
     async def graph_export(self, repo: str, **kwargs: Any) -> "GraphExportResult":
         return await self._sdk.graph_export(repo, **kwargs)
 
-    async def raw_signals(self, repo: str, query: str, **kwargs: Any) -> "RawSignalsResult":
-        return await self._sdk.raw_signals(repo, query, **kwargs)
-
 
 class RepoHandle:
     """A repo-bound proxy — all calls have ``repo`` pre-bound.
@@ -208,9 +204,6 @@ class RepoHandle:
     async def checkpoint(self, changed_files: list[str], **kwargs: Any) -> "CheckpointResult":
         with self._with_session():
             return await self._sdk.checkpoint(self._repo, changed_files, worktree=self._worktree, **kwargs)
-
-    async def raw_signals(self, query: str, **kwargs: Any) -> "RawSignalsResult":
-        return await self._sdk.raw_signals(self._repo, query, worktree=self._worktree, **kwargs)
 
     def as_openai_tools(self, **kwargs: Any) -> list[dict[str, Any]]:
         """Return OpenAI-compatible tool definitions with repo pre-bound."""
