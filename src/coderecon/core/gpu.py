@@ -96,7 +96,7 @@ def probe_gpu() -> GpuProbeResult:
         for provider in ("CUDAExecutionProvider", "ROCMExecutionProvider", "CoreMLExecutionProvider"):
             if provider in available:
                 result.onnx_gpu_providers.append(provider)
-    except Exception:
+    except (ImportError, OSError, RuntimeError):
         log.debug("gpu.ort_probe_failed", exc_info=True)
 
     return result
@@ -113,7 +113,7 @@ def _check_nvidia_gpu() -> bool:
             timeout=5,
         )
         return proc.returncode == 0 and len(proc.stdout.strip()) > 0
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         return False
 
 
@@ -128,5 +128,5 @@ def _check_amd_gpu() -> bool:
             timeout=5,
         )
         return proc.returncode == 0 and len(proc.stdout.strip()) > 0
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         return False

@@ -11,26 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-# Suppress Rich tracebacks BEFORE importing fastmcp
-# FastMCP configures RichHandler at import time with rich_tracebacks=True
-from rich.logging import RichHandler as _RichHandler
-
-_original_rich_emit = _RichHandler.emit
-
-
-def _patched_rich_emit(self: _RichHandler, record: Any) -> None:
-    """Patched RichHandler.emit that suppresses traceback rendering."""
-    # If this handler has rich_tracebacks enabled and there's exc_info,
-    # clear the exc_info so no traceback is rendered
-    if getattr(self, "rich_tracebacks", False) and record.exc_info:
-        record.exc_info = None
-        record.exc_text = None
-    _original_rich_emit(self, record)
-
-
-_RichHandler.emit = _patched_rich_emit  # type: ignore[method-assign]
-
-import structlog  # noqa: E402  # Must import after patching RichHandler
+import structlog
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -38,6 +19,32 @@ if TYPE_CHECKING:
     from coderecon.mcp.context import AppContext
 
 log = structlog.get_logger(__name__)
+
+_rich_handler_patched = False
+
+
+def _patch_rich_handler() -> None:
+    """Suppress Rich tracebacks by patching RichHandler.emit.
+
+    FastMCP configures RichHandler at import time with rich_tracebacks=True.
+    This must be called before importing fastmcp.
+    """
+    global _rich_handler_patched  # noqa: PLW0603
+    if _rich_handler_patched:
+        return
+
+    from rich.logging import RichHandler as _RichHandler
+
+    _original_rich_emit = _RichHandler.emit
+
+    def _patched_rich_emit(self: _RichHandler, record: Any) -> None:
+        if getattr(self, "rich_tracebacks", False) and record.exc_info:
+            record.exc_info = None
+            record.exc_text = None
+        _original_rich_emit(self, record)
+
+    _RichHandler.emit = _patched_rich_emit  # type: ignore[method-assign]
+    _rich_handler_patched = True
 
 
 @asynccontextmanager
@@ -95,6 +102,9 @@ def create_mcp_server(context: "AppContext", *, dev_mode: bool = False) -> "Fast
     Returns:
         Configured FastMCP server ready to run
     """
+    # Must patch before importing fastmcp (it configures RichHandler at import)
+    _patch_rich_handler()
+
     import fastmcp
     from fastmcp import FastMCP
 

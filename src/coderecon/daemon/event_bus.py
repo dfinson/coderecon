@@ -46,7 +46,7 @@ class EventBus:
             msg["data"] = data
         try:
             await self._write(msg)
-        except Exception:  # noqa: BLE001
+        except (OSError, RuntimeError):
             log.debug("event_bus.emit_failed", event_name=event_type, exc_info=True)
 
     def emit_sync(self, event_type: str, data: dict[str, Any] | None = None) -> None:
@@ -69,7 +69,7 @@ class EventBus:
         raw = (_json.dumps(msg, separators=(",", ":"), default=str) + "\n").encode("utf-8")
         try:
             self._transport.write(raw)
-        except Exception:  # noqa: BLE001
+        except (OSError, RuntimeError):
             log.debug("event_bus.emit_sync_failed", event_name=event_type, exc_info=True)
 
 
