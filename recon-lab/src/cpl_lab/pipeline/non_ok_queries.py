@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -523,9 +524,11 @@ async def _run_all(
 
                 out_path = _non_ok_output_path(data_dir, rid)
                 out_path.parent.mkdir(parents=True, exist_ok=True)
-                out_path.write_text(
+                tmp_path = out_path.with_suffix(".tmp")
+                tmp_path.write_text(
                     json.dumps(result, indent=2, ensure_ascii=False),
                 )
+                os.replace(tmp_path, out_path)
 
                 counts: dict[str, int] = {}
                 for q in result["non_ok_queries"]:

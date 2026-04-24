@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -167,9 +168,11 @@ def import_single_instance(
         task_json["non_ok_queries"] = []
 
     # Write as {instance_id}.json (the filename _parse_raw_task_jsons expects)
-    (inst_data_dir / f"{iid}.json").write_text(
-        json.dumps(task_json, indent=2, ensure_ascii=False)
-    )
+    # Atomic write: temp file → rename so a crash never leaves a truncated JSON
+    final_path = inst_data_dir / f"{iid}.json"
+    tmp_path = final_path.with_suffix(".tmp")
+    tmp_path.write_text(json.dumps(task_json, indent=2, ensure_ascii=False))
+    os.replace(tmp_path, final_path)
 
     # manifest.json — provenance for downstream stages
     from cpl_lab.data_manifest import write_repo_manifest

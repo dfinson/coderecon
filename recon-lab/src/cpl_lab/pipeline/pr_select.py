@@ -287,43 +287,60 @@ def run_pr_select(
     out_path = data_dir / "pr_instances.jsonl"
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load existing selections to allow incremental runs
+    # Load existing selections (tolerant of truncated trailing line)
+    existing_rows: list[str] = []  # raw JSON lines for surviving rows
     existing: set[str] = set()
     if out_path.exists():
         for line in out_path.read_text().splitlines():
-            if line.strip():
+            line = line.strip()
+            if not line:
+                continue
+            try:
                 row = json.loads(line)
-                existing.add(row["instance_id"])
+            except json.JSONDecodeError:
+                continue  # discard truncated line from prior crash
+            existing.add(row["instance_id"])
+            existing_rows.append(line)
 
     total_new = 0
     failed_repos: list[str] = []
+    new_rows: list[str] = []
 
-    with open(out_path, "a") as f:
-        for i, rid in enumerate(sorted(repo_ids), 1):
-            click.echo(f"\n[{i}/{len(repo_ids)}] {rid}")
-            cd = clone_dir_for(rid, clones_dir)
-            if cd is None or not cd.is_dir():
-                click.echo(f"  Skipping — clone not found")
+    for i, rid in enumerate(sorted(repo_ids), 1):
+        click.echo(f"\n[{i}/{len(repo_ids)}] {rid}")
+        cd = clone_dir_for(rid, clones_dir)
+        if cd is None or not cd.is_dir():
+            click.echo(f"  Skipping — clone not found")
+            continue
+
+        try:
+            instances = select_prs_for_repo(
+                rid, cd, headers,
+                prs_per_repo=prs_per_repo,
+                max_files=max_files,
+                verbose=verbose,
+            )
+        except Exception as exc:
+            click.echo(f"  ERROR: {exc}")
+            failed_repos.append(rid)
+            continue
+
+        for inst in instances:
+            if inst["instance_id"] in existing:
                 continue
+            row_line = json.dumps(inst, separators=(",", ":"))
+            new_rows.append(row_line)
+            existing.add(inst["instance_id"])
+            total_new += 1
 
-            try:
-                instances = select_prs_for_repo(
-                    rid, cd, headers,
-                    prs_per_repo=prs_per_repo,
-                    max_files=max_files,
-                    verbose=verbose,
-                )
-            except Exception as exc:
-                click.echo(f"  ERROR: {exc}")
-                failed_repos.append(rid)
-                continue
-
-            for inst in instances:
-                if inst["instance_id"] in existing:
-                    continue
-                f.write(json.dumps(inst, separators=(",", ":")) + "\n")
-                existing.add(inst["instance_id"])
-                total_new += 1
+    # Atomic rewrite: merge existing + new, write to tmp, rename
+    tmp_path = out_path.with_suffix(".tmp")
+    with open(tmp_path, "w") as f:
+        for line in existing_rows:
+            f.write(line + "\n")
+        for line in new_rows:
+            f.write(line + "\n")
+    os.replace(tmp_path, out_path)
 
     if failed_repos:
         click.echo(f"\n{len(failed_repos)} repos failed: {', '.join(failed_repos)}")

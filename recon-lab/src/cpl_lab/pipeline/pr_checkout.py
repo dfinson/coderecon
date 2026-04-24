@@ -27,11 +27,16 @@ def _git(
 def _create_worktree(clone_dir: Path, worktree_dir: Path, commit: str) -> bool:
     """Create a detached worktree at *commit*.  Returns True on success."""
     if worktree_dir.is_dir():
-        # Already exists — verify it's a valid worktree
+        # Validate existing worktree: .git must exist and git rev-parse must succeed
         git_file = worktree_dir / ".git"
         if git_file.exists():
-            return True
-        # Directory exists but isn't a worktree — remove and retry
+            probe = _git(["rev-parse", "HEAD"], cwd=worktree_dir, check=False)
+            if probe.returncode == 0:
+                return True
+            # Corrupt worktree — remove and recreate
+            click.echo(f"    Removing corrupt worktree: {worktree_dir.name}")
+        # Directory exists but isn't a valid worktree — prune and remove
+        _git(["worktree", "prune"], cwd=clone_dir, check=False)
         subprocess.run(["rm", "-rf", str(worktree_dir)], check=False)
 
     worktree_dir.parent.mkdir(parents=True, exist_ok=True)

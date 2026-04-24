@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -64,10 +65,12 @@ def _resolve_end_line(
 
 
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
-    """Write rows as newline-delimited JSON."""
-    with open(path, "w") as f:
+    """Write rows as newline-delimited JSON (atomic)."""
+    tmp = path.with_suffix(".tmp")
+    with open(tmp, "w") as f:
         for row in rows:
             f.write(json.dumps(row) + "\n")
+    os.replace(tmp, path)
 
 
 def collect_ground_truth(
@@ -331,7 +334,9 @@ def merge_ground_truth(
 
         df = pd.DataFrame(rows)
         out_path = merged_dir / f"{table_name}.parquet"
-        df.to_parquet(out_path, index=False)
+        tmp_path = out_path.with_suffix(".tmp.parquet")
+        df.to_parquet(tmp_path, index=False)
+        os.replace(tmp_path, out_path)
         counts[table_name] = len(df)
 
     # Phase 3: collect per-repo features from index.db
@@ -339,7 +344,9 @@ def merge_ground_truth(
         repo_features = _collect_repo_features(data_dir, clones_dir)
         if repo_features:
             rf_df = pd.DataFrame(repo_features)
-            rf_df.to_parquet(merged_dir / "repo_features.parquet", index=False)
+            tmp_rf = merged_dir / "repo_features.tmp.parquet"
+            rf_df.to_parquet(tmp_rf, index=False)
+            os.replace(tmp_rf, merged_dir / "repo_features.parquet")
             counts["repo_features"] = len(rf_df)
 
     summary = {"merged_dir": str(merged_dir), "counts": counts}

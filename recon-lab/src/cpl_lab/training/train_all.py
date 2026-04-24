@@ -700,11 +700,32 @@ def train_all(data_dir: Path, output_dir: Path, skip_merge: bool = False) -> dic
     """Run the full 4-model training pipeline."""
     merged_dir = data_dir / "merged"
 
-    # Validate
+    # Validate input exists
     for req in ("candidates_rank.parquet",):
         if not (merged_dir / req).exists():
             print(f"Missing {merged_dir / req}", file=sys.stderr)
             sys.exit(1)
+
+    # Validate row count and required columns
+    pq_path = merged_dir / "candidates_rank.parquet"
+    pf = pq.ParquetFile(pq_path)
+    n_rows = pf.metadata.num_rows
+    _MIN_TRAINING_ROWS = 1000
+    if n_rows < _MIN_TRAINING_ROWS:
+        print(f"candidates_rank.parquet has {n_rows} rows, "
+              f"need at least {_MIN_TRAINING_ROWS}", file=sys.stderr)
+        sys.exit(1)
+
+    available = set(pf.schema_arrow.names)
+    _REQUIRED_SOURCE_COLS = {
+        "run_id", "query_id", "query_type", "repo_set",
+        "label_relevant", "label_gate", "candidate_key",
+    }
+    missing = _REQUIRED_SOURCE_COLS - available
+    if missing:
+        print(f"candidates_rank.parquet missing required columns: "
+              f"{sorted(missing)}", file=sys.stderr)
+        sys.exit(1)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     summary: dict = {}

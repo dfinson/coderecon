@@ -21,6 +21,7 @@ Writes: ``data/merged/candidates_rank.parquet``
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -186,6 +187,7 @@ def merge_signals(data_dir: Path) -> dict[str, Any]:
     # ── stream per-repo signals row-group by row-group ───────────
 
     out_path = merged_dir / "candidates_rank.parquet"
+    tmp_path = out_path.with_suffix(".tmp.parquet")
     writer: pq.ParquetWriter | None = None
     total_candidates = 0
     total_positive = 0
@@ -319,7 +321,7 @@ def merge_signals(data_dir: Path) -> dict[str, Any]:
 
                 out_table = _align_to_merged(out_table)
                 if writer is None:
-                    writer = pq.ParquetWriter(out_path, _MERGED_SCHEMA)
+                    writer = pq.ParquetWriter(tmp_path, _MERGED_SCHEMA)
 
                 writer.write_table(out_table)
                 del out_table
@@ -343,6 +345,7 @@ def merge_signals(data_dir: Path) -> dict[str, Any]:
 
     if writer is not None:
         writer.close()
+        os.replace(tmp_path, out_path)
 
     if total_candidates == 0:
         raise ValueError("No signal data found")

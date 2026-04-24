@@ -302,6 +302,7 @@ def _worker_inner(args: tuple[str, str, str, str, str], queue: mp.Queue) -> None
             sig_dir = data_dir / "signals"
             sig_dir.mkdir(parents=True, exist_ok=True)
             out_path = sig_dir / "candidates_rank.parquet"
+            tmp_path = out_path.with_suffix(".tmp.parquet")
 
             writer: pq.ParquetWriter | None = None
 
@@ -360,7 +361,7 @@ def _worker_inner(args: tuple[str, str, str, str, str], queue: mp.Queue) -> None
                         pd.DataFrame(rows), schema=_SIGNALS_SCHEMA, preserve_index=False,
                     )
                     if writer is None:
-                        writer = pq.ParquetWriter(out_path, _SIGNALS_SCHEMA)
+                        writer = pq.ParquetWriter(tmp_path, _SIGNALS_SCHEMA)
                     writer.write_table(batch_table)
                     n_cand += len(rows)
                     del batch_table, rows
@@ -371,6 +372,7 @@ def _worker_inner(args: tuple[str, str, str, str, str], queue: mp.Queue) -> None
 
             if writer is not None:
                 writer.close()
+                os.replace(tmp_path, out_path)
 
     sig_dir = data_dir / "signals"
     n_cand = n_q = n_err = 0
