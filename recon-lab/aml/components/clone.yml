@@ -3,7 +3,7 @@ $schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.jso
 name: recon_lab_clone
 display_name: "Clone Repos"
 version: "1"
-description: "Clone SWE-bench repos to the workspace at pinned commits."
+description: "Clone repos to the workspace at pinned commits."
 
 inputs:
   workspace:

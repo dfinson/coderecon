@@ -6,7 +6,7 @@ For each repo in REPO_MANIFEST:
   3. Filter: non-trivial title/body, parseable diff, ≥1 def touched.
   4. Write ``pr_instances.jsonl`` with one row per selected PR.
 
-Requires ``GITHUB_TOKEN`` env var for API access.
+Requires ``gh`` CLI authentication (``gh auth login``).
 """
 
 from __future__ import annotations
@@ -38,11 +38,18 @@ _PER_PAGE = 100  # max allowed by GitHub
 
 
 def _gh_headers() -> dict[str, str]:
-    token = os.environ.get("GITHUB_TOKEN", "")
-    if not token:
+    """Build GitHub API headers using ``gh auth token`` (gh CLI)."""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True, text=True, check=True,
+        )
+        token = result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
         raise click.ClickException(
-            "GITHUB_TOKEN env var required for PR selection. "
-            "Create a fine-grained token with read-only 'pull requests' scope."
+            "GitHub auth failed. Run 'gh auth login' first."
         )
     return {
         "Authorization": f"Bearer {token}",

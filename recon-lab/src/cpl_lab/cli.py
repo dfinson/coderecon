@@ -31,7 +31,6 @@ from cpl_lab.config import get_config
 # ── Preflight checks ────────────────────────────────────────────
 
 # Stages that need specific credentials/tools.
-_NEEDS_GITHUB_TOKEN = frozenset({"pr-select"})
 _NEEDS_RECON_BINARY = frozenset({"index-main", "index-worktrees", "collect"})
 _NEEDS_AZURE_LLM = frozenset({"pr-import", "non-ok-queries"})
 
@@ -40,15 +39,6 @@ def _preflight(ctx: click.Context) -> None:
     """Validate credentials and tools BEFORE burning compute time."""
     cmd = ctx.info_name or ""
     issues: list[str] = []
-
-    if cmd in _NEEDS_GITHUB_TOKEN:
-        import os
-
-        token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
-        if not token:
-            issues.append(
-                "GITHUB_TOKEN not set. Export GITHUB_TOKEN for GitHub API access."
-            )
 
     if cmd in _NEEDS_RECON_BINARY:
         try:

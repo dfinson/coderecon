@@ -297,11 +297,11 @@ model hyperparameters, or debugs data quality.
 
 **Wrong assumptions this prevents**:
 - "Training data is random split" → Hash-based deterministic split: `hash(run_id) % 5 == 4` → cutoff shard
-- "SWE-bench instances are all Python" → Python + Rust + Java
+- "Training repos are all Python" → Python + Rust + Java + C# + Go
 - "Train/eval overlap is harmless" → 500 Verified ⊂ test split; training on Verified = data leakage
 - "Import stage is expensive" → 108 dev instances have cached LLM queries; import skips them
 - "DVC caches everything" → `cache: false` on large outputs; `persist: true` on clones
-- "Pipeline stages run sequentially" → DVC DAG: some stages parallelize (e.g., swebench-import + index)
+- "Pipeline stages run sequentially" → DVC DAG: some stages parallelize (e.g., index-main + pr-select)
 - "Env vars use CODERECON__" → recon-lab uses `CPL_LAB_*` prefix
 
 **Key references to bundle**:
