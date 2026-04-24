@@ -1313,8 +1313,8 @@ def _make_extraction(
         {"implementor_def_uid": def_uid, "interface_def_uid": def_uid}
     ]
     extraction.binds = [
-        {"target_kind": "DEF", "target_uid": def_uid},
-        {"target_kind": "IMPORT", "target_uid": import_uid},  # should NOT be remapped
+        {"target_kind": "def", "target_uid": def_uid},
+        {"target_kind": "import", "target_uid": import_uid},  # should NOT be remapped
     ]
     return extraction
 
@@ -1396,10 +1396,11 @@ class TestApplyWorktreeUidRemap:
         _apply_worktree_uid_remap(ex, worktree_id=1)
 
         new_uid = ex.defs[0]["def_uid"]
-        # First bind has target_kind=DEF — must be remapped
+        # First bind has target_kind=def — must be remapped via def_uid_remap
         assert ex.binds[0]["target_uid"] == new_uid
-        # Second bind has target_kind=IMPORT — must NOT be remapped by def remap
-        assert ex.binds[1]["target_uid"] == "eeff00112233aabb"
+        # Second bind has target_kind=import — must be remapped via import_uid_remap
+        new_import_uid = ex.imports[0]["import_uid"]
+        assert ex.binds[1]["target_uid"] == new_import_uid
 
     def test_uid_length_stays_16_chars(self) -> None:
         """Remapped UIDs must be exactly 16 hex chars (same format as originals)."""
