@@ -83,7 +83,7 @@ class CodeReconServer:
             cwd=self.repo_path,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            env={**os.environ, "CODEPLANE_LOG_LEVEL": "DEBUG"},
+            env={**os.environ, "CODERECON_LOG_LEVEL": "DEBUG"},
             start_new_session=True,
         )
 

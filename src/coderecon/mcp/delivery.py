@@ -13,10 +13,6 @@ from typing import Any
 from coderecon.config.constants import INLINE_CAP_BYTES
 
 
-def set_server_port(port: int) -> None:
-    """No-op — retained for backward compatibility with startup code."""
-
-
 def wrap_response(
     data: dict[str, Any],
     *,

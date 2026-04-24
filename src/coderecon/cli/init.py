@@ -34,7 +34,7 @@ log = structlog.get_logger(__name__)
 # Agent Instruction Snippet
 # =============================================================================
 
-_CODEPLANE_SNIPPET_MARKER = "<!-- coderecon-instructions -->"
+_CODERECON_SNIPPET_MARKER = "<!-- coderecon-instructions -->"
 
 
 def _make_coderecon_snippet(tool_prefix: str) -> str:
@@ -223,7 +223,7 @@ def _inject_agent_instructions(
 
         if target.exists():
             content = target.read_text()
-            if _CODEPLANE_SNIPPET_MARKER in content:
+            if _CODERECON_SNIPPET_MARKER in content:
                 new_content = re.sub(
                     r"<!-- coderecon-instructions -->.*?<!-- /coderecon-instructions -->",
                     snippet.strip(),

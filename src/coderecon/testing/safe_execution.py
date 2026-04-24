@@ -208,9 +208,9 @@ class SafeExecutionContext:
             "DISABLE_OPENCOLLECTIVE": "1",
             # Prevent browser opening
             "BROWSER": "none",
-            # Codeplane marker
-            "CODEPLANE_EXECUTION": "1",
-            "CODEPLANE_RUN_ID": self._config.run_id,
+            # CodeRecon marker
+            "CODERECON_EXECUTION": "1",
+            "CODERECON_RUN_ID": self._config.run_id,
         }
 
     # =========================================================================

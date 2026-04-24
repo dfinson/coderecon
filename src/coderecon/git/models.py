@@ -20,22 +20,6 @@ _DELTA_CHAR_MAP: dict[str, DeltaStatus] = {
     "C": "copied",
 }
 
-# Legacy map kept for backward compatibility (external code may import this)
-# Keys are arbitrary ints; values are DeltaStatus strings
-_DELTA_STATUS_MAP: dict[int | str, DeltaStatus] = {
-    1: "added",
-    2: "deleted",
-    3: "modified",
-    4: "renamed",
-    5: "copied",
-    # Also allow char keys for subprocess-based lookups
-    "A": "added",
-    "D": "deleted",
-    "M": "modified",
-    "R": "renamed",
-    "C": "copied",
-}
-
 
 @dataclass(frozen=True, slots=True)
 class Signature:

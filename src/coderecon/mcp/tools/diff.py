@@ -15,7 +15,7 @@ from fastmcp import Context
 from pydantic import Field
 
 from coderecon.core.languages import detect_language_family, has_grammar
-from coderecon.git.models import _DELTA_STATUS_MAP
+from coderecon.git.models import _DELTA_CHAR_MAP
 from coderecon.index._internal.diff.engine import compute_structural_diff
 from coderecon.index._internal.diff.enrichment import enrich_diff
 from coderecon.index._internal.diff.models import (
@@ -125,7 +125,7 @@ def _run_git_diff(
         if paths and file_path not in paths:
             continue
 
-        status = _DELTA_STATUS_MAP.get(status_char, "modified")
+        status = _DELTA_CHAR_MAP.get(status_char, "modified")
 
         lang = detect_language_family(file_path)
         file_has_grammar = bool(lang and has_grammar(lang))

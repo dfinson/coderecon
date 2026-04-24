@@ -204,7 +204,7 @@ recon init [PATH] [--reindex] [--port PORT] [--mcp-target TARGET]
 
 | Variable | Description |
 |---|---|
-| `CODEPLANE__SERVER__PORT` | Override default daemon port |
-| `CODEPLANE__LOGGING__LEVEL` | Override log level (`DEBUG`, `INFO`, `WARN`, `ERROR`) |
+| `CODERECON__SERVER__PORT` | Override default daemon port |
+| `CODERECON__LOGGING__LEVEL` | Override log level (`DEBUG`, `INFO`, `WARN`, `ERROR`) |
 
-Double-underscores separate nesting levels: `CODEPLANE__<SECTION>__<KEY>`.
+Double-underscores separate nesting levels: `CODERECON__<SECTION>__<KEY>`.

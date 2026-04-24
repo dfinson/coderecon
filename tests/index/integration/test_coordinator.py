@@ -499,7 +499,7 @@ class TestCoordinatorCplignore:
         coderecon = repo_root / ".recon"
         coderecon.mkdir()
         (coderecon / ".reconignore").write_text(get_reconignore_template())
-        (coderecon / "config.yaml").write_text("CODEPLANE_CONFIG = true")
+        (coderecon / "config.yaml").write_text("CODERECON_CONFIG = true")
         (coderecon / "index.db").write_bytes(b"database")
 
         # Create initial commit
@@ -517,7 +517,7 @@ class TestCoordinatorCplignore:
             await coordinator.initialize(on_index_progress=_noop_progress)
 
             # Search for content that should NOT be indexed
-            config_results = await coordinator.search("CODEPLANE_CONFIG")
+            config_results = await coordinator.search("CODERECON_CONFIG")
             assert len(config_results.results) == 0, ".recon/ should always be ignored"
 
             # But main.py should be indexed

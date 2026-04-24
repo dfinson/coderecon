@@ -138,7 +138,7 @@ class TestLoadConfig:
 
         with (
             patch("coderecon.config.loader.GLOBAL_CONFIG_PATH", tmp_path / "none.yaml"),
-            patch.dict(os.environ, {"CODEPLANE__LOGGING__LEVEL": "WARNING"}),
+            patch.dict(os.environ, {"CODERECON__LOGGING__LEVEL": "WARNING"}),
         ):
             config = load_config(tmp_path)
             assert config.logging.level == "WARNING"
@@ -159,7 +159,7 @@ class TestLoadConfig:
         # Use an invalid log level via env var - pydantic will reject it
         with (
             patch("coderecon.config.loader.GLOBAL_CONFIG_PATH", tmp_path / "none.yaml"),
-            patch.dict(os.environ, {"CODEPLANE__LOGGING__LEVEL": "INVALID_LEVEL"}),
+            patch.dict(os.environ, {"CODERECON__LOGGING__LEVEL": "INVALID_LEVEL"}),
             pytest.raises(ConfigError),
         ):
             load_config(tmp_path)

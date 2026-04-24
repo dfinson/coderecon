@@ -38,7 +38,7 @@ class TestClearRepoNothingToRemove:
         # Since Console(stderr=True), output goes to stderr
 
 
-class TestClearRepoCodeplaneDir:
+class TestClearRepoCodereconDir:
     """Tests for removing .recon/ directory."""
 
     def test_removes_coderecon_directory(self, tmp_path: Path) -> None:

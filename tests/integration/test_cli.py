@@ -33,7 +33,7 @@ def reset_state() -> Generator[None, None, None]:
     structlog.reset_defaults()
     logging.getLogger().handlers.clear()
     clear_request_id()
-    orig = {k: v for k, v in os.environ.items() if k.startswith("CODEPLANE__")}
+    orig = {k: v for k, v in os.environ.items() if k.startswith("CODERECON__")}
     for k in orig:
         del os.environ[k]
     yield
@@ -41,7 +41,7 @@ def reset_state() -> Generator[None, None, None]:
     logging.getLogger().handlers.clear()
     clear_request_id()
     for k in list(os.environ.keys()):
-        if k.startswith("CODEPLANE__"):
+        if k.startswith("CODERECON__"):
             del os.environ[k]
     os.environ.update(orig)
 
@@ -136,8 +136,8 @@ class TestWorkflows:
         runner.invoke(cli, ["init", str(temp_repo)])
 
         # Given - env vars set
-        os.environ["CODEPLANE__LOGGING__LEVEL"] = "DEBUG"
-        os.environ["CODEPLANE__SERVER__PORT"] = "3000"
+        os.environ["CODERECON__LOGGING__LEVEL"] = "DEBUG"
+        os.environ["CODERECON__SERVER__PORT"] = "3000"
 
         # When
         config = load_config(repo_root=temp_repo)

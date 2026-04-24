@@ -166,8 +166,8 @@ class TestUniversalEnvironmentOverrides:
     def test_coderecon_markers_set(self, safe_ctx: SafeExecutionContext) -> None:
         """Verify CodeRecon execution markers are set."""
         env = safe_ctx.prepare_environment("python.pytest")
-        assert env["CODEPLANE_EXECUTION"] == "1"
-        assert env["CODEPLANE_RUN_ID"] == "test-run-12345"
+        assert env["CODERECON_EXECUTION"] == "1"
+        assert env["CODERECON_RUN_ID"] == "test-run-12345"
 
     def test_base_environment_preserved(self, base_config: SafeExecutionConfig) -> None:
         """Verify base environment variables are preserved."""
@@ -1153,7 +1153,7 @@ class TestIntegration:
 
             # All should have universal overrides
             assert env["CI"] == "true", f"{pack_id} missing CI"
-            assert env["CODEPLANE_EXECUTION"] == "1", f"{pack_id} missing marker"
+            assert env["CODERECON_EXECUTION"] == "1", f"{pack_id} missing marker"
 
             # All values should be strings
             for key, value in env.items():

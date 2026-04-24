@@ -204,8 +204,17 @@ def scan_repo_languages(repo_root: Path) -> set[LanguageFamily]:
     """
     import os
 
-    from coderecon.index._internal.discovery.language_detect import detect_language_family
+    from coderecon.core.languages import detect_language_family as _detect_str
     from coderecon.index._internal.ignore import PRUNABLE_DIRS
+
+    def _detect_enum(path: str | Path) -> LanguageFamily | None:
+        family_str = _detect_str(path)
+        if family_str is None:
+            return None
+        try:
+            return LanguageFamily(family_str)
+        except ValueError:
+            return None
 
     languages: set[LanguageFamily] = set()
 
@@ -220,7 +229,7 @@ def scan_repo_languages(repo_root: Path) -> set[LanguageFamily]:
         )
         if result.returncode == 0:
             for line in result.stdout.splitlines():
-                lang = detect_language_family(line)
+                lang = _detect_enum(line)
                 if lang is not None:
                     languages.add(lang)
             return languages
@@ -235,7 +244,7 @@ def scan_repo_languages(repo_root: Path) -> set[LanguageFamily]:
         for filename in filenames:
             path = Path(dirpath) / filename
             if not any(part.startswith(".") for part in path.relative_to(repo_root).parts):
-                lang = detect_language_family(path)
+                lang = _detect_enum(path)
                 if lang is not None:
                     languages.add(lang)
 

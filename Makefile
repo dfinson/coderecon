@@ -4,7 +4,7 @@ PYTHON ?= python3
 VENV := .venv
 
 help:
-	@echo "CodePlane Development Commands"
+	@echo "CodeRecon Development Commands"
 	@echo ""
 	@echo "Setup:"
 	@echo "  make install     Install package in editable mode"
@@ -22,13 +22,13 @@ help:
 
 $(VENV)/bin/activate:
 	$(PYTHON) -m venv $(VENV)
-	$(VENV)/bin/pip install --upgrade pip
+	uv pip install --upgrade pip
 
 install: $(VENV)/bin/activate
-	$(VENV)/bin/pip install -e .
+	uv pip install -e .
 
 dev: $(VENV)/bin/activate
-	$(VENV)/bin/pip install -e ".[dev]"
+	uv pip install -e ".[dev]"
 	$(VENV)/bin/pre-commit install
 
 lint:

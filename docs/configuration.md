@@ -11,7 +11,7 @@ User-editable. Created by `recon register`. Persists across re-indexing.
 ```yaml
 # Port the daemon listens on for this repo's MCP slot.
 # Override via: recon register --port <N>
-# Or env var: CODEPLANE__SERVER__PORT=<N>
+# Or env var: CODERECON__SERVER__PORT=<N>
 port: 3100
 ```
 
@@ -105,7 +105,7 @@ port: 3100
 
 ## Config Precedence
 
-1. One-off: `recon up --set key=value` or environment variables (`CODEPLANE__*`)
+1. One-off: `recon up --set key=value` or environment variables (`CODERECON__*`)
 2. Per-repo: `.recon/config.yaml`
 3. Global: `~/.config/coderecon/config.yaml`
 4. Built-in defaults
@@ -114,12 +114,12 @@ port: 3100
 
 ## Environment Variables
 
-All config keys are overridable via env vars. Use `CODEPLANE__` prefix with double-underscore separators for nesting:
+All config keys are overridable via env vars. Use `CODERECON__` prefix with double-underscore separators for nesting:
 
 ```bash
-CODEPLANE__SERVER__PORT=4200
-CODEPLANE__LOGGING__LEVEL=DEBUG
-CODEPLANE__REFACTOR__ENABLED=false
+CODERECON__SERVER__PORT=4200
+CODERECON__LOGGING__LEVEL=DEBUG
+CODERECON__REFACTOR__ENABLED=false
 ```
 
 ---

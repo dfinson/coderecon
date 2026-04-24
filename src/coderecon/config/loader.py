@@ -2,7 +2,7 @@
 
 Supports loading configuration from multiple sources with precedence:
 1. Direct kwargs (highest priority)
-2. Environment variables (CODEPLANE__SECTION__KEY)
+2. Environment variables (CODERECON__SECTION__KEY)
 3. User config (.recon/config.yaml) - minimal user-facing options
 4. Runtime state (.recon/state.yaml) - auto-generated, not user-editable
 5. Built-in defaults (lowest priority)
@@ -87,10 +87,10 @@ def _make_settings_class(yaml_config: dict[str, Any]) -> type[BaseSettings]:
     """Create a Settings class with instance-based YAML source (thread-safe)."""
 
     class CodeReconSettings(BaseSettings):
-        """Root config. Env vars: CODEPLANE__LOGGING__LEVEL, CODEPLANE__SERVER__PORT, etc."""
+        """Root config. Env vars: CODERECON__LOGGING__LEVEL, CODERECON__SERVER__PORT, etc."""
 
         model_config = SettingsConfigDict(
-            env_prefix="CODEPLANE__",
+            env_prefix="CODERECON__",
             env_nested_delimiter="__",
             case_sensitive=False,
         )

@@ -211,6 +211,9 @@ __marimo__/
 # Benchmark raw chatreplay exports (large)
 benchmarking/**/results/*_raw.json
 
+# CodeRecon runtime state and artifacts (regenerated on `recon init`)
+.recon/
+
 # Recon-lab pipeline — mutable data lives outside repo at $CPL_LAB_WORKSPACE
 recon-lab/clones/
 recon-lab/data/

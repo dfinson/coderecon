@@ -3,10 +3,6 @@
     "coderecon": {
       "type": "http",
       "url": "http://127.0.0.1:7654/mcp"
-    },
-    "coderecon-coderecon": {
-      "type": "http",
-      "url": "http://127.0.0.1:7654/mcp"
     }
   }
 }

@@ -28,7 +28,7 @@ def _configure_ci_credentials(
 
     Uses a session-scoped temporary credential file to avoid polluting global config.
     """
-    token = os.environ.get("CODEPLANE_TEST_PRIVATE_TOKEN")
+    token = os.environ.get("CODERECON_TEST_PRIVATE_TOKEN")
     if not token:
         yield
         return
