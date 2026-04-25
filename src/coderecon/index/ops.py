@@ -862,6 +862,7 @@ class IndexCoordinatorEngine:
                     try:
                         p = p.relative_to(self.repo_root)
                     except ValueError:
+                        log.debug("path_resolve_failed", path=str(p))
                         continue  # skip paths we can't resolve
             _normalized.append(p)
         changed_paths = _normalized
@@ -933,6 +934,7 @@ class IndexCoordinatorEngine:
                                 file_id_map[str(path)] = file_record.id
                             files_added += 1
                         except (OSError, UnicodeDecodeError):
+                            log.debug("file_read_failed", path=str(path), exc_info=True)
                             continue
                     session.commit()
 
@@ -1303,6 +1305,7 @@ class IndexCoordinatorEngine:
                             )
                         files_added += 1
                     except (OSError, UnicodeDecodeError):
+                        log.debug("file_index_failed", path=rel_path, exc_info=True)
                         continue
 
         # Reload index
@@ -1720,6 +1723,7 @@ class IndexCoordinatorEngine:
                         try:
                             disk_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
                         except OSError:
+                            log.debug("hash_read_failed", path=rel_path, exc_info=True)
                             continue
                         if disk_hash != indexed_hashes.get(rel_path):
                             to_update.add(rel_path)
@@ -1758,6 +1762,7 @@ class IndexCoordinatorEngine:
                                 files_added += 1
                             symbols_indexed += len(symbols)
                         except (OSError, UnicodeDecodeError):
+                            log.debug("incremental_index_failed", path=rel_path, exc_info=True)
                             continue
 
             # Reload lexical index

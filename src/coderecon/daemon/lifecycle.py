@@ -185,7 +185,7 @@ async def run_server(
             await coordinator.reindex_full()
         except Exception:
             log.debug("bg_reindex_failed", exc_info=True)
-            pass  # Non-fatal; server still usable with stale index
+            # Non-fatal; server still usable with stale index
 
     asyncio.get_event_loop().call_soon(lambda: asyncio.ensure_future(_bg_reindex()))
 

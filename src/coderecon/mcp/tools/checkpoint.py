@@ -361,7 +361,7 @@ def _build_coverage_text(
             )
             reports.append(report)
         except CoverageParseError:
-            pass
+            log.debug("coverage_parse_failed", exc_info=True)
         except Exception as e:
             log.debug("Coverage parse failed", path=path_str, error=str(e))
 
@@ -573,8 +573,8 @@ def _ingest_checkpoint_coverage(
             try:
                 report = parse_artifact(f, base_path=app_ctx.repo_root)
                 reports.append(report)
-            except (CoverageParseError, Exception):
-                pass
+            except (CoverageParseError, Exception):  # noqa: BLE001
+                log.debug("artifact_parse_failed", path=str(f), exc_info=True)
 
         if not reports:
             return

@@ -67,7 +67,7 @@ def _collect_watch_dirs(
             for d in dirnames:
                 dirs.append(Path(dirpath) / d)
     except OSError:
-        pass
+        log.debug("dir_walk_failed", root=str(root), exc_info=True)
     return dirs
 
 
