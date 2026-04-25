@@ -474,6 +474,7 @@ class File(SQLModel, table=True):
         "NULL for languages without declarations (JS/TS, C/C++) "
         "or files missing declarations.",
     )
+    parse_status: str | None = None
 
     # Relationships
     defs: list["DefFact"] = Relationship(back_populates="file")
