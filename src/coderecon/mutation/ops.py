@@ -158,7 +158,7 @@ class MutationOps:
             file_deltas.append(
                 FileDelta(
                     path=edit.path,
-                    action=f"{edit.action}d",  # type: ignore[arg-type]
+                    action=f"{edit.action}d",  # "create"→"created", "update"→"updated", "delete"→"deleted"
                     old_hash=old_hash,
                     new_hash=new_hash,
                     insertions=insertions,

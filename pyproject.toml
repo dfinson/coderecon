@@ -40,7 +40,6 @@ dependencies = [
     "tree-sitter>=0.24.0",
     # Logging
     "structlog>=25.5.0",
-    "sqlalchemy[mypy]>=2.0.46",
     # CLI progress & output
     "tqdm>=4.66.0",
     "rich>=14.0.0",
@@ -75,6 +74,7 @@ dev = [
     "pytest-timeout>=2.3.0",
     "ruff>=0.14.0",
     "mypy>=1.19.0",
+    "sqlalchemy[mypy]>=2.0.46",
     "pre-commit>=4.2.0",
     "testcontainers>=4.10.0",
     # Tree-sitter grammars for tests (not runtime deps - installed on-demand)

@@ -7,9 +7,10 @@ See §2.3 of recon-lab/README.md.
 
 from __future__ import annotations
 
-import structlog
 from pathlib import Path
 from typing import Any
+
+import structlog
 
 from coderecon.ranking.models import GateLabel
 

@@ -7,9 +7,10 @@ to file level.  High-scoring files pass through to the def ranker
 
 from __future__ import annotations
 
-import structlog
 from pathlib import Path
 from typing import Any
+
+import structlog
 
 log = structlog.get_logger(__name__)
 

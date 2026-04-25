@@ -7,7 +7,8 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
-    from coderecon.git._internal.access import GitBranchData, GitCommitData, GitSignature as GitSig
+    from coderecon.git._internal.access import GitBranchData, GitCommitData
+    from coderecon.git._internal.access import GitSignature as GitSig
 
 DeltaStatus = Literal["added", "deleted", "modified", "renamed", "copied", "unknown"]
 

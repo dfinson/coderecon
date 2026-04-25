@@ -1492,7 +1492,6 @@ async def checkpoint_pipeline(
         gate_hints: list[str] = []
         try:
             from coderecon.config.loader import load_config
-
             from coderecon.index._internal.analysis.gate_engine import evaluate_gates
 
             config = load_config(repo_root=app_ctx.repo_root)

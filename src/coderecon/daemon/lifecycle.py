@@ -174,11 +174,11 @@ async def run_server(
     dev_mode: bool = False,
 ) -> None:
     """Run the daemon until shutdown signal."""
-    from coderecon.daemon.app import create_app
-
     # Ensure index is up-to-date (silent - this is internal housekeeping)
     # Run in background after server starts to avoid blocking startup
     import asyncio
+
+    from coderecon.daemon.app import create_app
 
     async def _bg_reindex() -> None:
         try:

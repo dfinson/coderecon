@@ -16,10 +16,10 @@ Design:
 
 from __future__ import annotations
 
-import structlog
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+import structlog
 from sqlalchemy import text
 
 if TYPE_CHECKING:

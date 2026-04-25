@@ -6,9 +6,10 @@ See §2.2 of recon-lab/README.md.
 
 from __future__ import annotations
 
-import structlog
 from pathlib import Path
 from typing import Any
+
+import structlog
 
 log = structlog.get_logger(__name__)
 

@@ -492,7 +492,7 @@ def extract_file_ranker_features(
         f["max_hub_score"] = max(hub_scores, default=0)
         f["is_test"] = any(d.get("is_test", False) for d in defs)
         f["is_barrel"] = any(d.get("is_barrel", False) for d in defs)
-        f["path_depth"] = defs[0].get("path_depth", 0)
+        f["path_depth"] = defs[0].get("path_depth", 0)  # all defs share the same file
         f["any_docstring"] = any(d.get("has_docstring", False) for d in defs)
         f["any_decorators"] = any(d.get("has_decorators", False) for d in defs)
         f["any_return_type"] = any(d.get("has_return_type", False) for d in defs)
