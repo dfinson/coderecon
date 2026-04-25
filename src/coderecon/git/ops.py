@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
+import structlog
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from coderecon.git._internal import (
@@ -72,6 +73,8 @@ from coderecon.git.models import (
     TagInfo,
     WorktreeInfo,
 )
+
+log = structlog.get_logger(__name__)
 
 
 class GitOps:
@@ -291,7 +294,7 @@ class GitOps:
                 ref = result.stdout.strip()  # refs/remotes/origin/main
                 return ref.rsplit("/", 1)[-1]
         except Exception:  # noqa: BLE001
-            pass
+            log.debug("symbolic_ref_failed", exc_info=True)
 
         # 3. Probe common branch names
         for candidate in ("main", "master"):
@@ -303,6 +306,7 @@ class GitOps:
                 if result.returncode == 0:
                     return candidate
             except Exception:  # noqa: BLE001
+                log.debug("branch_probe_failed", candidate=candidate, exc_info=True)
                 continue
 
         return "main"
@@ -695,7 +699,7 @@ class GitOps:
                 if Path(wt_path).resolve() == path.resolve():
                     raise WorktreeError(f"Path already in use by worktree '{wt_name}'")
             except GitError:
-                pass
+                log.debug("worktree_path_check_failed", worktree=wt_name, exc_info=True)
 
         self._access.add_worktree(name, str(path), ref)
         return GitOps(path)
@@ -892,7 +896,7 @@ class GitOps:
                     if x == "?" and y == "?":
                         untracked_count += 1
             except (subprocess.SubprocessError, OSError):
-                pass
+                log.debug("submodule_status_check_failed", exc_info=True)
 
         return SubmoduleStatus(
             info=info,
@@ -914,7 +918,7 @@ class GitOps:
                     sm = self._access.lookup_submodule(name)
                     initialized.append(sm["path"])
                 except GitError:
-                    pass
+                    log.debug("submodule_init_failed", submodule=name, exc_info=True)
         else:
             for path in paths:
                 sm_name = self._access.submodule_name_for_path(path)
@@ -924,7 +928,7 @@ class GitOps:
                     self._access.init_submodule(sm_name)
                     initialized.append(path)
                 except GitError:
-                    pass
+                    log.debug("submodule_init_failed", path=path, exc_info=True)
 
         return initialized
 
