@@ -142,6 +142,7 @@ def snapshots_from_blob(
             return []
         source = result.stdout
     except Exception:
+        log.debug("blob_retrieval_failed", exc_info=True)
         return []
 
     lang = detect_language_family(file_path)

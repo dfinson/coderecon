@@ -503,7 +503,7 @@ class TestOps:
                     ]
                 all_targets.extend(targets)
             except Exception:
-                # Pack discovery failed, skip
+                log.debug("pack_discovery_failed", exc_info=True)
                 continue
 
         # Deduplicate targets
@@ -797,6 +797,7 @@ class TestOps:
         try:
             run_status = await task
         except Exception:
+            log.warning("test_execution_failed", exc_info=True)
             run_status = TestRunStatus(
                 run_id=run_id,
                 status="failed",
@@ -1089,7 +1090,7 @@ class TestOps:
             return None
 
         except Exception:
-            # Resolution failed - return None to trigger PATH fallback
+            log.debug("runtime_resolution_failed", exc_info=True)
             return None
 
     async def _run_single_target(

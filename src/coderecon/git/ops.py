@@ -290,7 +290,7 @@ class GitOps:
             if result.returncode == 0:
                 ref = result.stdout.strip()  # refs/remotes/origin/main
                 return ref.rsplit("/", 1)[-1]
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
         # 3. Probe common branch names
@@ -302,7 +302,7 @@ class GitOps:
                 )
                 if result.returncode == 0:
                     return candidate
-            except Exception:
+            except Exception:  # noqa: BLE001
                 continue
 
         return "main"

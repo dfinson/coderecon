@@ -18,6 +18,8 @@ from __future__ import annotations
 import hashlib
 import importlib
 import re
+
+import structlog
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -37,6 +39,8 @@ from coderecon.index._internal.parsing.packs import (
 
 # Derive LANGUAGE_MAP from packs — includes aliases like shell→bash
 LANGUAGE_MAP: dict[str, str] = {key: pack.grammar_name for key, pack in PACKS.items()}
+
+log = structlog.get_logger(__name__)
 
 if TYPE_CHECKING:
     pass
@@ -437,6 +441,7 @@ class TreeSitterParser:
         try:
             query = _TSQuery(tree.language, config.query)
         except Exception:
+            log.debug("ts_query_compile_failed", exc_info=True)
             return []
         cursor = _TSQueryCursor(query)
         matches: list[tuple[int, dict[str, list[Any]]]] = cursor.matches(root)
@@ -566,6 +571,7 @@ class TreeSitterParser:
         try:
             query = _TSQuery(tree.language, pack.declared_module_query)
         except Exception:
+            log.debug("ts_query_compile_failed", exc_info=True)
             return None
         cursor = _TSQueryCursor(query)
         matches: list[tuple[int, dict[str, list[Any]]]] = cursor.matches(root)
@@ -801,6 +807,7 @@ class TreeSitterParser:
         try:
             query = _TSQuery(tree.language, pack.dynamic_query)
         except Exception:
+            log.debug("ts_query_compile_failed", exc_info=True)
             return []
         cursor = _TSQueryCursor(query)
         matches: list[tuple[int, dict[str, list[Any]]]] = cursor.matches(root)
