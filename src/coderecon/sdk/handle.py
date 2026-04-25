@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+from contextlib import AbstractContextManager
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -144,7 +145,7 @@ class RepoHandle:
             kw["worktree"] = self._worktree
         return kw
 
-    def _with_session(self) -> Any:
+    def _with_session(self) -> AbstractContextManager[None]:
         """Context manager to temporarily set explicit session on SDK."""
         class _Ctx:
             def __init__(ctx, sdk: "CodeRecon", session_id: str | None) -> None:

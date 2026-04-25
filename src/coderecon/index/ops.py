@@ -1140,12 +1140,14 @@ class IndexCoordinatorEngine:
                     # Invalidate dangling target_def_uid refs: when defs in changed
                     # files get new UIDs, refs in OTHER files still point at the
                     # old UID.  NULL them out and widen the resolution scope.
-                    _extra_file_ids = self._invalidate_dangling_refs(changed_file_ids)
+                    _extra_file_ids = self._invalidate_dangling_refs(
+                        changed_file_ids, worktree_id=_wt_id,
+                    )
                     _resolve_fids = list(
                         dict.fromkeys(changed_file_ids + _extra_file_ids)
                     )
                     run_pass_1_5(self.db, None, file_ids=_resolve_fids)
-                    resolve_references(self.db, file_ids=_resolve_fids)
+                    resolve_references(self.db, file_ids=_resolve_fids, worktree_id=_wt_id)
                     resolve_type_traced(self.db, file_ids=_resolve_fids)
 
                 # Sweep orphaned edge rows after resolution
@@ -1468,13 +1470,17 @@ class IndexCoordinatorEngine:
                         )  # type: ignore[call-overload]
             session.commit()
 
-    def _invalidate_dangling_refs(self, changed_file_ids: list[int]) -> list[int]:
+    def _invalidate_dangling_refs(
+        self, changed_file_ids: list[int], worktree_id: int | None = None,
+    ) -> list[int]:
         """NULL out target_def_uid on refs whose target no longer exists.
 
         When files are reindexed, their defs may get new UIDs.  Refs in
         *other* files that pointed at the old UIDs become dangling.  This
         method NULLs those out and returns the file_ids that were affected
         so the caller can widen the resolution scope.
+
+        If worktree_id is provided, only considers files in that worktree.
         """
         if not changed_file_ids:
             return []
@@ -1485,11 +1491,20 @@ class IndexCoordinatorEngine:
             binds: dict[str, int] = {f"cf_{i}": fid for i, fid in enumerate(changed_file_ids)}
             # Refs whose target_def_uid once belonged to a changed file's defs
             # but is no longer present in def_facts.
+            wt_clause = ""
+            if worktree_id is not None:
+                wt_clause = (
+                    " AND r.file_id IN ("
+                    "   SELECT id FROM files WHERE worktree_id = :wt_id"
+                    " )"
+                )
+                binds["wt_id"] = worktree_id
             affected_rows = session.execute(
                 text(
                     f"SELECT DISTINCT r.file_id FROM ref_facts r "
                     f"WHERE r.target_def_uid IS NOT NULL "
                     f"AND r.file_id NOT IN ({ph}) "
+                    f"{wt_clause} "
                     f"AND NOT EXISTS ("
                     f"  SELECT 1 FROM def_facts d "
                     f"  WHERE d.def_uid = r.target_def_uid"
@@ -1586,6 +1601,12 @@ class IndexCoordinatorEngine:
                     "target_def_uid NOT IN (SELECT def_uid FROM def_facts)"
                 )
             )
+            session.execute(
+                text(
+                    "DELETE FROM doc_code_edge_facts WHERE "
+                    "target_def_uid NOT IN (SELECT def_uid FROM def_facts)"
+                )
+            )
             session.commit()
 
     def _mark_coverage_stale(self, changed_file_ids: list[int]) -> None:
@@ -1640,10 +1661,13 @@ class IndexCoordinatorEngine:
         symbols_indexed = 0
 
         with self._get_worktree_lock("main"):
-            # Get currently indexed files from database
+            # Get currently indexed files from database (path → content_hash)
+            indexed_hashes: dict[str, str | None] = {}
             with self.db.session() as session:
-                file_stmt = select(File.path)
-                indexed_paths = set(session.exec(file_stmt).all())
+                file_stmt = select(File.path, File.content_hash)
+                for path, content_hash in session.exec(file_stmt).all():
+                    indexed_hashes[path] = content_hash
+            indexed_paths = set(indexed_hashes.keys())
 
             # Get files that should be indexed (walk filesystem)
             should_index: set[str] = set()
@@ -1686,7 +1710,23 @@ class IndexCoordinatorEngine:
             to_remove = indexed_paths - should_index
             to_add = should_index - indexed_paths
 
-            # Process removals
+            # Check existing files for content changes
+            to_update: set[str] = set()
+            common = indexed_paths & should_index
+            if common:
+                for rel_path in common:
+                    full_path = self.repo_root / rel_path
+                    if full_path.exists():
+                        try:
+                            disk_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
+                        except OSError:
+                            continue
+                        if disk_hash != indexed_hashes.get(rel_path):
+                            to_update.add(rel_path)
+            # Combine new + modified for indexing
+            to_index = to_add | to_update
+
+            # Process removals + updates (remove old Tantivy docs)
             with self._tantivy_write_lock:
                 # Remove files that no longer exist or are now ignored
                 for rel_path in to_remove:
@@ -1694,8 +1734,13 @@ class IndexCoordinatorEngine:
                         self._lexical.remove_file(rel_path)
                     files_removed += 1
 
-                # Add new files via lexical index
-                for rel_path in to_add:
+                # Remove stale Tantivy docs for files being re-indexed
+                for rel_path in to_update:
+                    if self._lexical is not None:
+                        self._lexical.remove_file(rel_path)
+
+                # Add/update files via lexical index
+                for rel_path in to_index:
                     full_path = self.repo_root / rel_path
                     if full_path.exists():
                         try:
@@ -1707,7 +1752,10 @@ class IndexCoordinatorEngine:
                                     rel_path, content, context_id=ctx_id, symbols=symbols,
                                     worktree=self._freshness_worktree or "main",
                                 )
-                            files_added += 1
+                            if rel_path in to_update:
+                                files_updated += 1
+                            else:
+                                files_added += 1
                             symbols_indexed += len(symbols)
                         except (OSError, UnicodeDecodeError):
                             continue
@@ -1716,11 +1764,31 @@ class IndexCoordinatorEngine:
             if self._lexical is not None:
                 self._lexical.reload()
 
-            # Pre-create File records for added files before structural indexing
-            # (flush to get IDs for FK constraints in structural facts)
+            # Pre-create/update File records before structural indexing
             file_id_map: dict[str, int] = {}
-            if to_add:
+            _full_wt_id = self._get_or_create_worktree_id(
+                self._freshness_worktree or "main"
+            )
+            if to_index:
                 with self.db.session() as session:
+                    # Update existing File records for modified files
+                    for rel_path in to_update:
+                        full_path = self.repo_root / rel_path
+                        if not full_path.exists():
+                            continue
+                        content_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
+                        existing = session.exec(
+                            select(File).where(
+                                File.path == rel_path,
+                                File.worktree_id == _full_wt_id,
+                            )
+                        ).first()
+                        if existing and existing.id is not None:
+                            existing.content_hash = content_hash
+                            existing.indexed_at = time.time()
+                            session.flush()
+                            file_id_map[rel_path] = existing.id
+                    # Create new File records for added files
                     for rel_path in to_add:
                         full_path = self.repo_root / rel_path
                         if not full_path.exists():
@@ -1733,9 +1801,7 @@ class IndexCoordinatorEngine:
                             content_hash=content_hash,
                             language_family=lang,
                             indexed_at=time.time(),
-                            worktree_id=self._get_or_create_worktree_id(
-                                self._freshness_worktree or "main"
-                            ),
+                            worktree_id=_full_wt_id,
                         )
                         session.add(file_record)
                         session.flush()
@@ -1743,11 +1809,11 @@ class IndexCoordinatorEngine:
                             file_id_map[rel_path] = file_record.id
                     session.commit()
 
-            # Structural indexing for added files
-            if to_add and self._structural is not None:
+            # Structural indexing for added + modified files
+            if to_index and self._structural is not None:
                 # Group files by context_id
                 by_context: dict[int, list[str]] = {}
-                for rel_path in to_add:
+                for rel_path in to_index:
                     ctx_id = file_to_context.get(rel_path, 1)
                     by_context.setdefault(ctx_id, []).append(rel_path)
 
@@ -1778,9 +1844,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
 
             # Remove structural facts for removed files
             if to_remove:
-                _full_wt_id = self._get_or_create_worktree_id(
-                    self._freshness_worktree or "main"
-                )
                 self._remove_structural_facts_for_paths(
                     list(to_remove), worktree_id=_full_wt_id,
                 )
@@ -1798,7 +1861,7 @@ is_main_worktree=self._is_main_worktree(_wt2),
             # Update test targets for files entering/leaving the index
             await self._update_test_targets_incremental(
                 new_paths=[Path(p) for p in to_add],
-                existing_paths=[],
+                existing_paths=[Path(p) for p in to_update],
                 removed_paths=[Path(p) for p in to_remove],
             )
 
@@ -1812,7 +1875,7 @@ is_main_worktree=self._is_main_worktree(_wt2),
         duration = time.time() - start_time
 
         return IndexStats(
-            files_processed=len(to_add) + len(to_remove),
+            files_processed=len(to_index) + len(to_remove),
             files_added=files_added,
             files_updated=files_updated,
             files_removed=files_removed,
@@ -2679,6 +2742,7 @@ is_main_worktree=self._is_main_worktree(_wt2),
                     try:
                         targets = await pack.discover(ws_root)
                     except Exception:
+                        logger.debug("test_pack_discover_failed", exc_info=True)
                         continue
 
                     for target in targets:

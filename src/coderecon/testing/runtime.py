@@ -19,6 +19,7 @@ Architecture:
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import subprocess
 from collections.abc import Callable
@@ -31,6 +32,8 @@ from sqlmodel import Field, SQLModel
 
 if TYPE_CHECKING:
     from coderecon.index.models import Context
+
+log = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -455,11 +458,11 @@ class RuntimeResolver:
             )
             return parser(result)
         except FileNotFoundError:
-            pass
+            log.debug("version_check_exe_not_found", exc_info=True)
         except subprocess.TimeoutExpired:
-            pass
+            log.debug("version_check_timed_out", exc_info=True)
         except subprocess.SubprocessError:
-            pass
+            log.debug("version_check_subprocess_error", exc_info=True)
         return None
 
     def _get_python_version(self, python_exe: Path) -> str | None:
@@ -484,14 +487,11 @@ class RuntimeResolver:
             if result.returncode == 0:
                 return result.stdout.strip()
         except FileNotFoundError:
-            # Poetry not installed
-            pass
+            log.debug("poetry_not_found", exc_info=True)
         except subprocess.TimeoutExpired:
-            # Poetry command timed out
-            pass
+            log.debug("poetry_env_timed_out", exc_info=True)
         except subprocess.SubprocessError:
-            # Other subprocess errors
-            pass
+            log.debug("poetry_env_subprocess_error", exc_info=True)
         return None
 
     def _set_python_env_vars(self, runtime: ContextRuntime, venv_path: Path) -> None:
@@ -882,13 +882,13 @@ class ExecutionContextBuilder:
             )
             return result.returncode == 0
         except FileNotFoundError:
-            # Python executable not found
+            log.debug("package_check_exe_not_found", exc_info=True)
             return False
         except subprocess.TimeoutExpired:
-            # Import check timed out
+            log.debug("package_check_timed_out", exc_info=True)
             return False
         except subprocess.SubprocessError:
-            # Other subprocess errors
+            log.debug("package_check_subprocess_error", exc_info=True)
             return False
 
     def _build_javascript_tools(

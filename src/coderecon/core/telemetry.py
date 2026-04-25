@@ -306,7 +306,7 @@ class _NoOpTracer:
         return _NoOpSpan()
 
     @contextmanager
-    def start_as_current_span_cm(self, _name: str, **_kwargs: Any) -> Any:
+    def start_as_current_span_cm(self, _name: str, **_kwargs: Any) -> Any:  # noqa: ANN401 — Generator yield type
         """Context manager version of start_as_current_span."""
         yield _NoOpSpan()
 
@@ -364,7 +364,7 @@ _noop_tracer = _NoOpTracer()
 _noop_meter = _NoOpMeter()
 
 
-def get_tracer() -> Any:
+def get_tracer() -> _NoOpTracer:
     """Get the global tracer instance.
 
     Returns the real tracer if telemetry is initialized and enabled,
@@ -374,11 +374,11 @@ def get_tracer() -> Any:
         Tracer instance (real or no-op).
     """
     if _tracer is not None:
-        return _tracer
+        return _tracer  # type: ignore[return-value]  # real Tracer is duck-compatible
     return _noop_tracer
 
 
-def get_meter() -> Any:
+def get_meter() -> _NoOpMeter:
     """Get the global meter instance.
 
     Returns the real meter if telemetry is initialized and enabled,
@@ -388,7 +388,7 @@ def get_meter() -> Any:
         Meter instance (real or no-op).
     """
     if _meter is not None:
-        return _meter
+        return _meter  # type: ignore[return-value]  # real Meter is duck-compatible
     return _noop_meter
 
 
