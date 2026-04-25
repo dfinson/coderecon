@@ -364,7 +364,7 @@ class BackgroundIndexer:
         """Process queued changes."""
         import structlog
 
-        logger = structlog.get_logger()
+        logger = structlog.get_logger(__name__)
         try:
             while self._running:
                 events = await self._queue.get()

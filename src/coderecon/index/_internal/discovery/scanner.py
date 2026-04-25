@@ -280,7 +280,7 @@ class ContextDiscovery:
                     # Non-fatal: marker kept at original tier
                     import structlog
 
-                    structlog.get_logger().debug(
+                    structlog.get_logger(__name__).debug(
                         "rust_workspace_detection_error",
                         path=marker.path,
                         error=str(e),
@@ -308,7 +308,7 @@ class ContextDiscovery:
                     # Non-fatal: marker kept at original tier
                     import structlog
 
-                    structlog.get_logger().debug(
+                    structlog.get_logger(__name__).debug(
                         "js_workspace_detection_error",
                         path=marker.path,
                         error=str(e),
@@ -336,7 +336,7 @@ class ContextDiscovery:
                     # Non-fatal: marker kept at original tier
                     import structlog
 
-                    structlog.get_logger().debug(
+                    structlog.get_logger(__name__).debug(
                         "maven_workspace_detection_error",
                         path=marker.path,
                         error=str(e),

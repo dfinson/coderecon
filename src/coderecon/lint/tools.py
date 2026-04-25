@@ -93,7 +93,7 @@ def _check_config_exists(workspace_root: Path, config_spec: str) -> str | None:
                 # User may want to fix the invalid TOML
                 import structlog
 
-                structlog.get_logger().warning(
+                structlog.get_logger(__name__).warning(
                     "lint_config_parse_error",
                     file=str(file_path),
                     section=section_path,

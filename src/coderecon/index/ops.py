@@ -2635,7 +2635,7 @@ is_main_worktree=self._is_main_worktree(_wt2),
         Returns:
             Count of runtimes resolved
         """
-        logger = structlog.get_logger()
+        logger = structlog.get_logger(__name__)
         runtimes_resolved = 0
 
         # Create resolver once

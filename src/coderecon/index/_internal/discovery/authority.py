@@ -362,7 +362,7 @@ class Tier1AuthorityFilter:
                 # Non-fatal: workspace detection continues with partial info
                 import structlog
 
-                structlog.get_logger().debug(
+                structlog.get_logger(__name__).debug(
                     "workspace_config_read_error",
                     marker=marker,
                     error=str(e),
@@ -372,7 +372,7 @@ class Tier1AuthorityFilter:
                 # Log as warning since user may want to fix the config
                 import structlog
 
-                structlog.get_logger().warning(
+                structlog.get_logger(__name__).warning(
                     "workspace_config_parse_error",
                     marker=marker,
                     error=str(e),
