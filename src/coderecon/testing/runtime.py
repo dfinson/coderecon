@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -429,28 +430,46 @@ class RuntimeResolver:
 
         return None
 
-    def _get_python_version(self, python_exe: Path) -> str | None:
-        """Get Python version from executable."""
+    @staticmethod
+    def _run_version_check(
+        args: list[str],
+        parser: Callable[[subprocess.CompletedProcess[str]], str | None],
+        timeout: int = 5,
+    ) -> str | None:
+        """Run a subprocess version check and parse the output.
+
+        Args:
+            args: Command and arguments to run.
+            parser: Extracts the version string from a successful CompletedProcess.
+            timeout: Seconds before the check is abandoned.
+
+        Returns:
+            Parsed version string, or None if the check fails.
+        """
         try:
             result = subprocess.run(
-                [str(python_exe), "--version"],
+                args,
                 capture_output=True,
-                timeout=5,
+                timeout=timeout,
                 text=True,
             )
-            if result.returncode == 0:
-                # "Python 3.12.1" -> "3.12.1"
-                return result.stdout.strip().split()[-1]
+            return parser(result)
         except FileNotFoundError:
-            # Executable doesn't exist
             pass
         except subprocess.TimeoutExpired:
-            # Version check timed out - executable may be hung
             pass
         except subprocess.SubprocessError:
-            # Other subprocess errors (e.g., CalledProcessError)
             pass
         return None
+
+    def _get_python_version(self, python_exe: Path) -> str | None:
+        """Get Python version from executable."""
+        def _parse(r: subprocess.CompletedProcess[str]) -> str | None:
+            if r.returncode == 0:
+                # "Python 3.12.1" -> "3.12.1"
+                return r.stdout.strip().split()[-1]
+            return None
+        return self._run_version_check([str(python_exe), "--version"], _parse)
 
     def _get_poetry_python(self, context_root: Path) -> str | None:
         """Get Python executable from Poetry environment."""
@@ -531,26 +550,12 @@ class RuntimeResolver:
 
     def _get_node_version(self, node_exe: str) -> str | None:
         """Get Node.js version."""
-        try:
-            result = subprocess.run(
-                [node_exe, "--version"],
-                capture_output=True,
-                timeout=5,
-                text=True,
-            )
-            if result.returncode == 0:
+        def _parse(r: subprocess.CompletedProcess[str]) -> str | None:
+            if r.returncode == 0:
                 # "v20.10.0" -> "20.10.0"
-                return result.stdout.strip().lstrip("v")
-        except FileNotFoundError:
-            # Node not installed
-            pass
-        except subprocess.TimeoutExpired:
-            # Version check timed out
-            pass
-        except subprocess.SubprocessError:
-            # Other subprocess errors
-            pass
-        return None
+                return r.stdout.strip().lstrip("v")
+            return None
+        return self._run_version_check([node_exe, "--version"], _parse)
 
     def _resolve_go(
         self, context_root: Path, runtime: ContextRuntime, warnings: list[str]
@@ -575,28 +580,14 @@ class RuntimeResolver:
 
     def _get_go_version(self, go_exe: str) -> str | None:
         """Get Go version."""
-        try:
-            result = subprocess.run(
-                [go_exe, "version"],
-                capture_output=True,
-                timeout=5,
-                text=True,
-            )
-            if result.returncode == 0:
+        def _parse(r: subprocess.CompletedProcess[str]) -> str | None:
+            if r.returncode == 0:
                 # "go version go1.21.5 linux/amd64" -> "1.21.5"
-                parts = result.stdout.split()
+                parts = r.stdout.split()
                 if len(parts) >= 3:
                     return parts[2].lstrip("go")
-        except FileNotFoundError:
-            # Go not installed
-            pass
-        except subprocess.TimeoutExpired:
-            # Version check timed out
-            pass
-        except subprocess.SubprocessError:
-            # Other subprocess errors
-            pass
-        return None
+            return None
+        return self._run_version_check([go_exe, "version"], _parse)
 
     def _resolve_rust(
         self, _context_root: Path, runtime: ContextRuntime, warnings: list[str]
@@ -613,28 +604,14 @@ class RuntimeResolver:
 
     def _get_rust_version(self, cargo_exe: str) -> str | None:
         """Get Rust version via cargo."""
-        try:
-            result = subprocess.run(
-                [cargo_exe, "--version"],
-                capture_output=True,
-                timeout=5,
-                text=True,
-            )
-            if result.returncode == 0:
+        def _parse(r: subprocess.CompletedProcess[str]) -> str | None:
+            if r.returncode == 0:
                 # "cargo 1.75.0 (...)" -> "1.75.0"
-                parts = result.stdout.split()
+                parts = r.stdout.split()
                 if len(parts) >= 2:
                     return parts[1]
-        except FileNotFoundError:
-            # Cargo not installed
-            pass
-        except subprocess.TimeoutExpired:
-            # Version check timed out
-            pass
-        except subprocess.SubprocessError:
-            # Other subprocess errors
-            pass
-        return None
+            return None
+        return self._run_version_check([cargo_exe, "--version"], _parse)
 
     def _resolve_jvm(
         self, context_root: Path, runtime: ContextRuntime, warnings: list[str]
@@ -674,35 +651,19 @@ class RuntimeResolver:
 
     def _get_java_version(self, java_exe: str) -> str | None:
         """Get Java version."""
-        try:
-            result = subprocess.run(
-                [java_exe, "-version"],
-                capture_output=True,
-                timeout=5,
-                text=True,
-            )
+        import re
+
+        def _parse(r: subprocess.CompletedProcess[str]) -> str | None:
             # Java version is on stderr
-            output = result.stderr or result.stdout
+            output = r.stderr or r.stdout
             if output:
-                # Parse: 'openjdk version "17.0.1"' or 'java version "1.8.0_..."'
                 for line in output.split("\n"):
                     if "version" in line:
-                        # Extract version between quotes
-                        import re
-
                         match = re.search(r'"([^"]+)"', line)
                         if match:
                             return match.group(1)
-        except FileNotFoundError:
-            # Java not installed
-            pass
-        except subprocess.TimeoutExpired:
-            # Version check timed out
-            pass
-        except subprocess.SubprocessError:
-            # Other subprocess errors
-            pass
-        return None
+            return None
+        return self._run_version_check([java_exe, "-version"], _parse)
 
     def _resolve_dotnet(
         self, _context_root: Path, runtime: ContextRuntime, warnings: list[str]
@@ -719,25 +680,11 @@ class RuntimeResolver:
 
     def _get_dotnet_version(self, dotnet_exe: str) -> str | None:
         """Get .NET version."""
-        try:
-            result = subprocess.run(
-                [dotnet_exe, "--version"],
-                capture_output=True,
-                timeout=5,
-                text=True,
-            )
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except FileNotFoundError:
-            # .NET not installed
-            pass
-        except subprocess.TimeoutExpired:
-            # Version check timed out
-            pass
-        except subprocess.SubprocessError:
-            # Other subprocess errors
-            pass
-        return None
+        def _parse(r: subprocess.CompletedProcess[str]) -> str | None:
+            if r.returncode == 0:
+                return r.stdout.strip()
+            return None
+        return self._run_version_check([dotnet_exe, "--version"], _parse)
 
     def _resolve_ruby(
         self, _context_root: Path, runtime: ContextRuntime, warnings: list[str]
@@ -759,28 +706,14 @@ class RuntimeResolver:
 
     def _get_ruby_version(self, ruby_exe: str) -> str | None:
         """Get Ruby version."""
-        try:
-            result = subprocess.run(
-                [ruby_exe, "--version"],
-                capture_output=True,
-                timeout=5,
-                text=True,
-            )
-            if result.returncode == 0:
+        def _parse(r: subprocess.CompletedProcess[str]) -> str | None:
+            if r.returncode == 0:
                 # "ruby 3.2.0 (2022-12-25...) [...]" -> "3.2.0"
-                parts = result.stdout.split()
+                parts = r.stdout.split()
                 if len(parts) >= 2:
                     return parts[1]
-        except FileNotFoundError:
-            # Ruby not installed
-            pass
-        except subprocess.TimeoutExpired:
-            # Version check timed out
-            pass
-        except subprocess.SubprocessError:
-            # Other subprocess errors
-            pass
-        return None
+            return None
+        return self._run_version_check([ruby_exe, "--version"], _parse)
 
 
 # =============================================================================
@@ -889,12 +822,6 @@ class ExecutionContextBuilder:
             self._build_dotnet_tools(exec_ctx, runtime)
         elif language_family == "ruby":
             self._build_ruby_tools(exec_ctx, runtime)
-
-    def _build_tool_configs(
-        self, exec_ctx: RuntimeExecutionContext, context: Context, runtime: ContextRuntime
-    ) -> None:
-        """Populate tool configurations for the execution context (deprecated - use _build_tool_configs_for_runtime)."""
-        self._build_tool_configs_for_runtime(exec_ctx, context.language_family, runtime)
 
     def _build_python_tools(
         self, exec_ctx: RuntimeExecutionContext, runtime: ContextRuntime

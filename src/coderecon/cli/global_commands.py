@@ -29,7 +29,7 @@ def catalog_command() -> None:
         return
 
     for repo in repos:
-        worktrees = registry.list_worktrees(repo.id)  # type: ignore[arg-type]
+        worktrees = registry.list_worktrees(repo.id)  # type: ignore[arg-type]  # repo.id is non-None after DB query
         wt_names = [f"{wt.name}{'*' if wt.is_main else ''}" for wt in worktrees]
         click.echo(f"  {repo.name}")
         click.echo(f"    git:        {repo.git_dir}")
@@ -238,7 +238,7 @@ def worktrees_command(name: str | None) -> None:
         return
 
     repo, _ = result
-    worktrees = registry.list_worktrees(repo.id)  # type: ignore[arg-type]
+    worktrees = registry.list_worktrees(repo.id)  # type: ignore[arg-type]  # repo.id is non-None after DB query
 
     click.echo(f"Worktrees for {repo.name}:")
     for wt in worktrees:

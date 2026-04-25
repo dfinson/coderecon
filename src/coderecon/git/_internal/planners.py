@@ -89,13 +89,13 @@ class DiffPlanner:
             return DiffResult(diff_text, numstat)
 
         if plan.diff_type == DiffType.REF_TO_WORKING:
-            diff_text = self._access.diff_refs(plan.base_sha)  # type: ignore[arg-type]
-            numstat = self._access.diff_numstat(plan.base_sha)  # type: ignore[arg-type]
+            diff_text = self._access.diff_refs(plan.base_sha)  # type: ignore[arg-type]  # base_sha guaranteed non-None for REF_TO_WORKING
+            numstat = self._access.diff_numstat(plan.base_sha)  # type: ignore[arg-type]  # base_sha guaranteed non-None for REF_TO_WORKING
             return DiffResult(diff_text, numstat)
 
         # REF_TO_REF
-        diff_text = self._access.diff_refs(plan.base_sha, plan.target_sha)  # type: ignore[arg-type]
-        numstat = self._access.diff_numstat(plan.base_sha, plan.target_sha)  # type: ignore[arg-type]
+        diff_text = self._access.diff_refs(plan.base_sha, plan.target_sha)  # type: ignore[arg-type]  # both shas guaranteed non-None for REF_TO_REF
+        numstat = self._access.diff_numstat(plan.base_sha, plan.target_sha)  # type: ignore[arg-type]  # both shas guaranteed non-None for REF_TO_REF
         return DiffResult(diff_text, numstat)
 
 

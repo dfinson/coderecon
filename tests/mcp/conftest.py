@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator
 from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
-from coderecon.mcp.registry import ToolRegistry, registry
 
 if TYPE_CHECKING:
     pass
@@ -34,17 +31,6 @@ def tmp_repo(tmp_path: Path) -> Path:
         capture_output=True,
     )
     return tmp_path
-
-
-@pytest.fixture
-def clean_registry() -> Generator[ToolRegistry, None, None]:
-    """Clear and yield the global registry, restore after test."""
-    # Store existing registrations
-    original_tools = dict(registry._tools)
-    registry.clear()
-    yield registry
-    # Restore
-    registry._tools = original_tools
 
 
 @pytest.fixture

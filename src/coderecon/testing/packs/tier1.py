@@ -96,14 +96,14 @@ class PytestPack(RunnerPack):
             try:
                 if "[tool.pytest" in pyproject.read_text():
                     return 1.0
-            except Exception:
+            except OSError:
                 pass
         setup_cfg = workspace_root / "setup.cfg"
         if setup_cfg.exists():
             try:
                 if "[tool:pytest]" in setup_cfg.read_text():
                     return 0.9
-            except Exception:
+            except OSError:
                 pass
         # Check for any test files
         if list(workspace_root.glob("**/test_*.py")) or list(workspace_root.glob("**/*_test.py")):
@@ -250,7 +250,7 @@ class JestPack(RunnerPack):
                 deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
                 if "jest" in deps:
                     return 0.8
-            except Exception:
+            except (OSError, json.JSONDecodeError, KeyError):
                 pass
         return 0.0
 
@@ -402,7 +402,7 @@ class VitestPack(RunnerPack):
                 try:
                     if "vitest" in (workspace_root / vite).read_text():
                         return 0.9
-                except Exception:
+                except OSError:
                     pass
         pkg = workspace_root / "package.json"
         if pkg.exists():
@@ -411,7 +411,7 @@ class VitestPack(RunnerPack):
                 deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
                 if "vitest" in deps:
                     return 0.7
-            except Exception:
+            except (OSError, json.JSONDecodeError):
                 pass
         return 0.0
 
@@ -659,7 +659,7 @@ class CargoNextestPack(RunnerPack):
                         workspace_root=str(workspace_root),
                     )
                 )
-        except Exception:
+        except OSError:
             pass
         return targets
 
@@ -860,7 +860,7 @@ class MavenSurefirePack(RunnerPack):
                             workspace_root=str(workspace_root),
                         )
                     )
-        except Exception:
+        except OSError:
             pass
         return targets
 
@@ -970,7 +970,7 @@ class GradlePack(RunnerPack):
                         # Has subprojects - look for build files
                         for build in workspace_root.glob("*/build.gradle*"):
                             subprojects.append(build.parent)
-                except Exception:
+                except OSError:
                     pass
 
         if subprojects:
@@ -1127,7 +1127,7 @@ class DotnetTestPack(RunnerPack):
                             workspace_root=str(workspace_root),
                         )
                     )
-            except Exception:
+            except OSError:
                 pass
         return targets
 
@@ -1203,7 +1203,7 @@ class CTestPack(RunnerPack):
                 if "enable_testing" in content or "add_test" in content:
                     return 1.0
                 return 0.5
-            except Exception:
+            except OSError:
                 pass
         return 0.0
 
@@ -1303,7 +1303,7 @@ class RSpecPack(RunnerPack):
             try:
                 if "rspec" in gemfile.read_text():
                     return 0.8
-            except Exception:
+            except OSError:
                 pass
         return 0.0
 
@@ -1398,7 +1398,7 @@ class MinitestPack(RunnerPack):
                 content = rakefile.read_text()
                 if "Rake::TestTask" in content:
                     return 0.9
-            except Exception:
+            except OSError:
                 pass
         # Medium confidence: test_helper.rb exists
         if (workspace_root / "test" / "test_helper.rb").exists():
@@ -1409,7 +1409,7 @@ class MinitestPack(RunnerPack):
             try:
                 if "minitest" in gemfile.read_text():
                     return 0.6
-            except Exception:
+            except OSError:
                 pass
         # Low: test/ directory with *_test.rb or spec_*.rb files
         test_dir = workspace_root / "test"
@@ -1511,7 +1511,7 @@ class PHPUnitPack(RunnerPack):
                 deps = {**data.get("require", {}), **data.get("require-dev", {})}
                 if "phpunit/phpunit" in deps:
                     return 0.8
-            except Exception:
+            except (OSError, json.JSONDecodeError):
                 pass
         return 0.0
 

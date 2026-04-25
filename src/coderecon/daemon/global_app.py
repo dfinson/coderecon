@@ -477,7 +477,7 @@ class GlobalDaemon:
                 name=repo_name,
                 repo_root=repo_root,
                 storage_dir=storage_dir,
-                repo_id=repo.id,  # type: ignore[arg-type]
+                repo_id=repo.id,  # type: ignore[arg-type]  # repo.id is non-None after DB persist
                 dev_mode=dev_mode,
             )
             log.info("lazy_activate_repo.activated", repo=repo_name)
@@ -721,7 +721,7 @@ class GlobalDaemon:
             repos = self.registry.list_repos()
             entries = []
             for repo in repos:
-                worktrees = self.registry.list_worktrees(repo.id)  # type: ignore[arg-type]
+                worktrees = self.registry.list_worktrees(repo.id)  # type: ignore[arg-type]  # repo.id is non-None after DB query
                 active = repo.name in self._slots
                 slot = self._slots.get(repo.name)
                 entries.append({
@@ -767,7 +767,7 @@ class GlobalDaemon:
                     name=repo.name,
                     repo_root=Path(wt.root_path),
                     storage_dir=storage_dir,
-                    repo_id=repo.id,  # type: ignore[arg-type]
+                    repo_id=repo.id,  # type: ignore[arg-type]  # repo.id is non-None after DB persist
                     dev_mode=dev_mode,
                 )
 
