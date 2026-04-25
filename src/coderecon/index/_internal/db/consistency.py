@@ -335,7 +335,6 @@ def _make_semantic_neighbors_check() -> SignalCheck:
 
 def _make_doc_chunks_check() -> SignalCheck:
     """Check for doc/config files missing chunk vectors and edges."""
-    from coderecon.index._internal.indexing.splade import MODEL_VERSION
 
     _doc_families = (
         "markdown", "rst", "asciidoc", "yaml", "toml", "json",

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 from coderecon.git._internal.access import RepoAccess
-from coderecon.git.errors import GitError, RefNotFoundError
+from coderecon.git.errors import RefNotFoundError
 
 
 class DiffType(Enum):
