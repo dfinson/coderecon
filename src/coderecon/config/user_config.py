@@ -8,13 +8,13 @@ Runtime state is stored in .recon/state.yaml (auto-generated, not user-editable)
 """
 
 from pathlib import Path
-import logging
+import structlog
 from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 

@@ -30,12 +30,12 @@ All resolution runs at **index time** and the result is stored in
 from __future__ import annotations
 
 import json
-import logging
+import structlog
 import re
 from collections.abc import Callable
 from pathlib import PurePosixPath
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 # Type alias for the file reader callable
 _ReadFileFn = Callable[[str], "str | None"]

@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-import logging
+import structlog
 import os
 import shutil
 import sys
@@ -57,7 +57,7 @@ from coderecon.testing.safe_execution import SafeExecutionConfig, SafeExecutionC
 if TYPE_CHECKING:
     from coderecon.index.ops import IndexCoordinatorEngine
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 
 # =============================================================================

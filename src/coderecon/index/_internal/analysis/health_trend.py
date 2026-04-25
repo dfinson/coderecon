@@ -9,11 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-import logging
+import structlog
 
 from sqlalchemy import text
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -214,6 +214,7 @@ def load_trend(recon_dir, max_snapshots: int = 20) -> HealthTrend:  # noqa: ANN0
                 cycle_count=d["cycles"],
             ))
         except (json.JSONDecodeError, KeyError):
+            log.debug("health_trend_snapshot_parse_failed", exc_info=True)
             continue
 
     # Keep only the most recent

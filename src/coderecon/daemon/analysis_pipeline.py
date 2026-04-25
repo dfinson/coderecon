@@ -175,7 +175,6 @@ class AnalysisPipeline:
             # Ingest coverage from artifacts produced by test runners
             if result.run_status and result.run_status.coverage:
                 from coderecon.testing.coverage import (
-                    CoverageParseError,
                     merge,
                     parse_artifact,
                 )
@@ -193,7 +192,7 @@ class AnalysisPipeline:
                             base_path=self.repo_root,
                         )
                         reports.append(report)
-                    except (CoverageParseError, Exception):
+                    except Exception:  # noqa: BLE001 — best-effort coverage parse
                         log.debug("tier2_coverage_parse_failed", path=cov_path, exc_info=True)
 
                 if reports:

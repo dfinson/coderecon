@@ -16,7 +16,7 @@ actual comparison count by 100-1000× for typical codebases.
 from __future__ import annotations
 
 import heapq
-import logging
+import structlog
 import time
 from typing import TYPE_CHECKING
 
@@ -31,7 +31,7 @@ from coderecon.index.models import SemanticNeighborFact
 if TYPE_CHECKING:
     from coderecon.index._internal.db.database import Database
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 # ── Tuning constants ─────────────────────────────────────────────
 
@@ -204,10 +204,15 @@ def compute_semantic_neighbors(
             session.commit()
 
             batch: list[SemanticNeighborFact] = []
+            _seen: set[tuple[str, str]] = set()
             for i, heap in per_def.items():
                 for score, j in heap:
                     # Write both directions for symmetric access
                     for src_i, tgt_i in [(i, j), (j, i)]:
+                        _key = (uids[src_i], uids[tgt_i])
+                        if _key in _seen:
+                            continue
+                        _seen.add(_key)
                         batch.append(SemanticNeighborFact(
                             source_def_uid=uids[src_i],
                             neighbor_def_uid=uids[tgt_i],
@@ -284,8 +289,13 @@ def compute_semantic_neighbors(
             session.commit()
 
             batch = []
+            _seen_full: set[tuple[str, str]] = set()
             for i, heap in enumerate(per_def_full):
                 for score, j in heap:
+                    _key = (uids[i], uids[j])
+                    if _key in _seen_full:
+                        continue
+                    _seen_full.add(_key)
                     batch.append(SemanticNeighborFact(
                         source_def_uid=uids[i],
                         neighbor_def_uid=uids[j],

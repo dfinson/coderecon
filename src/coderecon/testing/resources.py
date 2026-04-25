@@ -7,7 +7,7 @@ No platform-specific code paths.
 from __future__ import annotations
 
 import json
-import logging
+import structlog
 import re
 import time
 from dataclasses import dataclass, field
@@ -15,7 +15,7 @@ from pathlib import Path
 
 import psutil
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 # Patterns emitted by runtimes on OOM. Matched against stderr.
 _OOM_PATTERNS: list[re.Pattern[str]] = [

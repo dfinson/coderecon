@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import asyncio
 import functools
-import logging
 import os
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -43,7 +42,9 @@ from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar
 if TYPE_CHECKING:
     from coderecon.config.models import TelemetryConfig
 
-log = logging.getLogger(__name__)
+import structlog
+
+log = structlog.get_logger(__name__)
 
 # Type variables for decorator
 P = ParamSpec("P")
@@ -193,16 +194,14 @@ def init_telemetry(config: TelemetryConfig | None = None) -> bool:
         # Auto-instrument SQLAlchemy if available
         _instrument_sqlalchemy()
 
-        log.info(f"Telemetry initialized: endpoint={endpoint}, service={service_name}")
+        log.info("telemetry_initialized", endpoint=endpoint, service=service_name)
         return True
 
     except ImportError as e:
-        log.warning(
-            f"Failed to import OTLP exporters (install opentelemetry-exporter-otlp-proto-grpc): {e}"
-        )
+        log.warning("otlp_exporter_import_failed", error=str(e))
         return False
     except Exception as e:
-        log.error(f"Failed to initialize telemetry: {e}")
+        log.error("telemetry_init_failed", error=str(e))
         return False
 
 
@@ -233,7 +232,7 @@ def _instrument_sqlalchemy() -> None:
             "SQLAlchemy instrumentation not available (install opentelemetry-instrumentation-sqlalchemy)"
         )
     except Exception as e:
-        log.warning(f"Failed to instrument SQLAlchemy: {e}")
+        log.warning("sqlalchemy_instrumentation_failed", error=str(e))
 
 
 def shutdown_telemetry() -> None:
@@ -252,14 +251,14 @@ def shutdown_telemetry() -> None:
             _tracer_provider.shutdown()
             log.debug("Tracer provider shut down")
         except Exception as e:
-            log.warning(f"Error shutting down tracer provider: {e}")
+            log.warning("tracer_shutdown_error", error=str(e))
 
     if _meter_provider is not None:
         try:
             _meter_provider.shutdown()
-            log.debug("Meter provider shut down")
+            log.debug("meter_provider_shutdown")
         except Exception as e:
-            log.warning(f"Error shutting down meter provider: {e}")
+            log.warning("meter_shutdown_error", error=str(e))
 
     _tracer = None
     _meter = None

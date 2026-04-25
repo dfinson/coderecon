@@ -19,7 +19,7 @@ Architecture:
 from __future__ import annotations
 
 import json
-import logging
+import structlog
 import shutil
 import subprocess
 from collections.abc import Callable
@@ -33,7 +33,7 @@ from sqlmodel import Field, SQLModel
 if TYPE_CHECKING:
     from coderecon.index.models import Context
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 
 # =============================================================================

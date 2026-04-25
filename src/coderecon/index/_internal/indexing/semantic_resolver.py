@@ -15,7 +15,7 @@ persist edge only if CE score exceeds a calibrated confidence threshold.
 
 from __future__ import annotations
 
-import logging
+import structlog
 import time
 from typing import TYPE_CHECKING
 
@@ -47,7 +47,7 @@ from coderecon.ranking.cross_encoder import CrossEncoderScorer, get_tiny_scorer
 if TYPE_CHECKING:
     from coderecon.index._internal.db.database import Database
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 # ── Thresholds (initial values — calibrate from GT data) ─────────
 

@@ -13,7 +13,7 @@ then vendored into ``ranking/models/ce_minilm_l6/``.
 
 from __future__ import annotations
 
-import logging
+import structlog
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -22,7 +22,7 @@ import onnxruntime as ort
 from numpy.typing import NDArray
 from tokenizers import Tokenizer
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 # ONNX model + tokenizer (from coderecon-models-ce package)
 from coderecon_models_ce import ONNX_PATH as _ONNX_PATH

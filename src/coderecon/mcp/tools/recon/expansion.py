@@ -6,11 +6,11 @@ Single Responsibility: Low-level file I/O and def signature formatting.
 from __future__ import annotations
 
 import hashlib
-import logging
+import structlog
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 if TYPE_CHECKING:
     from coderecon.index.models import DefFact

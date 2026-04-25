@@ -573,7 +573,7 @@ def _ingest_checkpoint_coverage(
             try:
                 report = parse_artifact(f, base_path=app_ctx.repo_root)
                 reports.append(report)
-            except (CoverageParseError, Exception):  # noqa: BLE001
+            except Exception:  # noqa: BLE001 — best-effort artifact parse
                 log.debug("artifact_parse_failed", path=str(f), exc_info=True)
 
         if not reports:

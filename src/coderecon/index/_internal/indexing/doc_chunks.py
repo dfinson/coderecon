@@ -13,7 +13,7 @@ Chunking strategy:
 from __future__ import annotations
 
 import json
-import logging
+import structlog
 import re
 import time
 from typing import TYPE_CHECKING
@@ -38,7 +38,7 @@ from coderecon.index.models import (
 if TYPE_CHECKING:
     from coderecon.index._internal.db.database import Database
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 # ── Tuning constants ─────────────────────────────────────────────
 

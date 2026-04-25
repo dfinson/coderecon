@@ -17,7 +17,7 @@ sig +0.7%, doc +0.2%).
 from __future__ import annotations
 
 import json
-import logging
+import structlog
 import re
 import time
 from dataclasses import dataclass, field
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from coderecon.index._internal.db.database import Database
     from coderecon.index._internal.indexing.graph import FactQueries
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 # ── ONNX provider selection ──────────────────────────────────────
 

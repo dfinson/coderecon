@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
+import structlog
 import os
 import re
 import time
@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 if TYPE_CHECKING:
     from coderecon.index._internal.db import Database

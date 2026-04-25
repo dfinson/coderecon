@@ -16,13 +16,13 @@ No heuristics - every edge is backed by a verified file existence check.
 from __future__ import annotations
 
 import hashlib
-import logging
+import structlog
 import re
 from pathlib import Path
 
 from coderecon.index._internal.db import Database
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 # Config file extensions that we scan for cross-file string references.
 _CONFIG_EXTENSIONS: frozenset[str] = frozenset(

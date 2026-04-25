@@ -10,7 +10,7 @@ Design principles:
 - Explicit support: Only packs with tested emitters claim coverage support
 """
 
-import logging
+import structlog
 import shutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     pass
 
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 
 class CoverageCapability(Enum):

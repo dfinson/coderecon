@@ -7,14 +7,14 @@ flow to prompt the user when a GPU exists but the runtime lacks support.
 
 from __future__ import annotations
 
-import logging
+import structlog
 import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from enum import Enum
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 
 class GpuVendor(Enum):
