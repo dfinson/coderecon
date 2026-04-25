@@ -462,7 +462,7 @@ def build_scaffolds_for_defs(
                         d_types.add(btype)
                 type_refs_by_uid[d.def_uid] = list(d_types)[:20]
         except Exception:
-            pass
+            log.debug("type_annotation_lookup_failed", exc_info=True)
 
     # ── Build scaffolds ──────────────────────────────────────────
     for d in def_facts:
@@ -543,6 +543,7 @@ class SpladeEncoder:
         try:
             model = onnx.load(str(onnx_path), load_external_data=False)
         except Exception:
+            log.debug("onnx_model_load_failed", exc_info=True)
             return
         for out in model.graph.output:
             dims = out.type.tensor_type.shape.dim

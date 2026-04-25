@@ -219,6 +219,7 @@ def index_doc_chunk_vectors(
                 from coderecon.index._internal.db.database import Database as _DB
                 content = _read_file_content(db, f)
             except Exception:
+                log.debug("doc_chunk_read_failed", exc_info=True)
                 continue
 
             if not content or len(content.strip()) < MIN_CHUNK_LENGTH:

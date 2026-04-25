@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import time
@@ -24,6 +25,8 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from coderecon.index._internal.db import Database
@@ -126,7 +129,7 @@ def _discover_string_node_types(ts_language: Any) -> frozenset[str]:
             if _STRING_NODE_PATTERN.match(name):
                 types.add(name)
     except Exception:
-        pass  # Grammar doesn't support introspection
+        log.debug("string_node_introspection_failed", exc_info=True)
 
     result = frozenset(types)
     _string_node_types_cache[lang_id] = result
@@ -263,6 +266,7 @@ def _extract_sem_facts(
 
             compiled = _TSQuery(ts_language, query_text)
         except Exception:
+            log.debug("sem_query_compile_failed", exc_info=True)
             compiled = None
         _sem_query_cache[cache_key] = compiled
 
@@ -276,6 +280,7 @@ def _extract_sem_facts(
         cursor = _TSQueryCursor(compiled)
         matches: list[tuple[int, dict[str, list[Any]]]] = cursor.matches(root_node)
     except Exception:
+        log.debug("sem_query_execute_failed", exc_info=True)
         return
 
     # Collect captures: (category, raw_text, line_0idx)
@@ -589,6 +594,16 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
         # Build def_uid -> scope mapping for binding resolution
         def_uid_by_name: dict[str, str] = {}  # name -> def_uid (latest in file)
         def_scope_by_name: dict[str, int] = {}  # name -> local_scope_id containing def
+        # Scope-aware lookup: (scope_id, name) -> def_uid
+        _def_by_scope_name: dict[tuple[int, str], str] = {}
+        # Scope parent chain for walking up
+        _scope_parent: dict[int, int] = {0: -1}  # 0 = file scope, -1 = sentinel
+        for scope in scopes:
+            parent = scope.parent_scope_id if scope.parent_scope_id is not None else 0
+            if scope.scope_id == 0:
+                # Never overwrite the file-scope sentinel
+                continue
+            _scope_parent[scope.scope_id] = parent
 
         # Track disambiguator for symbols with same (lexical_path, sig_hash)
         disambiguator_counts: dict[tuple[str, str | None], int] = {}
@@ -639,6 +654,7 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
             # Track for binding resolution
             def_uid_by_name[sym.name] = def_uid
             def_scope_by_name[sym.name] = containing_scope
+            _def_by_scope_name[(containing_scope, sym.name)] = def_uid
 
             # Create a definition RefFact (definition sites are PROVEN refs to themselves)
             ref_dict = {
@@ -787,13 +803,26 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
             target_def_uid = None
             certainty = Certainty.UNCERTAIN.value
 
-            # Check if name is bound in scope (same-file definition)
-            if occ.name in def_uid_by_name:
+            # Scope-aware same-file resolution: walk from innermost scope outward
+            _resolved_scope_def = False
+            _walk_scope = containing_scope
+            while _walk_scope >= 0:
+                _scope_key = (_walk_scope, occ.name)
+                if _scope_key in _def_by_scope_name:
+                    ref_tier = RefTier.PROVEN.value
+                    target_def_uid = _def_by_scope_name[_scope_key]
+                    certainty = Certainty.CERTAIN.value
+                    _resolved_scope_def = True
+                    break
+                _walk_scope = _scope_parent.get(_walk_scope, -1)
+
+            # Fallback to flat dict for defs not in any scope (e.g. module-level)
+            if not _resolved_scope_def and occ.name in def_uid_by_name:
                 ref_tier = RefTier.PROVEN.value
                 target_def_uid = def_uid_by_name[occ.name]
                 certainty = Certainty.CERTAIN.value
             # Check if name is an import alias
-            elif occ.name in import_uid_by_alias:
+            elif not _resolved_scope_def and occ.name in import_uid_by_alias:
                 ref_tier = RefTier.STRONG.value  # Cross-file with explicit trace
                 certainty = Certainty.CERTAIN.value
 
@@ -952,7 +981,7 @@ def _extract_type_aware_facts(
         pass
     except Exception:
         # Don't fail extraction for type-aware facts - they're supplementary
-        pass
+        log.debug("type_aware_facts_failed", exc_info=True)
 
 
 def _find_containing_scope(scopes: list[SyntacticScope], line: int, col: int) -> int:
@@ -988,12 +1017,20 @@ def _compute_lexical_path(sym: SyntacticSymbol, all_symbols: list[SyntacticSymbo
     if sym.kind in ("class", "function"):
         return sym.name
 
-    # For methods, try to find the containing class
+    # For methods, try to find the innermost containing class
+    best: SyntacticSymbol | None = None
+    best_span = float("inf")
     for other in all_symbols:
         if other.kind == "class" and (
             other.line <= sym.line <= other.end_line and other.column <= sym.column
         ):
-            return f"{other.name}.{sym.name}"
+            span = other.end_line - other.line
+            if span < best_span:
+                best = other
+                best_span = span
+
+    if best is not None:
+        return f"{best.name}.{sym.name}"
 
     return sym.name
 
@@ -1091,8 +1128,23 @@ class StructuralIndexer:
             file_id_map = {}
         for extraction in extractions:
             if extraction.error:
+                # Record parse failure on the File row even though we won't extract facts
+                if extraction.file_path not in file_id_map:
+                    file_id_map[extraction.file_path] = self._ensure_file_id(
+                        extraction.file_path,
+                        extraction.content_hash,
+                        extraction.line_count,
+                        context_id,
+                        language_family=extraction.language_family,
+                        worktree_id=worktree_id,
+                        parse_status="failed",
+                    )
                 continue
             if extraction.file_path not in file_id_map:
+                # Determine parse_status from extraction result
+                _ps = "ok"
+                if extraction.skipped_no_grammar:
+                    _ps = "skipped"
                 file_id_map[extraction.file_path] = self._ensure_file_id(
                     extraction.file_path,
                     extraction.content_hash,
@@ -1101,6 +1153,7 @@ class StructuralIndexer:
                     language_family=extraction.language_family,
                     declared_module=extraction.declared_module,
                     worktree_id=worktree_id,
+                    parse_status=_ps,
                 )
 
         # Remap def_uid / import_uid to include worktree_id so that two
@@ -1587,6 +1640,7 @@ class StructuralIndexer:
         declared_module: str | None = None,
         *,
         worktree_id: int,
+        parse_status: str | None = None,
     ) -> int:
         """Ensure file exists in database and return its ID."""
         import time
@@ -1601,9 +1655,18 @@ class StructuralIndexer:
             existing = session.exec(stmt).first()
 
             if existing and existing.id is not None:
-                # Update declared_module if it changed
+                _changed = False
                 if existing.declared_module != declared_module:
                     existing.declared_module = declared_module
+                    _changed = True
+                if parse_status is not None and existing.parse_status != parse_status:
+                    existing.parse_status = parse_status
+                    _changed = True
+                if content_hash is not None and existing.content_hash != content_hash:
+                    existing.content_hash = content_hash
+                    existing.line_count = line_count
+                    _changed = True
+                if _changed:
                     session.add(existing)
                     session.commit()
                 return existing.id
@@ -1614,8 +1677,9 @@ class StructuralIndexer:
                 line_count=line_count,
                 language_family=language_family,
                 declared_module=declared_module,
-                indexed_at=time.time(),  # Mark as indexed
+                indexed_at=time.time(),
                 worktree_id=worktree_id,
+                parse_status=parse_status,
             )
             session.add(file)
             session.commit()

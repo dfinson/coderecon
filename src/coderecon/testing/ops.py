@@ -533,6 +533,7 @@ class TestOps:
             contexts = await self._coordinator.get_contexts()
         except Exception:
             # Index not ready, return empty to trigger filesystem fallback
+            log.debug("index_context_lookup_failed", exc_info=True)
             return []
 
         # Group contexts by root path to find workspaces
@@ -631,6 +632,7 @@ class TestOps:
             file_stats = await self._coordinator.get_file_stats()
             languages = set(file_stats.keys())
         except Exception:
+            log.debug("file_stats_lookup_failed", exc_info=True)
             languages = set()
 
         if "python" in languages:

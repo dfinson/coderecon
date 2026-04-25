@@ -6,8 +6,11 @@ Single Responsibility: Low-level file I/O and def signature formatting.
 from __future__ import annotations
 
 import hashlib
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from coderecon.index.models import DefFact
@@ -29,6 +32,7 @@ def _read_lines(full_path: Path, start: int, end: int) -> str:
     try:
         text = full_path.read_text(encoding="utf-8", errors="replace")
     except Exception:
+        log.debug("read_lines_failed", exc_info=True)
         return ""
     lines = text.splitlines(keepends=True)
     s = max(0, start - 1)

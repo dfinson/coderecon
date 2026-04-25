@@ -9,7 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+import logging
+
 from sqlalchemy import text
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -136,7 +140,7 @@ def capture_snapshot(engine: Engine, epoch: int) -> HealthSnapshot:
             cycles = detect_cycles(fg)
             cycle_count = len(cycles)
         except Exception:
-            pass
+            log.debug("health_trend_cycles_failed", exc_info=True)
 
     return HealthSnapshot(
         epoch=epoch,
