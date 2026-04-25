@@ -4,7 +4,6 @@ import asyncio
 import hashlib
 import json
 import math
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -815,4 +814,4 @@ def init_command(path: Path | None, reindex: bool, port: int | None, mcp_targets
     if not initialize_repo(repo_root, reindex=reindex, port=port, mcp_targets=list(mcp_targets)):
         if not reindex:
             return  # Already initialized, message printed
-        sys.exit(1)  # Errors occurred
+        raise SystemExit(1)  # Errors occurred

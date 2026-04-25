@@ -7,10 +7,10 @@ Outputs:
     tag_name: The next version tag (e.g., v0.2.0)
 """
 
+import logging
 import os
 import re
 import subprocess
-import sys
 
 
 def get_latest_tag() -> str | None:
@@ -20,12 +20,13 @@ def get_latest_tag() -> str | None:
             ["git", "tag", "--sort=-creatordate"],
             text=True,
             stderr=subprocess.DEVNULL,
+            timeout=30,
         )
         for tag in output.splitlines():
             if re.match(r"^v?\d+\.\d+\.\d+$", tag):
                 return tag
-    except subprocess.CalledProcessError as e:
-        print(f"Error fetching git tags: {e}", file=sys.stderr)
+    except subprocess.CalledProcessError:
+        logging.exception("Error fetching git tags")
     return None
 
 
@@ -46,14 +47,14 @@ def main() -> None:
     github_output = os.environ.get("GITHUB_OUTPUT")
 
     if release_type not in ["major", "minor", "patch"]:
-        sys.exit(
+        raise SystemExit(
             f"::error::Invalid release type '{release_type}'. Must be one of: major, minor, patch."
         )
 
     print(f"Auto-incrementing: {release_type}")
     latest = get_latest_tag()
     if not latest:
-        sys.exit(
+        raise SystemExit(
             "::error::No existing tags found to increment from! "
             "Please create an initial tag (e.g. v0.1.0) manually."
         )
