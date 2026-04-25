@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import Engine, event
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, create_engine
 
 
 def _configure_catalog_pragmas(dbapi_conn: Any, _connection_record: Any) -> None:

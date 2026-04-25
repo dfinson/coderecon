@@ -13,6 +13,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
+import structlog
+
+log = structlog.get_logger(__name__)
 
 
 @click.command("catalog")
@@ -276,4 +279,4 @@ def global_status_command() -> None:
                 for name in active:
                     click.echo(f"    {name}: http://127.0.0.1:{port}/repos/{name}/mcp")
         except Exception:  # noqa: BLE001
-            pass
+            log.debug("health_check_failed", exc_info=True)

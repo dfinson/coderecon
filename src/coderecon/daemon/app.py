@@ -27,7 +27,6 @@ def create_app(
     dev_mode: bool = False,
 ) -> Starlette:
     """Create the Starlette application with MCP server mounted."""
-    from coderecon.daemon.indexer import BackgroundIndexer
     from coderecon.files.ops import FileOps
     from coderecon.git.ops import GitOps
     from coderecon.lint.ops import LintOps

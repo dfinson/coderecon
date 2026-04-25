@@ -6,7 +6,10 @@ import hashlib
 import subprocess
 from pathlib import Path
 
-from sqlmodel import Session, select
+import structlog
+from sqlmodel import select
+
+log = structlog.get_logger(__name__)
 
 from coderecon.catalog.db import CatalogDB
 from coderecon.catalog.models import RepoEntry, WorktreeEntry
@@ -55,7 +58,7 @@ def _resolve_git_dir(repo_root: Path) -> str:
             common = result.stdout.strip()
             return str((repo_root / common).resolve())
     except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
+        log.debug("git_resolve_failed", exc_info=True)
 
     msg = f"Cannot resolve git directory for {repo_root}"
     raise ValueError(msg)
@@ -99,7 +102,7 @@ def _get_current_branch(repo_root: Path) -> str | None:
             branch = result.stdout.strip()
             return branch if branch != "HEAD" else None
     except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
+        log.debug("git_branch_detect_failed", exc_info=True)
     return None
 
 
@@ -338,4 +341,5 @@ class CatalogRegistry:
             return paths or [repo_root]
 
         except (subprocess.TimeoutExpired, FileNotFoundError):
+            log.debug("git_worktree_list_failed", exc_info=True)
             return [repo_root]

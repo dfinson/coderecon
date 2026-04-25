@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from coderecon.daemon.event_bus import EventBus
     from coderecon.daemon.global_app import GlobalDaemon
     from coderecon.mcp.context import AppContext
-    from coderecon.mcp.session import SessionState
 
 log = structlog.get_logger(__name__)
 
