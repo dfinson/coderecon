@@ -25,7 +25,7 @@ from sqlalchemy import text
 if TYPE_CHECKING:
     from coderecon.index._internal.db.database import Database
 
-log = structlog.get_logger()
+log = structlog.get_logger(__name__)
 
 
 # ── Data classes ──────────────────────────────────────────────────

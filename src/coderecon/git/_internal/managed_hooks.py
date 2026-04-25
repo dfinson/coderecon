@@ -12,7 +12,7 @@ from pathlib import Path
 
 import structlog
 
-logger = structlog.get_logger(__name__)
+log = structlog.get_logger(__name__)
 
 _HOOK_MARKER = "# coderecon-managed-hook"
 
@@ -48,7 +48,7 @@ def install_hooks(repo_root: Path) -> list[str]:
     """
     hooks_dir = repo_root / ".git" / "hooks"
     if not hooks_dir.exists():
-        logger.warning("git_hooks_dir_missing", path=str(hooks_dir))
+        log.warning("git_hooks_dir_missing", path=str(hooks_dir))
         return []
 
     installed = []
@@ -57,7 +57,7 @@ def install_hooks(repo_root: Path) -> list[str]:
         if hook_path.exists():
             content = hook_path.read_text()
             if _HOOK_MARKER not in content:
-                logger.info(
+                log.info(
                     "hook_exists_skipping",
                     hook=hook_name,
                     reason="not coderecon-managed",
@@ -68,7 +68,7 @@ def install_hooks(repo_root: Path) -> list[str]:
         hook_path.write_text(hook_content)
         hook_path.chmod(hook_path.stat().st_mode | stat.S_IEXEC)
         installed.append(hook_name)
-        logger.debug("hook_installed", hook=hook_name)
+        log.debug("hook_installed", hook=hook_name)
 
     return installed
 
@@ -96,7 +96,7 @@ def uninstall_hooks(repo_root: Path) -> list[str]:
         if _HOOK_MARKER in content:
             hook_path.unlink()
             removed.append(hook_name)
-            logger.debug("hook_removed", hook=hook_name)
+            log.debug("hook_removed", hook=hook_name)
 
     return removed
 

@@ -8,10 +8,13 @@ Runtime state is stored in .recon/state.yaml (auto-generated, not user-editable)
 """
 
 from pathlib import Path
+import logging
 from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field
+
+log = logging.getLogger(__name__)
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
@@ -118,6 +121,7 @@ def load_user_config(path: Path) -> UserConfig:
             data = yaml.safe_load(f) or {}
         return UserConfig(**data)
     except Exception:
+        log.debug("user_config_parse_failed", exc_info=True)
         return UserConfig()
 
 
@@ -130,4 +134,5 @@ def load_runtime_state(path: Path) -> RuntimeState | None:
             data = yaml.safe_load(f) or {}
         return RuntimeState(**data)
     except Exception:
+        log.debug("runtime_state_parse_failed", exc_info=True)
         return None

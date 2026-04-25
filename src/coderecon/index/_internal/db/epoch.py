@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from coderecon.index._internal.db import Database
     from coderecon.index._internal.indexing import LexicalIndex
 
-logger = structlog.get_logger()
+log = structlog.get_logger(__name__)
 
 
 @dataclass
@@ -121,7 +121,7 @@ class EpochManager:
             json.dump(journal.to_dict(), f)
             f.flush()
             os.fsync(f.fileno())
-        logger.debug("epoch_journal_written", epoch_id=journal.epoch_id)
+        log.debug("epoch_journal_written", epoch_id=journal.epoch_id)
 
     def _update_journal(self, journal: EpochJournal) -> None:
         """Update existing journal on disk."""
@@ -132,7 +132,7 @@ class EpochManager:
         path = self._journal_path(epoch_id)
         try:
             path.unlink()
-            logger.debug("epoch_journal_deleted", epoch_id=epoch_id)
+            log.debug("epoch_journal_deleted", epoch_id=epoch_id)
         except FileNotFoundError:
             pass
 
@@ -209,7 +209,7 @@ class EpochManager:
             # Phase 2: Commit Tantivy staged changes
             if self.lexical and self.lexical.has_staged_changes():
                 staged_count = self.lexical.commit_staged()
-                logger.debug("tantivy_staged_committed", count=staged_count, epoch_id=new_epoch_id)
+                log.debug("tantivy_staged_committed", count=staged_count, epoch_id=new_epoch_id)
             elif self.lexical:
                 # Just reload to see any direct writes
                 self.lexical.reload()
@@ -282,7 +282,7 @@ class EpochManager:
             # Phase 4: Delete journal (marks successful completion)
             self._delete_journal(new_epoch_id)
 
-            logger.info(
+            log.info(
                 "epoch_published",
                 epoch_id=new_epoch_id,
                 files_indexed=files_indexed,
@@ -292,7 +292,7 @@ class EpochManager:
             # On failure, discard any uncommitted Tantivy changes
             if self.lexical and not journal.tantivy_committed:
                 self.lexical.discard_staged()
-            logger.error("epoch_publish_failed", epoch_id=new_epoch_id, error=str(e))
+            log.error("epoch_publish_failed", epoch_id=new_epoch_id, error=str(e))
             raise
 
         return EpochStats(
@@ -322,7 +322,7 @@ class EpochManager:
         if journal.tantivy_committed:
             # Tantivy has changes SQLite doesn't know about
             # This is a problem - Tantivy needs to be rebuilt from SQLite
-            logger.warning(
+            log.warning(
                 "epoch_recovery_tantivy_desync",
                 epoch_id=journal.epoch_id,
                 message="Tantivy committed but SQLite didn't. Tantivy rebuild required.",
@@ -331,7 +331,7 @@ class EpochManager:
             return True  # Caller should trigger Tantivy rebuild
 
         # Neither committed - just clean up
-        logger.info("epoch_recovery_clean", epoch_id=journal.epoch_id)
+        log.info("epoch_recovery_clean", epoch_id=journal.epoch_id)
         self._delete_journal(journal.epoch_id)
         return False
 

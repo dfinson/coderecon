@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
     from coderecon.config.models import GovernanceConfig
 
-logger = structlog.get_logger(__name__)
+log = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,7 +158,7 @@ def _check_coverage_floor(
                     details={"current": pct, "threshold": threshold},
                 ))
     except Exception:
-        logger.debug("gate.coverage_floor.failed", exc_info=True)
+        log.debug("gate.coverage_floor.failed", exc_info=True)
 
 
 def _check_lint_clean(
@@ -216,7 +216,7 @@ def _check_no_new_cycles(
                 },
             ))
     except Exception:
-        logger.debug("gate.no_new_cycles.failed", exc_info=True)
+        log.debug("gate.no_new_cycles.failed", exc_info=True)
 
 
 def _check_test_debt(
@@ -272,7 +272,7 @@ def _check_coverage_regression(
                     details={"current_rate": avg_rate, "threshold": threshold},
                 ))
     except Exception:
-        logger.debug("gate.coverage_regression.failed", exc_info=True)
+        log.debug("gate.coverage_regression.failed", exc_info=True)
 
 
 def _check_centrality_impact(
@@ -307,4 +307,4 @@ def _check_centrality_impact(
                 details={"impacted_symbols": impacted[:5], "count": len(impacted)},
             ))
     except Exception:
-        logger.debug("gate.centrality_impact.failed", exc_info=True)
+        log.debug("gate.centrality_impact.failed", exc_info=True)

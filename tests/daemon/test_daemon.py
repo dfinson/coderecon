@@ -589,7 +589,7 @@ class TestHandleCplignoreChange:
         reconignore.write_text("*.pyc\n__pycache__/\n")
 
         # Handle change
-        with patch("coderecon.daemon.watcher.logger") as mock_logger:
+        with patch("coderecon.daemon.watcher.log") as mock_logger:
             watcher._handle_reconignore_change(Path(".recon/.reconignore"))
 
             # Check that added patterns were logged
@@ -612,7 +612,7 @@ class TestHandleCplignoreChange:
         # Remove a pattern
         reconignore.write_text("*.pyc\n")
 
-        with patch("coderecon.daemon.watcher.logger") as mock_logger:
+        with patch("coderecon.daemon.watcher.log") as mock_logger:
             watcher._handle_reconignore_change(Path(".recon/.reconignore"))
 
             # Check logging occurred
@@ -657,7 +657,7 @@ class TestHandleCplignoreChange:
         # Add another comment - should show no pattern changes
         reconignore.write_text("# comment\n# another comment\n*.pyc\n")
 
-        with patch("coderecon.daemon.watcher.logger") as mock_logger:
+        with patch("coderecon.daemon.watcher.log") as mock_logger:
             watcher._handle_reconignore_change(Path(".recon/.reconignore"))
 
             # Should log with "no changes" or empty diff

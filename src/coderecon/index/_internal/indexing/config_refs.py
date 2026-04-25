@@ -22,7 +22,7 @@ from pathlib import Path
 
 from coderecon.index._internal.db import Database
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 # Config file extensions that we scan for cross-file string references.
 _CONFIG_EXTENSIONS: frozenset[str] = frozenset(
@@ -333,7 +333,7 @@ def resolve_config_file_refs(
     ]
 
     if not config_files:
-        logger.debug("No config files found in index; skipping config ref resolution.")
+        log.debug("No config files found in index; skipping config ref resolution.")
         return 0
 
     # 3. Get unit_id for each config file (from existing DefFacts).
@@ -363,7 +363,7 @@ def resolve_config_file_refs(
     for file_id, file_path in config_files:
         unit_id = unit_id_map.get(file_id)
         if unit_id is None:
-            logger.debug("Skipping config file %s: no unit_id found.", file_path)
+            log.debug("Skipping config file %s: no unit_id found.", file_path)
             continue
 
         # Read file content
@@ -424,7 +424,7 @@ def resolve_config_file_refs(
         with db.bulk_writer() as writer:
             writer.insert_many(ImportFact, new_imports)
 
-    logger.info(
+    log.info(
         "Config file ref resolution: scanned %d files, checked %d strings, "
         "created %d import edges.",
         files_scanned,

@@ -28,7 +28,7 @@ from watchfiles import Change, awatch
 
 from coderecon.index._internal.ignore import IgnoreChecker
 
-logger = structlog.get_logger()
+log = structlog.get_logger(__name__)
 
 # Directories that are NEVER watched, regardless of other settings.
 # These are hardcoded because:
@@ -226,7 +226,7 @@ class FileWatcher:
         self._stop_event.clear()
         if self._is_cross_fs:
             self._watch_task = asyncio.create_task(self._poll_loop())
-            logger.info(
+            log.info(
                 "file_watcher_started",
                 repo_root=str(self.repo_root),
                 mode="polling",
@@ -237,7 +237,7 @@ class FileWatcher:
             self._watch_task = asyncio.create_task(self._watch_loop())
             # Periodic safety-net scan for directory changes we might have missed
             self._dir_scan_task = asyncio.create_task(self._periodic_dir_scan())
-            logger.info(
+            log.info(
                 "file_watcher_started",
                 repo_root=str(self.repo_root),
                 mode="native_nonrecursive",
@@ -272,7 +272,7 @@ class FileWatcher:
                 await asyncio.wait_for(self._watch_task, timeout=2.0)
             self._watch_task = None
 
-        logger.info("file_watcher_stopped")
+        log.info("file_watcher_stopped")
 
     def _queue_change(self, path: Path) -> None:
         """Queue a change for debounced delivery."""
@@ -308,7 +308,7 @@ class FileWatcher:
 
         # Log with human-readable summary (Issue #4)
         summary = _summarize_changes_by_type(paths)
-        logger.info("changes_detected", count=len(paths), summary=summary)
+        log.info("changes_detected", count=len(paths), summary=summary)
 
         self.on_change(paths)
 
@@ -344,10 +344,10 @@ class FileWatcher:
                 self._watched_dirs = set(watch_dirs)
 
                 if not watch_dirs:
-                    logger.warning("no_watchable_dirs", repo_root=str(self.repo_root))
+                    log.warning("no_watchable_dirs", repo_root=str(self.repo_root))
                     return
 
-                logger.info(
+                log.info(
                     "watch_dirs_collected",
                     count=len(watch_dirs),
                     repo_root=str(self.repo_root),
@@ -365,13 +365,13 @@ class FileWatcher:
                     ):
                         needs_restart = await self._handle_changes(changes)
                         if needs_restart:
-                            logger.info("watcher_restart_requested", reason="new_directories")
+                            log.info("watcher_restart_requested", reason="new_directories")
                             break  # Break inner loop to re-collect dirs
                 except asyncio.CancelledError:
                     raise
                 except OSError as e:
                     if e.errno == 28:  # ENOSPC — out of inotify watches
-                        logger.warning(
+                        log.warning(
                             "inotify_enospc_fallback",
                             repo_root=str(self.repo_root),
                             watch_dirs=len(watch_dirs),
@@ -388,7 +388,7 @@ class FileWatcher:
                 except Exception as e:
                     if self._stop_event.is_set():
                         return
-                    logger.error("watcher_error", error=str(e))
+                    log.error("watcher_error", error=str(e))
                     # Brief backoff before retry
                     await asyncio.sleep(1.0)
         except asyncio.CancelledError:
@@ -411,7 +411,7 @@ class FileWatcher:
                 if current_dirs != self._watched_dirs:
                     new_dirs = current_dirs - self._watched_dirs
                     removed_dirs = self._watched_dirs - current_dirs
-                    logger.info(
+                    log.info(
                         "dir_scan_drift_detected",
                         new_count=len(new_dirs),
                         removed_count=len(removed_dirs),
@@ -479,7 +479,7 @@ class FileWatcher:
                     mtimes = current_mtimes
 
                 except Exception as e:
-                    logger.error("poll_error", error=str(e))
+                    log.error("poll_error", error=str(e))
         finally:
             if self._debounce_task:
                 self._debounce_task.cancel()
@@ -533,7 +533,7 @@ class FileWatcher:
             diff_parts.append(f"-{len(removed)} pattern{suffix}")
         diff_summary = ", ".join(diff_parts) if diff_parts else "no changes"
 
-        logger.info(
+        log.info(
             "reconignore_changed",
             path=str(rel_path),
             diff=diff_summary,
@@ -542,7 +542,7 @@ class FileWatcher:
         )
 
         # Log consequence (Issue #6 Option A)
-        logger.info(
+        log.info(
             "full_reindex_triggered",
             reason="ignore_patterns_changed",
             patterns_added=len(added),
@@ -577,7 +577,7 @@ class FileWatcher:
                     not self._ignore_checker.should_prune_dir(path.name)
                     and path not in self._watched_dirs
                 ):
-                    logger.info(
+                    log.info(
                         "new_directory_detected",
                         path=str(rel_path),
                     )
@@ -592,11 +592,11 @@ class FileWatcher:
 
             # Filter through .reconignore
             if self._ignore_checker.should_ignore(self.repo_root / rel_path):
-                logger.debug("path_ignored", path=str(rel_path))
+                log.debug("path_ignored", path=str(rel_path))
                 continue
 
             self._queue_change(rel_path)
-            logger.debug(
+            log.debug(
                 "path_queued",
                 path=str(rel_path),
                 change_type=change_type.name,

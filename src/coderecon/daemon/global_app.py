@@ -193,6 +193,7 @@ class GlobalDaemon:
         try:
             worktrees = git_ops.worktrees()
         except Exception:
+            log.debug("worktree_discovery_failed", exc_info=True)
             worktrees = []
 
         # Resolve the repo's default branch once for all worktree diffs.
@@ -573,6 +574,7 @@ class GlobalDaemon:
                     _main_git = GitOps(main_slot.repo_root)
                     base_branch = _main_git.default_branch()
                 except Exception:
+                    log.debug("default_branch_resolution_failed", exc_info=True)
                     base_branch = "main"
 
             # Main worktree: use the coordinator's reconciler (indexed-commit based).
@@ -644,6 +646,7 @@ class GlobalDaemon:
         try:
             worktrees = git_ops.worktrees()
         except Exception:
+            log.debug("refresh_worktrees_failed", exc_info=True)
             return []
 
         base_branch = git_ops.default_branch()

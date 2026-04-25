@@ -20,7 +20,7 @@ from coderecon.daemon.watcher import FileWatcher
 if TYPE_CHECKING:
     from coderecon.index.ops import IndexCoordinatorEngine
 
-logger = structlog.get_logger()
+log = structlog.get_logger(__name__)
 
 # PID file location relative to .recon/
 PID_FILE = "daemon.pid"
@@ -68,7 +68,7 @@ class ServerController:
 
     async def start(self) -> None:
         """Start all daemon components."""
-        logger.info("server starting", repo_root=str(self.repo_root))
+        log.info("server starting", repo_root=str(self.repo_root))
 
         # Start indexer thread pool
         self.indexer.start()
@@ -77,14 +77,14 @@ class ServerController:
         await self.watcher.start()
 
         base_url = f"http://{self.server_config.host}:{self.server_config.port}"
-        logger.info("server started")
-        logger.info("endpoint", name="mcp", url=f"{base_url}/mcp")
-        logger.info("endpoint", name="health", url=f"{base_url}/health")
-        logger.info("endpoint", name="status", url=f"{base_url}/status")
+        log.info("server started")
+        log.info("endpoint", name="mcp", url=f"{base_url}/mcp")
+        log.info("endpoint", name="health", url=f"{base_url}/health")
+        log.info("endpoint", name="status", url=f"{base_url}/status")
 
     async def stop(self) -> None:
         """Stop all daemon components gracefully."""
-        logger.info("server stopping")
+        log.info("server stopping")
 
         # Stop with timeout to prevent hanging
         try:
@@ -95,7 +95,7 @@ class ServerController:
                 # Stop indexer (complete pending work)
                 await self.indexer.stop()
         except TimeoutError:
-            logger.warning(
+            log.warning(
                 "server_stop_timeout",
                 message=f"Shutdown timed out after {self.timeouts_config.server_stop_sec}s",
             )
@@ -103,7 +103,7 @@ class ServerController:
         # Signal shutdown complete
         self._shutdown_event.set()
 
-        logger.info("server stopped")
+        log.info("server stopped")
 
     def wait_for_shutdown(self) -> asyncio.Event:
         """Get the shutdown event for external coordination."""
@@ -120,7 +120,7 @@ def write_pid_file(coderecon_dir: Path, port: int) -> None:
     pid_path.write_text(str(os.getpid()))
     port_path.write_text(str(port))
 
-    logger.debug("pid_file_written", pid_path=str(pid_path), port=port)
+    log.debug("pid_file_written", pid_path=str(pid_path), port=port)
 
 
 def remove_pid_file(coderecon_dir: Path) -> None:
@@ -226,13 +226,13 @@ async def run_server(
     async def force_exit_after_timeout() -> None:
         """Force exit if graceful shutdown takes too long."""
         await asyncio.sleep(config.timeouts.force_exit_sec)
-        logger.info("forcing_exit_after_timeout")
+        log.info("forcing_exit_after_timeout")
         server.force_exit = True
 
     def signal_handler() -> None:
         nonlocal shutdown_count, force_exit_task
         shutdown_count += 1
-        logger.info("shutdown_signal_received", count=shutdown_count)
+        log.info("shutdown_signal_received", count=shutdown_count)
         server.should_exit = True
         if shutdown_count == 1:
             # Schedule force exit after timeout
@@ -266,7 +266,7 @@ def stop_daemon(coderecon_dir: Path) -> bool:
 
     try:
         os.kill(pid, signal.SIGTERM)
-        logger.info("daemon_stop_signal_sent", pid=pid)
+        log.info("daemon_stop_signal_sent", pid=pid)
         return True
     except (OSError, ProcessLookupError):
         remove_pid_file(coderecon_dir)

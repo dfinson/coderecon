@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from coderecon.daemon.concurrency import FreshnessGate
     from coderecon.index.ops import IndexCoordinatorEngine, IndexStats
 
-logger = structlog.get_logger()
+log = structlog.get_logger(__name__)
 
 
 class IndexerState(Enum):
@@ -86,7 +86,7 @@ class BackgroundIndexer:
             thread_name_prefix="coderecon-indexer",
         )
         self._state = IndexerState.IDLE
-        logger.info("background_indexer_started", max_workers=self.config.max_workers)
+        log.info("background_indexer_started", max_workers=self.config.max_workers)
 
     async def stop(self) -> None:
         """Stop the background indexer gracefully."""
@@ -104,7 +104,7 @@ class BackgroundIndexer:
             self._executor = None
 
         self._state = IndexerState.STOPPED
-        logger.info("background_indexer_stopped")
+        log.info("background_indexer_stopped")
 
     def queue_paths(self, worktree: str, paths: list[Path]) -> None:
         """Queue paths for indexing with debouncing, tagged by worktree."""
@@ -113,7 +113,7 @@ class BackgroundIndexer:
             bucket.update(paths)
             count = sum(len(s) for s in self._pending.values())
 
-        logger.debug("paths_queued", worktree=worktree, new_paths=len(paths), total_pending=count)
+        log.debug("paths_queued", worktree=worktree, new_paths=len(paths), total_pending=count)
 
         # Schedule debounced flush
         self._schedule_flush()
@@ -203,7 +203,7 @@ class BackgroundIndexer:
 
         except Exception as e:
             self._last_error = str(e)
-            logger.error("indexing_failed", error=str(e))
+            log.error("indexing_failed", error=str(e))
 
         finally:
             # Mark all affected worktrees fresh

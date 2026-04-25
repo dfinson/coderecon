@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from coderecon.lint.ops import LintOps
     from coderecon.testing.ops import TestOps
 
-logger = structlog.get_logger(__name__)
+log = structlog.get_logger(__name__)
 
 # Tier 2 debounce: batch rapid changes before running tests
 _TIER2_DEBOUNCE_SEC = 2.0
@@ -119,7 +119,7 @@ class AnalysisPipeline:
                         )
 
             elapsed = time.monotonic() - t0
-            logger.debug(
+            log.debug(
                 "tier1_complete",
                 files=len(paths),
                 tools=len(result.tools_run),
@@ -128,7 +128,7 @@ class AnalysisPipeline:
             )
 
         except Exception:
-            logger.debug("tier1_failed", exc_info=True)
+            log.debug("tier1_failed", exc_info=True)
 
     def _schedule_tier2(self) -> None:
         """Schedule or reschedule tier 2 with debounce."""
@@ -161,7 +161,7 @@ class AnalysisPipeline:
             # Discover affected tests via import graph
             graph_result = await self.coordinator.get_affected_test_targets(paths)
             if not graph_result.test_files:
-                logger.debug("tier2_no_affected_tests", changed_files=len(paths))
+                log.debug("tier2_no_affected_tests", changed_files=len(paths))
                 return
 
             # Run tests with coverage — target_ids need "test:" prefix
@@ -194,7 +194,7 @@ class AnalysisPipeline:
                         )
                         reports.append(report)
                     except (CoverageParseError, Exception):
-                        logger.debug("tier2_coverage_parse_failed", path=cov_path, exc_info=True)
+                        log.debug("tier2_coverage_parse_failed", path=cov_path, exc_info=True)
 
                 if reports:
                     from coderecon.index._internal.analysis.coverage_ingestion import (
@@ -213,10 +213,10 @@ class AnalysisPipeline:
                     written = ingest_coverage(
                         engine, merged, epoch, failed_test_ids=failed_ids,
                     )
-                    logger.debug("tier2_coverage_ingested", facts=written)
+                    log.debug("tier2_coverage_ingested", facts=written)
 
             elapsed = time.monotonic() - t0
-            logger.debug(
+            log.debug(
                 "tier2_complete",
                 affected_tests=len(graph_result.test_files),
                 passed=getattr(result, "passed", 0),
@@ -225,7 +225,7 @@ class AnalysisPipeline:
             )
 
         except Exception:
-            logger.debug("tier2_failed", exc_info=True)
+            log.debug("tier2_failed", exc_info=True)
 
     async def stop(self) -> None:
         """Stop the pipeline gracefully."""

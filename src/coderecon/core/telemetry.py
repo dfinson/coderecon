@@ -43,7 +43,7 @@ from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar
 if TYPE_CHECKING:
     from coderecon.config.models import TelemetryConfig
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 # Type variables for decorator
 P = ParamSpec("P")
@@ -71,7 +71,7 @@ try:
 
     _otel_available = True
 except ImportError:
-    logger.debug("OpenTelemetry SDK not installed - telemetry will be disabled")
+    log.debug("OpenTelemetry SDK not installed - telemetry will be disabled")
     _otel_available = False
 
 
@@ -133,24 +133,24 @@ def init_telemetry(config: TelemetryConfig | None = None) -> bool:
     global _tracer, _meter, _tracer_provider, _meter_provider, _initialized
 
     if _initialized:
-        logger.debug("Telemetry already initialized")
+        log.debug("Telemetry already initialized")
         return _tracer is not None
 
     _initialized = True
 
     if not _otel_available:
-        logger.info("OpenTelemetry not available - telemetry disabled")
+        log.info("OpenTelemetry not available - telemetry disabled")
         return False
 
     if not _is_telemetry_enabled(config):
-        logger.debug(
+        log.debug(
             "Telemetry not enabled (set OTEL_EXPORTER_OTLP_ENDPOINT or telemetry.enabled=true)"
         )
         return False
 
     endpoint = _get_otlp_endpoint(config)
     if not endpoint:
-        logger.warning("Telemetry enabled but no OTLP endpoint configured - telemetry disabled")
+        log.warning("Telemetry enabled but no OTLP endpoint configured - telemetry disabled")
         return False
 
     service_name = _get_service_name(config)
@@ -193,16 +193,16 @@ def init_telemetry(config: TelemetryConfig | None = None) -> bool:
         # Auto-instrument SQLAlchemy if available
         _instrument_sqlalchemy()
 
-        logger.info(f"Telemetry initialized: endpoint={endpoint}, service={service_name}")
+        log.info(f"Telemetry initialized: endpoint={endpoint}, service={service_name}")
         return True
 
     except ImportError as e:
-        logger.warning(
+        log.warning(
             f"Failed to import OTLP exporters (install opentelemetry-exporter-otlp-proto-grpc): {e}"
         )
         return False
     except Exception as e:
-        logger.error(f"Failed to initialize telemetry: {e}")
+        log.error(f"Failed to initialize telemetry: {e}")
         return False
 
 
@@ -227,13 +227,13 @@ def _instrument_sqlalchemy() -> None:
         from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 
         SQLAlchemyInstrumentor().instrument()
-        logger.debug("SQLAlchemy auto-instrumentation enabled")
+        log.debug("SQLAlchemy auto-instrumentation enabled")
     except ImportError:
-        logger.debug(
+        log.debug(
             "SQLAlchemy instrumentation not available (install opentelemetry-instrumentation-sqlalchemy)"
         )
     except Exception as e:
-        logger.warning(f"Failed to instrument SQLAlchemy: {e}")
+        log.warning(f"Failed to instrument SQLAlchemy: {e}")
 
 
 def shutdown_telemetry() -> None:
@@ -250,16 +250,16 @@ def shutdown_telemetry() -> None:
     if _tracer_provider is not None:
         try:
             _tracer_provider.shutdown()
-            logger.debug("Tracer provider shut down")
+            log.debug("Tracer provider shut down")
         except Exception as e:
-            logger.warning(f"Error shutting down tracer provider: {e}")
+            log.warning(f"Error shutting down tracer provider: {e}")
 
     if _meter_provider is not None:
         try:
             _meter_provider.shutdown()
-            logger.debug("Meter provider shut down")
+            log.debug("Meter provider shut down")
         except Exception as e:
-            logger.warning(f"Error shutting down meter provider: {e}")
+            log.warning(f"Error shutting down meter provider: {e}")
 
     _tracer = None
     _meter = None

@@ -271,8 +271,8 @@ def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
                         and (ws_path / "package.json").exists()
                     ):
                         workspace_dirs.add(ws_path)
-        except Exception:
-            pass
+        except (OSError, json.JSONDecodeError, KeyError):
+            log.debug("npm_workspace_parse_failed", exc_info=True)
 
     # Check for pnpm workspaces
     pnpm_ws = repo_root / "pnpm-workspace.yaml"
@@ -289,8 +289,8 @@ def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
                         and (ws_path / "package.json").exists()
                     ):
                         workspace_dirs.add(ws_path)
-        except Exception:
-            pass
+        except (OSError, yaml.YAMLError, KeyError):
+            log.debug("pnpm_workspace_parse_failed", exc_info=True)
 
     # Check for Nx workspaces
     nx_json = repo_root / "nx.json"
@@ -335,8 +335,8 @@ def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
                         and (ws_path / "package.json").exists()
                     ):
                         workspace_dirs.add(ws_path)
-        except Exception:
-            pass
+        except (OSError, json.JSONDecodeError, KeyError):
+            log.debug("lerna_workspace_parse_failed", exc_info=True)
 
     # Check for Rush
     rush_json = repo_root / "rush.json"
@@ -349,8 +349,8 @@ def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
                     ws_path = repo_root / project_folder
                     if ws_path.is_dir():
                         workspace_dirs.add(ws_path)
-        except Exception:
-            pass
+        except (OSError, json.JSONDecodeError, KeyError):
+            log.debug("rush_workspace_parse_failed", exc_info=True)
 
     # Legacy: Check for packages/* pattern (fallback)
     for pkg_json in repo_root.glob("packages/*/package.json"):

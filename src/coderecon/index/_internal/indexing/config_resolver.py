@@ -35,7 +35,7 @@ import re
 from collections.abc import Callable
 from pathlib import PurePosixPath
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 # Type alias for the file reader callable
 _ReadFileFn = Callable[[str], "str | None"]
@@ -179,7 +179,7 @@ class ConfigResolver:
                     mod = parse_go_mod(text)
                     if mod:
                         self._go_mods[fp] = mod
-                        logger.debug("go.mod: %s -> %s", fp, mod)
+                        log.debug("go.mod: %s -> %s", fp, mod)
         return self._go_mods
 
     def _discover_cargo_tomls(self, read_file: _ReadFileFn) -> dict[str, str]:
@@ -194,7 +194,7 @@ class ConfigResolver:
                     crate = parse_cargo_toml(text)
                     if crate:
                         self._cargo_tomls[fp] = crate
-                        logger.debug("Cargo.toml: %s -> %s", fp, crate)
+                        log.debug("Cargo.toml: %s -> %s", fp, crate)
         return self._cargo_tomls
 
     def _find_nearest_config(
@@ -353,7 +353,7 @@ def build_js_package_exports(
             actual = _resolve_export_target(resolved, set(file_paths))
             if actual:
                 result[specifier] = actual
-                logger.debug("package.json export: %s -> %s", specifier, actual)
+                log.debug("package.json export: %s -> %s", specifier, actual)
 
     return result
 

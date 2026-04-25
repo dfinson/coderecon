@@ -28,7 +28,7 @@ from sqlmodel import Session, SQLModel, create_engine
 if TYPE_CHECKING:
     from sqlalchemy import Engine
 
-logger = structlog.get_logger()
+log = structlog.get_logger(__name__)
 
 # Retry configuration for SQLite busy handling
 DEFAULT_MAX_RETRIES = 3
@@ -152,7 +152,7 @@ class Database:
                         self._retry_base_delay * (2**attempt),
                         self._retry_max_delay,
                     )
-                    logger.warning(
+                    log.warning(
                         "sqlite_busy_retry",
                         attempt=attempt + 1,
                         max_retries=retries,
@@ -205,7 +205,7 @@ class Database:
 
         with self.engine.connect() as conn:
             conn.execute(text(f"PRAGMA wal_checkpoint({mode.upper()})"))
-            logger.debug("wal_checkpoint_completed", mode=mode)
+            log.debug("wal_checkpoint_completed", mode=mode)
 
 
 def _configure_pragmas(

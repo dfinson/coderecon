@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     pass
 
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class CoverageCapability(Enum):

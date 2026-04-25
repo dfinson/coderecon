@@ -220,7 +220,7 @@ def _fetch_scaffolds(
                 .where(col(SpladeVec.def_uid).in_(def_uids))
             ).all())
             return {uid: txt for uid, txt in rows if txt}
-    except Exception:
+    except Exception:  # noqa: BLE001 — scaffold lookup is best-effort
         log.warning("cross_encoder.scaffold_lookup_failed", exc_info=True)
         return {}
 
@@ -256,7 +256,7 @@ def _score_cross_encoder_tiny(
 
     try:
         from coderecon.ranking.cross_encoder import get_tiny_scorer
-    except Exception:
+    except Exception:  # noqa: BLE001 — optional dependency
         log.debug("cross_encoder_tiny.unavailable", exc_info=True)
         return candidates
 
@@ -268,7 +268,7 @@ def _score_cross_encoder_tiny(
         scores = scorer.score_pairs(task, documents)
         for c, s in zip(candidates, scores):
             c["ce_score_tiny"] = float(s)
-    except Exception:
+    except Exception:  # noqa: BLE001 — scoring is best-effort
         log.warning("cross_encoder_tiny.scoring_failed", exc_info=True)
         return candidates
 
@@ -305,7 +305,7 @@ def _score_cross_encoder(
 
     try:
         from coderecon.ranking.cross_encoder import get_scorer
-    except Exception:
+    except Exception:  # noqa: BLE001 — optional dependency
         log.debug("cross_encoder.unavailable", exc_info=True)
         return candidates
 
@@ -317,7 +317,7 @@ def _score_cross_encoder(
         scores = scorer.score_pairs(task, documents)
         for c, s in zip(candidates, scores):
             c["ce_score"] = float(s)
-    except Exception:
+    except Exception:  # noqa: BLE001 — scoring is best-effort
         log.warning("cross_encoder.scoring_failed", exc_info=True)
 
     return candidates
