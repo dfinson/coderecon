@@ -165,7 +165,7 @@ async def _build_scaffold(
     try:
         content = full_path.read_text(encoding="utf-8", errors="replace")
         total_lines = content.count("\n") + (1 if content and not content.endswith("\n") else 0)
-    except Exception:
+    except OSError:
         total_lines = 0
 
     result: dict[str, Any] = {
@@ -258,7 +258,7 @@ def _build_unindexed_fallback(full_path: Any, rel_path: str) -> dict[str, Any]:
     try:
         content = full_path.read_text(encoding="utf-8", errors="replace")
         total_lines = content.count("\n") + (1 if content and not content.endswith("\n") else 0)
-    except Exception:
+    except OSError:
         total_lines = 0
 
     return {
@@ -294,7 +294,7 @@ async def _build_lite_scaffold(
     try:
         raw_text = full_path.read_text(encoding="utf-8", errors="replace")
         total_lines = raw_text.count("\n") + (1 if raw_text and not raw_text.endswith("\n") else 0)
-    except Exception:
+    except OSError:
         total_lines = 0
 
     # Look up file in the index

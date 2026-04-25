@@ -94,7 +94,7 @@ class KotlinGradlePack(RunnerPack):
                 content = build_kts.read_text()
                 if "kotlin" in content.lower():
                     return 1.0
-            except Exception:
+            except OSError:
                 pass
             return 0.7
         if (workspace_root / "settings.gradle.kts").exists():
@@ -379,7 +379,7 @@ class DartTestPack(RunnerPack):
                 if "flutter:" in content:
                     return 0.0  # Let FlutterTestPack handle it
                 return 1.0
-            except Exception:
+            except OSError:
                 return 0.8
         return 0.0
 
@@ -495,7 +495,7 @@ class FlutterTestPack(RunnerPack):
                 content = pubspec.read_text()
                 if "flutter:" in content:
                     return 1.0
-            except Exception:
+            except OSError:
                 pass
         return 0.0
 
@@ -813,7 +813,7 @@ class MixTestPack(RunnerPack):
                 content = mix_exs.read_text()
                 if "def project" in content:
                     return 1.0
-            except Exception:
+            except OSError:
                 pass
             return 0.9
         return 0.0
@@ -918,7 +918,7 @@ class CabalTestPack(RunnerPack):
                     content = cf.read_text()
                     if "test-suite" in content.lower():
                         return 1.0
-                except Exception:
+                except OSError:
                     pass
             return 0.5  # Cabal file exists but no test-suite stanza
         return 0.0
@@ -1112,7 +1112,7 @@ class DuneTestPack(RunnerPack):
                     content = dune_file.read_text()
                     if "inline_tests" in content or "(test" in content:
                         return 0.9
-                except Exception:
+                except OSError:
                     pass
             return 0.5
         return 0.0

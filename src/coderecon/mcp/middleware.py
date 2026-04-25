@@ -51,7 +51,7 @@ class ToolMiddleware(Middleware):
         super().__init__()
         self._session_manager = session_manager
 
-    async def on_call_tool(  # type: ignore[override]
+    async def on_call_tool(  # type: ignore[override]  # FastMCP Middleware base uses broader signature
         self,
         context: MiddlewareContext[mt.CallToolRequest],
         call_next: CallNext[mt.CallToolRequest, Any],

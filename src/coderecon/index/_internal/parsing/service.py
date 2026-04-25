@@ -33,6 +33,7 @@ from coderecon.index._internal.parsing.packs import (
 )
 from coderecon.index._internal.parsing.treesitter import (
     DynamicAccess,
+    ParseResult,
     SyntacticImport,
     SyntacticScope,
     SyntacticSymbol,
@@ -76,7 +77,7 @@ class TreeSitterService:
         """Direct access to the underlying parser (for cases not yet migrated)."""
         return self._parser
 
-    def parse(self, path: Path, content: bytes | None = None) -> Any:
+    def parse(self, path: Path, content: bytes | None = None) -> ParseResult:
         """Parse a file. Returns a :class:`ParseResult`."""
         return self._parser.parse(path, content)
 
@@ -84,15 +85,15 @@ class TreeSitterService:
     # Symbol extraction (delegates to TreeSitterParser -- already query-based)
     # ------------------------------------------------------------------
 
-    def extract_symbols(self, result: Any) -> list[SyntacticSymbol]:
+    def extract_symbols(self, result: ParseResult) -> list[SyntacticSymbol]:
         """Extract symbol definitions from a parse result."""
         return self._parser.extract_symbols(result)
 
-    def extract_identifier_occurrences(self, result: Any) -> list[Any]:
+    def extract_identifier_occurrences(self, result: ParseResult) -> list[Any]:
         """Extract all identifier occurrences from a parse result."""
         return self._parser.extract_identifier_occurrences(result)
 
-    def validate_code_file(self, result: Any) -> Any:
+    def validate_code_file(self, result: ParseResult) -> Any:
         """Validate a code file parse result."""
         return self._parser.validate_code_file(result)
 
@@ -104,7 +105,7 @@ class TreeSitterService:
     # Scope extraction -- GENERIC (replaces 3 near-identical methods)
     # ------------------------------------------------------------------
 
-    def extract_scopes(self, result: Any) -> list[SyntacticScope]:
+    def extract_scopes(self, result: ParseResult) -> list[SyntacticScope]:
         """Extract lexical scopes using pack-driven scope_types.
 
         Instead of ``_extract_python_scopes``, ``_extract_js_scopes``,
@@ -121,7 +122,7 @@ class TreeSitterService:
     # Import extraction -- delegates to TreeSitterParser methods
     # ------------------------------------------------------------------
 
-    def extract_imports(self, result: Any, file_path: str) -> list[SyntacticImport]:
+    def extract_imports(self, result: ParseResult, file_path: str) -> list[SyntacticImport]:
         """Extract imports (delegates to hand-written per-language methods)."""
         return self._parser.extract_imports(result, file_path)
 
@@ -129,7 +130,7 @@ class TreeSitterService:
     # Declared module -- delegates to TreeSitterParser methods
     # ------------------------------------------------------------------
 
-    def extract_declared_module(self, result: Any, file_path: str) -> str | None:
+    def extract_declared_module(self, result: ParseResult, file_path: str) -> str | None:
         """Extract language-level module/package/namespace declaration."""
         return self._parser.extract_declared_module(result, file_path)
 
@@ -137,7 +138,7 @@ class TreeSitterService:
     # Dynamic access -- delegates to TreeSitterParser methods
     # ------------------------------------------------------------------
 
-    def extract_dynamic_accesses(self, result: Any) -> list[DynamicAccess]:
+    def extract_dynamic_accesses(self, result: ParseResult) -> list[DynamicAccess]:
         """Extract dynamic access patterns."""
         return self._parser.extract_dynamic_accesses(result)
 

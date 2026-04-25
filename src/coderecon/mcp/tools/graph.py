@@ -148,20 +148,16 @@ async def recon_understand_core(
                 }
                 for c in file_analysis.communities[:10]
             ]
-    except Exception:  # noqa: BLE001
-        pass
-
-    # Section 4: Circular dependencies
+    except Exception:  # noqa: BLE001  # graceful degradation — section is optional
+        log.debug("understand.communities.failed", exc_info=True)
     try:
         if file_analysis and file_analysis.cycles:
             sections["cycles"] = [
                 {"size": c.size, "nodes": sorted(c.nodes)[:10]}
                 for c in file_analysis.cycles[:5]
             ]
-    except Exception:  # noqa: BLE001
-        pass
-
-    # Section 5: Coverage summary
+    except Exception:  # noqa: BLE001  # graceful degradation — section is optional
+        log.debug("understand.cycles.failed", exc_info=True)
     try:
         from coderecon.index._internal.analysis.coverage_ingestion import get_coverage_summary
 
