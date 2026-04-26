@@ -582,7 +582,7 @@ class FactQueries:
         """
         if not test_file_paths:
             return set()
-        from sqlalchemy import or_, text
+        from sqlalchemy import or_
 
         # Build prefix conditions: test_id LIKE 'path::%' OR test_id = 'path'
         conditions = []
