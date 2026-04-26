@@ -41,6 +41,9 @@ SIGMA_FLOOR = 15.0  # Calibrate from GT co-touch distributions
 # Maximum neighbors per definition.
 MAX_NEIGHBORS_PER_DEF = 20
 
+# Flush ORM objects to the DB in batches of this size to cap memory.
+_DB_FLUSH_BATCH_SIZE = 1000
+
 
 def compute_semantic_neighbors(
     db: Database,
@@ -304,7 +307,7 @@ def compute_semantic_neighbors(
                     ))
                     edges_written += 1
 
-                    if len(batch) >= 1000:
+                    if len(batch) >= _DB_FLUSH_BATCH_SIZE:
                         session.add_all(batch)
                         session.commit()
                         batch.clear()

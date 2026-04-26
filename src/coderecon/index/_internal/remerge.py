@@ -16,6 +16,8 @@ from pathlib import Path
 import structlog
 from sqlalchemy import Engine, text
 
+
+_MS_PER_SEC = 1000
 log = structlog.get_logger(__name__)
 
 
@@ -119,7 +121,7 @@ def remerge_worktree(
     # 1. Find changed files since the merge
     changed_paths = get_changed_files_since(repo_root)
     if not changed_paths:
-        result.elapsed_ms = (time.monotonic() - t0) * 1000
+        result.elapsed_ms = (time.monotonic() - t0) * _MS_PER_SEC
         return result
 
     # 2. Compute current content hashes for changed files
@@ -177,7 +179,7 @@ def remerge_worktree(
         # Needs full re-indexing
         result.reindexed.append(path)
 
-    result.elapsed_ms = (time.monotonic() - t0) * 1000
+    result.elapsed_ms = (time.monotonic() - t0) * _MS_PER_SEC
 
     log.info(
         "remerge_complete",

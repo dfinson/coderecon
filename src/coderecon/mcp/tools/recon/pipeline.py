@@ -20,6 +20,8 @@ import structlog
 from fastmcp import Context
 from pydantic import Field
 
+
+_MS_PER_SEC = 1000
 if TYPE_CHECKING:
     from fastmcp import FastMCP
 
@@ -356,7 +358,7 @@ def _pipeline_model(
     gate_label = gate.classify(gate_features)
 
     if gate_label != GateLabel.OK:
-        elapsed = round((time.monotonic() - t0) * 1000)
+        elapsed = round((time.monotonic() - t0) * _MS_PER_SEC)
         metrics = {
             "scored": len(candidates),
             "term": diagnostics.get("term_hits", 0),
@@ -493,7 +495,7 @@ def _build_output(
 
         result_candidates.append(entry)
 
-    elapsed = round((time.monotonic() - t0) * 1000)
+    elapsed = round((time.monotonic() - t0) * _MS_PER_SEC)
     metrics: dict[str, Any] = {
         "scored": len(candidates),
         "term": diagnostics.get("term_hits", 0),

@@ -12,6 +12,8 @@ from typing import Any
 
 from coderecon.config.constants import INLINE_CAP_BYTES
 
+_STRUCTURE_TRUNCATION_CHARS = 2000  # keep structure section readable in MCP responses
+
 
 def wrap_response(
     data: dict[str, Any],
@@ -93,8 +95,8 @@ def _trim_repo_map(data: dict[str, Any], budget: int) -> dict[str, Any]:
     # Drop structure first (largest section)
     if "structure" in trimmed and len(json.dumps(trimmed, default=str)) > budget:
         struct = trimmed["structure"]
-        if isinstance(struct, str) and len(struct) > 2000:
-            trimmed["structure"] = struct[:2000] + "\n... (truncated)"
+        if isinstance(struct, str) and len(struct) > _STRUCTURE_TRUNCATION_CHARS:
+            trimmed["structure"] = struct[:_STRUCTURE_TRUNCATION_CHARS] + "\n... (truncated)"
     # Drop entry_points if still too big
     if len(json.dumps(trimmed, default=str)) > budget:
         trimmed.pop("entry_points", None)

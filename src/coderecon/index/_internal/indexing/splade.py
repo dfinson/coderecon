@@ -186,8 +186,9 @@ BATCH_SIZE = BATCH_SIZE_CPU
 #   → ~165 MB/sample at 340 tokens → ~486 KB/sample/token.
 # The quadratic attention term means this *overestimates* for short
 # sequences, but conservative is correct — OOM fallback handles outliers.
-_VRAM_BYTES_PER_SAMPLE_PER_TOKEN = 500_000  # 500 KB
-_VRAM_MODEL_OVERHEAD_BYTES = 2500 * 1024 * 1024  # 2.5 GB  (model + ORT runtime + arena fragmentation)
+_VRAM_BYTES_PER_SAMPLE_PER_TOKEN = 500_000  # 500 KB — measured from CUDA allocation at 55 samples × 340 tokens
+_BYTES_PER_MIB = 1024 * 1024
+_VRAM_MODEL_OVERHEAD_BYTES = 2500 * _BYTES_PER_MIB  # 2.5 GB  (model + ORT runtime + arena fragmentation)
 _VRAM_UTILIZATION = 0.90  # use at most 90% of total VRAM
 
 
@@ -212,7 +213,7 @@ def _query_gpu_vram_bytes() -> int | None:
         if result.returncode == 0:
             # Output is in MiB, one line per GPU — take the first
             mib = int(result.stdout.strip().split("\n")[0])
-            return mib * 1024 * 1024
+            return mib * _BYTES_PER_MIB
     except (FileNotFoundError, ValueError, subprocess.TimeoutExpired):
         log.debug("nvidia_smi_query_failed", exc_info=True)
     return None
@@ -577,7 +578,7 @@ class SpladeEncoder:
             if self._vram_bytes:
                 log.info(
                     "splade.gpu_vram",
-                    extra={"vram_mib": self._vram_bytes // (1024 * 1024)},
+                    extra={"vram_mib": self._vram_bytes // _BYTES_PER_MIB},
                 )
         log.info("splade.loaded", extra={"providers": active, "gpu": _gpu_active})
         self._tokenizer = Tokenizer.from_file(str(self.tokenizer_path))

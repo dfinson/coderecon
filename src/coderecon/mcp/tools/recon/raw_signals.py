@@ -31,6 +31,8 @@ from coderecon.mcp.tools.recon.merge import (
 from coderecon.mcp.tools.recon.models import HarvestCandidate
 from coderecon.mcp.tools.recon.parsing import parse_task
 
+
+_MS_PER_SEC = 1000
 if TYPE_CHECKING:
     from fastmcp import FastMCP
 
@@ -245,7 +247,7 @@ async def raw_signals_pipeline(
     from coderecon.ranking.rrf import rrf_fuse
     candidates_out = rrf_fuse(candidates_out)
 
-    elapsed_ms = round((time.monotonic() - t0) * 1000)
+    elapsed_ms = round((time.monotonic() - t0) * _MS_PER_SEC)
 
     # Query features
     query_features = {

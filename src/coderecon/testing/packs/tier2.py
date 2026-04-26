@@ -38,6 +38,8 @@ from coderecon.testing.packs import _is_prunable_path
 
 log = structlog.get_logger(__name__)
 
+_MS_PER_SEC = 1000
+
 
 # =============================================================================
 # Kotlin - Gradle with Kotlin DSL
@@ -435,7 +437,7 @@ class DartTestPack(RunnerPack):
                     else:
                         status = "skipped"
                     tests[test_id].status = status
-                    tests[test_id].duration_seconds = event.get("time", 0) / 1000
+                    tests[test_id].duration_seconds = event.get("time", 0) / _MS_PER_SEC
 
         test_list = list(tests.values())
         return ParsedTestSuite(

@@ -24,6 +24,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+_MAX_TCP_PORT = 65535  # RFC 793: 16-bit unsigned port number
+
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 
@@ -103,8 +105,8 @@ class ServerConfig(BaseModel):
     @field_validator("port")
     @classmethod
     def validate_port(cls, v: int) -> int:
-        if not (0 <= v <= 65535):
-            raise ValueError(f"Port must be 0-65535, got {v}")
+        if not (0 <= v <= _MAX_TCP_PORT):
+            raise ValueError(f"Port must be 0-{_MAX_TCP_PORT}, got {v}")
         return v
 
 

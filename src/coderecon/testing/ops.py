@@ -61,6 +61,8 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
+_STDERR_TRUNCATION_CHARS = 2000  # cap stderr in diagnostics to avoid response bloat
+
 
 # =============================================================================
 # Environment Detection
@@ -1018,8 +1020,8 @@ class TestOps:
                     truncated_stderr = None
                     if result.execution and result.execution.raw_stderr:
                         stderr_text = result.execution.raw_stderr
-                        if len(stderr_text) > 2000:
-                            truncated_stderr = stderr_text[:2000] + "\n... (truncated)"
+                        if len(stderr_text) > _STDERR_TRUNCATION_CHARS:
+                            truncated_stderr = stderr_text[:_STDERR_TRUNCATION_CHARS] + "\n... (truncated)"
                         else:
                             truncated_stderr = stderr_text
 

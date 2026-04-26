@@ -24,6 +24,8 @@ from typing import Literal
 # leaked from CodeRecon's own environment (e.g., COVERAGE_FILE).
 _DELETE_KEY = object()
 
+_BYTES_PER_MB = 1024 * 1024
+
 
 @dataclass
 class SafeExecutionConfig:
@@ -446,7 +448,7 @@ class SafeExecutionContext:
         limit = self._config.subprocess_memory_limit_mb
         if limit:
             # .NET GC hard heap limit in bytes (hex)
-            env["DOTNET_GCHeapHardLimit"] = hex(limit * 1024 * 1024)
+            env["DOTNET_GCHeapHardLimit"] = hex(limit * _BYTES_PER_MB)
         return env
 
     def _cpp_env(self) -> dict[str, str | object]:

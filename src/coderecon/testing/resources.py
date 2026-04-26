@@ -19,6 +19,10 @@ from coderecon.files.ops import atomic_write_text
 
 log = structlog.get_logger(__name__)
 
+_BYTES_PER_MB = 1024 * 1024
+_DEFAULT_RESERVE_MB = 1024  # 1 GB — leaves headroom for IDE + OS
+_MIN_SUBPROCESS_CEILING_MB = 128  # floor for ceiling_mb to avoid starving subprocesses
+
 # Patterns emitted by runtimes on OOM. Matched against stderr.
 _OOM_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"java\.lang\.OutOfMemoryError", re.IGNORECASE),
@@ -40,12 +44,12 @@ class MemoryBudget:
     ``sysctl``), and Windows (``GlobalMemoryStatusEx``).
     """
 
-    def __init__(self, reserve_mb: int = 1024) -> None:
-        self._reserve_bytes = reserve_mb * 1024 * 1024
+    def __init__(self, reserve_mb: int = _DEFAULT_RESERVE_MB) -> None:
+        self._reserve_bytes = reserve_mb * _BYTES_PER_MB
 
     def available_mb(self) -> int:
         """Available memory in MB (kernel estimate)."""
-        return int(psutil.virtual_memory().available // (1024 * 1024))
+        return int(psutil.virtual_memory().available // _BYTES_PER_MB)
 
     def can_launch(self) -> bool:
         """True if available memory exceeds the reserve threshold."""
@@ -54,7 +58,7 @@ class MemoryBudget:
     def ceiling_mb(self) -> int:
         """Max MB any single subprocess should use (available − reserve)."""
         raw = psutil.virtual_memory().available - self._reserve_bytes
-        return max(int(raw // (1024 * 1024)), 128)  # floor at 128 MB
+        return max(int(raw // _BYTES_PER_MB), _MIN_SUBPROCESS_CEILING_MB)  # floor avoids starving subprocesses
 
 
 def child_rss_mb(pid: int) -> int:
@@ -71,7 +75,7 @@ def child_rss_mb(pid: int) -> int:
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 structlog.get_logger().debug("child_process_memory_unavailable", exc_info=True)
                 pass
-        return int(total // (1024 * 1024))
+        return int(total // _BYTES_PER_MB)
     except (psutil.NoSuchProcess, psutil.AccessDenied):
         return 0
 
