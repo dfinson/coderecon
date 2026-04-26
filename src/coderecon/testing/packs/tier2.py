@@ -32,7 +32,11 @@ from coderecon.testing.runner_pack import (
 if TYPE_CHECKING:
     from coderecon.testing.runtime import RuntimeExecutionContext
 
+import structlog
+
 from coderecon.testing.packs import _is_prunable_path
+
+log = structlog.get_logger(__name__)
 
 
 # =============================================================================
@@ -70,7 +74,7 @@ class KotlinGradlePack(RunnerPack):
                 if "kotlin" in content.lower():
                     return 1.0
             except OSError:
-                pass
+                log.debug("kotlin_config_read_failed", exc_info=True)
             return 0.7
         if (workspace_root / "settings.gradle.kts").exists():
             return 0.5
@@ -402,6 +406,7 @@ class DartTestPack(RunnerPack):
             try:
                 event = json.loads(line)
             except json.JSONDecodeError:
+                log.debug("dart_output_parse_failed", exc_info=True)
                 continue
 
             event_type = event.get("type")
@@ -471,7 +476,7 @@ class FlutterTestPack(RunnerPack):
                 if "flutter:" in content:
                     return 1.0
             except OSError:
-                pass
+                log.debug("flutter_config_read_failed", exc_info=True)
         return 0.0
 
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
@@ -789,7 +794,7 @@ class MixTestPack(RunnerPack):
                 if "def project" in content:
                     return 1.0
             except OSError:
-                pass
+                log.debug("elixir_config_read_failed", exc_info=True)
             return 0.9
         return 0.0
 
@@ -850,13 +855,13 @@ class MixTestPack(RunnerPack):
                             total = int(part.split()[0])
                             suite.total = total
                         except (ValueError, IndexError):
-                            pass
+                            log.debug("elixir_output_parse_failed", exc_info=True)
                     elif "failure" in part:
                         try:
                             failures = int(part.split()[0])
                             suite.failed = failures
                         except (ValueError, IndexError):
-                            pass
+                            log.debug("elixir_output_parse_failed", exc_info=True)
         return suite
 
 
@@ -894,7 +899,7 @@ class CabalTestPack(RunnerPack):
                     if "test-suite" in content.lower():
                         return 1.0
                 except OSError:
-                    pass
+                    log.debug("haskell_config_read_failed", exc_info=True)
             return 0.5  # Cabal file exists but no test-suite stanza
         return 0.0
 
@@ -1088,7 +1093,7 @@ class DuneTestPack(RunnerPack):
                     if "inline_tests" in content or "(test" in content:
                         return 0.9
                 except OSError:
-                    pass
+                    log.debug("ocaml_config_read_failed", exc_info=True)
             return 0.5
         return 0.0
 

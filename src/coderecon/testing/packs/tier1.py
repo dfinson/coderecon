@@ -31,7 +31,11 @@ from coderecon.testing.runner_pack import (
 if TYPE_CHECKING:
     from coderecon.testing.runtime import RuntimeExecutionContext
 
+import structlog
+
 from coderecon.testing.packs import _is_prunable_path
+
+log = structlog.get_logger(__name__)
 
 
 # =============================================================================
@@ -72,14 +76,14 @@ class PytestPack(RunnerPack):
                 if "[tool.pytest" in pyproject.read_text():
                     return 1.0
             except OSError:
-                pass
+                log.debug("pytest_config_read_failed", path="pyproject.toml", exc_info=True)
         setup_cfg = workspace_root / "setup.cfg"
         if setup_cfg.exists():
             try:
                 if "[tool:pytest]" in setup_cfg.read_text():
                     return 0.9
             except OSError:
-                pass
+                log.debug("pytest_config_read_failed", path="setup.cfg", exc_info=True)
         # Check for any test files
         if list(workspace_root.glob("**/test_*.py")) or list(workspace_root.glob("**/*_test.py")):
             return 0.5
@@ -226,7 +230,7 @@ class JestPack(RunnerPack):
                 if "jest" in deps:
                     return 0.8
             except (OSError, json.JSONDecodeError, KeyError):
-                pass
+                log.debug("jest_config_read_failed", exc_info=True)
         return 0.0
 
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
@@ -378,7 +382,7 @@ class VitestPack(RunnerPack):
                     if "vitest" in (workspace_root / vite).read_text():
                         return 0.9
                 except OSError:
-                    pass
+                    log.debug("vitest_config_read_failed", path=vite, exc_info=True)
         pkg = workspace_root / "package.json"
         if pkg.exists():
             try:
@@ -387,7 +391,7 @@ class VitestPack(RunnerPack):
                 if "vitest" in deps:
                     return 0.7
             except (OSError, json.JSONDecodeError):
-                pass
+                log.debug("vitest_deps_read_failed", exc_info=True)
         return 0.0
 
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
@@ -635,7 +639,7 @@ class CargoNextestPack(RunnerPack):
                     )
                 )
         except OSError:
-            pass
+            log.debug("rust_test_discovery_failed", exc_info=True)
         return targets
 
     def build_command(
@@ -836,7 +840,7 @@ class MavenSurefirePack(RunnerPack):
                         )
                     )
         except OSError:
-            pass
+            log.debug("java_test_discovery_failed", exc_info=True)
         return targets
 
     def build_command(
@@ -946,7 +950,7 @@ class GradlePack(RunnerPack):
                         for build in workspace_root.glob("*/build.gradle*"):
                             subprojects.append(build.parent)
                 except OSError:
-                    pass
+                    log.debug("gradle_subproject_read_failed", exc_info=True)
 
         if subprojects:
             for project_dir in subprojects:
@@ -1103,7 +1107,7 @@ class DotnetTestPack(RunnerPack):
                         )
                     )
             except OSError:
-                pass
+                log.debug("dotnet_test_discovery_failed", exc_info=True)
         return targets
 
     def build_command(
@@ -1179,7 +1183,7 @@ class CTestPack(RunnerPack):
                     return 1.0
                 return 0.5
             except OSError:
-                pass
+                log.debug("cmake_config_read_failed", exc_info=True)
         return 0.0
 
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
@@ -1232,7 +1236,7 @@ class CTestPack(RunnerPack):
                         if part == "failed":
                             failed = int(parts[i - 1])
                 except (ValueError, IndexError):
-                    pass
+                    log.debug("ctest_output_parse_failed", exc_info=True)
 
         return ParsedTestSuite(
             name="ctest",
@@ -1279,7 +1283,7 @@ class RSpecPack(RunnerPack):
                 if "rspec" in gemfile.read_text():
                     return 0.8
             except OSError:
-                pass
+                log.debug("rspec_config_read_failed", exc_info=True)
         return 0.0
 
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
@@ -1374,7 +1378,7 @@ class MinitestPack(RunnerPack):
                 if "Rake::TestTask" in content:
                     return 0.9
             except OSError:
-                pass
+                log.debug("minitest_config_read_failed", path="Rakefile", exc_info=True)
         # Medium confidence: test_helper.rb exists
         if (workspace_root / "test" / "test_helper.rb").exists():
             return 0.7
@@ -1385,7 +1389,7 @@ class MinitestPack(RunnerPack):
                 if "minitest" in gemfile.read_text():
                     return 0.6
             except OSError:
-                pass
+                log.debug("minitest_config_read_failed", path="Gemfile", exc_info=True)
         # Low: test/ directory with *_test.rb or spec_*.rb files
         test_dir = workspace_root / "test"
         if test_dir.is_dir():
@@ -1487,7 +1491,7 @@ class PHPUnitPack(RunnerPack):
                 if "phpunit/phpunit" in deps:
                     return 0.8
             except (OSError, json.JSONDecodeError):
-                pass
+                log.debug("phpunit_config_read_failed", exc_info=True)
         return 0.0
 
     async def discover(self, workspace_root: Path) -> list[TestTarget]:

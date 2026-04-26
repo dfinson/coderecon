@@ -655,7 +655,7 @@ class SpladeEncoder:
         """
         try:
             return self._encode_batch(texts)
-        except Exception as exc:
+        except (RuntimeError, MemoryError) as exc:
             err_msg = str(exc).lower()
             is_oom = (
                 "out of memory" in err_msg
