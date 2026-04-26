@@ -657,7 +657,8 @@ def _assign_target_hops(
     """
     from coderecon.index._internal.indexing.import_graph import ImportGraphResult
 
-    assert isinstance(graph_result, ImportGraphResult)
+    if not isinstance(graph_result, ImportGraphResult):
+        raise TypeError(f"Expected ImportGraphResult, got {type(graph_result).__name__}")
     tests_by_hop = graph_result.tests_by_hop()
 
     # Build reverse map: test_file -> hop

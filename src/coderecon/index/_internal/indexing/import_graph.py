@@ -163,7 +163,8 @@ class ImportGraph:
             ImportGraphResult with matches and confidence.
         """
         self._ensure_caches()
-        assert self._module_index is not None
+        if self._module_index is None:
+            raise RuntimeError("_ensure_caches did not populate _module_index")
 
         # Step 0: Partition — test files in changed_files are directly affected.
         # The import graph traces source→test imports but cannot discover that
@@ -171,7 +172,8 @@ class ImportGraph:
         # the end (Step 5b).  Source files go through the normal graph walk;
         # test files are excluded from module resolution (Step 1) because they
         # are not importable in most languages and would pollute unresolved/ratio.
-        assert self._test_file_set is not None
+        if self._test_file_set is None:
+            raise RuntimeError("_ensure_caches did not populate _test_file_set")
         direct_test_files = [f for f in changed_files if f in self._test_file_set]
         direct_test_set = set(direct_test_files)
         source_changed_files = [f for f in changed_files if f not in direct_test_set]
@@ -230,7 +232,8 @@ class ImportGraph:
             if mod.startswith("src."):
                 search_modules.add(mod[4:])
 
-        assert self._test_file_paths is not None
+        if self._test_file_paths is None:
+            raise RuntimeError("_ensure_caches did not populate _test_file_paths")
 
         matched_rows: list[tuple[str, str | None]] = []
         null_in_tests = 0
@@ -511,7 +514,8 @@ class ImportGraph:
             CoverageSourceResult with source directories.
         """
         self._ensure_caches()
-        assert self._module_index is not None
+        if self._module_index is None:
+            raise RuntimeError("_ensure_caches did not populate _module_index")
 
         if not test_files:
             return CoverageSourceResult(
@@ -569,12 +573,15 @@ class ImportGraph:
             List of CoverageGap for each uncovered module.
         """
         self._ensure_caches()
-        assert self._module_index is not None
-        assert self._file_paths is not None
+        if self._module_index is None:
+            raise RuntimeError("_ensure_caches did not populate _module_index")
+        if self._file_paths is None:
+            raise RuntimeError("_ensure_caches did not populate _file_paths")
 
         # All source modules: files not in test paths (use cached set for O(1) lookup)
         test_set = self._test_file_set
-        assert test_set is not None
+        if test_set is None:
+            raise RuntimeError("_ensure_caches did not populate _test_file_set")
         all_source_modules: set[str] = set()
         for fp in self._file_paths:
             if fp not in test_set:
@@ -584,7 +591,8 @@ class ImportGraph:
 
         # Modules imported by test files — scope query to test files only
         test_file_paths = self._test_file_paths
-        assert test_file_paths is not None
+        if test_file_paths is None:
+            raise RuntimeError("_ensure_caches did not populate _test_file_paths")
         stmt = (
             select(ImportFact.source_literal)
             .join(File, ImportFact.file_id == File.id)  # type: ignore[arg-type]

@@ -597,7 +597,8 @@ class SpladeEncoder:
         *session* overrides the default session (used by CPU fallback).
         """
         sess = session or self._session
-        assert sess is not None and self._tokenizer is not None
+        if sess is None or self._tokenizer is None:
+            raise RuntimeError("SPLADE model not loaded: call load() first")
 
         encodings = self._tokenizer.encode_batch(texts)
         ids = np.array([e.ids for e in encodings], dtype=np.int64)
@@ -695,7 +696,8 @@ class SpladeEncoder:
         self.load()
         if not texts:
             return []
-        assert self._tokenizer is not None
+        if self._tokenizer is None:
+            raise RuntimeError("SPLADE tokenizer not loaded after load()")
 
         # Sort by token count → similar lengths in each batch → less padding
         indexed = list(enumerate(texts))

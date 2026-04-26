@@ -437,7 +437,8 @@ class CodeRecon:
         line = encode_request(method, params, request_id=request_id, session_id=sid)
         fut = self._pending.create(request_id)
 
-        assert self._process.stdin is not None
+        if self._process.stdin is None:
+            raise RuntimeError("Process stdin not available — was start() called?")
         self._process.stdin.write(line)
         await self._process.stdin.drain()
 
