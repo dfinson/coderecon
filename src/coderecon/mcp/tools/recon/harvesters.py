@@ -16,7 +16,6 @@ from coderecon.core.languages import CONSTANT_KINDS, TYPE_KINDS
 from coderecon.mcp.tools.recon.models import (
     EvidenceRecord,
     HarvestCandidate,
-    _classify_artifact,
 )
 
 if TYPE_CHECKING:

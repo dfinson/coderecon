@@ -20,7 +20,6 @@ import time
 from typing import TYPE_CHECKING
 
 import numpy as np
-from sqlalchemy import text
 from sqlmodel import col, select
 
 from coderecon.core.languages import TYPE_KINDS
@@ -39,7 +38,6 @@ from coderecon.index.models import (
     RefTier,
     ResolutionMethod,
     Role,
-    SpladeVec,
 )
 from coderecon.ranking.cross_encoder import get_tiny_scorer
 

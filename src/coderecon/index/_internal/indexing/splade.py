@@ -40,7 +40,6 @@ from coderecon.index.models import (
 
 if TYPE_CHECKING:
     from coderecon.index._internal.db.database import Database
-    from coderecon.index._internal.indexing.graph import FactQueries
 
 log = structlog.get_logger(__name__)
 

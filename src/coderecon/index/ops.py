@@ -12,7 +12,6 @@ Discovery -> Authority -> Membership -> Probe -> Router -> Index
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import os
@@ -23,7 +22,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import structlog
 from sqlalchemy import bindparam, case, delete, func, text
@@ -69,16 +68,12 @@ from coderecon.index.models import (
     Context,
     ContextMarker,
     DefFact,
-    DocCrossRef,
     File,
     ImportFact,
     IndexedCoverageCapability,
     IndexedLintTool,
     ProbeStatus,
     RefFact,
-    RefTier,
-    SemanticNeighborFact,
-    TestCoverageFact,
     TestTarget,
     Worktree,
 )
@@ -91,7 +86,6 @@ if TYPE_CHECKING:
         CoverageSourceResult,
         ImportGraphResult,
     )
-    from coderecon.index._internal.indexing.structural import ExtractionResult
     from coderecon.index.models import FileState
     from coderecon.testing.runtime import ContextRuntime
 

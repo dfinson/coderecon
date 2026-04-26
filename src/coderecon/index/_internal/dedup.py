@@ -7,7 +7,6 @@ worktree can reuse facts without re-parsing.
 from __future__ import annotations
 
 import time
-from pathlib import Path
 
 import structlog
 from sqlalchemy import Engine, text

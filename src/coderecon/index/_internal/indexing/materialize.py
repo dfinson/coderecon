@@ -20,10 +20,6 @@ from typing import TYPE_CHECKING
 from sqlalchemy import text
 
 from coderecon.index.models import (
-    AnchorGroup,
-    ExportEntry,
-    ExportSurface,
-    ExportThunk,
     ExportThunkMode,
     RefTier,
 )
