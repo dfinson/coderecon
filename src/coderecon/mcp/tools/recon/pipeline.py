@@ -577,7 +577,7 @@ async def recon_map_core(app_ctx: "AppContext") -> dict[str, Any]:
     return wrap_response(repo_map, resource_kind="repo_map")
 
 
-def register_tools(mcp: FastMCP, app_ctx: AppContext, *, dev_mode: bool = False) -> None:
+def register_tools(mcp: "FastMCP", app_ctx: "AppContext", *, dev_mode: bool = False) -> None:
     """Register recon tools with FastMCP server."""
 
     # Register raw signals endpoint only in dev mode (ranking training)

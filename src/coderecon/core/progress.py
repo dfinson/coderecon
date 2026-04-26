@@ -304,7 +304,7 @@ class PhaseBox:
             phase.complete("3 grammars installed")
     """
 
-    def __init__(self, title: str, *, width: int = 60, console: Console | None = None):
+    def __init__(self, title: str, *, width: int = 60, console: Console | None = None) -> None:
         self._title = title
         self._width = width
         self._console = console or _console
@@ -470,7 +470,7 @@ class SummaryStream:
             stream.done("3 new, 1 modified")
     """
 
-    def __init__(self, console: Console | None = None):
+    def __init__(self, console: Console | None = None) -> None:
         self._console = console or _console
         self._current_progress: Progress | None = None
         self._current_task_id: TaskID | None = None
