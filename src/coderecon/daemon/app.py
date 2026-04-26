@@ -82,20 +82,6 @@ def create_app(
     controller.indexer.add_on_complete(pipeline.on_index_complete)
 
     @asynccontextmanager
-    async def lifespan(_app: Starlette) -> AsyncIterator[None]:
-        yield
-        # Controller stop is handled in run_server finally block
-        # to ensure it runs even if lifespan exit times out
-
-    @asynccontextmanager
-    async def mcp_lifespan_with_timeout(app: Starlette) -> AsyncIterator[None]:
-        """Wrap MCP lifespan with timeout to prevent hanging on shutdown."""
-        async with mcp_app.lifespan(app):
-            yield
-        # MCP cleanup happens when exiting the context manager
-        # This is wrapped in timeout in combined_lifespan
-
-    @asynccontextmanager
     async def combined_lifespan(app: Starlette) -> AsyncIterator[None]:
         # Enter MCP lifespan
         async with mcp_app.lifespan(app):
