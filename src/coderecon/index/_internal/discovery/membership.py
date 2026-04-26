@@ -13,13 +13,9 @@ Key rules:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
 from coderecon.index._internal.discovery.scanner import INCLUDE_SPECS, UNIVERSAL_EXCLUDES
 from coderecon.index.models import CandidateContext, LanguageFamily
-
-if TYPE_CHECKING:
-    pass
 
 
 @dataclass

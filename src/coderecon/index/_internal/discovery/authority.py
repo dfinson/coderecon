@@ -18,16 +18,11 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
-
 import yaml
 
 import structlog
 
 from coderecon.index.models import CandidateContext, LanguageFamily, ProbeStatus
-
-if TYPE_CHECKING:
-    pass
 
 log = structlog.get_logger(__name__)
 

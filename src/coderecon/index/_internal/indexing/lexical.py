@@ -16,16 +16,12 @@ import shutil
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import tantivy
 
 from coderecon.files.ops import atomic_write_text
 from coderecon.config.constants import MS_PER_SEC
-
-
-if TYPE_CHECKING:
-    pass
 
 # Bump when the Tantivy schema changes — triggers automatic index rebuild.
 # 1 → 2: added ``worktree`` field and made ``path_exact`` a compound

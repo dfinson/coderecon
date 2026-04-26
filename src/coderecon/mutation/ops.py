@@ -10,12 +10,9 @@ import hashlib
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 from coderecon.files.ops import atomic_write_text
-
-if TYPE_CHECKING:
-    pass
 
 
 @dataclass

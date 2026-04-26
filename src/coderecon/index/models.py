@@ -13,13 +13,9 @@ semantic guarantees itself.
 
 import json
 from enum import StrEnum
-from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, ForeignKey, Integer, String, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
-
-if TYPE_CHECKING:
-    pass
 
 
 # ENUMS
