@@ -43,7 +43,7 @@ LANGUAGE_MAP: dict[str, str] = {key: pack.grammar_name for key, pack in PACKS.it
 log = structlog.get_logger(__name__)
 
 if TYPE_CHECKING:
-    pass
+    from coderecon.index._internal.parsing.packs import ImportQueryConfig
 
 
 @dataclass
@@ -426,7 +426,7 @@ class TreeSitterParser:
         self,
         tree: Any,
         root: Any,
-        config: Any,  # ImportQueryConfig
+        config: ImportQueryConfig,
         file_path: str,
     ) -> list[SyntacticImport]:
         """Extract imports using declarative multi-pattern queries.

@@ -75,12 +75,12 @@ def _detect_test_debt(
     for src in source_files:
         pairs = find_test_pairs(src)
         # Find test files that exist on disk but weren't in changed_files
-        for tp in pairs:
-            if tp in changed_set:
+        for test_path in pairs:
+            if test_path in changed_set:
                 break  # At least one test counterpart was updated — no debt
         else:
             # No test counterpart was in changed_files — check if any exist
-            existing_tests = [tp for tp in pairs if (repo_root / tp).exists()]
+            existing_tests = [test_path for test_path in pairs if (repo_root / test_path).exists()]
             if existing_tests:
                 missing.append(
                     {
