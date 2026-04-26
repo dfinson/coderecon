@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from coderecon.sdk.events import EventRouter
 from coderecon.sdk.types import Event
 

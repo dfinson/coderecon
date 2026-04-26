@@ -14,7 +14,6 @@ from coderecon.sdk.protocol import (
     generate_session_id,
     is_event,
     is_response,
-    next_request_id,
 )
 
 

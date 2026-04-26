@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from coderecon.index._internal.db.consistency import (
     ConsistencyReport,
     SignalCheck,

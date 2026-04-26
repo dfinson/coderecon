@@ -5,8 +5,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import pytest
-
 from coderecon.index._internal.analysis.gate_engine import (
     GateResult,
     GateViolation,

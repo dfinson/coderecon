@@ -6,8 +6,6 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from coderecon.cli.mcp_writers import (
     ALL_TOOLS,
     detect_tools,

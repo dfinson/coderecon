@@ -6,8 +6,6 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from coderecon.daemon.global_lifecycle import (
     is_global_server_running,
     read_global_server_info,

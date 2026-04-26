@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from coderecon.sdk.events import EventRouter
 from coderecon.sdk.types import Event
 
