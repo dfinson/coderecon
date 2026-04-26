@@ -27,6 +27,8 @@ from sqlmodel import Session, SQLModel, create_engine
 
 if TYPE_CHECKING:
     from sqlalchemy import Engine
+    from sqlalchemy.engine.interfaces import DBAPIConnection
+    from sqlalchemy.pool import ConnectionPoolEntry
 
 log = structlog.get_logger(__name__)
 
@@ -209,7 +211,7 @@ class Database:
 
 
 def _configure_pragmas(
-    dbapi_conn: Any, _connection_record: Any, busy_timeout_ms: int = 30_000
+    dbapi_conn: DBAPIConnection, _connection_record: ConnectionPoolEntry, busy_timeout_ms: int = 30_000
 ) -> None:
     """Configure SQLite for concurrent access and performance."""
     cursor = dbapi_conn.cursor()

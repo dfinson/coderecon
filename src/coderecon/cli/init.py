@@ -7,12 +7,15 @@ import hashlib
 import json
 import math
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import click
 import json5
 import structlog
 from rich.table import Table
+
+if TYPE_CHECKING:
+    from rich.progress import TaskID
 
 from coderecon.config.user_config import (
     DEFAULT_PORT,
@@ -597,10 +600,10 @@ def initialize_repo(
     }
     # Track resolution phase box and task IDs
     resolution_phase: PhaseBox | None = None
-    refs_task_id: Any = None
-    types_task_id: Any = None
+    refs_task_id: TaskID | None = None
+    types_task_id: TaskID | None = None
     splade_phase: PhaseBox | None = None
-    splade_task_id: Any = None
+    splade_task_id: TaskID | None = None
     indexing_elapsed = 0.0
 
     try:

@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -43,7 +44,7 @@ async def _handle_request(
     daemon: "GlobalDaemon",
     registry: "CatalogRegistry",
     request: dict[str, Any],
-    write_message: Any,
+    write_message: Callable[[dict[str, Any]], Awaitable[None]],
     bus: EventBus,
 ) -> None:
     """Dispatch a single request and write the response."""

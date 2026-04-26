@@ -7,13 +7,17 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Engine, event
 from sqlmodel import Session, create_engine
 
+if TYPE_CHECKING:
+    from sqlalchemy.engine.interfaces import DBAPIConnection
+    from sqlalchemy.pool import ConnectionPoolEntry
 
-def _configure_catalog_pragmas(dbapi_conn: Any, _connection_record: Any) -> None:
+
+def _configure_catalog_pragmas(dbapi_conn: DBAPIConnection, _connection_record: ConnectionPoolEntry) -> None:
     """Configure SQLite pragmas for the catalog database."""
     cursor = dbapi_conn.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")

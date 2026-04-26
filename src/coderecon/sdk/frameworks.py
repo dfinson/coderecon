@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import functools
 import inspect
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -204,7 +205,7 @@ def as_openai_tools(
     return tools
 
 
-def _takes_repo(method: Any) -> bool:
+def _takes_repo(method: Callable[..., Any]) -> bool:
     """Check if the method has a 'repo' parameter."""
     try:
         sig = inspect.signature(method)

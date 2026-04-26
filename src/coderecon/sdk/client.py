@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import shutil
 from pathlib import Path
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
 import structlog
@@ -170,7 +171,7 @@ class CodeRecon:
 
     # ── Events ──
 
-    def on(self, pattern: str, callback: Any) -> None:
+    def on(self, pattern: str, callback: Callable[[Event], Any]) -> None:
         """Register a callback for events matching *pattern* (glob)."""
         self._event_router.on(pattern, callback)
 
