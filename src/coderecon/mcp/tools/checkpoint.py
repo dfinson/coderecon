@@ -250,7 +250,7 @@ def _normalize_selector(selector: str) -> str:
 
 
 def _target_matches_affected_files(
-    target: Any,
+    target: TestTarget,
     affected_paths: set[str],
     repo_root: Path,
 ) -> bool:

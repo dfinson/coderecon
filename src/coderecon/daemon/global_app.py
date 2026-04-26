@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from coderecon.config.models import CodeReconConfig
     from coderecon.daemon.indexer import BackgroundIndexer
     from coderecon.daemon.watcher import FileWatcher
-    from coderecon.index.ops import IndexCoordinatorEngine
+    from coderecon.index.ops import IndexCoordinatorEngine, IndexStats
     from coderecon.mcp.context import AppContext
     from coderecon.mcp.session import SessionManager
 
@@ -340,7 +340,7 @@ class GlobalDaemon:
         _wt_root = wt_root
 
         async def _update_last_indexed_at(
-            stats: Any, paths: list[Path]  # noqa: ARG001
+            stats: IndexStats, paths: list[Path]  # noqa: ARG001
         ) -> None:
             try:
                 _registry.update_last_indexed_at(_wt_root, time.time())

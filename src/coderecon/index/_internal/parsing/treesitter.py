@@ -143,12 +143,12 @@ class ProbeValidation:
 class ParseResult:
     """Result of parsing a file."""
 
-    tree: Any  # Tree-sitter Tree (not serializable)
+    tree: tree_sitter.Tree  # Tree-sitter Tree (not serializable)
     language: str
     error_count: int
     total_nodes: int
-    root_node: Any  # Tree-sitter Node
-    ts_language: Any = None  # tree-sitter Language object for grammar introspection
+    root_node: tree_sitter.Node  # Tree-sitter Node
+    ts_language: tree_sitter.Language | None = None  # tree-sitter Language object for grammar introspection
 
 
 # C# preprocessor wrapper node types that may contain declarations.
@@ -197,15 +197,15 @@ class TreeSitterParser:
         validation = parser.validate_code_file(result)
     """
 
-    _parser: Any = field(default=None, repr=False)
-    _languages: dict[str, Any] = field(default_factory=dict, repr=False)
+    _parser: tree_sitter.Parser = field(default=None, repr=False)  # type: ignore[assignment]
+    _languages: dict[str, tree_sitter.Language] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
         """Initialize the parser."""
         self._parser = tree_sitter.Parser()
         self._languages = {}
 
-    def _get_language(self, lang_name: str) -> Any:
+    def _get_language(self, lang_name: str) -> tree_sitter.Language | None:
         """Get or load a Tree-sitter language.
 
         Uses LanguagePack metadata for module/function resolution instead

@@ -11,6 +11,7 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import TYPE_CHECKING, Any, Callable, Coroutine
 
@@ -31,7 +32,7 @@ class EventBus:
     def __init__(
         self,
         write_message: WriteMessageFn,
-        transport: Any | None = None,
+        transport: asyncio.WriteTransport | None = None,
     ) -> None:
         self._write = write_message
         self._transport = transport  # raw asyncio.WriteTransport for sync writes

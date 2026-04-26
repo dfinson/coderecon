@@ -89,9 +89,9 @@ class LexicalIndex:
             index_path: Directory to store Tantivy index files
         """
         self.index_path = Path(index_path)
-        self._index: Any = None
-        self._writer: Any = None
-        self._schema: Any = None
+        self._index: tantivy.Index | None = None
+        self._writer: tantivy.IndexWriter | None = None
+        self._schema: tantivy.Schema | None = None
         self._initialized = False
         # Staging buffer for atomic epoch commits
         self._staged_adds: list[dict[str, Any]] = []
