@@ -87,7 +87,7 @@ class RemergeResult:
         self.pruned: int = 0
         self.elapsed_ms: float = 0
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, int | float]:
         return {
             "adopted": self.adopted,
             "reindexed": len(self.reindexed),

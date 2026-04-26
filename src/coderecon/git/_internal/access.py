@@ -995,7 +995,7 @@ class RepoAccess:
                 names.append(match.group(1))
         return names
 
-    def lookup_submodule(self, name: str) -> dict:
+    def lookup_submodule(self, name: str) -> dict[str, str | None]:
         """Get submodule info as dict."""
         rc, path_out, _ = self._git.run_raw("config", "--file", ".gitmodules", f"submodule.{name}.path")
         if rc != 0:
@@ -1033,7 +1033,7 @@ class RepoAccess:
                 continue
         return None
 
-    def lookup_submodule_by_path(self, path: str) -> dict:
+    def lookup_submodule_by_path(self, path: str) -> dict[str, str | None]:
         """Get submodule by path."""
         name = self.submodule_name_for_path(path)
         if name is None:

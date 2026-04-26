@@ -140,14 +140,14 @@ class FileStateService:
         """
         # In Tier 0+1, dirtiness is implicit from content_hash mismatch
         # No separate tracking needed
-        pass
+        return None
 
     def mark_file_stale(self, file_id: int, context_id: int) -> None:
         """Mark a file as stale (dependency changed).
 
         In Tier 0+1, we don't track dependency chains, so this is a no-op.
         """
-        pass
+        return None
 
 
 class MutationGateResult:

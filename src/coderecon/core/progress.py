@@ -533,7 +533,7 @@ class SummaryStream:
         exc_tb: TracebackType | None,
     ) -> None:
         """No-op: SummaryStream requires no teardown."""
-        pass
+        return None
 
 
 def summary_stream(console: Console | None = None) -> SummaryStream:

@@ -143,7 +143,7 @@ async def run_global_server(
     class _Server(uvicorn.Server):
         def install_signal_handlers(self) -> None:
             """No-op: signal handlers are installed externally."""
-            pass
+            return None
 
     server = _Server(uvicorn_config)
 
