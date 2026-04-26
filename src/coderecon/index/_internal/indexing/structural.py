@@ -92,7 +92,9 @@ _MAX_FILE_BYTES = 1_000_000
 # Regex pattern for discovering string-related node types from grammar metadata
 _STRING_NODE_PATTERN = re.compile(r"(?i).*string.*")
 
-# Cache: grammar id → frozenset of string node type names
+# Cache: grammar id → frozenset of string node type names.
+# Bounded by the number of supported languages (~50) — each language
+# creates one ts_language object that lives for the process lifetime.
 _string_node_types_cache: dict[int, frozenset[str]] = {}
 
 # Regex fallback for string literal extraction
@@ -216,7 +218,8 @@ def _extract_string_literals_regex(
 # SEM_FACTS extraction — tree-sitter query driven (SPEC §16.6)
 # ===================================================================
 
-# Cache: (grammar id, ts_lang_name) → compiled query object or None
+# Cache: (grammar id, ts_lang_name) → compiled query object or None.
+# Bounded by the number of (language × query) pairs — O(supported languages).
 _sem_query_cache: dict[tuple[int, str], Any] = {}
 
 

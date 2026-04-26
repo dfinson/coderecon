@@ -130,7 +130,7 @@ class AnalysisPipeline:
             )
 
         except Exception:
-            log.debug("tier1_failed", exc_info=True)
+            log.warning("tier1_failed", exc_info=True)
 
     def _schedule_tier2(self) -> None:
         """Schedule or reschedule tier 2 with debounce."""
@@ -226,7 +226,7 @@ class AnalysisPipeline:
             )
 
         except Exception:
-            log.debug("tier2_failed", exc_info=True)
+            log.warning("tier2_failed", exc_info=True)
 
     async def stop(self) -> None:
         """Stop the pipeline gracefully."""
