@@ -15,7 +15,7 @@ import contextlib
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import structlog
 from starlette.applications import Starlette
