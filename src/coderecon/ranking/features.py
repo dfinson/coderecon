@@ -18,38 +18,18 @@ def extract_ranker_features(
     candidates: list[dict[str, Any]],
     query_features: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Build per-candidate feature dicts for the ranker model.
-
-    Parameters
-    ----------
-    candidates
-        Raw candidate dicts from ``recon_raw_signals()``.
-    query_features
-        Query-level features (query_len, has_identifier, etc.).
-
-    Returns
-    -------
-    list[dict]
-        One feature dict per candidate, ready for LightGBM prediction.
-    """
+    """Build per-candidate feature dicts for the ranker model."""
     features_out: list[dict[str, Any]] = []
 
     for cand in candidates:
         f: dict[str, Any] = {}
 
-        # Term match signal
         f["term_match_count"] = cand.get("term_match_count") or 0
         f["term_total_matches"] = cand.get("term_total_matches") or 0
         f["lex_hit_count"] = cand.get("lex_hit_count") or 0
         f["bm25_file_score"] = cand.get("bm25_file_score") or 0.0
-
-        # SPLADE sparse retrieval score (continuous)
         f["splade_score"] = cand.get("splade_score") or 0.0
-
-        # Cross-encoder relevance score (continuous)
         f["ce_score"] = cand.get("ce_score") or 0.0
-
-        # TinyBERT cross-encoder score (all candidates, pre-file-prune)
         f["ce_score_tiny"] = cand.get("ce_score_tiny") or 0.0
 
         # Language family (categorical from index language module)
@@ -94,8 +74,6 @@ def extract_ranker_features(
         f["import_reverse"] = imp_dir == "reverse"
         f["import_barrel"] = imp_dir == "barrel"
         f["import_test_pair"] = imp_dir == "test_pair"
-
-        # Retriever agreement
         f["retriever_hits"] = cand.get("retriever_hits", 0)
 
         # Kind one-hot (function/class/method/variable/interface → other)
@@ -106,7 +84,6 @@ def extract_ranker_features(
         f["kind_variable"] = kind == "variable"
         f["kind_interface"] = kind == "interface"
 
-        # Object metadata
         f["object_size_lines"] = cand.get("object_size_lines", 0)
         f["path_depth"] = cand.get("path_depth", 0)
         f["nesting_depth"] = cand.get("nesting_depth", 0)
@@ -121,13 +98,11 @@ def extract_ranker_features(
         f["has_parent_scope"] = cand.get("has_parent_scope", False)
         f["has_signature"] = cand.get("signature_text") is not None
 
-        # Structural link signals
         f["shares_file_with_seed"] = cand.get("shares_file_with_seed", False)
         f["is_callee_of_top"] = cand.get("is_callee_of_top", False)
         f["is_imported_by_top"] = cand.get("is_imported_by_top", False)
         f["from_coverage"] = cand.get("from_coverage", False)
 
-        # Harvester source flags
         f["from_term_match"] = cand.get("from_term_match", False)
         f["from_explicit"] = cand.get("from_explicit", False)
         f["from_graph"] = cand.get("from_graph", False)
@@ -137,7 +112,6 @@ def extract_ranker_features(
         total_terms = query_features.get("term_count", 0)
         f["term_coverage"] = matched_count / total_terms if total_terms > 0 else 0.0
 
-        # RRF ensemble score (computed in shared pipeline layer)
         f["rrf_score"] = cand.get("rrf_score", 0.0)
 
         # Artifact kind one-hot (code/test/config/doc/build)
@@ -148,7 +122,6 @@ def extract_ranker_features(
         f["artifact_doc"] = ak == "doc"
         f["artifact_build"] = ak == "build"
 
-        # Locality signals
         f["seed_path_distance"] = cand.get("seed_path_distance", 999)
         f["same_package"] = cand.get("same_package", False)
         f["package_distance"] = cand.get("package_distance", 999)
@@ -170,7 +143,6 @@ def extract_ranker_features(
         f["intent_understand"] = intent == "understand"
         f["intent_test"] = intent == "test"
 
-        # Stacktrace / test-driven flags
         f["is_stacktrace_driven"] = query_features.get("is_stacktrace_driven", False)
         f["is_test_driven"] = query_features.get("is_test_driven", False)
 
