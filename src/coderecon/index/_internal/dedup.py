@@ -11,6 +11,7 @@ from pathlib import Path
 
 import structlog
 from sqlalchemy import Engine, text
+from sqlalchemy.exc import SQLAlchemyError
 
 log = structlog.get_logger(__name__)
 
@@ -129,7 +130,7 @@ def clone_facts_from_source(
                     f"WHERE file_id = {source_file_id}"
                 ))
                 total += result.rowcount
-            except Exception:  # noqa: BLE001
+            except (SQLAlchemyError, ValueError):  # noqa: BLE001
                 # Table might not have all columns — skip silently
                 log.debug("clone_facts_skip", extra={"table": table}, exc_info=True)
 

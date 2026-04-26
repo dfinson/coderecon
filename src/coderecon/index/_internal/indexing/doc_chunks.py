@@ -218,7 +218,7 @@ def index_doc_chunk_vectors(
             try:
                 from coderecon.index._internal.db.database import Database as _DB
                 content = _read_file_content(db, f)
-            except Exception:
+            except (OSError, ValueError, RuntimeError):
                 log.debug("doc_chunk_read_failed", exc_info=True)
                 continue
 

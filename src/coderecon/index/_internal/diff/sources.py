@@ -141,7 +141,7 @@ def snapshots_from_blob(
         if result.returncode != 0:
             return []
         source = result.stdout
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         log.debug("blob_retrieval_failed", exc_info=True)
         return []
 
@@ -155,7 +155,7 @@ def snapshots_from_blob(
 
         result = parser.parse(_Path(file_path), content=source)
         symbols = parser.extract_symbols(result)
-    except Exception:
+    except (OSError, RuntimeError, ValueError):
         log.warning("blob_parse_failed", extra={"path": file_path})
         return []
 

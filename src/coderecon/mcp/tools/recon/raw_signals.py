@@ -279,7 +279,7 @@ async def raw_signals_pipeline(
                 "object_count": def_count,
                 "file_count": file_count,
             }
-    except Exception:  # noqa: BLE001
+    except (OSError, RuntimeError, ValueError):  # noqa: BLE001
         repo_features = {"object_count": 0, "file_count": 0}
 
     return {

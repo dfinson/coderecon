@@ -183,7 +183,7 @@ async def run_server(
     async def _bg_reindex() -> None:
         try:
             await coordinator.reindex_full()
-        except Exception:
+        except (OSError, RuntimeError, ValueError):
             log.debug("bg_reindex_failed", exc_info=True)
             # Non-fatal; server still usable with stale index
 

@@ -139,7 +139,7 @@ def capture_snapshot(engine: Engine, epoch: int) -> HealthSnapshot:
             fg = build_file_graph(engine)
             cycles = detect_cycles(fg)
             cycle_count = len(cycles)
-        except Exception:
+        except (ImportError, RuntimeError, ValueError):
             log.debug("health_trend_cycles_failed", exc_info=True)
 
     return HealthSnapshot(

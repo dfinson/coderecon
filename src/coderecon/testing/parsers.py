@@ -331,7 +331,7 @@ def auto_parse(content: str, runner: str | None = None) -> ParsedTestSuite:  # n
             result = parser(content)
             if result.total > 0:
                 return result
-        except Exception:
+        except (OSError, ValueError, KeyError):
             continue
 
     return ParsedTestSuite(

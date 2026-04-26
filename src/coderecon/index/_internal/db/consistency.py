@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 if TYPE_CHECKING:
     from coderecon.index._internal.db.database import Database
@@ -410,7 +411,7 @@ def check_consistency(db: Database) -> ConsistencyReport:
         try:
             gaps = check.run(db)  # type: ignore[operator]
             report.gaps.extend(gaps)
-        except Exception:
+        except (SQLAlchemyError, ValueError, RuntimeError):
             log.warning("consistency.check_failed", extra={"signal": check.name}, exc_info=True)
 
     if report.gaps:
@@ -467,7 +468,7 @@ def backfill_gaps(db: Database, report: ConsistencyReport) -> dict[str, int]:
                     "stored": stored,
                 },
             )
-        except Exception:
+        except (SQLAlchemyError, ValueError, RuntimeError):
             log.error(
                 "consistency.backfill_failed",
                 extra={"signal": gap.signal},

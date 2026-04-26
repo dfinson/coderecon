@@ -29,7 +29,7 @@ class EventRouter:
             if fnmatch.fnmatch(event.type, pattern):
                 try:
                     cb(event)
-                except Exception:  # noqa: BLE001
+                except (RuntimeError, ValueError, TypeError):  # noqa: BLE001
                     _log.debug("Event callback failed", exc_info=True)
 
         for patterns, queue in self._queues:

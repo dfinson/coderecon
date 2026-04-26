@@ -394,7 +394,7 @@ def _annotate_change_previews(
     """
     try:
         patch_lines = _extract_patch_lines(diff_text)
-    except Exception:
+    except (ValueError, IndexError):
         log.debug("patch_line_extraction_failed", exc_info=True)
         return
 

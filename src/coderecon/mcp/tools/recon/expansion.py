@@ -31,7 +31,7 @@ def _read_lines(full_path: Path, start: int, end: int) -> str:
     """Read lines [start, end] (1-indexed, inclusive) from a file."""
     try:
         text = full_path.read_text(encoding="utf-8", errors="replace")
-    except Exception:
+    except OSError:
         log.debug("read_lines_failed", exc_info=True)
         return ""
     lines = text.splitlines(keepends=True)

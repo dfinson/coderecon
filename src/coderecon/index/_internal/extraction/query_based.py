@@ -95,7 +95,7 @@ class QueryBasedExtractor(BaseTypeExtractor):
 
                 lang = self._get_language()
                 self._queries[query_string] = Query(lang, query_string)
-            except Exception:
+            except (ValueError, RuntimeError):
                 # Query compilation failed - grammar mismatch
                 return None
 

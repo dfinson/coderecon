@@ -14,6 +14,7 @@ Database access patterns:
 from __future__ import annotations
 
 import hashlib
+import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -373,7 +374,7 @@ class Reconciler:
                         )
                     )
 
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError, ValueError) as e:
             # Invalid commit reference
             raise ValueError(f"Invalid commit reference: {e}") from e
 
