@@ -344,7 +344,7 @@ def sync_vscode_mcp_port(repo_root: Path, port: int) -> bool:
     try:
         existing: dict[str, Any] = json5.loads(content)
     except ValueError:
-        # Unparseable JSONC — don't risk overwriting existing servers
+        log.debug("mcp_config_parse_failed", exc_info=True)
         return False
 
     servers = existing.get("servers", {})

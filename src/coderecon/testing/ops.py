@@ -1706,4 +1706,5 @@ class TestOps:
                 target_selectors=data.get("target_selectors", []),
             )
         except (json.JSONDecodeError, KeyError):
+            log.debug("test_run_status_parse_failed", exc_info=True)
             return None

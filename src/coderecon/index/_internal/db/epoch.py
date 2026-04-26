@@ -145,6 +145,7 @@ class EpochManager:
             with open(path) as f:
                 return EpochJournal.from_dict(json.load(f))
         except (json.JSONDecodeError, KeyError):
+            log.debug("epoch_journal_read_failed", exc_info=True)
             return None
 
     def find_incomplete_epochs(self) -> list[EpochJournal]:

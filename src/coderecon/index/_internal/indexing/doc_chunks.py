@@ -372,4 +372,5 @@ def _read_file_content(db: Database, f: File) -> str | None:
         try:
             return full_path.read_text(encoding="utf-8", errors="replace")
         except OSError:
+            log.debug("doc_chunk_file_read_failed", exc_info=True)
             return None

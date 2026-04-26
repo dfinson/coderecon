@@ -43,6 +43,7 @@ def _read_snippet(repo_root: Path, path: str, start_line: int, end_line: int) ->
         end = min(len(lines), end_line)
         return "\n".join(lines[start:end])
     except OSError:
+        log.debug("read_lines_failed", exc_info=True)
         return None
 
 
@@ -83,6 +84,7 @@ def _read_signature(repo_root: Path, path: str, start_line: int, end_line: int) 
 
         return "\n".join(sig_lines[:10])  # cap at 10 lines for safety
     except OSError:
+        log.debug("read_signature_failed", exc_info=True)
         return None
 
 

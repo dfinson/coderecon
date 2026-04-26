@@ -14,6 +14,8 @@ from coderecon.core.languages import detect_language_family
 from coderecon.lint.models import LintResult, ToolCategory, ToolResult
 from coderecon.lint.tools import LintTool, registry
 
+log = structlog.get_logger(__name__)
+
 if TYPE_CHECKING:
     from coderecon.index.ops import IndexCoordinatorEngine
 
@@ -450,7 +452,7 @@ class LintOps:
                         break
             return count
         except RuntimeError:
-            # Coordinator not initialized - return 0 as fallback
+            log.debug("indexed_count_coordinator_unavailable", exc_info=True)
             return 0
 
     def _build_command(

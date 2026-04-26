@@ -3523,6 +3523,7 @@ is_main_worktree=self._is_main_worktree(_wt2),
         try:
             return path.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
+            log.debug("safe_read_text_failed", exc_info=True)
             return ""
 
     def _walk_all_files(self) -> list[str]:

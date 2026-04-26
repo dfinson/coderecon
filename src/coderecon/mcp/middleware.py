@@ -384,7 +384,7 @@ class ToolMiddleware(Middleware):
 
             return schema
         except Exception:
-            # Don't let schema extraction failure break error handling
+            log.debug("tool_schema_extraction_failed", exc_info=True)
             return None
 
     def _extract_log_params(self, _tool_name: str, kwargs: dict[str, Any]) -> dict[str, Any]:

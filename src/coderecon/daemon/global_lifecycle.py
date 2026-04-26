@@ -52,6 +52,7 @@ def read_global_server_info(home: Path | None = None) -> tuple[int, int] | None:
         port = int((home / PORT_FILE).read_text().strip())
         return (pid, port)
     except (FileNotFoundError, ValueError):
+        log.debug("global_server_info_read_failed", exc_info=True)
         return None
 
 

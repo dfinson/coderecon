@@ -1405,6 +1405,7 @@ class StructuralIndexer:
             try:
                 return full.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
+                log.debug("module_config_read_failed", exc_info=True)
                 return None
 
         for ex in extractions:
@@ -1509,6 +1510,7 @@ class StructuralIndexer:
             try:
                 return full.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
+                log.debug("js_package_read_failed", exc_info=True)
                 return None
 
         js_exports = build_js_package_exports(all_paths_list, _read_file)
@@ -1556,6 +1558,7 @@ class StructuralIndexer:
             try:
                 return full.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
+                log.debug("js_package_read_failed", exc_info=True)
                 return None
 
         js_exports = build_js_package_exports(all_paths, _read_file)

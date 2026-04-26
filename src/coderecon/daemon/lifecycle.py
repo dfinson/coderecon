@@ -144,6 +144,7 @@ def read_server_info(coderecon_dir: Path) -> tuple[int, int] | None:
         port = int(port_path.read_text().strip())
         return (pid, port)
     except (FileNotFoundError, ValueError):
+        log.debug("server_info_read_failed", exc_info=True)
         return None
 
 
