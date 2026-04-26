@@ -12,7 +12,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -279,7 +279,7 @@ class DynamicMcpRouter:
             return Match.FULL, {}
         return Match.NONE, {}
 
-    def url_path_for(self, name: str, /, **path_params: Any) -> Any:
+    def url_path_for(self, name: str, /, **path_params: Any) -> NoReturn:
         from starlette.routing import NoMatchFound
 
         raise NoMatchFound(name, path_params)

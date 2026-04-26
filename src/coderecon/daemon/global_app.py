@@ -47,8 +47,8 @@ class WorktreeSlot:
     app_ctx: AppContext
     session_manager: SessionManager
     mcp: FastMCP
-    mcp_asgi_app: Any  # Built from mcp.http_app(); lifespan already started
-    _mcp_lifespan_ctx: Any  # Active async context manager — used for clean shutdown
+    mcp_asgi_app: Starlette
+    _mcp_lifespan_ctx: contextlib.AbstractAsyncContextManager[None]
     activated_at: float = field(default_factory=time.time)
     last_request_at: float = field(default_factory=time.time)
 
