@@ -1,8 +1,5 @@
 """Tests for coderecon.mcp.tools.recon.pipeline."""
 
-import pytest
-from pathlib import Path
-
 from coderecon.mcp.tools.recon.pipeline import (
     _read_snippet,
     _read_signature,

@@ -1,9 +1,5 @@
 """Tests for index/_internal/discovery/scanner.py — ContextDiscovery."""
 
-from pathlib import Path
-
-import pytest
-
 from coderecon.index._internal.discovery.scanner import (
     ContextDiscovery,
     DiscoveredMarker,

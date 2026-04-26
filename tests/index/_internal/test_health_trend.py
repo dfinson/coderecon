@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
-
-import pytest
 
 from coderecon.index._internal.analysis.health_trend import (
     HealthSnapshot,

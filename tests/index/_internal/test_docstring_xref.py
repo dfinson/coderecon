@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from coderecon.index._internal.analysis.docstring_xref import (
     extract_cross_refs,
 )
