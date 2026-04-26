@@ -24,6 +24,7 @@ from coderecon.mcp.errors import MCPError, MCPErrorCode
 if TYPE_CHECKING:
     from fastmcp.server.middleware import CallNext
     from mcp import types as mt
+    from rich.console import Console
 
     from coderecon.mcp.session import SessionManager
 
@@ -122,7 +123,7 @@ class ToolMiddleware(Middleware):
         arguments: dict[str, Any],
         session_id: str,
         start_time: float,
-        console: Any,
+        console: Console,
     ) -> Any:
         """Execute a tool call with structured error handling and UX."""
 
@@ -286,7 +287,7 @@ class ToolMiddleware(Middleware):
 
     def _print_error_with_log_pointer(
         self,
-        console: Any,
+        console: Console,
         tool_name: str,
         error_type: str,
         error_msg: str,

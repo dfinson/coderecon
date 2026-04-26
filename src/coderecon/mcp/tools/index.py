@@ -10,10 +10,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    pass
+    from coderecon.index._internal.diff.models import StructuralChange
+    from coderecon.tools.map_repo import MapRepoResult
 
 
-def _change_to_text(c: Any, depth: int = 0) -> list[str]:
+def _change_to_text(c: StructuralChange, depth: int = 0) -> list[str]:
     """Convert a StructuralChange to compact text lines.
 
     Format: {change} {kind} {name}  {path}:{start}-{end}  Δ{lines}  risk:{risk}  refs:{N}  tests:{list}
@@ -163,7 +164,7 @@ def _tree_to_hybrid_text(
 
 
 def _map_repo_sections_to_text(
-    result: Any,
+    result: MapRepoResult,
 ) -> dict[str, Any]:
     """Convert map_repo result sections to hybrid text format.
 
@@ -227,7 +228,7 @@ def _map_repo_sections_to_text(
     return sections
 
 
-def _build_overview(result: Any) -> dict[str, Any]:
+def _build_overview(result: MapRepoResult) -> dict[str, Any]:
     """Build the always-fits overview block with counts."""
     overview: dict[str, Any] = {}
 

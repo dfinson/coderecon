@@ -15,11 +15,14 @@ from coderecon.git._internal.hooks import run_hook
 from coderecon.git.errors import EmptyCommitMessageError, GitError, PathsNotFoundError
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from fastmcp import FastMCP
 
+    from coderecon.index._internal.indexing.import_graph import ImportGraphResult
     from coderecon.mcp.context import AppContext
     from coderecon.mcp.session import SessionState
-    from coderecon.testing.models import TestResult
+    from coderecon.testing.models import TestResult, TestTarget
 
 # Context must be a runtime import — FastMCP resolves tool annotations at runtime
 from fastmcp import Context
@@ -148,7 +151,7 @@ def _validate_paths_exist(
 def _run_hook_with_retry(
     repo_path: Path,
     paths_to_restage: list[str],
-    stage_fn: Any,
+    stage_fn: Callable[[list[str]], None],
 ) -> tuple[Any, dict[str, Any] | None]:
     """Run pre-commit hooks with auto-fix retry logic.
 
@@ -642,10 +645,10 @@ _BATCH_COST_THRESHOLD = 1.0
 
 
 def _assign_target_hops(
-    targets: list[Any],
-    graph_result: Any,
+    targets: list[TestTarget],
+    graph_result: ImportGraphResult,
     repo_root: Path,
-) -> dict[int, list[Any]]:
+) -> dict[int, list[TestTarget]]:
     """Map test targets to their import-graph hop distance.
 
     Returns dict[hop_number, list_of_targets].  Targets that don't match any
@@ -737,8 +740,8 @@ async def _run_tiered_tests(
     *,
     app_ctx: "AppContext",
     progress: ProgressSink,
-    graph_result: Any,
-    filtered_targets: list[Any],
+    graph_result: ImportGraphResult,
+    filtered_targets: list[TestTarget],
     repo_root: Path,
     test_filter: str | None,
     coverage: bool,

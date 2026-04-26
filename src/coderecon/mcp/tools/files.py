@@ -6,6 +6,7 @@ read_file_full, list_files, reset_budget) have been removed in v2.
 """
 
 import hashlib
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
     from coderecon.mcp.context import AppContext
 
 
-def _compute_file_sha256(full_path: Any) -> str:
+def _compute_file_sha256(full_path: Path) -> str:
     """Compute SHA256 of entire file contents."""
     content = full_path.read_bytes()
     return hashlib.sha256(content).hexdigest()
@@ -95,7 +96,7 @@ def _summarize_list(path: str, total: int, truncated: bool) -> str:
 def _build_scaffold(
     app_ctx: "AppContext",
     rel_path: str,
-    full_path: Any,
+    full_path: Path,
     *,
     include_docstrings: bool = False,
     include_constants: bool = False,
@@ -253,7 +254,7 @@ def _build_symbol_tree(
     return lines
 
 
-def _build_unindexed_fallback(full_path: Any, rel_path: str) -> dict[str, Any]:
+def _build_unindexed_fallback(full_path: Path, rel_path: str) -> dict[str, Any]:
     """Fallback for files not in the structural index."""
     try:
         content = full_path.read_text(encoding="utf-8", errors="replace")
@@ -277,7 +278,7 @@ def _build_unindexed_fallback(full_path: Any, rel_path: str) -> dict[str, Any]:
 def _build_lite_scaffold(
     app_ctx: "AppContext",
     rel_path: str,
-    full_path: Any,
+    full_path: Path,
 ) -> dict[str, Any]:
     """Build a lightweight scaffold with only symbol names and import sources.
 

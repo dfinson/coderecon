@@ -4,6 +4,7 @@ Uses native FastMCP @mcp.tool decorators for tool registration.
 Includes logging middleware for tool call instrumentation.
 """
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -37,7 +38,7 @@ def _patch_rich_handler() -> None:
 
     _original_rich_emit = _RichHandler.emit
 
-    def _patched_rich_emit(self: _RichHandler, record: Any) -> None:
+    def _patched_rich_emit(self: _RichHandler, record: logging.LogRecord) -> None:
         if getattr(self, "rich_tracebacks", False) and record.exc_info:
             record.exc_info = None
             record.exc_text = None

@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from fastmcp import FastMCP
 
     from coderecon.catalog.registry import CatalogRegistry
+    from coderecon.config.models import CodeReconConfig
     from coderecon.daemon.indexer import BackgroundIndexer
     from coderecon.daemon.watcher import FileWatcher
     from coderecon.index.ops import IndexCoordinatorEngine
@@ -260,7 +261,7 @@ class GlobalDaemon:
         repo_slot: RepoSlot,
         wt_name: str,
         wt_root: Path,
-        config: Any,
+        config: CodeReconConfig,
         *,
         dev_mode: bool = False,
     ) -> WorktreeSlot:

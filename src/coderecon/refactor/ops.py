@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, Literal
 import structlog
 
 if TYPE_CHECKING:
+    from coderecon.index.models import RefFact
     from coderecon.index.ops import IndexCoordinatorEngine
     from coderecon.mutation.ops import Edit, MutationDelta, MutationOps
 
@@ -178,7 +179,7 @@ def _word_boundary_match(text: str, symbol: str) -> bool:
     return bool(re.search(pattern, text))
 
 
-def _compute_rename_certainty_from_ref(ref: Any) -> Literal["high", "medium", "low"]:
+def _compute_rename_certainty_from_ref(ref: RefFact) -> Literal["high", "medium", "low"]:
     """
     Compute certainty for a rename candidate based on RefFact properties.
 
@@ -231,7 +232,7 @@ class RefactorOps:
         self._coordinator = coordinator
         self._pending: dict[str, RefactorPreview] = {}
 
-    def _compute_rename_certainty(self, ref: Any) -> Literal["high", "medium", "low"]:
+    def _compute_rename_certainty(self, ref: RefFact) -> Literal["high", "medium", "low"]:
         """Compute certainty for a rename candidate.
 
         Delegates to module-level function for reusability.
