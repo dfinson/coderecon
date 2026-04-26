@@ -18,7 +18,8 @@ from fastmcp.server.middleware import Middleware, MiddlewareContext
 from fastmcp.tools.tool import ToolResult
 from pydantic import ValidationError
 
-from coderecon.mcp.errors import MCPError
+from coderecon.core.errors import PathTraversalError
+from coderecon.mcp.errors import MCPError, MCPErrorCode
 
 if TYPE_CHECKING:
     from fastmcp.server.middleware import CallNext
@@ -226,6 +227,29 @@ class ToolMiddleware(Middleware):
                 structured_content={
                     "error": error_response.to_dict(),
                     "summary": f"error: {e.code.value}",
+                }
+            )
+
+        except PathTraversalError as e:
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            log.warning(
+                "tool_error",
+                tool=tool_name,
+                error_code="PERMISSION_DENIED",
+                error=str(e),
+                path=e.user_path,
+                duration_ms=round(duration_ms, 1),
+            )
+            return ToolResult(
+                structured_content={
+                    "error": {
+                        "code": MCPErrorCode.PERMISSION_DENIED.value,
+                        "message": str(e),
+                        "remediation": "Use paths relative to the repository root. Do not use '..' to escape the repo.",
+                        "path": e.user_path,
+                        "context": {"repo_root": e.repo_root},
+                    },
+                    "summary": f"error: {MCPErrorCode.PERMISSION_DENIED.value}",
                 }
             )
 

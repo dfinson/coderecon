@@ -5,6 +5,7 @@ from coderecon.core.errors import (
     ConfigError,
     InternalError,
     InternalErrorCode,
+    PathTraversalError,
 )
 from coderecon.core.logging import (
     clear_request_id,
@@ -21,6 +22,7 @@ __all__ = [
     "ConfigError",
     "InternalErrorCode",
     "InternalError",
+    "PathTraversalError",
     # Logging
     "clear_request_id",
     "configure_logging",

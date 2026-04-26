@@ -93,3 +93,12 @@ class InternalError(CodeReconError):
     @classmethod
     def unexpected(cls, reason: str, **details: Any) -> "InternalError":
         return cls(InternalErrorCode.INTERNAL_ERROR, f"Internal error: {reason}", details=details)
+
+
+class PathTraversalError(Exception):
+    """Raised when a user-supplied path escapes the repository root."""
+
+    def __init__(self, user_path: str, repo_root: str) -> None:
+        super().__init__(f"Path '{user_path}' escapes repository root")
+        self.user_path = user_path
+        self.repo_root = repo_root

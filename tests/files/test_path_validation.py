@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from coderecon.core.errors import PathTraversalError
 from coderecon.files.ops import validate_path_in_repo
-from coderecon.mcp.errors import MCPError, MCPErrorCode
 
 
 @pytest.fixture
@@ -59,25 +59,21 @@ class TestValidatePathInRepo:
 
     def test_rejects_parent_directory_escape(self, temp_repo: Path) -> None:
         """Rejects .. that escapes repo root."""
-        with pytest.raises(MCPError) as exc_info:
+        with pytest.raises(PathTraversalError) as exc_info:
             validate_path_in_repo(temp_repo, "../outside")
 
-        assert exc_info.value.code == MCPErrorCode.PERMISSION_DENIED
-        assert "escapes repository root" in exc_info.value.message
+        assert exc_info.value.user_path == "../outside"
+        assert "escapes repository root" in str(exc_info.value)
 
     def test_rejects_multiple_parent_traversal(self, temp_repo: Path) -> None:
         """Rejects multiple .. that escape."""
-        with pytest.raises(MCPError) as exc_info:
+        with pytest.raises(PathTraversalError):
             validate_path_in_repo(temp_repo, "src/../../outside")
-
-        assert exc_info.value.code == MCPErrorCode.PERMISSION_DENIED
 
     def test_rejects_deeply_nested_escape(self, temp_repo: Path) -> None:
         """Rejects deeply nested path that still escapes."""
-        with pytest.raises(MCPError) as exc_info:
+        with pytest.raises(PathTraversalError):
             validate_path_in_repo(temp_repo, "a/b/c/../../../../outside")
-
-        assert exc_info.value.code == MCPErrorCode.PERMISSION_DENIED
 
     def test_allows_internal_parent_navigation(self, temp_repo: Path) -> None:
         """Allows .. that stays within repo."""
@@ -87,10 +83,8 @@ class TestValidatePathInRepo:
 
     def test_rejects_absolute_path_outside_repo(self, temp_repo: Path) -> None:
         """Rejects absolute path outside repo."""
-        with pytest.raises(MCPError) as exc_info:
+        with pytest.raises(PathTraversalError):
             validate_path_in_repo(temp_repo, "/etc/passwd")
-
-        assert exc_info.value.code == MCPErrorCode.PERMISSION_DENIED
 
     def test_allows_absolute_path_inside_repo(self, temp_repo: Path) -> None:
         """Accepts absolute path that's inside repo."""
@@ -107,10 +101,8 @@ class TestValidatePathInRepo:
         except OSError:
             pytest.skip("Cannot create symlinks on this system")
 
-        with pytest.raises(MCPError) as exc_info:
+        with pytest.raises(PathTraversalError):
             validate_path_in_repo(temp_repo, "evil_link/something")
-
-        assert exc_info.value.code == MCPErrorCode.PERMISSION_DENIED
 
     def test_allows_symlink_inside_repo(self, temp_repo: Path) -> None:
         """Accepts symlink that stays inside repo."""
@@ -144,21 +136,13 @@ class TestValidatePathInRepo:
         result = validate_path_in_repo(temp_repo, "日本語/ファイル.txt")
         assert "日本語" in str(result)
 
-    def test_error_includes_remediation(self, temp_repo: Path) -> None:
-        """Error message includes helpful remediation."""
-        with pytest.raises(MCPError) as exc_info:
+    def test_error_includes_path_and_root(self, temp_repo: Path) -> None:
+        """Error includes user_path and repo_root."""
+        with pytest.raises(PathTraversalError) as exc_info:
             validate_path_in_repo(temp_repo, "../escape")
 
-        assert exc_info.value.remediation is not None
-        assert "relative to the repository root" in exc_info.value.remediation
-
-    def test_error_includes_path_context(self, temp_repo: Path) -> None:
-        """Error includes the repo_root in context."""
-        with pytest.raises(MCPError) as exc_info:
-            validate_path_in_repo(temp_repo, "../escape")
-
-        # The error context includes repo_root
-        assert exc_info.value.context.get("repo_root") is not None
+        assert exc_info.value.user_path == "../escape"
+        assert exc_info.value.repo_root == str(temp_repo.resolve())
 
     def test_normalizes_windows_separators(self, temp_repo: Path) -> None:
         """Handles Windows-style path separators."""

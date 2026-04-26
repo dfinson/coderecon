@@ -10,8 +10,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from coderecon.core.errors import PathTraversalError
 from coderecon.core.languages import EXTENSION_TO_NAME
-from coderecon.mcp.errors import MCPError, MCPErrorCode
 
 
 @dataclass
@@ -65,17 +65,14 @@ def validate_path_in_repo(repo_root: Path, user_path: str) -> Path:
         Resolved absolute path if valid
 
     Raises:
-        MCPError(PERMISSION_DENIED): If path escapes repo_root
+        PathTraversalError: If path escapes repo_root
     """
     resolved_root = repo_root.resolve()
     full_path = (repo_root / user_path).resolve()
 
     if not full_path.is_relative_to(resolved_root):
-        raise MCPError(
-            code=MCPErrorCode.PERMISSION_DENIED,
-            message=f"Path '{user_path}' escapes repository root",
-            remediation="Use paths relative to the repository root. Do not use '..' to escape the repo.",
-            path=user_path,
+        raise PathTraversalError(
+            user_path=user_path,
             repo_root=str(resolved_root),
         )
 
@@ -237,7 +234,7 @@ class FileOps:
             # Validate path doesn't escape repo root
             try:
                 full_path = validate_path_in_repo(self._repo_root, rel_path)
-            except MCPError:
+            except PathTraversalError:
                 # Skip paths that escape repo root (silent skip matches existing not-found behavior)
                 continue
 
