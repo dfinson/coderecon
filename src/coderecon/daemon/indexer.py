@@ -23,7 +23,8 @@ from typing import TYPE_CHECKING
 import structlog
 
 from coderecon.config.models import IndexerConfig
-from coderecon.core.progress import pluralize, spinner, status
+from coderecon.core.formatting import pluralize
+from coderecon.core.progress import spinner, status
 
 if TYPE_CHECKING:
     from coderecon.daemon.concurrency import FreshnessGate

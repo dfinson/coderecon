@@ -170,23 +170,6 @@ def status(
     _get_logger().debug("status", message=message, style=style, source=source)
 
 
-def pluralize(count: int, singular: str, plural: str | None = None) -> str:
-    """Return grammatically correct singular/plural form.
-
-    Args:
-        count: The number of items
-        singular: Singular form (e.g., "file")
-        plural: Plural form (default: singular + "s")
-
-    Returns:
-        Formatted string like "1 file" or "3 files"
-    """
-    if plural is None:
-        plural = singular + "s"
-    word = singular if count == 1 else plural
-    return f"{count} {word}"
-
-
 def progress[T](
     iterable: Iterable[T],
     *,

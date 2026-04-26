@@ -22,6 +22,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from coderecon.core.formatting import pluralize
 from coderecon.core.progress import (
     _PROGRESS_THRESHOLD,
     _STYLES,
@@ -30,7 +31,6 @@ from coderecon.core.progress import (
     animate_text,
     get_console,
     is_console_suppressed,
-    pluralize,
     progress,
     spinner,
     status,

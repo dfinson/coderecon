@@ -28,7 +28,6 @@ from coderecon.index._internal.indexing.splade import (
     _get_encoder,
     build_def_scaffold,
     load_all_vectors_fast,
-    sparse_dot,
     word_split,
 )
 from coderecon.index.models import (
@@ -42,7 +41,7 @@ from coderecon.index.models import (
     Role,
     SpladeVec,
 )
-from coderecon.ranking.cross_encoder import CrossEncoderScorer, get_tiny_scorer
+from coderecon.ranking.cross_encoder import get_tiny_scorer
 
 if TYPE_CHECKING:
     from coderecon.index._internal.db.database import Database
@@ -71,69 +70,6 @@ _CE_BATCH = 64
 def _load_all_vecs(db: Database) -> dict[str, dict[int, float]]:
     """Load all SPLADE vectors into memory (uses binary cache when available)."""
     return load_all_vectors_fast(db)
-
-
-def _splade_retrieve(
-    query_text: str,
-    all_vecs: dict[str, dict[int, float]],
-    *,
-    pool_size: int = _CANDIDATE_POOL,
-    exclude_uids: set[str] | None = None,
-    filter_names: set[str] | None = None,
-) -> list[tuple[str, float]]:
-    """Retrieve top candidates by SPLADE dot product.
-
-    Args:
-        query_text: Natural language query to encode.
-        all_vecs: Pre-loaded {def_uid: sparse_vec} map.
-        pool_size: Max candidates to return.
-        exclude_uids: Def UIDs to skip (e.g. self).
-        filter_names: If set, only consider defs whose uid contains one of these names.
-    """
-    encoder = _get_encoder()
-    q_vecs = encoder.encode_queries([query_text])
-    if not q_vecs or not q_vecs[0]:
-        return []
-    q_vec = q_vecs[0]
-
-    scored: list[tuple[str, float]] = []
-    for uid, doc_vec in all_vecs.items():
-        if exclude_uids and uid in exclude_uids:
-            continue
-        score = sparse_dot(q_vec, doc_vec)
-        if score > 0.5:  # Loose floor — CE does the real filtering
-            scored.append((uid, score))
-
-    scored.sort(key=lambda x: -x[1])
-    return scored[:pool_size]
-
-
-def _ce_rerank(
-    query: str,
-    candidates: list[tuple[str, str]],  # (def_uid, scaffold_text)
-    threshold: float,
-    *,
-    scorer: CrossEncoderScorer | None = None,
-) -> list[tuple[str, float]]:
-    """CE rerank candidates, return those above threshold.
-
-    Returns [(def_uid, ce_score)] sorted by score descending.
-    """
-    if not candidates:
-        return []
-
-    if scorer is None:
-        scorer = get_tiny_scorer()
-    scaffolds = [scaffold for _, scaffold in candidates]
-    scores = scorer.score_pairs(query, scaffolds)
-
-    results: list[tuple[str, float]] = []
-    for (uid, _), score in zip(candidates, scores):
-        if float(score) >= threshold:
-            results.append((uid, float(score)))
-
-    results.sort(key=lambda x: -x[1])
-    return results
 
 
 # ── Batched SPLADE retrieval ─────────────────────────────────────
