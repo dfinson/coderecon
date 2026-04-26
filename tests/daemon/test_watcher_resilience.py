@@ -20,7 +20,7 @@ class TestWatchCount:
         watcher = FileWatcher(repo_root=tmp_path, on_change=lambda paths: None)
         assert watcher.watch_count == 0
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_nonzero_after_start(self, tmp_path: Path) -> None:
         """watch_count reflects watched directories after start."""
         (tmp_path / ".recon").mkdir()
@@ -37,7 +37,7 @@ class TestWatchCount:
         finally:
             await watcher.stop()
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_zero_after_stop(self, tmp_path: Path) -> None:
         """After stop, _watched_dirs stays populated (not cleared), but that's OK."""
         (tmp_path / ".recon").mkdir()
