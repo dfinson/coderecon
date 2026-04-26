@@ -26,6 +26,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from coderecon.daemon.concurrency import FreshnessGate, MutationRouter
+from coderecon.git.errors import GitError
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -192,7 +193,7 @@ class GlobalDaemon:
         git_ops = GitOps(repo_root)
         try:
             worktrees = git_ops.worktrees()
-        except Exception:
+        except GitError:
             log.debug("worktree_discovery_failed", exc_info=True)
             worktrees = []
 
@@ -238,7 +239,7 @@ class GlobalDaemon:
                                 worktree=wt.name,
                                 changed_files=len(diff_paths),
                             )
-                    except Exception as exc:
+                    except (GitError, OSError) as exc:
                         log.warning(
                             "activate_repo.worktree_diff_failed",
                             repo=name,
@@ -347,7 +348,7 @@ class GlobalDaemon:
         ) -> None:
             try:
                 _registry.update_last_indexed_at(_wt_root, time.time())
-            except Exception as exc:
+            except (OSError, RuntimeError) as exc:
                 log.warning("last_indexed_at.update_failed", error=str(exc), exc_info=True)
 
         repo_slot.indexer.add_on_complete(_update_last_indexed_at)
@@ -574,7 +575,7 @@ class GlobalDaemon:
                 try:
                     _main_git = GitOps(main_slot.repo_root)
                     base_branch = _main_git.default_branch()
-                except Exception:
+                except GitError:
                     log.debug("default_branch_resolution_failed", exc_info=True)
                     base_branch = "main"
 
@@ -614,7 +615,7 @@ class GlobalDaemon:
                         )
                     else:
                         log.debug("startup_scan_clean", repo=name, worktree=wt_name)
-                except Exception as exc:
+                except (GitError, OSError) as exc:
                     log.warning(
                         "startup_scan_worktree_diff_failed",
                         repo=name,
@@ -647,7 +648,7 @@ class GlobalDaemon:
         git_ops = GitOps(any_wt.repo_root)
         try:
             worktrees = git_ops.worktrees()
-        except Exception:
+        except GitError:
             log.debug("refresh_worktrees_failed", exc_info=True)
             return []
 
@@ -690,7 +691,7 @@ class GlobalDaemon:
                         worktree=wt.name,
                         changed_files=len(diff_paths),
                     )
-            except Exception as exc:
+            except (GitError, OSError) as exc:
                 log.warning(
                     "refresh_worktrees.diff_scan_failed",
                     repo=name,
@@ -761,7 +762,7 @@ class GlobalDaemon:
 
             try:
                 repo, wt = self.registry.register(path)
-            except Exception as exc:
+            except (GitError, OSError, ValueError) as exc:
                 return JSONResponse(
                     {"error": f"Registration failed: {exc}"}, status_code=400,
                 )

@@ -122,7 +122,7 @@ def _sync_analysis_sections(engine: Any) -> tuple[dict[str, Any], Any]:
                 {"file": s.file_path, "pagerank": round(s.pagerank, 6)}
                 for s in file_analysis.pagerank[:10]
             ]
-    except Exception:  # noqa: BLE001
+    except (ImportError, OSError, ValueError):  # pagerank analysis
         log.warning("understand.pagerank.failed", exc_info=True)
 
     # Community clusters
@@ -137,7 +137,7 @@ def _sync_analysis_sections(engine: Any) -> tuple[dict[str, Any], Any]:
                 }
                 for c in file_analysis.communities[:10]
             ]
-    except Exception:  # noqa: BLE001
+    except (NameError, AttributeError, TypeError):  # community extraction
         log.debug("understand.communities.failed", exc_info=True)
 
     # Cycles
@@ -147,7 +147,7 @@ def _sync_analysis_sections(engine: Any) -> tuple[dict[str, Any], Any]:
                 {"size": c.size, "nodes": sorted(c.nodes)[:10]}
                 for c in file_analysis.cycles[:5]
             ]
-    except Exception:  # noqa: BLE001
+    except (NameError, AttributeError, TypeError):  # cycle extraction
         log.debug("understand.cycles.failed", exc_info=True)
 
     # Coverage
@@ -157,7 +157,7 @@ def _sync_analysis_sections(engine: Any) -> tuple[dict[str, Any], Any]:
         cov = get_coverage_summary(engine)
         if cov.get("total_defs", 0) > 0:
             sections["coverage"] = cov
-    except Exception:  # noqa: BLE001
+    except (ImportError, OSError, ValueError):  # coverage summary
         log.warning("understand.coverage.failed", exc_info=True)
 
     # Lint health
@@ -167,7 +167,7 @@ def _sync_analysis_sections(engine: Any) -> tuple[dict[str, Any], Any]:
         lint = get_lint_summary(engine)
         if lint.get("files_checked", 0) > 0:
             sections["lint"] = lint
-    except Exception:  # noqa: BLE001
+    except (ImportError, OSError, ValueError):  # lint summary
         log.warning("understand.lint.failed", exc_info=True)
 
     return sections, file_analysis
@@ -189,7 +189,7 @@ async def recon_understand_core(
         from coderecon.mcp.tools.index import _build_overview
 
         sections["structure"] = _build_overview(map_result)
-    except Exception:  # noqa: BLE001
+    except (ImportError, OSError, ValueError, AttributeError):  # map_repo analysis
         log.warning("understand.structure.failed", exc_info=True)
 
     # Sections 2-6: Sync graph analysis
