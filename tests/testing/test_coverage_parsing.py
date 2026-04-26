@@ -60,7 +60,6 @@ class TestCompressRanges:
     def test_long_gap(self) -> None:
         assert _compress_ranges([1, 2, 100, 101, 102]) == "1-2,100-102"
 
-
 # =============================================================================
 # _path_matches tests
 # =============================================================================
@@ -82,7 +81,6 @@ class TestPathMatches:
     def test_suffix_match_with_slash(self) -> None:
         # Absolute path matching relative
         assert _path_matches("/workspace/repo/src/foo.py", {"src/foo.py"})
-
 
 # =============================================================================
 # FileCoverage model tests
@@ -120,7 +118,6 @@ class TestFileCoverage:
         assert fc.line_rate == 0.0
         assert fc.uncovered_lines == [1, 2, 3]
 
-
 # =============================================================================
 # CoverageReport model tests
 # =============================================================================
@@ -151,7 +148,6 @@ class TestCoverageReport:
         assert summary.lines_found == 5
         assert summary.lines_hit == 2
         assert pytest.approx(summary.line_rate, 0.01) == 2 / 5
-
 
 # =============================================================================
 # merge tests
@@ -186,7 +182,6 @@ class TestMerge:
         assert "b.py" in merged.files
         assert merged.files["a.py"].lines == {1: 1}
         assert merged.files["b.py"].lines == {1: 2}
-
 
 # =============================================================================
 # build_compact_summary tests
@@ -233,7 +228,6 @@ class TestBuildCompactSummary:
         assert "coverage: 100% (2/2 lines)" in result
         assert "a.py" not in result
 
-
 # =============================================================================
 # _compress_ranges_tolerant tests
 # =============================================================================
@@ -270,7 +264,6 @@ class TestCompressRangesTolerant:
         instrumented = {1, 2, 3, 5, 6, 8, 9, 10}
         result = _compress_ranges_tolerant(uncovered, instrumented)
         assert result == "1-6,9-10"
-
 
 # =============================================================================
 # build_tiered_coverage tests
@@ -380,7 +373,6 @@ class TestBuildTieredCoverage:
         # 55% coverage (5/9), mid-tier, line 4 not instrumented so bridge
         assert "uncovered: 1-5" in result
 
-
 # =============================================================================
 # Parser tests - LCOV format
 # =============================================================================
@@ -449,7 +441,6 @@ end_of_record
         assert fc.functions["my_function"].hits == 3
         assert fc.functions["my_function"].start_line == 5
 
-
 # =============================================================================
 # Parser tests - Cobertura format
 # =============================================================================
@@ -486,7 +477,6 @@ class TestCoberturaParser:
         assert "src/foo.py" in report.files
         fc = report.files["src/foo.py"]
         assert fc.lines == {1: 5, 2: 0, 3: 1}
-
 
 # =============================================================================
 # Error handling tests

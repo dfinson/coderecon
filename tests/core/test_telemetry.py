@@ -48,7 +48,6 @@ class MockTelemetryConfig:
         self.otlp_endpoint = otlp_endpoint
         self.service_name = service_name
 
-
 # =============================================================================
 # Tests for _is_telemetry_enabled
 # =============================================================================
@@ -89,7 +88,6 @@ class TestIsTelemetryEnabled:
             config = MockTelemetryConfig(enabled=False)
             assert _is_telemetry_enabled(config) is True  # type: ignore[arg-type]
 
-
 # =============================================================================
 # Tests for _get_otlp_endpoint
 # =============================================================================
@@ -124,7 +122,6 @@ class TestGetOtlpEndpoint:
             os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
             assert _get_otlp_endpoint(None) is None
 
-
 # =============================================================================
 # Tests for _get_service_name
 # =============================================================================
@@ -151,7 +148,6 @@ class TestGetServiceName:
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("OTEL_SERVICE_NAME", None)
             assert _get_service_name(None) == "coderecon"
-
 
 # =============================================================================
 # Tests for NoOp classes
@@ -197,7 +193,6 @@ class TestNoOpSpan:
         span = _NoOpSpan()
         assert span.is_recording() is False
 
-
 class TestNoOpTracer:
     """Tests for _NoOpTracer class."""
 
@@ -218,7 +213,6 @@ class TestNoOpTracer:
         tracer = _NoOpTracer()
         with tracer.start_as_current_span_cm("test") as span:
             assert isinstance(span, _NoOpSpan)
-
 
 class TestNoOpMeter:
     """Tests for _NoOpMeter class."""
@@ -259,7 +253,6 @@ class TestNoOpMeter:
         counter = meter.create_observable_up_down_counter("test_counter")
         assert isinstance(counter, _NoOpObservable)
 
-
 class TestNoOpCounter:
     """Tests for _NoOpCounter class."""
 
@@ -269,7 +262,6 @@ class TestNoOpCounter:
         counter.add(1)
         counter.add(5, {"attr": "value"})
 
-
 class TestNoOpHistogram:
     """Tests for _NoOpHistogram class."""
 
@@ -278,7 +270,6 @@ class TestNoOpHistogram:
         histogram = _NoOpHistogram()
         histogram.record(1.5)
         histogram.record(100, {"attr": "value"})
-
 
 # =============================================================================
 # Tests for get_tracer / get_meter
@@ -301,7 +292,6 @@ class TestGetTracer:
         finally:
             tel._tracer = original_tracer
 
-
 class TestGetMeter:
     """Tests for get_meter function."""
 
@@ -316,7 +306,6 @@ class TestGetMeter:
             assert isinstance(meter, _NoOpMeter)
         finally:
             tel._meter = original_meter
-
 
 # =============================================================================
 # Tests for traced decorator
@@ -389,7 +378,6 @@ class TestTracedDecorator:
         assert documented_func.__name__ == "documented_func"
         assert documented_func.__doc__ == "This is the docstring."
 
-
 # =============================================================================
 # Tests for span_context
 # =============================================================================
@@ -421,7 +409,6 @@ class TestSpanContext:
             # Should not raise
             pass
 
-
 # =============================================================================
 # Tests for is_telemetry_enabled / is_otel_available
 # =============================================================================
@@ -446,7 +433,6 @@ class TestTelemetryStatusFunctions:
         # This depends on whether otel is installed in test env
         result = is_otel_available()
         assert isinstance(result, bool)
-
 
 # =============================================================================
 # Tests for shutdown_telemetry

@@ -26,7 +26,6 @@ from coderecon.mutation.ops import (
 if TYPE_CHECKING:
     pass
 
-
 class TestHashContent:
     """Tests for _hash_content function."""
 
@@ -54,7 +53,6 @@ class TestHashContent:
         result = _hash_content("héllo wörld 🎉")
         assert len(result) == 12
 
-
 class TestEdit:
     """Tests for Edit dataclass."""
 
@@ -76,7 +74,6 @@ class TestEdit:
         edit = Edit(path="test.py", action="delete")
         assert edit.action == "delete"
         assert edit.content is None
-
 
 class TestFileDelta:
     """Tests for FileDelta dataclass."""
@@ -123,7 +120,6 @@ class TestFileDelta:
         assert delta.new_hash is None
         assert delta.deletions == 25
 
-
 class TestMutationDelta:
     """Tests for MutationDelta dataclass."""
 
@@ -151,7 +147,6 @@ class TestMutationDelta:
         assert len(delta.files) == 1
         assert delta.files[0].path == "a.py"
 
-
 class TestMutationResult:
     """Tests for MutationResult dataclass."""
 
@@ -172,7 +167,6 @@ class TestMutationResult:
         )
         assert result.applied is False
         assert result.dry_run is True
-
 
 class TestMutationOpsCreate:
     """Tests for MutationOps create action."""
@@ -228,7 +222,6 @@ class TestMutationOpsCreate:
         assert delta.insertions == 3
         assert delta.deletions == 0
 
-
 class TestMutationOpsDelete:
     """Tests for MutationOps delete action."""
 
@@ -266,7 +259,6 @@ class TestMutationOpsDelete:
         assert delta.new_hash is None
         assert delta.insertions == 0
         assert delta.deletions == 4
-
 
 class TestMutationOpsUpdateFullContent:
     """Tests for MutationOps update action with full content."""
@@ -306,7 +298,6 @@ class TestMutationOpsUpdateFullContent:
         # 2 lines -> 3 lines = 1 insertion
         assert delta.insertions == 1
         assert delta.deletions == 0
-
 
 class TestMutationOpsDryRun:
     """Tests for MutationOps dry run mode."""
@@ -361,7 +352,6 @@ class TestMutationOpsDryRun:
         assert result.delta.files_changed == 1
         assert result.delta.files[0].insertions == 3
 
-
 class TestMutationOpsCallback:
     """Tests for MutationOps changed_paths tracking."""
 
@@ -406,7 +396,6 @@ class TestMutationOpsCallback:
         ops = MutationOps(tmp_path)
         result = ops.write_source([Edit(path="test.py", action="create", content="x")])
         assert result.applied is True
-
 
 class TestMutationOpsMultipleEdits:
     """Tests for MutationOps with multiple edits."""
@@ -480,7 +469,6 @@ class TestMutationOpsMultipleEdits:
         # Total: 5 + 1 insertions, 3 deletions
         assert result.delta.insertions >= 5
         assert result.delta.deletions >= 3
-
 
 class TestMutationOpsMutationId:
     """Tests for mutation ID generation."""
