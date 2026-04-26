@@ -8,7 +8,8 @@ import pytest
 
 from coderecon.catalog.db import CatalogDB
 from coderecon.catalog.registry import CatalogRegistry
-from coderecon.daemon.global_app import GlobalDaemon, _DynamicMcpRouter
+from coderecon.daemon.global_app import GlobalDaemon
+from coderecon.daemon.global_routes import DynamicMcpRouter
 
 
 @pytest.fixture
@@ -41,7 +42,7 @@ class TestGlobalDaemon:
 
     def test_build_app_includes_dynamic_mcp_router(self, daemon: GlobalDaemon) -> None:
         app = daemon.build_app()
-        assert any(isinstance(r, _DynamicMcpRouter) for r in app.routes)
+        assert any(isinstance(r, DynamicMcpRouter) for r in app.routes)
 
 
 class TestGlobalAppRoutes:
