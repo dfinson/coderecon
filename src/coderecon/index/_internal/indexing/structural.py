@@ -982,7 +982,7 @@ def _extract_type_aware_facts(
 
     except ImportError:
         # Extraction module not available - skip type-aware extraction
-        pass
+        log.debug("type_extraction_module_unavailable")
     except (RuntimeError, TypeError, ValueError):
         # Don't fail extraction for type-aware facts — they're supplementary
         log.debug("type_aware_facts_failed", exc_info=True)

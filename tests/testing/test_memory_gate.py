@@ -116,7 +116,7 @@ class TestMemoryGateIntegration:
 
             # Patch asyncio.sleep to not actually wait
             with patch("coderecon.testing.ops.asyncio.sleep", new=AsyncMock()):
-                result = await ops._execute_tests(
+                await ops._execute_tests(
                     run_id="test1",
                     targets=[_make_target()],
                     progress=progress,

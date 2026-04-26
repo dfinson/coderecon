@@ -42,7 +42,7 @@ def _make_commit(path: Path, files: dict[str, str], message: str) -> str:
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(content)
         _run_git(path, "add", name)
-    result = _run_git(path, "commit", "-m", message)
+    _run_git(path, "commit", "-m", message)
     sha_result = _run_git(path, "rev-parse", "HEAD")
     return sha_result.stdout.strip()
 

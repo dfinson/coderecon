@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from coderecon.ranking.elbow import elbow_cut
 
 

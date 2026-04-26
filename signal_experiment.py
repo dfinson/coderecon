@@ -243,7 +243,6 @@ def call_raw_signals(query: Query) -> dict:
 def is_gt_candidate(cand: dict, gt_task: dict) -> bool:
     """Check if a candidate matches ground truth (by name or path)."""
     name = cand.get("name", "")
-    path = cand.get("path", "")
     qname = cand.get("qualified_name", "")
 
     # Match by name

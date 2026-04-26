@@ -8,8 +8,6 @@ Covers:
 
 from __future__ import annotations
 
-import pytest
-
 from coderecon.mcp.tools.recon.raw_signals import (
     _min_package_distance,
     _min_path_distance,

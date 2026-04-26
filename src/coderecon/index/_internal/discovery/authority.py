@@ -409,7 +409,7 @@ class Tier1AuthorityFilter:
                             # Single use directive
                             modules.append(line[4:].strip())
                 except OSError:
-                    pass
+                    log.debug("go_work_read_failed", marker=str(marker_path))
 
         return modules
 

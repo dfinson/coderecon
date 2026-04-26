@@ -1272,6 +1272,7 @@ class RefactorOps:
                         cwd=self._repo_root,
                         capture_output=True,
                         check=True,
+                        timeout=30,
                     )
                     # Tracked: use git mv to preserve history
                     subprocess.run(
@@ -1279,6 +1280,7 @@ class RefactorOps:
                         cwd=self._repo_root,
                         capture_output=True,
                         check=True,
+                        timeout=30,
                     )
                 except subprocess.CalledProcessError:
                     # Untracked or dirty: plain filesystem move

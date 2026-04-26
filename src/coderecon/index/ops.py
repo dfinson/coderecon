@@ -3631,8 +3631,7 @@ is_main_worktree=self._is_main_worktree(_wt2),
                     files.append(full_path)
             except OSError:
                 # Permission denied or path too long - skip file
-                # Logged by caller during indexing if needed
-                pass
+                log.debug("file_access_error", path=rel_str)
 
         return files
 

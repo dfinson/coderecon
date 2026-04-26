@@ -39,7 +39,6 @@ def test_database_session_yields_session(db):
 
 def test_database_execute_raw(db):
     """execute_raw runs arbitrary SQL."""
-    from sqlalchemy import text
     _result = db.execute_raw("SELECT 42 AS answer")
     # result is a CursorResult — just verify it ran without error
 

@@ -358,8 +358,6 @@ def _read_file_content(db: Database, f: File) -> str | None:
     """Read file content from disk via the worktree path."""
     from pathlib import Path
 
-    from sqlmodel import select as sel
-
     from coderecon.index.models import Worktree
 
     with db.session() as session:

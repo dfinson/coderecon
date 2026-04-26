@@ -1,7 +1,5 @@
 """Tests for coderecon.index._internal.indexing.semantic_neighbors."""
 
-import pytest
-
 from coderecon.index._internal.indexing.semantic_neighbors import (
     SIGMA_FLOOR,
     MAX_NEIGHBORS_PER_DEF,

@@ -1,7 +1,5 @@
 """Tests for coderecon.mcp.tools.recon.harvesters."""
 
-import pytest
-
 from coderecon.mcp.tools.recon.harvesters import (
     _harvest_term_match,
     _harvest_explicit,

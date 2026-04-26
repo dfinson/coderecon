@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from coderecon.ranking.file_ranker import FileRanker, load_file_ranker
 
 

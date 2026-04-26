@@ -1,7 +1,5 @@
 """Tests for coderecon.index._internal.indexing.semantic_resolver."""
 
-import pytest
-
 from coderecon.index._internal.indexing.semantic_resolver import (
     TAU_REF,
     TAU_ACCESS,
