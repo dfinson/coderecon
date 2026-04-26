@@ -29,7 +29,10 @@ from typing import TYPE_CHECKING, Any
 log = structlog.get_logger(__name__)
 
 if TYPE_CHECKING:
+    import tree_sitter
+
     from coderecon.index._internal.db import Database
+    from coderecon.index._internal.db.database import BulkWriter
 
 from coderecon.core.languages import detect_language_family, has_grammar
 from coderecon.index._internal.parsing import (
@@ -102,7 +105,7 @@ _STRING_REGEX_DQ = re.compile(r'"([^"]{4,80})"')
 _STRING_REGEX_SQ = re.compile(r"'([^']{4,80})'")
 
 
-def _discover_string_node_types(ts_language: Any) -> frozenset[str]:
+def _discover_string_node_types(ts_language: tree_sitter.Language) -> frozenset[str]:
     """Discover string literal node types from tree-sitter Language metadata.
 
     Scans all node kinds in the grammar for types whose name matches
@@ -139,7 +142,7 @@ def _discover_string_node_types(ts_language: Any) -> frozenset[str]:
 
 
 def _collect_string_literals(
-    root_node: Any,
+    root_node: tree_sitter.Node,
     content: bytes,
     start_line: int,
     end_line: int,
@@ -163,7 +166,7 @@ def _collect_string_literals(
     """
     results: list[str] = []
 
-    def walk(node: Any) -> None:
+    def walk(node: tree_sitter.Node) -> None:
         # Skip nodes entirely outside the def span
         if node.end_point[0] < start_line or node.start_point[0] > end_line:
             return
@@ -224,9 +227,9 @@ _sem_query_cache: dict[tuple[int, str], Any] = {}
 
 
 def _extract_sem_facts(
-    root_node: Any,
+    root_node: tree_sitter.Node,
     content: bytes,
-    ts_language: Any,
+    ts_language: tree_sitter.Language,
     language: str,
     defs: list[dict[str, Any]],
 ) -> None:
@@ -692,10 +695,8 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
         if parse_result.ts_language is not None:
             string_types = _discover_string_node_types(parse_result.ts_language)
         for def_dict in result.defs:
-            _sl: Any = def_dict["start_line"]
-            _el: Any = def_dict["end_line"]
-            sl = int(_sl)
-            el = int(_el)
+            sl = int(def_dict["start_line"])
+            el = int(def_dict["end_line"])
             if string_types:
                 literals = _collect_string_literals(
                     parse_result.root_node,
@@ -871,7 +872,7 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
 
 def _extract_type_aware_facts(
     extraction: ExtractionResult,
-    tree: Any,
+    tree: tree_sitter.Tree,
     _content: bytes,
     unit_id: int,
     file_path: str,
@@ -1428,7 +1429,7 @@ class StructuralIndexer:
             if ex.declared_module is None:
                 ex.declared_module = path_to_module(ex.file_path)
 
-    def _resolve_xref_target(self, writer: Any, target_name: str) -> str | None:
+    def _resolve_xref_target(self, writer: BulkWriter, target_name: str) -> str | None:
         """Resolve a cross-ref target name to a def_uid using the BulkWriter's connection."""
         from sqlalchemy import text as sa_text
 
