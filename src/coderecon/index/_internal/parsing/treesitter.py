@@ -1260,17 +1260,47 @@ class TreeSitterParser:
                 source = source_node.text.decode("utf-8").strip("'\"")
 
             for child in node.children:
-                if child.type == "import_clause":
-                    for clause_child in child.children:
-                        if clause_child.type == "identifier":
-                            name = clause_child.text.decode("utf-8") if clause_child.text else ""
+                if child.type != "import_clause":
+                    continue
+                for clause_child in child.children:
+                    if clause_child.type == "identifier":
+                        name = clause_child.text.decode("utf-8") if clause_child.text else ""
+                        imports.append(
+                            SyntacticImport(
+                                import_uid=_import_uid(
+                                    file_path, name, node.start_point[0] + 1
+                                ),
+                                imported_name=name,
+                                alias=None,
+                                source_literal=source,
+                                import_kind="js_import",
+                                start_line=node.start_point[0] + 1,
+                                start_col=node.start_point[1],
+                                end_line=node.end_point[0] + 1,
+                                end_col=node.end_point[1],
+                            )
+                        )
+                    elif clause_child.type == "named_imports":
+                        for spec in clause_child.children:
+                            if spec.type != "import_specifier":
+                                continue
+                            name_node = spec.child_by_field_name("name")
+                            alias_node = spec.child_by_field_name("alias")
+                            if not (name_node and name_node.text):
+                                continue
+                            name = name_node.text.decode("utf-8")
+                            alias = (
+                                alias_node.text.decode("utf-8")
+                                if alias_node and alias_node.text
+                                else None
+                            )
                             imports.append(
                                 SyntacticImport(
                                     import_uid=_import_uid(
                                         file_path, name, node.start_point[0] + 1
                                     ),
                                     imported_name=name,
-                                    alias=None,
+                                    alias=alias,
                                     source_literal=source,
                                     import_kind="js_import",
                                     start_line=node.start_point[0] + 1,
@@ -1279,52 +1309,26 @@ class TreeSitterParser:
                                     end_col=node.end_point[1],
                                 )
                             )
-                        elif clause_child.type == "named_imports":
-                            for spec in clause_child.children:
-                                if spec.type == "import_specifier":
-                                    name_node = spec.child_by_field_name("name")
-                                    alias_node = spec.child_by_field_name("alias")
-                                    if name_node and name_node.text:
-                                        name = name_node.text.decode("utf-8")
-                                        alias = (
-                                            alias_node.text.decode("utf-8")
-                                            if alias_node and alias_node.text
-                                            else None
-                                        )
-                                        imports.append(
-                                            SyntacticImport(
-                                                import_uid=_import_uid(
-                                                    file_path, name, node.start_point[0] + 1
-                                                ),
-                                                imported_name=name,
-                                                alias=alias,
-                                                source_literal=source,
-                                                import_kind="js_import",
-                                                start_line=node.start_point[0] + 1,
-                                                start_col=node.start_point[1],
-                                                end_line=node.end_point[0] + 1,
-                                                end_col=node.end_point[1],
-                                            )
-                                        )
-                        elif clause_child.type == "namespace_import":
-                            for ns_child in clause_child.children:
-                                if ns_child.type == "identifier":
-                                    alias = ns_child.text.decode("utf-8") if ns_child.text else ""
-                                    imports.append(
-                                        SyntacticImport(
-                                            import_uid=_import_uid(
-                                                file_path, "*", node.start_point[0] + 1
-                                            ),
-                                            imported_name="*",
-                                            alias=alias,
-                                            source_literal=source,
-                                            import_kind="js_import",
-                                            start_line=node.start_point[0] + 1,
-                                            start_col=node.start_point[1],
-                                            end_line=node.end_point[0] + 1,
-                                            end_col=node.end_point[1],
-                                        )
-                                    )
+                    elif clause_child.type == "namespace_import":
+                        for ns_child in clause_child.children:
+                            if ns_child.type != "identifier":
+                                continue
+                            alias = ns_child.text.decode("utf-8") if ns_child.text else ""
+                            imports.append(
+                                SyntacticImport(
+                                    import_uid=_import_uid(
+                                        file_path, "*", node.start_point[0] + 1
+                                    ),
+                                    imported_name="*",
+                                    alias=alias,
+                                    source_literal=source,
+                                    import_kind="js_import",
+                                    start_line=node.start_point[0] + 1,
+                                    start_col=node.start_point[1],
+                                    end_line=node.end_point[0] + 1,
+                                    end_col=node.end_point[1],
+                                )
+                            )
 
         elif node.type == "call_expression":
             func_node = node.child_by_field_name("function")

@@ -92,73 +92,77 @@ class LcovParser:
                 if current_file is None:
                     continue
                 parts = line[3:].split(",")
-                if len(parts) >= 2:
-                    try:
-                        line_num = int(parts[0])
-                        hits_str = parts[1]
-                        # Handle '-' as 0 (some tools use this)
-                        hits = 0 if hits_str == "-" else int(hits_str)
-                        current_file.lines[line_num] = hits
-                    except ValueError:
-                        pass
+                if len(parts) < 2:
+                    continue
+                try:
+                    line_num = int(parts[0])
+                    hits_str = parts[1]
+                    # Handle '-' as 0 (some tools use this)
+                    hits = 0 if hits_str == "-" else int(hits_str)
+                    current_file.lines[line_num] = hits
+                except ValueError:
+                    pass
 
             elif line.startswith("BRDA:"):
                 # Branch data: BRDA:line,block,branch,taken
                 if current_file is None:
                     continue
                 parts = line[5:].split(",")
-                if len(parts) >= 4:
-                    try:
-                        line_num = int(parts[0])
-                        block_id = int(parts[1])
-                        branch_id = int(parts[2])
-                        taken_str = parts[3]
-                        # '-' means branch not taken
-                        hits = 0 if taken_str == "-" else int(taken_str)
-                        current_file.branches.append(
-                            BranchCoverage(
-                                line=line_num,
-                                block_id=block_id,
-                                branch_id=branch_id,
-                                hits=hits,
-                            )
+                if len(parts) < 4:
+                    continue
+                try:
+                    line_num = int(parts[0])
+                    block_id = int(parts[1])
+                    branch_id = int(parts[2])
+                    taken_str = parts[3]
+                    # '-' means branch not taken
+                    hits = 0 if taken_str == "-" else int(taken_str)
+                    current_file.branches.append(
+                        BranchCoverage(
+                            line=line_num,
+                            block_id=block_id,
+                            branch_id=branch_id,
+                            hits=hits,
                         )
-                    except ValueError:
-                        pass
+                    )
+                except ValueError:
+                    pass
 
             elif line.startswith("FN:"):
                 # Function definition: FN:line,name
                 parts = line[3:].split(",", 1)
-                if len(parts) >= 2:
-                    try:
-                        line_num = int(parts[0])
-                        name = parts[1]
-                        fn_names[line_num] = name
-                    except ValueError:
-                        pass
+                if len(parts) < 2:
+                    continue
+                try:
+                    line_num = int(parts[0])
+                    name = parts[1]
+                    fn_names[line_num] = name
+                except ValueError:
+                    pass
 
             elif line.startswith("FNDA:"):
                 # Function hits: FNDA:hits,name
                 if current_file is None:
                     continue
                 parts = line[5:].split(",", 1)
-                if len(parts) >= 2:
-                    try:
-                        hits = int(parts[0])
-                        name = parts[1]
-                        # Find line number from FN records
-                        start_line = 0
-                        for ln, fn in fn_names.items():
-                            if fn == name:
-                                start_line = ln
-                                break
-                        current_file.functions[name] = FunctionCoverage(
-                            name=name,
-                            start_line=start_line,
-                            hits=hits,
-                        )
-                    except ValueError:
-                        pass
+                if len(parts) < 2:
+                    continue
+                try:
+                    hits = int(parts[0])
+                    name = parts[1]
+                    # Find line number from FN records
+                    start_line = 0
+                    for ln, fn in fn_names.items():
+                        if fn == name:
+                            start_line = ln
+                            break
+                    current_file.functions[name] = FunctionCoverage(
+                        name=name,
+                        start_line=start_line,
+                        hits=hits,
+                    )
+                except ValueError:
+                    pass
 
             elif line == "end_of_record":
                 # End of file record
