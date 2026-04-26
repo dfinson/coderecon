@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 # =============================================================================
 
 
-async def describe_core(
+def describe_core(
     *,
     action: str,
     name: str | None = None,
@@ -128,7 +128,7 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
         from coderecon.mcp._compat import get_tools_sync
 
         td = get_tools_sync(mcp)
-        return await describe_core(
+        return describe_core(
             action=action,
             name=name,
             code=code,

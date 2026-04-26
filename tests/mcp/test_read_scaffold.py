@@ -404,7 +404,7 @@ class TestBuildLiteScaffold:
             "coderecon.index._internal.indexing.graph.FactQueries",
             return_value=fq_instance,
         ):
-            return await _build_lite_scaffold(app_ctx, "src/mod.py", fp)
+            return _build_lite_scaffold(app_ctx, "src/mod.py", fp)
 
     @pytest.mark.asyncio
     async def test_basic_structure(self, _reset_call_idx: Any, tmp_path: Path) -> None:
@@ -482,7 +482,7 @@ class TestBuildLiteScaffold:
         fp = tmp_path / "unknown.py"
         fp.write_text("print('hello')\n")
 
-        result = await _build_lite_scaffold(app_ctx, "unknown.py", fp)
+        result = _build_lite_scaffold(app_ctx, "unknown.py", fp)
         assert result["total_lines"] == 1
         assert result["imports"] == []
         assert result["symbols"] == []

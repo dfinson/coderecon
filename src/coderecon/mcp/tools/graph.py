@@ -25,7 +25,7 @@ log = structlog.get_logger(__name__)
 # =============================================================================
 
 
-async def graph_cycles_core(
+def graph_cycles_core(
     app_ctx: "AppContext",
     *,
     level: str = "file",
@@ -52,7 +52,7 @@ async def graph_cycles_core(
     )
 
 
-async def graph_communities_core(
+def graph_communities_core(
     app_ctx: "AppContext",
     *,
     level: str = "file",
@@ -210,7 +210,7 @@ async def recon_understand_core(
     )
 
 
-async def graph_export_core(
+def graph_export_core(
     app_ctx: "AppContext",
     *,
     output_path: str = "",
@@ -263,7 +263,7 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
     ) -> dict[str, Any]:
         """Detect circular dependencies using Tarjan's algorithm."""
         _ = app_ctx.session_manager.get_or_create(ctx.session_id)
-        return await graph_cycles_core(app_ctx, level=level)
+        return graph_cycles_core(app_ctx, level=level)
 
     @mcp.tool(
         annotations={
@@ -287,7 +287,7 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
     ) -> dict[str, Any]:
         """Detect module communities using Louvain algorithm."""
         _ = app_ctx.session_manager.get_or_create(ctx.session_id)
-        return await graph_communities_core(app_ctx, level=level, resolution=resolution)
+        return graph_communities_core(app_ctx, level=level, resolution=resolution)
 
     @mcp.tool(
         annotations={
@@ -326,4 +326,4 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
         ),
     ) -> dict[str, Any]:
         """Export an interactive dependency graph as a self-contained HTML file."""
-        return await graph_export_core(app_ctx, output_path=output_path, resolution=resolution)
+        return graph_export_core(app_ctx, output_path=output_path, resolution=resolution)

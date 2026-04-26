@@ -1420,7 +1420,7 @@ async def checkpoint_pipeline(
                     try:
                         from coderecon.mcp.tools.files import _build_scaffold
 
-                        scaffold = await _build_scaffold(app_ctx, cf, fp)
+                        scaffold = _build_scaffold(app_ctx, cf, fp)
                         entry["scaffold"] = scaffold
                     except Exception:  # noqa: BLE001
                         pass  # scaffold is best-effort

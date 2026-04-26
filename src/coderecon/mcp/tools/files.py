@@ -92,7 +92,7 @@ def _summarize_list(path: str, total: int, truncated: bool) -> str:
     return f"{total} entries in {loc}{trunc}"
 
 
-async def _build_scaffold(
+def _build_scaffold(
     app_ctx: "AppContext",
     rel_path: str,
     full_path: Any,
@@ -274,7 +274,7 @@ def _build_unindexed_fallback(full_path: Any, rel_path: str) -> dict[str, Any]:
     }
 
 
-async def _build_lite_scaffold(
+def _build_lite_scaffold(
     app_ctx: "AppContext",
     rel_path: str,
     full_path: Any,

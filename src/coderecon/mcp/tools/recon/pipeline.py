@@ -188,7 +188,7 @@ async def recon_pipeline(
     diagnostics = raw.get("diagnostics", {})
 
     if _models_available():
-        return await _pipeline_model(
+        return _pipeline_model(
             candidates, query_features, repo_features, diagnostics,
             repo_root=repo_root, seeds=seeds, pins=pins, t0=t0,
             task=task, db=app_ctx.coordinator.db,
@@ -323,7 +323,7 @@ def _score_cross_encoder(
     return candidates
 
 
-async def _pipeline_model(
+def _pipeline_model(
     candidates: list[dict[str, Any]],
     query_features: dict[str, Any],
     repo_features: dict[str, Any],

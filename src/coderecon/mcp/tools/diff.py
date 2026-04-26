@@ -44,7 +44,7 @@ log = structlog.get_logger(__name__)
 # =============================================================================
 
 
-async def semantic_diff_core(
+def semantic_diff_core(
     app_ctx: "AppContext",
     *,
     base: str = "HEAD",
@@ -95,7 +95,7 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
     ) -> dict[str, Any]:
         """Structural change summary from index facts."""
         _ = app_ctx.session_manager.get_or_create(ctx.session_id)
-        return await semantic_diff_core(
+        return semantic_diff_core(
             app_ctx, base=base, target=target, paths=paths, scope_id=scope_id,
         )
 

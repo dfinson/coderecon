@@ -11,8 +11,9 @@ repo/worktree context.
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Coroutine
+from typing import TYPE_CHECKING, Any, Callable
 
 import structlog
 
@@ -26,8 +27,8 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-# Type for core functions: (app_ctx, session?, **params) -> dict
-CoreFn = Callable[..., Coroutine[Any, Any, dict[str, Any]]]
+# Type for core functions: (app_ctx, session?, **params) -> dict (sync or async)
+CoreFn = Callable[..., Any]
 
 
 # ---------------------------------------------------------------------------
@@ -509,12 +510,14 @@ async def dispatch(
 
         # Invoke core function — some take session, some don't
         if method in _NO_SESSION_METHODS:
-            result = await core_fn(app_ctx, **params)
+            result = core_fn(app_ctx, **params)
         else:
             if not session_id:
                 session_id = f"stdio_{repo_name}_{worktree or 'main'}"
             session = app_ctx.session_manager.get_or_create(session_id)
-            result = await core_fn(app_ctx, session, **params)
+            result = core_fn(app_ctx, session, **params)
+        if inspect.isawaitable(result):
+            result = await result
 
         return _success_response(request_id, result)
 
