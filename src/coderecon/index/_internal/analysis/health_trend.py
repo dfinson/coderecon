@@ -162,7 +162,7 @@ def capture_snapshot(engine: Engine, epoch: int) -> HealthSnapshot:
 _SNAPSHOT_FILE = "health_snapshots.jsonl"
 
 
-def persist_snapshot(recon_dir, snapshot: HealthSnapshot) -> None:  # noqa: ANN001
+def persist_snapshot(recon_dir: Path | str, snapshot: HealthSnapshot) -> None:
     """Append a snapshot to the JSONL file."""
     import json
     from pathlib import Path
@@ -186,7 +186,7 @@ def persist_snapshot(recon_dir, snapshot: HealthSnapshot) -> None:  # noqa: ANN0
         f.write(json.dumps(record) + "\n")
 
 
-def load_trend(recon_dir, max_snapshots: int = 20) -> HealthTrend:  # noqa: ANN001
+def load_trend(recon_dir: Path | str, max_snapshots: int = 20) -> HealthTrend:
     """Load recent health snapshots and compute trend."""
     import json
     from pathlib import Path

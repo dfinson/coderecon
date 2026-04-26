@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import text
 
 if TYPE_CHECKING:
-    from sqlalchemy.engine import Engine
+    from sqlalchemy.engine import Connection, Engine
 
 
 # Patterns for cross-references in docstrings/comments
@@ -183,7 +183,7 @@ def resolve_and_persist(
     return written
 
 
-def _resolve_target(conn, target_name: str) -> str | None:  # noqa: ANN001
+def _resolve_target(conn: Connection, target_name: str) -> str | None:
     """Resolve a target name to a def_uid.
 
     Tries in order:

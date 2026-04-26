@@ -23,6 +23,7 @@ from pydantic import Field
 if TYPE_CHECKING:
     from fastmcp import FastMCP
 
+    from coderecon.index import Database
     from coderecon.mcp.context import AppContext
 
 log = structlog.get_logger(__name__)
@@ -202,7 +203,7 @@ async def recon_pipeline(
 
 def _fetch_scaffolds(
     candidates: list[dict[str, Any]],
-    db: Any,
+    db: Database,
 ) -> dict[str, str]:
     """Fetch stored scaffold texts for candidates from SpladeVec table."""
     from coderecon.index.models import SpladeVec
@@ -244,7 +245,7 @@ def _build_ce_documents(
 def _score_cross_encoder_tiny(
     candidates: list[dict[str, Any]],
     task: str,
-    db: Any,
+    db: Database,
 ) -> list[dict[str, Any]]:
     """Run TinyBERT cross-encoder on ALL candidates before file pruning.
 
@@ -292,7 +293,7 @@ def _score_cross_encoder_tiny(
 def _score_cross_encoder(
     candidates: list[dict[str, Any]],
     task: str,
-    db: Any,
+    db: Database,
 ) -> list[dict[str, Any]]:
     """Run cross-encoder on filtered candidates and attach ce_score.
 
@@ -334,7 +335,7 @@ def _pipeline_model(
     pins: list[str] | None,
     t0: float,
     task: str,
-    db: Any,
+    db: Database,
 ) -> dict[str, Any]:
     """Model path: gate → file ranker → def ranker → cutoff."""
     from coderecon.ranking.cutoff import load_cutoff
