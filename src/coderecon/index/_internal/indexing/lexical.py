@@ -21,9 +21,9 @@ from typing import TYPE_CHECKING, Any
 import tantivy
 
 from coderecon.files.ops import atomic_write_text
+from coderecon.config.constants import MS_PER_SEC
 
 
-_MS_PER_SEC = 1000
 if TYPE_CHECKING:
     pass
 
@@ -521,7 +521,7 @@ class LexicalIndex:
             try:
                 parsed = self._index.parse_query(escaped_full, ["content", "symbols", "path"])
             except ValueError:
-                results.query_time_ms = int((time.monotonic() - start) * _MS_PER_SEC)
+                results.query_time_ms = int((time.monotonic() - start) * MS_PER_SEC)
                 results.fallback_reason = "query could not be parsed even after escaping"
                 return results
 
@@ -578,7 +578,7 @@ class LexicalIndex:
             for _prio, fp, ln, snippet, ctx_id in kept
         ]
 
-        results.query_time_ms = int((time.monotonic() - start) * _MS_PER_SEC)
+        results.query_time_ms = int((time.monotonic() - start) * MS_PER_SEC)
         results.fallback_reason = fallback_reason
         return results
 

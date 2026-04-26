@@ -18,13 +18,13 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
+from coderecon.config.constants import BYTES_PER_MB
 
 # Sentinel value indicating a key should be removed from the environment.
 # Used by _unknown_env() to strip language-specific variables that may have
 # leaked from CodeRecon's own environment (e.g., COVERAGE_FILE).
 _DELETE_KEY = object()
 
-_BYTES_PER_MB = 1024 * 1024
 
 
 @dataclass
@@ -448,7 +448,7 @@ class SafeExecutionContext:
         limit = self._config.subprocess_memory_limit_mb
         if limit:
             # .NET GC hard heap limit in bytes (hex)
-            env["DOTNET_GCHeapHardLimit"] = hex(limit * _BYTES_PER_MB)
+            env["DOTNET_GCHeapHardLimit"] = hex(limit * BYTES_PER_MB)
         return env
 
     def _cpp_env(self) -> dict[str, str | object]:

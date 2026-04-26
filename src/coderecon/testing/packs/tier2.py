@@ -35,10 +35,10 @@ if TYPE_CHECKING:
 import structlog
 
 from coderecon.testing.packs import _is_prunable_path
+from coderecon.config.constants import MS_PER_SEC
 
 log = structlog.get_logger(__name__)
 
-_MS_PER_SEC = 1000
 
 
 # =============================================================================
@@ -437,7 +437,7 @@ class DartTestPack(RunnerPack):
                     else:
                         status = "skipped"
                     tests[test_id].status = status
-                    tests[test_id].duration_seconds = event.get("time", 0) / _MS_PER_SEC
+                    tests[test_id].duration_seconds = event.get("time", 0) / MS_PER_SEC
 
         test_list = list(tests.values())
         return ParsedTestSuite(

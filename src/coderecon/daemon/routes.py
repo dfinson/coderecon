@@ -15,11 +15,11 @@ from typing import TYPE_CHECKING, Any
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
+from coderecon.config.constants import BYTES_PER_MB
 
 if TYPE_CHECKING:
     from coderecon.daemon.lifecycle import ServerController
 
-_BYTES_PER_MB = 1024 * 1024
 
 
 def _get_version() -> str:
@@ -37,7 +37,7 @@ def _get_db_stats(db_path: Path) -> dict[str, Any]:
     }
     if db_path.exists():
         stats["size_bytes"] = db_path.stat().st_size
-        stats["size_mb"] = round(db_path.stat().st_size / _BYTES_PER_MB, 2)
+        stats["size_mb"] = round(db_path.stat().st_size / BYTES_PER_MB, 2)
 
         # Check WAL file size if it exists
         wal_path = Path(str(db_path) + "-wal")

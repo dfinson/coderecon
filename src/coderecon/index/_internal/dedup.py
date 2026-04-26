@@ -11,9 +11,9 @@ import time
 import structlog
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
+from coderecon.config.constants import MS_PER_SEC
 
 
-_MS_PER_SEC = 1000
 log = structlog.get_logger(__name__)
 
 
@@ -141,7 +141,7 @@ def clone_facts_from_source(
             "source_file_id": source_file_id,
             "target_file_id": target_file_id,
             "facts": total,
-            "elapsed_ms": round(elapsed * _MS_PER_SEC),
+            "elapsed_ms": round(elapsed * MS_PER_SEC),
         },
     )
     return total

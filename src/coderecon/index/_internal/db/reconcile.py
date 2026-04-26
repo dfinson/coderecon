@@ -23,9 +23,9 @@ from typing import TYPE_CHECKING
 from coderecon.core.languages import detect_language_family
 from coderecon.git import GitOps
 from coderecon.index.models import File, Freshness, RepoState
+from coderecon.config.constants import MS_PER_SEC
 
 
-_MS_PER_SEC = 1000
 if TYPE_CHECKING:
     from coderecon.index._internal.db.database import Database
 
@@ -218,7 +218,7 @@ class Reconciler:
                     params,
                 )
 
-        result.duration_ms = (time.perf_counter() - start_time) * _MS_PER_SEC
+        result.duration_ms = (time.perf_counter() - start_time) * MS_PER_SEC
         return result
 
     def get_changed_files(self, since_head: str | None = None) -> list[ChangedFile]:

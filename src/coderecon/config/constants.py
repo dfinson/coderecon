@@ -74,3 +74,16 @@ INSPECT_CONTEXT_LINES_DEFAULT = 2
 PORT_MIN = 0
 PORT_MAX = 65535
 """Valid port range."""
+
+# ======================================================================
+# Unit Conversion Constants
+# ======================================================================
+
+MS_PER_SEC = 1000
+"""Milliseconds per second — used for sec→ms timing conversions."""
+
+BYTES_PER_MB = 1024 * 1024
+"""Bytes per mebibyte (MiB) — used for memory/file size conversions."""
+
+DB_FLUSH_BATCH_SIZE = 1000
+"""Flush ORM objects to the DB in batches of this size to cap memory."""

@@ -27,6 +27,7 @@ from coderecon.index._internal.indexing.splade import (
     load_all_vectors_fast,
     sparse_dot,
 )
+from coderecon.config.constants import DB_FLUSH_BATCH_SIZE
 from coderecon.index.models import (
     DocCodeEdgeFact,
     File,
@@ -44,8 +45,6 @@ log = structlog.get_logger(__name__)
 # Minimum SPLADE dot-product score to persist a doc→code edge.
 SIGMA_DOC_FLOOR = 12.0
 
-# Flush ORM objects to the DB in batches of this size to cap memory.
-_DB_FLUSH_BATCH_SIZE = 1000
 
 # Maximum edges per chunk (cap noisy chunks).
 MAX_EDGES_PER_CHUNK = 10
@@ -342,7 +341,7 @@ def link_doc_chunks_to_defs(
                 ))
                 edges_written += 1
 
-                if len(batch) >= _DB_FLUSH_BATCH_SIZE:
+                if len(batch) >= DB_FLUSH_BATCH_SIZE:
                     session.add_all(batch)
                     session.commit()
                     batch.clear()

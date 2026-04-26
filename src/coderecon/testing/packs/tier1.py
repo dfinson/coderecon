@@ -34,10 +34,10 @@ if TYPE_CHECKING:
 import structlog
 
 from coderecon.testing.packs import _is_prunable_path
+from coderecon.config.constants import MS_PER_SEC
 
 log = structlog.get_logger(__name__)
 
-_MS_PER_SEC = 1000
 
 
 # =============================================================================
@@ -328,7 +328,7 @@ class JestPack(RunnerPack):
                         name=assertion.get("title", "unknown"),
                         classname=" > ".join(assertion.get("ancestorTitles", [])),
                         status=status,
-                        duration_seconds=assertion.get("duration", 0) / _MS_PER_SEC,
+                        duration_seconds=assertion.get("duration", 0) / MS_PER_SEC,
                         message="\n".join(assertion.get("failureMessages", [])) or None,
                     )
                 )
@@ -341,7 +341,7 @@ class JestPack(RunnerPack):
             failed=sum(1 for t in tests if t.status == "failed"),
             skipped=sum(1 for t in tests if t.status == "skipped"),
             errors=sum(1 for t in tests if t.status == "error"),
-            duration_seconds=data.get("testResults", [{}])[0].get("endTime", 0) / _MS_PER_SEC
+            duration_seconds=data.get("testResults", [{}])[0].get("endTime", 0) / MS_PER_SEC
             if data.get("testResults")
             else 0,
         )

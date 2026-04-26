@@ -16,10 +16,10 @@ from pathlib import Path
 import psutil
 
 from coderecon.files.ops import atomic_write_text
+from coderecon.config.constants import BYTES_PER_MB
 
 log = structlog.get_logger(__name__)
 
-_BYTES_PER_MB = 1024 * 1024
 _DEFAULT_RESERVE_MB = 1024  # 1 GB — leaves headroom for IDE + OS
 _MIN_SUBPROCESS_CEILING_MB = 128  # floor for ceiling_mb to avoid starving subprocesses
 
@@ -45,11 +45,11 @@ class MemoryBudget:
     """
 
     def __init__(self, reserve_mb: int = _DEFAULT_RESERVE_MB) -> None:
-        self._reserve_bytes = reserve_mb * _BYTES_PER_MB
+        self._reserve_bytes = reserve_mb * BYTES_PER_MB
 
     def available_mb(self) -> int:
         """Available memory in MB (kernel estimate)."""
-        return int(psutil.virtual_memory().available // _BYTES_PER_MB)
+        return int(psutil.virtual_memory().available // BYTES_PER_MB)
 
     def can_launch(self) -> bool:
         """True if available memory exceeds the reserve threshold."""
@@ -58,7 +58,7 @@ class MemoryBudget:
     def ceiling_mb(self) -> int:
         """Max MB any single subprocess should use (available − reserve)."""
         raw = psutil.virtual_memory().available - self._reserve_bytes
-        return max(int(raw // _BYTES_PER_MB), _MIN_SUBPROCESS_CEILING_MB)  # floor avoids starving subprocesses
+        return max(int(raw // BYTES_PER_MB), _MIN_SUBPROCESS_CEILING_MB)  # floor avoids starving subprocesses
 
 
 def child_rss_mb(pid: int) -> int:
@@ -75,7 +75,7 @@ def child_rss_mb(pid: int) -> int:
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 structlog.get_logger().debug("child_process_memory_unavailable", exc_info=True)
                 pass
-        return int(total // _BYTES_PER_MB)
+        return int(total // BYTES_PER_MB)
     except (psutil.NoSuchProcess, psutil.AccessDenied):
         return 0
 

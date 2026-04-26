@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from coderecon.index._internal.db.database import BulkWriter
 
 from coderecon.core.languages import detect_language_family, has_grammar
+from coderecon.config.constants import MS_PER_SEC
 from coderecon.index._internal.parsing import (
     SyntacticScope,
     SyntacticSymbol,
@@ -88,7 +89,6 @@ _FILE_FACT_TABLES: tuple[type, ...] = (
 # data files.  1 MB covers >99.9 % of real source files.
 _MAX_FILE_BYTES = 1_000_000
 
-_MS_PER_SEC = 1000
 _SCOPE_SORT_LINE_WEIGHT = 10_000  # column span never exceeds this
 
 # ===================================================================
@@ -544,7 +544,7 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
         # have language definitions but no PyPI-available tree-sitter grammar
         if not _has_grammar_for_family(family):
             result.skipped_no_grammar = True
-            result.parse_time_ms = int((time.monotonic() - start) * _MS_PER_SEC)
+            result.parse_time_ms = int((time.monotonic() - start) * MS_PER_SEC)
             return result
 
         parser = tree_sitter_service.parser
@@ -865,7 +865,7 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
         # Extract type-aware facts (Tier 2) using language-specific extractors
         _extract_type_aware_facts(result, parse_result, content, unit_id, file_path)
 
-        result.parse_time_ms = int((time.monotonic() - start) * _MS_PER_SEC)
+        result.parse_time_ms = int((time.monotonic() - start) * MS_PER_SEC)
 
     except (OSError, UnicodeDecodeError, RuntimeError, ValueError) as e:
         result.error = str(e)
@@ -1359,7 +1359,7 @@ class StructuralIndexer:
                                     "confidence": ref.confidence,
                                 }])
 
-        result.duration_ms = int((time.monotonic() - start) * _MS_PER_SEC)
+        result.duration_ms = int((time.monotonic() - start) * MS_PER_SEC)
         return result
 
     def _augment_declared_modules(self, extractions: list[ExtractionResult]) -> None:

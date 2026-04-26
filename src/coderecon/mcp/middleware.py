@@ -16,12 +16,12 @@ from typing import TYPE_CHECKING, Any
 import structlog
 from fastmcp.server.middleware import Middleware, MiddlewareContext
 
-_MS_PER_SEC = 1000
 from fastmcp.tools.tool import ToolResult
 from pydantic import ValidationError
 
 from coderecon.core.errors import PathTraversalError
 from coderecon.mcp.errors import MCPError, MCPErrorCode
+from coderecon.config.constants import MS_PER_SEC
 
 if TYPE_CHECKING:
     from fastmcp.server.middleware import CallNext
@@ -132,7 +132,7 @@ class ToolMiddleware(Middleware):
         try:
             result = await call_next(context)
 
-            duration_ms = (time.perf_counter() - start_time) * _MS_PER_SEC
+            duration_ms = (time.perf_counter() - start_time) * MS_PER_SEC
 
             # Extract summary from result for logging
             summary_dict = self._extract_result_summary(tool_name, result)
@@ -158,7 +158,7 @@ class ToolMiddleware(Middleware):
 
         except asyncio.CancelledError:
             # Server shutdown during tool execution - return graceful error
-            duration_ms = (time.perf_counter() - start_time) * _MS_PER_SEC
+            duration_ms = (time.perf_counter() - start_time) * MS_PER_SEC
             log.info(
                 "tool_cancelled",
                 tool=tool_name,
@@ -177,7 +177,7 @@ class ToolMiddleware(Middleware):
 
         except ValidationError as e:
             # User input error - return structured response with schema help
-            duration_ms = (time.perf_counter() - start_time) * _MS_PER_SEC
+            duration_ms = (time.perf_counter() - start_time) * MS_PER_SEC
             errors = e.errors()
             error_details = [
                 {
@@ -215,7 +215,7 @@ class ToolMiddleware(Middleware):
 
         except MCPError as e:
             # Expected error - return structured response, not exception
-            duration_ms = (time.perf_counter() - start_time) * _MS_PER_SEC
+            duration_ms = (time.perf_counter() - start_time) * MS_PER_SEC
             log.warning(
                 "tool_error",
                 tool=tool_name,
@@ -234,7 +234,7 @@ class ToolMiddleware(Middleware):
             )
 
         except PathTraversalError as e:
-            duration_ms = (time.perf_counter() - start_time) * _MS_PER_SEC
+            duration_ms = (time.perf_counter() - start_time) * MS_PER_SEC
             log.warning(
                 "tool_error",
                 tool=tool_name,
@@ -258,7 +258,7 @@ class ToolMiddleware(Middleware):
 
         except Exception as e:
             # Internal error - log error, no traceback to console
-            duration_ms = (time.perf_counter() - start_time) * _MS_PER_SEC
+            duration_ms = (time.perf_counter() - start_time) * MS_PER_SEC
             log.error(
                 "tool_internal_error",
                 tool=tool_name,
