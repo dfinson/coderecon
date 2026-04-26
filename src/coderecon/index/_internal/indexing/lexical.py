@@ -81,7 +81,7 @@ class LexicalIndex:
         results = index.search("class MyClass", limit=10)
     """
 
-    def __init__(self, index_path: Path | str):
+    def __init__(self, index_path: Path | str) -> None:
         """
         Initialize the lexical index.
 

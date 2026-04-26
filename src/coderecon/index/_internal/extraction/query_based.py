@@ -40,7 +40,7 @@ class QueryBasedExtractor(BaseTypeExtractor):
     (from packs.py) with query strings and configuration.
     """
 
-    def __init__(self, config: TypeExtractionConfig, grammar_name: str):
+    def __init__(self, config: TypeExtractionConfig, grammar_name: str) -> None:
         self._config = config
         self._grammar_name = grammar_name
         self._queries: dict[str, Query] = {}

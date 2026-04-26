@@ -1059,7 +1059,7 @@ class StructuralIndexer:
         result = indexer.index_files(file_paths, context_id=1, worktree_id=wt_id)
     """
 
-    def __init__(self, db: Database, repo_path: Path | str):
+    def __init__(self, db: Database, repo_path: Path | str) -> None:
         self.db = db
         self.repo_path = Path(repo_path)
 

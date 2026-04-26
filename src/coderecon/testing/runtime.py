@@ -241,7 +241,7 @@ class RuntimeResolver:
     environment. Results are persisted to ContextRuntime table.
     """
 
-    def __init__(self, repo_root: Path):
+    def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root
 
     @staticmethod
@@ -728,7 +728,7 @@ class ExecutionContextBuilder:
     and the execution layer (RuntimeExecutionContext, ToolConfig).
     """
 
-    def __init__(self, repo_root: Path):
+    def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root
 
     @staticmethod

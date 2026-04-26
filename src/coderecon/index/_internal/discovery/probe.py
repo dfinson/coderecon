@@ -67,7 +67,7 @@ class ContextProbe:
         repo_path: Path | str,
         config: ProbeConfig | None = None,
         parser: TreeSitterParser | None = None,
-    ):
+    ) -> None:
         self.repo_path = Path(repo_path)
         self.config = config or ProbeConfig()
         self.parser = parser or tree_sitter_service.parser
