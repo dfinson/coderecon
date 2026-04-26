@@ -167,9 +167,7 @@ class Event:
     ts: float = 0.0
 
 
-# ---------------------------------------------------------------------------
 # Wire → typed conversion
-# ---------------------------------------------------------------------------
 
 def _to_recon_result(d: dict[str, Any]) -> ReconResult:
     return ReconResult(

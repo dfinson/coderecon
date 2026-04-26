@@ -79,13 +79,11 @@ def probe_gpu() -> GpuProbeResult:
     """
     result = GpuProbeResult()
 
-    # --- Hardware detection via CLI tools ---
     if _check_nvidia_gpu():
         result.detected_gpus.append(GpuVendor.NVIDIA)
     if _check_amd_gpu():
         result.detected_gpus.append(GpuVendor.AMD)
 
-    # --- ONNX Runtime provider detection ---
     try:
         from coderecon.index._internal.indexing.splade import _ensure_cuda_lib_path
 

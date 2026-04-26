@@ -15,9 +15,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from coderecon.index.models import DefFact
 
-# ---------------------------------------------------------------------------
 # Constants (all internal — not exposed to agents)
-# ---------------------------------------------------------------------------
 
 _INTERNAL_DEPTH = 2  # Graph expansion depth (backend-decided, not agent-facing)
 

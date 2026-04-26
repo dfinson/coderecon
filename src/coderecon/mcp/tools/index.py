@@ -136,7 +136,6 @@ def _tree_to_hybrid_text(
             fname = parts[-1]
             node.files.append(f"{fname}:{lc}" if lc else fname)
 
-    # ---- render ----
     def _render(node: _DirNode, indent: int) -> list[str]:
         result: list[str] = []
         for name in sorted(node.children):

@@ -30,17 +30,13 @@ from coderecon.files.ops import atomic_write_text
 
 log = structlog.get_logger(__name__)
 
-# ---------------------------------------------------------------------------
 # Public constants
-# ---------------------------------------------------------------------------
 
 #: All tool IDs recognised by the writers.
 ALL_TOOLS: tuple[str, ...] = ("vscode", "claude", "cursor", "opencode")
 
 
-# ---------------------------------------------------------------------------
 # Auto-detection
-# ---------------------------------------------------------------------------
 
 
 def detect_tools(repo_root: Path) -> list[str]:
@@ -108,9 +104,7 @@ def resolve_targets(targets: list[str], repo_root: Path) -> list[str]:
     return out
 
 
-# ---------------------------------------------------------------------------
 # Per-tool writers
-# ---------------------------------------------------------------------------
 
 
 def _write_vscode(repo_root: Path, port: int, server_name: str) -> bool:
@@ -282,9 +276,7 @@ def _write_opencode(_repo_root: Path, port: int, server_name: str) -> bool:
     return True
 
 
-# ---------------------------------------------------------------------------
 # Dispatch table
-# ---------------------------------------------------------------------------
 
 _WRITERS = {
     "vscode": _write_vscode,
@@ -340,9 +332,7 @@ def sync_mcp_port(repo_root: Path, port: int, server_name: str, targets: list[st
     return write_mcp_configs(repo_root, port, server_name, targets)
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 def _tool_config_label(tool: str, _repo_root: Path) -> str:

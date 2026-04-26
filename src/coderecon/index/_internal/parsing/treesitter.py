@@ -638,7 +638,6 @@ class TreeSitterParser:
         # Generic: try using node text directly
         return module_node.text.decode("utf-8") if module_node.text else None
 
-    # ---- Package/module declaration extractors ----
 
     def _extract_java_scoped_path(self, node: tree_sitter.Node) -> list[str]:
         """Extract path parts from a Java scoped_identifier."""
@@ -932,9 +931,7 @@ class TreeSitterParser:
 
         return imports
 
-    # ------------------------------------------------------------------
     # C# using directive and namespace extraction
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _qualified_name_text(node: tree_sitter.Node) -> str:
@@ -1160,9 +1157,7 @@ class TreeSitterParser:
 
         return check(node)
 
-    # ------------------------------------------------------------------
     # Unified query-based symbol extraction
-    # ------------------------------------------------------------------
 
     def extract_csharp_namespace_types(self, root: tree_sitter.Node) -> dict[str, list[str]]:
         """Extract namespace -> type names mapping from a C# AST.
@@ -1360,9 +1355,7 @@ class TreeSitterParser:
 
         return imports
 
-    # ------------------------------------------------------------------
     # Unified query-based symbol extraction
-    # ------------------------------------------------------------------
 
     def _extract_symbols_via_query(
         self,
@@ -1397,17 +1390,14 @@ class TreeSitterParser:
 
             pattern = config.patterns[pattern_idx]
 
-            # --- name ---
             name_nodes = captures.get("name")
             name: str = pattern.kind if not name_nodes else str(name_nodes[0].text.decode("utf-8"))
 
-            # --- node (for position) ---
             node_list = captures.get("node")
             node = node_list[0] if node_list else (name_nodes[0] if name_nodes else None)
             if node is None:
                 continue
 
-            # --- kind + parent context ---
             kind = pattern.kind
             parent_name: str | None = None
             if config.container_types:
@@ -1417,16 +1407,12 @@ class TreeSitterParser:
                 if parent_name and pattern.nested_kind:
                     kind = pattern.nested_kind
 
-            # --- signature ---
             signature = self._extract_signature(captures, node, config.params_from_children)
 
-            # --- decorators (language-agnostic) ---
             decorators = self._extract_decorators(node)
 
-            # --- return type ---
             return_type = self._extract_return_type(node)
 
-            # --- docstring ---
             docstring = self._extract_docstring(node, config.body_node_types)
 
             symbols.append(

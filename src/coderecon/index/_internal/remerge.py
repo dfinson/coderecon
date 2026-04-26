@@ -247,8 +247,6 @@ def drop_worktree_data(engine: Engine, worktree_id: int) -> int:
     return count
 
 
-# --- Internal helpers ---
-
 def _prune_file(engine: Engine, file_id: int) -> None:
     """Remove a single file and all its facts.
 

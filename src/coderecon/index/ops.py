@@ -940,7 +940,6 @@ class IndexCoordinatorEngine:
             existing_set = {str(p) for p in existing_paths}
 
             if str_changed and self._structural is not None and self._lexical is not None:
-                # --- Context routing (group files by owning context) ---
                 with self.db.session() as session:
                     contexts = session.exec(
                         select(Context).where(Context.probe_status == ProbeStatus.VALID.value)
@@ -1014,7 +1013,6 @@ class IndexCoordinatorEngine:
                 for str_path, ctx_id in file_to_context.items():
                     context_files.setdefault(ctx_id, []).append(str_path)
 
-                # --- Single-pass: extract once, feed Tantivy + structural ---
                 # Use parallel extraction when batch is large enough to
                 # amortise process-pool overhead (~8 files threshold).
                 _PARALLEL_THRESHOLD = 8

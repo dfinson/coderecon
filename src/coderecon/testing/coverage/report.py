@@ -20,9 +20,7 @@ from typing import Any
 
 from coderecon.testing.coverage.models import CoverageReport, FileCoverage
 
-# ---------------------------------------------------------------------------
 # Tier thresholds
-# ---------------------------------------------------------------------------
 _LOW_COVERAGE_THRESHOLD = 20  # files below this: percent only
 _FULL_COVERAGE_THRESHOLD = 100  # files at this: omitted
 

@@ -30,9 +30,7 @@ if TYPE_CHECKING:
     from sqlmodel import Session
 
 
-# ---------------------------------------------------------------------------
 # Result models
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -115,9 +113,7 @@ class CoverageGap:
     file_path: str | None  # resolved file path, if available
 
 
-# ---------------------------------------------------------------------------
 # ImportGraph
-# ---------------------------------------------------------------------------
 
 
 class ImportGraph:
@@ -145,9 +141,7 @@ class ImportGraph:
         self._test_file_paths = [fp for fp in self._file_paths if is_test_file(fp)]
         self._test_file_set = set(self._test_file_paths)
 
-    # -----------------------------------------------------------------
     # 1. affected_tests: changed files → test files
-    # -----------------------------------------------------------------
 
     def affected_tests(self, changed_files: list[str]) -> ImportGraphResult:
         """Find test files affected by changed files.
@@ -498,9 +492,7 @@ class ImportGraph:
             changed_modules=sorted(search_modules),
         )
 
-    # -----------------------------------------------------------------
     # 2. imported_sources: test files → source modules (for --cov scoping)
-    # -----------------------------------------------------------------
 
     def imported_sources(self, test_files: list[str]) -> CoverageSourceResult:
         """Given test files, find source modules they import.
@@ -562,9 +554,7 @@ class ImportGraph:
             null_import_count=null_count,
         )
 
-    # -----------------------------------------------------------------
     # 3. uncovered_modules: source modules with zero test imports
-    # -----------------------------------------------------------------
 
     def uncovered_modules(self) -> list[CoverageGap]:
         """Find source modules that no test file imports.

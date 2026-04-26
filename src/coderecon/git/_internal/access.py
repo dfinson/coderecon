@@ -39,9 +39,7 @@ from coderecon.git.errors import (
     RemoteError,
 )
 
-# ---------------------------------------------------------------------------
 # Lightweight replacement types (avoid dependency on pygit2 types)
-# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)

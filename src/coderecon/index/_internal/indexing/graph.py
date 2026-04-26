@@ -42,9 +42,7 @@ class FactQueries:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    # -------------------------------------------------------------------------
     # Definition lookups
-    # -------------------------------------------------------------------------
 
     def get_def(self, def_uid: str) -> DefFact | None:
         """Get a definition by its stable UID."""
@@ -77,9 +75,7 @@ class FactQueries:
         )
         return list(self._session.exec(stmt).all())
 
-    # -------------------------------------------------------------------------
     # Reference lookups
-    # -------------------------------------------------------------------------
 
     def list_refs_by_def_uid(
         self,
@@ -228,9 +224,7 @@ class FactQueries:
         )
         return list(self._session.exec(stmt).all())
 
-    # -------------------------------------------------------------------------
     # Scope lookups
-    # -------------------------------------------------------------------------
 
     def get_scope(self, scope_id: int) -> ScopeFact | None:
         """Get a scope by ID."""
@@ -241,9 +235,7 @@ class FactQueries:
         stmt = select(ScopeFact).where(ScopeFact.file_id == file_id)
         return list(self._session.exec(stmt).all())
 
-    # -------------------------------------------------------------------------
     # Binding lookups
-    # -------------------------------------------------------------------------
 
     def get_local_bind(self, scope_id: int, name: str) -> LocalBindFact | None:
         """Get a local binding by scope and name."""
@@ -257,9 +249,7 @@ class FactQueries:
         stmt = select(LocalBindFact).where(LocalBindFact.scope_id == scope_id).limit(limit)
         return list(self._session.exec(stmt).all())
 
-    # -------------------------------------------------------------------------
     # Import lookups
-    # -------------------------------------------------------------------------
 
     def list_imports(self, file_id: int, *, limit: int = 100) -> list[ImportFact]:
         """List all imports in a file, ordered by source position."""
@@ -275,9 +265,7 @@ class FactQueries:
         """Get an import by its UID."""
         return self._session.get(ImportFact, import_uid)
 
-    # -------------------------------------------------------------------------
     # Export lookups
-    # -------------------------------------------------------------------------
 
     def get_export_surface(self, unit_id: int) -> ExportSurface | None:
         """Get the export surface for a build unit."""
@@ -289,9 +277,7 @@ class FactQueries:
         stmt = select(ExportEntry).where(ExportEntry.surface_id == surface_id).limit(limit)
         return list(self._session.exec(stmt).all())
 
-    # -------------------------------------------------------------------------
     # Anchor group lookups
-    # -------------------------------------------------------------------------
 
     def get_anchor_group(
         self, unit_id: int, member_token: str, receiver_shape: str | None
@@ -312,9 +298,7 @@ class FactQueries:
         stmt = select(AnchorGroup).where(AnchorGroup.unit_id == unit_id).limit(limit)
         return list(self._session.exec(stmt).all())
 
-    # -------------------------------------------------------------------------
     # File lookups
-    # -------------------------------------------------------------------------
 
     def get_file(self, file_id: int) -> File | None:
         """Get a file by ID."""
@@ -352,9 +336,7 @@ class FactQueries:
         stmt = select(File).limit(limit)
         return list(self._session.exec(stmt).all())
 
-    # -------------------------------------------------------------------------
     # Seed finding (recon-dedicated)
-    # -------------------------------------------------------------------------
 
     def find_defs_matching_term(
         self,
@@ -414,9 +396,7 @@ class FactQueries:
         stmt = select(File).where(col(File.path).ilike(pattern)).order_by(File.path).limit(limit)
         return list(self._session.exec(stmt).all())
 
-    # -------------------------------------------------------------------------
     # Interface / type hierarchy lookups (Tier 2)
-    # -------------------------------------------------------------------------
 
     def list_implementors(
         self, interface_name: str, *, limit: int = 100
@@ -460,9 +440,7 @@ class FactQueries:
         )
         return list(self._session.exec(stmt).all())
 
-    # -------------------------------------------------------------------------
     # DocCrossRef lookups
-    # -------------------------------------------------------------------------
 
     def list_doc_xrefs_from(
         self, source_def_uid: str, *, limit: int = 50
@@ -486,9 +464,7 @@ class FactQueries:
         )
         return list(self._session.exec(stmt).all())
 
-    # -------------------------------------------------------------------------
     # Endpoint lookups
-    # -------------------------------------------------------------------------
 
     def batch_get_endpoints(
         self, handler_def_uids: list[str]
@@ -510,9 +486,7 @@ class FactQueries:
                 out[ep.handler_def_uid] = ep
         return out
 
-    # -------------------------------------------------------------------------
     # Test coverage lookups
-    # -------------------------------------------------------------------------
 
     def batch_count_test_coverage(
         self, def_uids: list[str]

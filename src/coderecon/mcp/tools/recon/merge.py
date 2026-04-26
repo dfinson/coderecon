@@ -140,7 +140,6 @@ async def _enrich_candidates(
             cand.declared_module = module_cache.get(d.file_id, "")
             cand.artifact_kind = _classify_artifact(cand.file_path)
 
-    # --- Populate structural link fields ---
     anchor_uids: set[str] = set()
     anchor_file_ids: set[int] = set()
     for uid, cand in candidates.items():

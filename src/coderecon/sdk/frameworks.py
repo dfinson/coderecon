@@ -16,9 +16,7 @@ if TYPE_CHECKING:
     from coderecon.sdk.client import CodeRecon
 
 
-# ---------------------------------------------------------------------------
 # Tool metadata — shared between adapters
-# ---------------------------------------------------------------------------
 
 _TOOL_DEFS: list[dict[str, Any]] = [
     {
@@ -148,9 +146,7 @@ _TOOL_DEFS: list[dict[str, Any]] = [
 ]
 
 
-# ---------------------------------------------------------------------------
 # OpenAI function calling
-# ---------------------------------------------------------------------------
 
 
 def as_openai_tools(
@@ -214,9 +210,7 @@ def _takes_repo(method: Callable[..., Any]) -> bool:
         return True  # assume yes
 
 
-# ---------------------------------------------------------------------------
 # LangChain adapter (optional dependency)
-# ---------------------------------------------------------------------------
 
 
 def as_langchain_tools(

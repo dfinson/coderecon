@@ -61,9 +61,7 @@ class IndexStatusResult:
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
-# ---------------------------------------------------------------------------
 # Wire → typed conversion
-# ---------------------------------------------------------------------------
 
 
 def _to_raw_signals_result(d: dict[str, Any]) -> RawSignalsResult:

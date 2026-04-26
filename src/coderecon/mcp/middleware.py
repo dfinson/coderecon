@@ -89,7 +89,6 @@ class ToolMiddleware(Middleware):
 
         console = get_console()
 
-        # --- Exclusive tool enforcement ---
         # All tools acquire the session's exclusive lock. For exclusive tools
         # (checkpoint, semantic_diff) this blocks any concurrent
         # tool call on the same session until the exclusive tool completes.

@@ -98,32 +98,26 @@ def evaluate_gates(
     """
     result = GateResult()
 
-    # --- Coverage floor ---
     rule = governance.coverage_floor
     if rule.enabled:
         _check_coverage_floor(engine, rule, result)
 
-    # --- Lint clean ---
     rule = governance.lint_clean
     if rule.enabled:
         _check_lint_clean(rule, result, lint_clean, lint_diagnostics)
 
-    # --- No new cycles ---
     rule = governance.no_new_cycles
     if rule.enabled:
         _check_no_new_cycles(engine, rule, result, changed_files)
 
-    # --- Test debt ---
     rule = governance.test_debt
     if rule.enabled and test_debt_info:
         _check_test_debt(rule, result, test_debt_info)
 
-    # --- Coverage regression ---
     rule = governance.coverage_regression
     if rule.enabled and changed_def_uids:
         _check_coverage_regression(engine, rule, result, changed_def_uids)
 
-    # --- Centrality impact ---
     rule = governance.centrality_impact
     if rule.enabled and changed_def_uids:
         _check_centrality_impact(engine, rule, result, changed_def_uids)

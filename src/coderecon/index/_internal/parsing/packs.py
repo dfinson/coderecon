@@ -84,9 +84,7 @@ class TypeExtractionConfig:
     reference_indicator: str = ""
 
 
-# -------------------------------------------------------------------------
 # Declarative extraction configs (replace per-language Python handlers)
-# -------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)

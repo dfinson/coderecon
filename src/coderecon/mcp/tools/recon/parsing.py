@@ -141,14 +141,12 @@ def parse_task(task: str) -> ParsedTask:
 
     working = task
 
-    # --- Step 1: Extract quoted strings ---
     quoted: list[str] = []
     for match in re.finditer(r"['\"]([^'\"]+)['\"]", working):
         quoted.append(match.group(1))
     for q in quoted:
         working = working.replace(f'"{q}"', " ").replace(f"'{q}'", " ")
 
-    # --- Step 2: Extract file paths ---
     explicit_paths: list[str] = []
     path_seen: set[str] = set()
     for match in _PATH_REGEX.finditer(task):  # Use original task
@@ -157,7 +155,6 @@ def parse_task(task: str) -> ParsedTask:
             path_seen.add(p)
             explicit_paths.append(p)
 
-    # --- Step 3: Extract symbol-like identifiers ---
     explicit_symbols: list[str] = []
     symbol_seen: set[str] = set()
     for match in _SYMBOL_REGEX.finditer(task):
@@ -170,7 +167,6 @@ def parse_task(task: str) -> ParsedTask:
             symbol_seen.add(q)
             explicit_symbols.append(q)
 
-    # --- Step 4: Tokenize into terms ---
     primary_terms: list[str] = []
     secondary_terms: list[str] = []
     seen_terms: set[str] = set()
@@ -222,10 +218,8 @@ def parse_task(task: str) -> ParsedTask:
     keywords = primary_terms + secondary_terms
     intent = _extract_intent(task)
 
-    # --- Step 5: Extract negative mentions ---
     negative_mentions = _extract_negative_mentions(task)
 
-    # --- Step 6: Detect stacktrace-driven and test-driven ---
     is_stacktrace = _detect_stacktrace_driven(task)
     is_test = _detect_test_driven(task, intent)
 

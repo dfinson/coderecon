@@ -69,9 +69,7 @@ def rrf_file_prune(
     return [c for c in candidates if c.get("path", "") in kept]
 
 
-# ------------------------------------------------------------------
 # Named rank lists (public) + internal wrapper
-# ------------------------------------------------------------------
 
 #: Canonical list names in declaration order.
 ALL_LIST_NAMES: list[str] = [

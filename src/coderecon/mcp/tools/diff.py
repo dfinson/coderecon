@@ -666,17 +666,14 @@ def _result_to_text(result: SemanticDiffResult) -> dict[str, Any]:
 
     from coderecon.mcp.tools.index import _change_to_text
 
-    # --- Domain classification ---
     domains = _classify_domains(result.structural_changes, result.non_structural_changes)
     cross_edges = _detect_cross_domain_edges(result.structural_changes, domains)
     agentic_hint = _build_agentic_hint(result, domains, cross_edges)
 
-    # --- Phase 1: render raw lines ---
     raw_lines: list[str] = []
     for c in result.structural_changes:
         raw_lines.extend(_change_to_text(c))
 
-    # --- Phase 2: build test aliases (paths appearing 3+ times) ---
     test_counter: Counter[str] = Counter()
     for line in raw_lines:
         idx = line.find("tests:")
@@ -693,7 +690,6 @@ def _result_to_text(result: SemanticDiffResult) -> dict[str, Any]:
             alias_idx += 1
             aliases[test_path] = f"t{alias_idx}"
 
-    # --- Phase 3: apply nested path dedup + test aliases ---
     structural_lines: list[str] = []
 
     if raw_lines:

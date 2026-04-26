@@ -152,7 +152,6 @@ class RepoMapper:
         if include is None:
             include = ["structure", "languages", "entry_points"]
 
-        # --- single query, single filter pass (Change 2) ----------------
         needs_file_data = {"structure", "languages", "test_layout"} & set(include)
         filtered_files: list[tuple[str, str | None, int | None]] | None = None
         if needs_file_data:

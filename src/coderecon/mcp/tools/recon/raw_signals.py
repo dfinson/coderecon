@@ -355,9 +355,7 @@ def register_raw_signals_tool(mcp: FastMCP, app_ctx: AppContext) -> None:
         )
 
 
-# ---------------------------------------------------------------------------
 # Locality helpers
-# ---------------------------------------------------------------------------
 
 
 def _shared_prefix_depth(a: str, b: str) -> int:

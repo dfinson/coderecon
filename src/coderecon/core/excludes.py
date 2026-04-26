@@ -37,9 +37,7 @@ HARDCODED_DIRS: frozenset[str] = frozenset(
 
 DEFAULT_PRUNABLE_DIRS: frozenset[str] = frozenset(
     (
-        # -------------------------------------------------------------------------
         # JavaScript/Node.js ecosystem
-        # -------------------------------------------------------------------------
         "node_modules",
         ".npm",
         ".yarn",
@@ -48,9 +46,7 @@ DEFAULT_PRUNABLE_DIRS: frozenset[str] = frozenset(
         ".next",  # Next.js build
         ".nuxt",  # Nuxt.js build
         ".turbo",  # Turborepo cache
-        # -------------------------------------------------------------------------
         # Python ecosystem
-        # -------------------------------------------------------------------------
         "venv",
         ".venv",
         ".virtualenv",
@@ -69,97 +65,63 @@ DEFAULT_PRUNABLE_DIRS: frozenset[str] = frozenset(
         ".ipynb_checkpoints",
         ".hypothesis",
         "htmlcov",
-        # -------------------------------------------------------------------------
         # Ruby ecosystem
-        # -------------------------------------------------------------------------
         ".bundle",
-        # -------------------------------------------------------------------------
         # Go ecosystem
-        # -------------------------------------------------------------------------
         "pkg",  # Go pkg cache (older GOPATH style)
-        # -------------------------------------------------------------------------
         # Rust ecosystem
-        # -------------------------------------------------------------------------
         "target",  # Cargo build output
-        # -------------------------------------------------------------------------
         # Elixir/Erlang ecosystem
-        # -------------------------------------------------------------------------
         "_build",  # Mix build output
         "deps",  # Mix dependencies
         "ebin",  # Erlang compiled beam files
-        # -------------------------------------------------------------------------
         # Haskell ecosystem
-        # -------------------------------------------------------------------------
         ".stack-work",  # Stack build artifacts
         ".cabal-sandbox",  # Cabal sandbox (legacy)
-        # -------------------------------------------------------------------------
         # OCaml/Reason ecosystem
-        # -------------------------------------------------------------------------
         "_opam",  # opam local switch
         "_esy",  # esy package cache
-        # -------------------------------------------------------------------------
         # Scala ecosystem
-        # -------------------------------------------------------------------------
         ".bsp",  # Build Server Protocol
         ".metals",  # Metals LSP cache
         ".bloop",  # Bloop build cache
-        # -------------------------------------------------------------------------
         # Clojure ecosystem
-        # -------------------------------------------------------------------------
         ".cpcache",  # Clojure tools.deps cache
         ".clj-kondo",  # clj-kondo linter cache
         ".lsp",  # LSP data
-        # -------------------------------------------------------------------------
         # Dart/Flutter ecosystem
-        # -------------------------------------------------------------------------
         ".dart_tool",  # Dart tooling
         ".pub-cache",  # Pub package cache
-        # -------------------------------------------------------------------------
         # JVM ecosystem (Java, Kotlin, Groovy)
-        # -------------------------------------------------------------------------
         ".gradle",  # Gradle cache
         ".m2",  # Maven local repo
-        # -------------------------------------------------------------------------
         # .NET ecosystem
-        # -------------------------------------------------------------------------
         "bin",  # .NET build output
         "obj",  # .NET intermediate
         # NOTE: packages/ removed — it conflicts with JS/TS monorepo workspaces
         # (npm/pnpm/yarn workspaces commonly use packages/). Modern .NET uses
         # global NuGet cache; legacy NuGet packages/ is handled by .gitignore.
-        # -------------------------------------------------------------------------
         # iOS/macOS ecosystem
         # Note: macOS is case-insensitive, but we use lowercase for consistency.
         # The watcher/scanner should do case-insensitive matching on macOS.
-        # -------------------------------------------------------------------------
         "pods",  # CocoaPods
         "deriveddata",  # Xcode build
         ".swiftpm",  # Swift Package Manager
-        # -------------------------------------------------------------------------
         # Android ecosystem
-        # -------------------------------------------------------------------------
         ".android",  # Android SDK/AVD
-        # -------------------------------------------------------------------------
         # Infrastructure/DevOps
-        # -------------------------------------------------------------------------
         ".terraform",  # Terraform state/plugins
-        # -------------------------------------------------------------------------
         # Generic build/output directories
-        # -------------------------------------------------------------------------
         "dist",
         "build",
         "out",
         ".coverage",
         ".nyc_output",
-        # -------------------------------------------------------------------------
         # IDE/Editor directories
-        # -------------------------------------------------------------------------
         ".idea",  # JetBrains
         ".vscode",  # VS Code
         ".vs",  # Visual Studio
-        # -------------------------------------------------------------------------
         # Misc caches
-        # -------------------------------------------------------------------------
         ".cache",
         "tmp",
         "temp",

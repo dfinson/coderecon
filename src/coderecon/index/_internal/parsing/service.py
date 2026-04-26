@@ -71,9 +71,7 @@ class TreeSitterService:
         """Reset singleton (mainly for testing)."""
         cls._instance = None
 
-    # ------------------------------------------------------------------
     # Core parser access
-    # ------------------------------------------------------------------
 
     @property
     def parser(self) -> TreeSitterParser:
@@ -84,9 +82,7 @@ class TreeSitterService:
         """Parse a file. Returns a :class:`ParseResult`."""
         return self._parser.parse(path, content)
 
-    # ------------------------------------------------------------------
     # Symbol extraction (delegates to TreeSitterParser -- already query-based)
-    # ------------------------------------------------------------------
 
     def extract_symbols(self, result: ParseResult) -> list[SyntacticSymbol]:
         """Extract symbol definitions from a parse result."""
@@ -104,9 +100,7 @@ class TreeSitterService:
         """Compute interface hash from symbols."""
         return self._parser.compute_interface_hash(symbols)
 
-    # ------------------------------------------------------------------
     # Scope extraction -- GENERIC (replaces 3 near-identical methods)
-    # ------------------------------------------------------------------
 
     def extract_scopes(self, result: ParseResult) -> list[SyntacticScope]:
         """Extract lexical scopes using pack-driven scope_types.
@@ -121,33 +115,25 @@ class TreeSitterService:
         # Fallback for unknown languages: pattern-match node types
         return _extract_scopes_by_pattern(result.root_node, _GENERIC_SCOPE_PATTERNS)
 
-    # ------------------------------------------------------------------
     # Import extraction -- delegates to TreeSitterParser methods
-    # ------------------------------------------------------------------
 
     def extract_imports(self, result: ParseResult, file_path: str) -> list[SyntacticImport]:
         """Extract imports (delegates to hand-written per-language methods)."""
         return self._parser.extract_imports(result, file_path)
 
-    # ------------------------------------------------------------------
     # Declared module -- delegates to TreeSitterParser methods
-    # ------------------------------------------------------------------
 
     def extract_declared_module(self, result: ParseResult, file_path: str) -> str | None:
         """Extract language-level module/package/namespace declaration."""
         return self._parser.extract_declared_module(result, file_path)
 
-    # ------------------------------------------------------------------
     # Dynamic access -- delegates to TreeSitterParser methods
-    # ------------------------------------------------------------------
 
     def extract_dynamic_accesses(self, result: ParseResult) -> list[DynamicAccess]:
         """Extract dynamic access patterns."""
         return self._parser.extract_dynamic_accesses(result)
 
-    # ------------------------------------------------------------------
     # C# specific
-    # ------------------------------------------------------------------
 
     def extract_csharp_namespace_types(self, root_node: tree_sitter.Node) -> dict[str, list[str]]:
         """Extract C# namespace-to-types mapping."""

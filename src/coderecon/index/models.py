@@ -31,7 +31,6 @@ class LanguageFamily(StrEnum):
     Run validate_language_families() to check for mismatches.
     """
 
-    # --- Code families - mainstream ---
     JAVASCRIPT = "javascript"  # JS, TS, JSX, TSX, Vue, Svelte
     PYTHON = "python"
     GO = "go"
@@ -52,7 +51,6 @@ class LanguageFamily(StrEnum):
     OBJC = "objc"  # Objective-C, Objective-C++
     MATLAB = "matlab"  # MATLAB/Octave
 
-    # --- Code families - functional ---
     ELIXIR = "elixir"
     ERLANG = "erlang"
     HASKELL = "haskell"
@@ -61,7 +59,6 @@ class LanguageFamily(StrEnum):
     CLOJURE = "clojure"
     ELM = "elm"
 
-    # --- Code families - scripting ---
     SHELL = "shell"  # Bash, Zsh, Ksh (POSIX-compatible)
     FISH = "fish"  # Fish shell (separate - incompatible syntax)
     POWERSHELL = "powershell"
@@ -70,7 +67,6 @@ class LanguageFamily(StrEnum):
     R = "r"
     JULIA = "julia"
 
-    # --- Code families - systems ---
     ZIG = "zig"
     NIM = "nim"
     D = "d"
@@ -78,23 +74,19 @@ class LanguageFamily(StrEnum):
     FORTRAN = "fortran"
     PASCAL = "pascal"
 
-    # --- Code families - other ---
     DART = "dart"
     GLEAM = "gleam"
     CRYSTAL = "crystal"
     VLANG = "vlang"  # V language
     ODIN = "odin"
 
-    # --- Hardware description ---
     VERILOG = "verilog"  # Verilog, SystemVerilog
     VHDL = "vhdl"
 
-    # --- Web/markup ---
     HTML = "html"
     XML = "xml"
     CSS = "css"  # CSS, SCSS, Less
 
-    # --- Data/config families ---
     TERRAFORM = "terraform"
     HCL = "hcl"
     SQL = "sql"
@@ -109,14 +101,12 @@ class LanguageFamily(StrEnum):
     GRAPHQL = "graphql"
     NIX = "nix"
 
-    # --- Build systems ---
     MAKE = "make"
     CMAKE = "cmake"
     MESON = "meson"
     BAZEL = "bazel"  # Starlark
     JUST = "just"
 
-    # --- Other ---
     ASSEMBLY = "assembly"
     UNKNOWN = "unknown"  # Root fallback for files not claimed by any project
 

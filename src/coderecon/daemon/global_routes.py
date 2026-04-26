@@ -26,9 +26,7 @@ if TYPE_CHECKING:
     from coderecon.daemon.global_app import GlobalDaemon
 
 
-# ---------------------------------------------------------------------------
 # Route handlers — module-level functions taking (daemon, ..., request)
-# ---------------------------------------------------------------------------
 
 
 async def _health(daemon: GlobalDaemon, request: Request) -> JSONResponse:
@@ -194,9 +192,7 @@ async def _repo_refresh_worktrees(
     return JSONResponse({"added_worktrees": new_wts})
 
 
-# ---------------------------------------------------------------------------
 # App builder
-# ---------------------------------------------------------------------------
 
 
 def build_global_app(daemon: GlobalDaemon, *, dev_mode: bool = False) -> Starlette:
@@ -228,9 +224,7 @@ def build_global_app(daemon: GlobalDaemon, *, dev_mode: bool = False) -> Starlet
     return Starlette(routes=routes, lifespan=lifespan)
 
 
-# ---------------------------------------------------------------------------
 # Dynamic MCP dispatcher
-# ---------------------------------------------------------------------------
 
 
 async def _asgi_not_found(scope: Scope, receive: Receive, send: Send) -> None:  # noqa: ARG001
@@ -258,9 +252,7 @@ class DynamicMcpRouter:
     def __init__(self, daemon: GlobalDaemon) -> None:
         self._daemon = daemon
 
-    # ------------------------------------------------------------------
     # Starlette BaseRoute protocol
-    # ------------------------------------------------------------------
 
     def matches(self, scope: Scope) -> tuple[Any, Any]:
         from starlette.routing import Match

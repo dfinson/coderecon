@@ -31,9 +31,7 @@ log = structlog.get_logger(__name__)
 CoreFn = Callable[..., Any]
 
 
-# ---------------------------------------------------------------------------
 # Dev/training core functions — index introspection
-# ---------------------------------------------------------------------------
 
 
 async def _dev_index_facts(app_ctx: "AppContext", **kwargs: Any) -> dict[str, Any]:
@@ -217,9 +215,7 @@ async def _dev_index_status(app_ctx: "AppContext", **kwargs: Any) -> dict[str, A
         "initialized": app_ctx.coordinator._initialized,
     }
 
-# ---------------------------------------------------------------------------
 # Lazy-loaded dispatch table — avoids importing every tool module at startup
-# ---------------------------------------------------------------------------
 
 _CORE_FUNCTIONS: dict[str, CoreFn] | None = None
 
@@ -278,9 +274,7 @@ def _get_core_functions() -> dict[str, CoreFn]:
     return _CORE_FUNCTIONS
 
 
-# ---------------------------------------------------------------------------
 # Management methods — no repo context needed
-# ---------------------------------------------------------------------------
 
 # Methods that the dispatch loop handles without resolving a repo/worktree.
 MANAGEMENT_METHODS = frozenset({
@@ -442,9 +436,7 @@ async def _handle_session_close(
     return _success_response(request_id, {"closed": True})
 
 
-# ---------------------------------------------------------------------------
 # Main dispatch
-# ---------------------------------------------------------------------------
 
 
 async def dispatch(
@@ -528,9 +520,7 @@ async def dispatch(
         return _error_response(request_id, "INTERNAL", str(exc))
 
 
-# ---------------------------------------------------------------------------
 # Response helpers
-# ---------------------------------------------------------------------------
 
 
 def _success_response(request_id: str | None, result: Any) -> dict[str, Any]:

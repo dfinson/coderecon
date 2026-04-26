@@ -1137,7 +1137,6 @@ async def checkpoint_pipeline(
     test_failed = 0
     test_status = "skipped"
 
-    # --- Phase 1: Lint ---
     if lint:
         # Fast-path: read cached lint facts if background pipeline already ran
         cached_lint = None
@@ -1241,7 +1240,6 @@ async def checkpoint_pipeline(
                 }
                 tests = False
 
-    # --- Phase 2: Tests ---
     if tests:
         await progress.report_progress(phase, total_phases, "Discovering test targets")
         discover_result = await app_ctx.test_ops.discover(paths=None)
@@ -1298,7 +1296,6 @@ async def checkpoint_pipeline(
                 else:
                     effective_hops = _DEFAULT_MAX_TEST_HOPS
 
-                # --- Tiered execution: run direct tests first, then transitive ---
                 tiered_result = await _run_tiered_tests(
                     app_ctx=app_ctx,
                     progress=progress,
@@ -1346,7 +1343,6 @@ async def checkpoint_pipeline(
                 "reason": reason,
             }
 
-    # --- Summary ---
     result["summary"] = _summarize_verify(
         lint_status, lint_diagnostics, test_passed, test_failed, test_status
     )
@@ -1520,7 +1516,6 @@ async def checkpoint_pipeline(
         except (AttributeError, RuntimeError):  # best-effort reset
             log.debug("checkpoint.mutation_reset.failed", exc_info=True)
 
-        # --- Optional: Auto-commit ---
         if commit_message:
             _validate_commit_message(commit_message)
             repo_path = Path(app_ctx.git_ops.path)
@@ -1563,7 +1558,6 @@ async def checkpoint_pipeline(
                     f"Committed {sha[:7]}",
                 )
 
-                # --- Lean semantic diff as compact text ---
                 try:
                     from coderecon.mcp.tools.diff import (
                         _result_to_dict,
@@ -1610,7 +1604,6 @@ async def checkpoint_pipeline(
             except (ImportError, OSError, ValueError):
                 log.debug("test_debt_detection_failed", exc_info=True)
 
-    # --- Wrap with delivery envelope ---
     from coderecon.mcp.delivery import wrap_response
 
     return wrap_response(
