@@ -11,6 +11,8 @@ This ensures the merged result represents "covered in any run" rather than
 accidentally dropping coverage from parallel test shards.
 """
 
+from __future__ import annotations
+
 from collections.abc import Iterable
 
 from coderecon.testing.coverage.models import (

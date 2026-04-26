@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 r"""OpenCover XML format parser.
 
 OpenCover is a .NET coverage tool producing XML with detailed per-sequence-point data.

@@ -10,6 +10,8 @@ Design principles:
 - Explicit support: Only packs with tested emitters claim coverage support
 """
 
+from __future__ import annotations
+
 import structlog
 import shutil
 from abc import ABC, abstractmethod

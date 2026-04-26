@@ -27,6 +27,8 @@ Line types:
 - method: method declaration
 """
 
+from __future__ import annotations
+
 import contextlib
 import xml.etree.ElementTree as ET
 from pathlib import Path

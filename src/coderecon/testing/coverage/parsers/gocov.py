@@ -14,6 +14,8 @@ github.com/user/pkg/main.go:15.2,20.16 5 0
 - count: execution count (0 = not covered)
 """
 
+from __future__ import annotations
+
 import contextlib
 from pathlib import Path
 

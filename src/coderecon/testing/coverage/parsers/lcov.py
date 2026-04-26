@@ -17,6 +17,8 @@ LCOV format is a plain text format with records like:
 Used by: pytest-cov, cargo-llvm-cov, gcov, dart test
 """
 
+from __future__ import annotations
+
 import contextlib
 from pathlib import Path
 

@@ -6,6 +6,8 @@ These are protocol constraints, API stability limits, and implementation details
 For configurable values, see models.py (TimeoutsConfig, LimitsConfig, etc.).
 """
 
+from __future__ import annotations
+
 # ======================================================================# MCP Tool Limits
 # ======================================================================# These are hard caps for API stability and security. Users can configure
 # defaults below these, but cannot exceed them.

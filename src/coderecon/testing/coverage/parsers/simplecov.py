@@ -32,6 +32,8 @@ Line array semantics:
 Array is 0-indexed but represents 1-indexed lines (element 0 = line 1).
 """
 
+from __future__ import annotations
+
 import contextlib
 import json
 from pathlib import Path

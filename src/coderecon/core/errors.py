@@ -4,6 +4,8 @@ Error code ranges: 1xxx Auth, 2xxx Config, 3xxx Index, 4xxx Refactor,
 5xxx Mutation, 6xxx Task, 7xxx Test, 8xxx Reserved, 9xxx Internal.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any

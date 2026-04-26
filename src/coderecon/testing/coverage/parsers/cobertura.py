@@ -30,6 +30,8 @@ Structure:
 </coverage>
 """
 
+from __future__ import annotations
+
 import contextlib
 import re
 import xml.etree.ElementTree as ET

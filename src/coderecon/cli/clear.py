@@ -1,5 +1,7 @@
 """recon clear command - remove CodeRecon data from a repository."""
 
+from __future__ import annotations
+
 import shutil
 from pathlib import Path
 

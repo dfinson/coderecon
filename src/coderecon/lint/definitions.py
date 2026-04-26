@@ -1,5 +1,7 @@
 """Tool definitions - register all supported lint tools."""
 
+from __future__ import annotations
+
 from coderecon.lint import parsers
 from coderecon.lint.models import ToolCategory
 from coderecon.lint.tools import LintTool, registry

@@ -1,5 +1,7 @@
 """CodeRecon CLI - recon command."""
 
+from __future__ import annotations
+
 import click
 
 from coderecon.cli.clear import clear_command

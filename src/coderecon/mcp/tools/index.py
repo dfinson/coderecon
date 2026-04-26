@@ -5,6 +5,8 @@ The MCP tool handlers that were previously in this module (search, map_repo)
 have been removed in v2.
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
