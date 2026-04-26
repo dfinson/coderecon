@@ -1067,12 +1067,15 @@ class _NullProgress:
     """No-op progress sink for callers that don't need progress."""
 
     async def report_progress(self, current: int, total: int, message: str) -> None:
+        """No-op: progress discarded when no listener is attached."""
         pass
 
     async def info(self, message: str) -> None:
+        """No-op: info message discarded when no listener is attached."""
         pass
 
     async def warning(self, message: str) -> None:
+        """No-op: warning discarded when no listener is attached."""
         pass
 
 

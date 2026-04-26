@@ -7,6 +7,7 @@ import sys
 from importlib.metadata import version
 
 import click
+import structlog
 
 from coderecon.config.user_config import DEFAULT_PORT
 from coderecon.core.progress import (
@@ -122,6 +123,7 @@ def up_command(port: int, stdio: bool, dev_mode: bool) -> None:
         try:
             asyncio.run(run_global_server_stdio(dev_mode=dev_mode))
         except KeyboardInterrupt:
+            structlog.get_logger().debug("keyboard_interrupt_during_stdio_server", exc_info=True)
             pass
         return
 

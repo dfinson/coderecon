@@ -21,6 +21,8 @@ from typing import TYPE_CHECKING, Literal
 
 from coderecon.index._internal.ignore import PRUNABLE_DIRS
 
+from coderecon.files.ops import atomic_write_text
+
 # Import packs to trigger registration
 from coderecon.testing import packs as _packs  # noqa: F401
 from coderecon.testing.emitters import (
@@ -994,6 +996,7 @@ class TestOps:
                 target, result, cov_artifact = await coro
             except asyncio.CancelledError:
                 # Task was cancelled, skip processing
+                structlog.get_logger().debug("test_task_cancelled", exc_info=True)
                 continue
 
             if cov_artifact:
@@ -1314,10 +1317,10 @@ class TestOps:
 
             # Write artifacts
             stdout_path = artifact_dir / f"{safe_name}.stdout.txt"
-            stdout_path.write_text(stdout)
+            atomic_write_text(stdout_path, stdout)
             if stderr:
                 stderr_path = artifact_dir / f"{safe_name}.stderr.txt"
-                stderr_path.write_text(stderr)
+                atomic_write_text(stderr_path, stderr)
 
             # Create execution context
             execution = ExecutionContext(
@@ -1526,10 +1529,10 @@ class TestOps:
 
             # Write artifacts
             stdout_path = artifact_dir / f"{batch_name}.stdout.txt"
-            stdout_path.write_text(stdout)
+            atomic_write_text(stdout_path, stdout)
             if stderr:
                 stderr_path = artifact_dir / f"{batch_name}.stderr.txt"
-                stderr_path.write_text(stderr)
+                atomic_write_text(stderr_path, stderr)
 
             execution = ExecutionContext(
                 command=cmd,
@@ -1638,7 +1641,7 @@ class TestOps:
             "coverage": status.coverage,
             "target_selectors": status.target_selectors,
         }
-        result_path.write_text(json.dumps(result_data, indent=2))
+        atomic_write_text(result_path, json.dumps(result_data, indent=2))
 
     def _load_result(self, artifact_dir: Path) -> TestRunStatus | None:
         """Load test run result from artifact directory."""

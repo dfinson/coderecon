@@ -532,6 +532,7 @@ class SummaryStream:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
+        """No-op: SummaryStream requires no teardown."""
         pass
 
 

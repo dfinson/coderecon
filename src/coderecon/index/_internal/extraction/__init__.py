@@ -12,6 +12,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
+import structlog
+
 if TYPE_CHECKING:
     from tree_sitter import Node, Tree
 
@@ -506,4 +508,5 @@ def _register_builtin_extractors(registry: ExtractorRegistry) -> None:
             registry.register(extractor)
         except ValueError:
             # Grammar not available - skip this language
+            structlog.get_logger().debug("grammar_not_available", grammar=pack.grammar_name, exc_info=True)
             pass

@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING, Any
 
 import tantivy
 
+from coderecon.files.ops import atomic_write_text
+
 if TYPE_CHECKING:
     pass
 
@@ -137,7 +139,7 @@ class LexicalIndex:
         self._initialized = True
 
         # Persist the schema version so future startups detect upgrades.
-        version_file.write_text(json.dumps({"version": SCHEMA_VERSION}))
+        atomic_write_text(version_file, json.dumps({"version": SCHEMA_VERSION}))
 
     def add_file(
         self,

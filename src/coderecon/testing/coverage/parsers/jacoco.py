@@ -31,6 +31,8 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import structlog
+
 from coderecon.testing.coverage.models import (
     BranchCoverage,
     CoverageParseError,
@@ -68,6 +70,7 @@ class JacocoParser:
                 if "<report" in header and '<counter type="' in header:
                     return True
         except (OSError, UnicodeDecodeError):
+            structlog.get_logger().debug("jacoco content sniff failed", exc_info=True)
             pass
         return False
 

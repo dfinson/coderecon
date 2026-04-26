@@ -8,6 +8,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
+import structlog
+
 from coderecon.git._internal.constants import (
     GIT_REPOSITORY_STATE_APPLY_MAILBOX,
     GIT_REPOSITORY_STATE_APPLY_MAILBOX_OR_REBASE,
@@ -1027,6 +1029,7 @@ class RepoAccess:
                 if sm["path"] == path:
                     return name
             except GitError:
+                structlog.get_logger().debug("submodule_lookup_failed", name=name, exc_info=True)
                 continue
         return None
 

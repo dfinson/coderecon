@@ -137,6 +137,7 @@ class CodeRecon:
             try:
                 await self._reader_task
             except asyncio.CancelledError:
+                structlog.get_logger().debug("reader_task_cancelled", exc_info=True)
                 pass
 
         self._pending.cancel_all()

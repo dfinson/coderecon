@@ -40,6 +40,8 @@ import contextlib
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import structlog
+
 from coderecon.testing.coverage.models import (
     BranchCoverage,
     CoverageParseError,
@@ -79,6 +81,7 @@ class OpencoverParser:
                 if "<CoverageSession" in header or "<SequencePoint" in header:
                     return True
         except (OSError, UnicodeDecodeError):
+            structlog.get_logger().debug("opencover content sniff failed", exc_info=True)
             pass
         return False
 

@@ -16,6 +16,7 @@ from coderecon.config.models import CodeReconConfig, IndexerConfig, ServerConfig
 from coderecon.daemon.concurrency import FreshnessGate
 from coderecon.daemon.indexer import BackgroundIndexer
 from coderecon.daemon.watcher import FileWatcher
+from coderecon.files.ops import atomic_write_text
 
 if TYPE_CHECKING:
     from coderecon.index.ops import IndexCoordinatorEngine
@@ -117,8 +118,8 @@ def write_pid_file(coderecon_dir: Path, port: int) -> None:
     pid_path = coderecon_dir / PID_FILE
     port_path = coderecon_dir / PORT_FILE
 
-    pid_path.write_text(str(os.getpid()))
-    port_path.write_text(str(port))
+    atomic_write_text(pid_path, str(os.getpid()))
+    atomic_write_text(port_path, str(port))
 
     log.debug("pid_file_written", pid_path=str(pid_path), port=port)
 

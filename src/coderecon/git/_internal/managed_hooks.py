@@ -12,6 +12,8 @@ from pathlib import Path
 
 import structlog
 
+from coderecon.files.ops import atomic_write_text
+
 log = structlog.get_logger(__name__)
 
 _HOOK_MARKER = "# coderecon-managed-hook"
@@ -65,7 +67,7 @@ def install_hooks(repo_root: Path) -> list[str]:
                 continue
 
         hook_content = _HOOK_TEMPLATE.format(marker=_HOOK_MARKER)
-        hook_path.write_text(hook_content)
+        atomic_write_text(hook_path, hook_content)
         hook_path.chmod(hook_path.stat().st_mode | stat.S_IEXEC)
         installed.append(hook_name)
         log.debug("hook_installed", hook=hook_name)

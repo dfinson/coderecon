@@ -281,21 +281,27 @@ class _NoOpSpan:
         return self
 
     def __exit__(self, *args: Any) -> None:
+        """No-op: span cleanup disabled when telemetry is off."""
         pass
 
     def set_attribute(self, key: str, value: Any) -> None:
+        """No-op: attribute ignored when telemetry is disabled."""
         pass
 
     def set_attributes(self, attributes: dict[str, Any]) -> None:
+        """No-op: attributes ignored when telemetry is disabled."""
         pass
 
     def add_event(self, name: str, attributes: dict[str, Any] | None = None) -> None:
+        """No-op: event ignored when telemetry is disabled."""
         pass
 
     def set_status(self, status: Any) -> None:
+        """No-op: status ignored when telemetry is disabled."""
         pass
 
     def record_exception(self, exception: Exception) -> None:
+        """No-op: exception recording disabled when telemetry is off."""
         pass
 
     def is_recording(self) -> bool:
@@ -349,6 +355,7 @@ class _NoOpCounter:
     """No-op counter instrument."""
 
     def add(self, amount: int | float, attributes: dict[str, Any] | None = None) -> None:
+        """No-op: counter increment ignored when telemetry is disabled."""
         pass
 
 
@@ -356,6 +363,7 @@ class _NoOpHistogram:
     """No-op histogram instrument."""
 
     def record(self, amount: int | float, attributes: dict[str, Any] | None = None) -> None:
+        """No-op: histogram recording ignored when telemetry is disabled."""
         pass
 
 

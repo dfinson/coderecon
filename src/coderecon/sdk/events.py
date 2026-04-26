@@ -7,6 +7,8 @@ import fnmatch
 import logging
 from typing import Any, Callable
 
+import structlog
+
 from coderecon.sdk.types import Event
 
 _log = logging.getLogger(__name__)
@@ -37,6 +39,7 @@ class EventRouter:
                 try:
                     queue.put_nowait(event)
                 except asyncio.QueueFull:
+                    structlog.get_logger().debug("event_queue_full_dropped", event_type=event.type, exc_info=True)
                     pass  # Drop events if consumer is too slow
 
     def subscribe(self, *patterns: str, maxsize: int = 256) -> asyncio.Queue[Event]:

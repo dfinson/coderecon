@@ -148,6 +148,7 @@ class AnalysisPipeline:
             await asyncio.sleep(_TIER2_DEBOUNCE_SEC)
             await self._run_tier2()
         except asyncio.CancelledError:
+            structlog.get_logger().debug("tier2_debounce_cancelled", exc_info=True)
             pass
 
     async def _run_tier2(self) -> None:
@@ -236,4 +237,5 @@ class AnalysisPipeline:
             try:
                 await self._tier2_task
             except asyncio.CancelledError:
+                structlog.get_logger().debug("tier2_task_stop_cancelled", exc_info=True)
                 pass

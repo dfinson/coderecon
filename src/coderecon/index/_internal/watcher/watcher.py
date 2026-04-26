@@ -18,6 +18,8 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import structlog
+
 from coderecon.index._internal.ignore import IgnoreChecker
 
 if TYPE_CHECKING:
@@ -234,6 +236,7 @@ class FileWatcher:
                     mtimes[file_path] = stat.st_mtime
                 except OSError:
                     # File may have been deleted between listing and stat
+                    structlog.get_logger().debug("file_stat_race", path=str(file_path), exc_info=True)
                     pass
 
         return mtimes
@@ -358,6 +361,7 @@ class BackgroundIndexer:
             async for events in self._watcher.watch():
                 await self._queue.put(events)
         except asyncio.CancelledError:
+            structlog.get_logger().debug("watch_loop_cancelled", exc_info=True)
             pass
 
     async def _process_loop(self) -> None:
@@ -391,4 +395,5 @@ class BackgroundIndexer:
                         exc_info=True,
                     )
         except asyncio.CancelledError:
+            structlog.get_logger().debug("process_loop_cancelled", exc_info=True)
             pass

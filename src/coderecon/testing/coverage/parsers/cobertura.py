@@ -37,6 +37,8 @@ import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import structlog
+
 from coderecon.testing.coverage.models import (
     BranchCoverage,
     CoverageParseError,
@@ -80,6 +82,7 @@ class CoberturaParser:
                 ):
                     return True
         except (OSError, UnicodeDecodeError):
+            structlog.get_logger().debug("cobertura content sniff failed", exc_info=True)
             pass
         return False
 

@@ -14,6 +14,8 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, Field
 
+from coderecon.files.ops import atomic_write_text
+
 log = structlog.get_logger(__name__)
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -102,14 +104,14 @@ def write_user_config(path: Path, config: UserConfig | None = None) -> None:
         lines.append(f"# log_level: {cfg.log_level}")
     lines.append("")
 
-    path.write_text("\n".join(lines))
+    atomic_write_text(path, "\n".join(lines))
 
 
 def write_runtime_state(path: Path, state: RuntimeState) -> None:
     """Write runtime state file with warning header."""
     data = state.model_dump()
     content = STATE_HEADER + yaml.dump(data, default_flow_style=False, sort_keys=False)
-    path.write_text(content)
+    atomic_write_text(path, content)
 
 
 def load_user_config(path: Path) -> UserConfig:

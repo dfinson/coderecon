@@ -5,10 +5,15 @@ Pure filesystem I/O. No index dependency.
 
 from __future__ import annotations
 
+import contextlib
 import fnmatch
+import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
+
+import structlog
 
 from coderecon.core.errors import PathTraversalError
 from coderecon.core.languages import EXTENSION_TO_NAME
@@ -148,6 +153,7 @@ class FileOps:
                     if any(part.startswith(".") for part in rel.parts[:-1]):
                         continue
                 except ValueError:
+                    structlog.get_logger().debug("relative_path_hidden_check_failed", exc_info=True)
                     continue
 
             # Apply file_type filter
@@ -163,6 +169,7 @@ class FileOps:
                     # Use as_posix() for cross-platform pattern matching
                     rel_str = rel_path.as_posix()
                 except ValueError:
+                    structlog.get_logger().debug("relative_path_pattern_check_failed", exc_info=True)
                     continue
 
                 if not fnmatch.fnmatch(rel_str, pattern) and not fnmatch.fnmatch(
@@ -193,6 +200,7 @@ class FileOps:
                         entry.size = stat.st_size
                         entry.modified_at = int(stat.st_mtime)
                     except OSError:
+                        structlog.get_logger().debug("file_stat_failed", exc_info=True)
                         pass
 
                 entries.append(entry)
@@ -236,6 +244,7 @@ class FileOps:
                 full_path = validate_path_in_repo(self._repo_root, rel_path)
             except PathTraversalError:
                 # Skip paths that escape repo root (silent skip matches existing not-found behavior)
+                structlog.get_logger().debug("path_traversal_skipped", path=rel_path, exc_info=True)
                 continue
 
             if not full_path.is_file():
@@ -280,3 +289,20 @@ class FileOps:
             )
 
         return ReadFilesResult(files=results)
+
+
+def atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> None:
+    """Write *content* to *path* atomically via temp-file + rename.
+
+    Ensures readers never see a partially-written file.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding=encoding) as fh:
+            fh.write(content)
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise

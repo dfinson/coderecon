@@ -15,6 +15,8 @@ from pathlib import Path
 
 import psutil
 
+from coderecon.files.ops import atomic_write_text
+
 log = structlog.get_logger(__name__)
 
 # Patterns emitted by runtimes on OOM. Matched against stderr.
@@ -67,6 +69,7 @@ def child_rss_mb(pid: int) -> int:
             try:
                 total += child.memory_info().rss
             except (psutil.NoSuchProcess, psutil.AccessDenied):
+                structlog.get_logger().debug("child_process_memory_unavailable", exc_info=True)
                 pass
         return int(total // (1024 * 1024))
     except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -182,6 +185,6 @@ class MemoryHistory:
                 }
                 for tid, p in self._data.items()
             }
-            self._path.write_text(json.dumps(payload, indent=2) + "\n")
+            atomic_write_text(self._path, json.dumps(payload, indent=2) + "\n")
         except OSError:
             log.debug("memory_history.save_failed", exc_info=True)

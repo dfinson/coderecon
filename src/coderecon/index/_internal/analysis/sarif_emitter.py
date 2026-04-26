@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from coderecon.files.ops import atomic_write_text
+
 if TYPE_CHECKING:
     from coderecon.index._internal.analysis.gate_engine import GateResult
 
@@ -167,5 +169,5 @@ def lint_diagnostics_to_sarif(
 def write_sarif(sarif: dict[str, Any], output_path: Path) -> Path:
     """Write SARIF dict to a JSON file."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(sarif, indent=2))
+    atomic_write_text(output_path, json.dumps(sarif, indent=2))
     return output_path

@@ -17,6 +17,8 @@ from typing import Any
 
 import structlog
 
+from coderecon.files.ops import atomic_write_text
+
 log = structlog.get_logger(__name__)
 
 _DATA_DIR = Path(__file__).parent / "data"
@@ -93,7 +95,7 @@ def load_manifest() -> RankingManifest:
 def write_manifest(manifest: RankingManifest) -> None:
     """Write manifest to package data (called by training pipeline)."""
     _DATA_DIR.mkdir(parents=True, exist_ok=True)
-    _MANIFEST_PATH.write_text(json.dumps({
+    atomic_write_text(_MANIFEST_PATH, json.dumps({
         "model_version": manifest.model_version,
         "dataset_version": manifest.dataset_version,
         "trained_at": manifest.trained_at,

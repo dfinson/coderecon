@@ -22,6 +22,8 @@ from __future__ import annotations
 import contextlib
 from pathlib import Path
 
+import structlog
+
 from coderecon.testing.coverage.models import (
     BranchCoverage,
     CoverageParseError,
@@ -56,6 +58,7 @@ class LcovParser:
                     if stripped and not stripped.startswith("#"):
                         break
         except (OSError, UnicodeDecodeError):
+            structlog.get_logger().debug("lcov content sniff failed", exc_info=True)
             pass
         return False
 
@@ -103,6 +106,7 @@ class LcovParser:
                     hits = 0 if hits_str == "-" else int(hits_str)
                     current_file.lines[line_num] = hits
                 except ValueError:
+                    structlog.get_logger().debug("skipping malformed DA record", exc_info=True)
                     pass
 
             elif line.startswith("BRDA:"):
@@ -128,6 +132,7 @@ class LcovParser:
                         )
                     )
                 except ValueError:
+                    structlog.get_logger().debug("skipping malformed BRDA record", exc_info=True)
                     pass
 
             elif line.startswith("FN:"):
@@ -140,6 +145,7 @@ class LcovParser:
                     name = parts[1]
                     fn_names[line_num] = name
                 except ValueError:
+                    structlog.get_logger().debug("skipping malformed FN record", exc_info=True)
                     pass
 
             elif line.startswith("FNDA:"):
@@ -164,6 +170,7 @@ class LcovParser:
                         hits=hits,
                     )
                 except ValueError:
+                    structlog.get_logger().debug("skipping malformed FNDA record", exc_info=True)
                     pass
 
             elif line == "end_of_record":

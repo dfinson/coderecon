@@ -21,6 +21,8 @@ from coderecon.git.models import RebasePlan, RebaseResult, RebaseStep
 if TYPE_CHECKING:
     from coderecon.git._internal.access import RepoAccess
 
+from coderecon.files.ops import atomic_write_text
+
 
 # Rebase state file stored in .git/
 REBASE_STATE_FILE = "coderecon-rebase-state.json"
@@ -353,7 +355,7 @@ class RebaseFlow:
             "current_step": state.current_step,
             "completed_commits": state.completed_commits,
         }
-        self._state_path.write_text(json.dumps(data))
+        atomic_write_text(self._state_path, json.dumps(data))
 
     def _load_state(self) -> RebaseState | None:
         if not self._state_path.exists():

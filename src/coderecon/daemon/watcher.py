@@ -321,6 +321,7 @@ class FileWatcher:
                 if self._should_flush():
                     self._flush_pending()
         except asyncio.CancelledError:
+            structlog.get_logger().debug("debounce_flush_loop_cancelled", exc_info=True)
             pass
 
     async def _watch_loop(self) -> None:
@@ -392,6 +393,7 @@ class FileWatcher:
                     # Brief backoff before retry
                     await asyncio.sleep(1.0)
         except asyncio.CancelledError:
+            structlog.get_logger().debug("watch_loop_cancelled", exc_info=True)
             pass
         finally:
             if self._debounce_task:
@@ -427,6 +429,7 @@ class FileWatcher:
                             await self._watch_task
                         self._watch_task = asyncio.create_task(self._watch_loop())
         except asyncio.CancelledError:
+            structlog.get_logger().debug("periodic_dir_scan_cancelled", exc_info=True)
             pass
 
     async def _poll_loop(self) -> None:
@@ -566,6 +569,7 @@ class FileWatcher:
             try:
                 rel_path = path.relative_to(self.repo_root)
             except ValueError:
+                structlog.get_logger().debug("path_not_relative_to_repo", path=path_str, exc_info=True)
                 continue
 
             if ".git" in rel_path.parts:

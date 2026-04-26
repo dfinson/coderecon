@@ -533,6 +533,7 @@ class GlobalDaemon:
                             await self._stop_worktree_slot(wt_slot)
                             del slot.worktrees[wt_name]
         except asyncio.CancelledError:
+            structlog.get_logger().debug("eviction_loop_cancelled", exc_info=True)
             pass
 
     def start_eviction_loop(self, idle_timeout: float) -> None:

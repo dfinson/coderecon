@@ -13,6 +13,8 @@ from importlib.util import find_spec
 from pathlib import Path
 from collections.abc import Callable
 
+import structlog
+
 from coderecon.index.models import LanguageFamily
 
 # Map LanguageFamily -> (PyPI package name, min version, import name)
@@ -234,6 +236,7 @@ def scan_repo_languages(repo_root: Path) -> set[LanguageFamily]:
                     languages.add(lang)
             return languages
     except (FileNotFoundError, subprocess.TimeoutExpired):
+        structlog.get_logger().debug("git_ls_files_unavailable", exc_info=True)
         pass
 
     # Fall back to walking the filesystem with pruning

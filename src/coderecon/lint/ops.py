@@ -8,6 +8,8 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+import structlog
+
 from coderecon.core.languages import detect_language_family
 from coderecon.lint.models import LintResult, ToolCategory, ToolResult
 from coderecon.lint.tools import LintTool, registry
@@ -279,6 +281,7 @@ class LintOps:
                 return detected
         except (RuntimeError, AttributeError):
             # Coordinator not initialized or doesn't have get_lint_tools
+            structlog.get_logger().debug("coordinator_lint_tools_unavailable", exc_info=True)
             pass
 
         # Fallback: runtime detection

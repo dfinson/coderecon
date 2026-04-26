@@ -74,6 +74,8 @@ from coderecon.git.models import (
     WorktreeInfo,
 )
 
+from coderecon.files.ops import atomic_write_text
+
 log = structlog.get_logger(__name__)
 
 
@@ -739,7 +741,7 @@ class GitOps:
             raise WorktreeLockedError(name)
 
         try:
-            lock_file.write_text(reason or "", encoding="utf-8")
+            atomic_write_text(lock_file, reason or "")
         except OSError as e:
             raise WorktreeError(f"Failed to lock worktree {name}: {e}") from e
 

@@ -22,6 +22,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pathspec
+import structlog
 
 from coderecon.core.excludes import (
     DEFAULT_PRUNABLE_DIRS,
@@ -304,6 +305,7 @@ class IgnoreChecker:
             # Invalidate compiled spec so it is rebuilt on next match.
             self._spec = None
         except OSError:
+            structlog.get_logger().debug("ignore_file_read_failed", exc_info=True)
             pass
 
     def should_ignore(self, path: Path) -> bool:

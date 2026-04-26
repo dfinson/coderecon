@@ -38,6 +38,8 @@ import contextlib
 import json
 from pathlib import Path
 
+import structlog
+
 from coderecon.testing.coverage.models import (
     CoverageParseError,
     CoverageReport,
@@ -74,6 +76,7 @@ class SimplecovParser:
                 if '"coverage"' in header and ('"lines":' in header or '".rb":' in header):
                     return True
         except (OSError, UnicodeDecodeError):
+            structlog.get_logger().debug("simplecov content sniff failed", exc_info=True)
             pass
         return False
 

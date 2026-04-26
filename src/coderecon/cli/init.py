@@ -31,6 +31,7 @@ from coderecon.core.progress import (
     phase_box,
     status,
 )
+from coderecon.files.ops import atomic_write_text
 from coderecon.templates import get_reconignore_template
 
 log = structlog.get_logger(__name__)
@@ -235,21 +236,21 @@ def _inject_agent_instructions(
                     flags=re.DOTALL,
                 )
                 if new_content != content:
-                    target.write_text(new_content)
+                    atomic_write_text(target, new_content)
                     try:
                         modified.append(str(target.relative_to(repo_root)))
                     except ValueError:
                         modified.append(str(target))
             else:
                 new_content = content.rstrip() + "\n" + snippet
-                target.write_text(new_content)
+                atomic_write_text(target, new_content)
                 try:
                     modified.append(str(target.relative_to(repo_root)))
                 except ValueError:
                     modified.append(str(target))
         else:
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(header + snippet)
+            atomic_write_text(target, header + snippet)
             try:
                 modified.append(str(target.relative_to(repo_root)))
             except ValueError:
@@ -318,14 +319,14 @@ def _ensure_vscode_mcp_config(repo_root: Path, port: int) -> tuple[bool, str]:
 
         existing["servers"] = servers
         output = json.dumps(existing, indent=2) + "\n"
-        mcp_json_path.write_text(output)
+        atomic_write_text(mcp_json_path, output)
         return True, server_name
     else:
         # Create new mcp.json
         vscode_dir.mkdir(parents=True, exist_ok=True)
         config = {"servers": {server_name: expected_config}}
         output = json.dumps(config, indent=2) + "\n"
-        mcp_json_path.write_text(output)
+        atomic_write_text(mcp_json_path, output)
         return True, server_name
 
 
@@ -359,7 +360,7 @@ def sync_vscode_mcp_port(repo_root: Path, port: int) -> bool:
         }
         existing["servers"] = servers
         output = json.dumps(existing, indent=2) + "\n"
-        mcp_json_path.write_text(output)
+        atomic_write_text(mcp_json_path, output)
         return True
 
     current_url = servers[server_name].get("url", "")
@@ -378,7 +379,7 @@ def sync_vscode_mcp_port(repo_root: Path, port: int) -> bool:
         servers[server_name] = {"type": "http", "url": expected_url}
     existing["servers"] = servers
     output = json.dumps(existing, indent=2) + "\n"
-    mcp_json_path.write_text(output)
+    atomic_write_text(mcp_json_path, output)
     return True
 
 
@@ -484,7 +485,7 @@ def initialize_repo(
 
     reconignore_path = coderecon_dir / ".reconignore"
     if not reconignore_path.exists() or reindex:
-        reconignore_path.write_text(get_reconignore_template())
+        atomic_write_text(reconignore_path, get_reconignore_template())
 
     # Merge repo-root .reconignore if it exists — user patterns survive reindex
     root_reconignore = repo_root / ".reconignore"
@@ -501,17 +502,18 @@ def initialize_repo(
             if new_patterns:
                 merged = generated.rstrip() + "\n\n# From repo-root .reconignore\n"
                 merged += "\n".join(new_patterns) + "\n"
-                reconignore_path.write_text(merged)
+                atomic_write_text(reconignore_path, merged)
 
     # Create .gitignore to exclude artifacts from version control per SPEC.md §7.7
     gitignore_path = coderecon_dir / ".gitignore"
     if not gitignore_path.exists() or reindex:
-        gitignore_path.write_text(
+        atomic_write_text(
+            gitignore_path,
             "# Ignore everything except user config files\n"
             "*\n"
             "!.gitignore\n"
             "!config.yaml\n"
-            "# state.yaml is auto-generated, do not commit\n"
+            "# state.yaml is auto-generated, do not commit\n",
         )
 
     # === IDE & Agent Integration ===

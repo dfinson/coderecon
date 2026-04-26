@@ -13,12 +13,11 @@ import uvicorn
 
 from coderecon.catalog.db import CatalogDB, _default_coderecon_home
 from coderecon.catalog.registry import CatalogRegistry
+from coderecon.config.user_config import DEFAULT_PORT
+from coderecon.daemon.lifecycle import PID_FILE, PORT_FILE
+from coderecon.files.ops import atomic_write_text
 
 log = structlog.get_logger(__name__)
-
-DEFAULT_PORT = 7654
-PID_FILE = "daemon.pid"
-PORT_FILE = "daemon.port"
 
 
 def _coderecon_dir() -> Path:
@@ -27,8 +26,8 @@ def _coderecon_dir() -> Path:
 
 def write_global_pid(home: Path, port: int) -> None:
     """Write PID and port files for global daemon discovery."""
-    (home / PID_FILE).write_text(str(os.getpid()))
-    (home / PORT_FILE).write_text(str(port))
+    atomic_write_text(home / PID_FILE, str(os.getpid()))
+    atomic_write_text(home / PORT_FILE, str(port))
 
 
 def remove_global_pid(home: Path) -> None:
@@ -143,7 +142,8 @@ async def run_global_server(
 
     class _Server(uvicorn.Server):
         def install_signal_handlers(self) -> None:
-            pass  # handled externally
+            """No-op: signal handlers are installed externally."""
+            pass
 
     server = _Server(uvicorn_config)
 

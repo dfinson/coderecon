@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from coderecon.files.ops import atomic_write_text
+
 if TYPE_CHECKING:
     pass
 
@@ -136,7 +138,7 @@ class MutationOps:
                 insertions = content.count("\n") + 1
                 if not dry_run:
                     full_path.parent.mkdir(parents=True, exist_ok=True)
-                    full_path.write_text(content)
+                    atomic_write_text(full_path, content)
 
             elif edit.action == "update":
                 old_file_content = full_path.read_text()
@@ -153,7 +155,7 @@ class MutationOps:
                 deletions = max(0, len(old_lines) - len(new_lines))
 
                 if not dry_run:
-                    full_path.write_text(new_file_content)
+                    atomic_write_text(full_path, new_file_content)
 
             file_deltas.append(
                 FileDelta(

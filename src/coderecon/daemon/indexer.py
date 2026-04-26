@@ -135,6 +135,7 @@ class BackgroundIndexer:
             await asyncio.sleep(self.config.debounce_sec)
             await self._flush()
         except asyncio.CancelledError:
+            structlog.get_logger().debug("debounced_flush_cancelled", exc_info=True)
             pass
 
     async def _flush(self) -> None:

@@ -24,6 +24,8 @@ from coderecon.index._internal.analysis.code_graph import (
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
+from coderecon.files.ops import atomic_write_text
+
 # Community color palette (vis.js color names)
 _COLORS = [
     "#4285f4", "#ea4335", "#fbbc04", "#34a853", "#ff6d01",
@@ -52,7 +54,7 @@ def export_graph_html(
     """
     g = build_file_graph(engine)
     if g.number_of_nodes() == 0:
-        output_path.write_text(_EMPTY_HTML)
+        atomic_write_text(output_path, _EMPTY_HTML)
         return output_path
 
     # Compute analysis
@@ -118,7 +120,7 @@ def export_graph_html(
     }))
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(html)
+    atomic_write_text(output_path, html)
     return output_path
 
 

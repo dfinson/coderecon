@@ -6,6 +6,14 @@ from coderecon.files.ops import (
     FileResult,
     ListFilesResult,
     ReadFilesResult,
+    atomic_write_text,
 )
 
-__all__ = ["FileEntry", "FileOps", "FileResult", "ListFilesResult", "ReadFilesResult"]
+__all__ = [
+    "FileEntry",
+    "FileOps",
+    "FileResult",
+    "ListFilesResult",
+    "ReadFilesResult",
+    "atomic_write_text",
+]

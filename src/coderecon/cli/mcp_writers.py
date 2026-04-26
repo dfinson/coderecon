@@ -26,6 +26,8 @@ from typing import Any
 import json5
 import structlog
 
+from coderecon.files.ops import atomic_write_text
+
 log = structlog.get_logger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -144,12 +146,12 @@ def _write_vscode(repo_root: Path, port: int, server_name: str) -> bool:
 
         servers[server_name] = expected_entry
         existing["servers"] = servers
-        mcp_json_path.write_text(json.dumps(existing, indent=2) + "\n")
+        atomic_write_text(mcp_json_path, json.dumps(existing, indent=2) + "\n")
         return True
 
     vscode_dir.mkdir(parents=True, exist_ok=True)
     config: dict[str, Any] = {"servers": {server_name: expected_entry}}
-    mcp_json_path.write_text(json.dumps(config, indent=2) + "\n")
+    atomic_write_text(mcp_json_path, json.dumps(config, indent=2) + "\n")
     return True
 
 
@@ -185,11 +187,11 @@ def _write_claude(repo_root: Path, port: int, server_name: str) -> bool:
 
         servers[server_name] = expected_entry
         existing["mcpServers"] = servers
-        mcp_path.write_text(json.dumps(existing, indent=2) + "\n")
+        atomic_write_text(mcp_path, json.dumps(existing, indent=2) + "\n")
         return True
 
     config: dict[str, Any] = {"mcpServers": {server_name: expected_entry}}
-    mcp_path.write_text(json.dumps(config, indent=2) + "\n")
+    atomic_write_text(mcp_path, json.dumps(config, indent=2) + "\n")
     return True
 
 
@@ -220,12 +222,12 @@ def _write_cursor(repo_root: Path, port: int, server_name: str) -> bool:
 
         servers[server_name] = expected_entry
         existing["mcpServers"] = servers
-        mcp_path.write_text(json.dumps(existing, indent=2) + "\n")
+        atomic_write_text(mcp_path, json.dumps(existing, indent=2) + "\n")
         return True
 
     cursor_dir.mkdir(parents=True, exist_ok=True)
     config: dict[str, Any] = {"mcpServers": {server_name: expected_entry}}
-    mcp_path.write_text(json.dumps(config, indent=2) + "\n")
+    atomic_write_text(mcp_path, json.dumps(config, indent=2) + "\n")
     return True
 
 
@@ -271,12 +273,12 @@ def _write_opencode(_repo_root: Path, port: int, server_name: str) -> bool:
 
         servers[server_name] = expected_entry
         existing["mcp"] = servers
-        config_path.write_text(json.dumps(existing, indent=2) + "\n")
+        atomic_write_text(config_path, json.dumps(existing, indent=2) + "\n")
         return True
 
     config_dir.mkdir(parents=True, exist_ok=True)
     config: dict[str, Any] = {"mcp": {server_name: expected_entry}}
-    config_path.write_text(json.dumps(config, indent=2) + "\n")
+    atomic_write_text(config_path, json.dumps(config, indent=2) + "\n")
     return True
 
 
