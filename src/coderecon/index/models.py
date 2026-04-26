@@ -361,15 +361,6 @@ class MarkerTier(StrEnum):
     PACKAGE = "package"
 
 
-class AccessStyle(StrEnum):
-    """Member access syntax style."""
-
-    DOT = "dot"  # obj.member (most languages)
-    ARROW = "arrow"  # obj->member (C, C++, PHP)
-    SCOPE = "scope"  # Namespace::member (C++, Rust, PHP)
-    BRACKET = "bracket"  # obj["member"] (dynamic access)
-
-
 class ResolutionMethod(StrEnum):
     """How a reference was resolved to its target."""
 
@@ -380,49 +371,6 @@ class ResolutionMethod(StrEnum):
     SEMANTIC = "semantic"  # Via SPLADE+CE semantic similarity
     LEXICAL = "lexical"  # Lexical search only (lowest confidence)
     UNRESOLVED = "unresolved"  # Could not resolve
-
-
-class AnnotationTargetKind(StrEnum):
-    """What kind of entity has a type annotation."""
-
-    PARAMETER = "parameter"  # Function/method parameter
-    VARIABLE = "variable"  # Local variable
-    FIELD = "field"  # Class/struct field
-    PROPERTY = "property"  # Property (getter/setter)
-    RETURN = "return"  # Function return type
-    CLASS_VAR = "class_var"  # Class-level variable
-
-
-class MemberKind(StrEnum):
-    """Kind of type member."""
-
-    FIELD = "field"  # Instance field
-    METHOD = "method"  # Instance method
-    PROPERTY = "property"  # Property
-    STATIC_FIELD = "static_field"  # Static/class field
-    STATIC_METHOD = "static_method"  # Static method
-    CLASS_METHOD = "class_method"  # Class method (Python)
-    CONSTRUCTOR = "constructor"  # Constructor/initializer
-
-
-class TypeParentKind(StrEnum):
-    """Kind of type that contains members."""
-
-    CLASS = "class"
-    STRUCT = "struct"
-    INTERFACE = "interface"
-    TRAIT = "trait"
-    PROTOCOL = "protocol"  # Swift
-    MODULE = "module"  # Module-level namespace
-    ENUM = "enum"
-
-
-class ImplStyle(StrEnum):
-    """How interface implementation is declared."""
-
-    EXPLICIT = "explicit"  # implements/impl keyword
-    STRUCTURAL = "structural"  # Go-style implicit (shape match)
-    INFERRED = "inferred"  # Type inference
 
 
 # ============================================================================
