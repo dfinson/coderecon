@@ -14,7 +14,9 @@ from pydantic import Field
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
+    from sqlalchemy.engine import Engine
 
+    from coderecon.index._internal.analysis.code_graph import GraphAnalysisResult
     from coderecon.mcp.context import AppContext
 
 log = structlog.get_logger(__name__)
@@ -87,7 +89,7 @@ def graph_communities_core(
     )
 
 
-def _sync_analysis_sections(engine: Any) -> tuple[dict[str, Any], Any]:
+def _sync_analysis_sections(engine: Engine) -> tuple[dict[str, Any], GraphAnalysisResult | None]:
     """Run sync graph analysis and return (sections, file_analysis).
 
     Separated from the async recon_understand_core so that sync DB queries

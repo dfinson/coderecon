@@ -20,6 +20,7 @@ import json
 import structlog
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -832,7 +833,7 @@ def index_splade_vectors(
     db: Database,
     *,
     file_ids: list[int] | None = None,
-    progress_cb: Any | None = None,
+    progress_cb: Callable[[int, int], None] | None = None,
 ) -> int:
     """Compute and persist SPLADE vectors for definitions.
 

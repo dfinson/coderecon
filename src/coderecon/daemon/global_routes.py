@@ -18,6 +18,7 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
+from starlette.types import Receive, Scope, Send
 
 from coderecon.git.errors import GitError
 
@@ -232,7 +233,7 @@ def build_global_app(daemon: GlobalDaemon, *, dev_mode: bool = False) -> Starlet
 # ---------------------------------------------------------------------------
 
 
-async def _asgi_not_found(scope: Any, receive: Any, send: Any) -> None:  # noqa: ARG001
+async def _asgi_not_found(scope: Scope, receive: Receive, send: Send) -> None:  # noqa: ARG001
     await send({
         "type": "http.response.start",
         "status": 404,
@@ -261,7 +262,7 @@ class DynamicMcpRouter:
     # Starlette BaseRoute protocol
     # ------------------------------------------------------------------
 
-    def matches(self, scope: Any) -> tuple[Any, Any]:
+    def matches(self, scope: Scope) -> tuple[Any, Any]:
         from starlette.routing import Match
 
         if scope["type"] not in ("http", "websocket"):
@@ -283,7 +284,7 @@ class DynamicMcpRouter:
 
         raise NoMatchFound(name, path_params)
 
-    async def handle(self, scope: Any, receive: Any, send: Any) -> None:
+    async def handle(self, scope: Scope, receive: Receive, send: Send) -> None:
         from coderecon.daemon.resolve import resolve_worktree
 
         path: str = scope.get("path", "")
@@ -306,7 +307,7 @@ class DynamicMcpRouter:
         await wt_slot.mcp_asgi_app(new_scope, receive, send)
 
     # Allow use as a standalone ASGI app too (matches BaseRoute.__call__)
-    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         from starlette.routing import Match
 
         match, _ = self.matches(scope)

@@ -25,7 +25,10 @@ Usage::
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import tree_sitter
 
 from coderecon.index._internal.parsing.packs import (
     _GENERIC_SCOPE_PATTERNS,
@@ -146,7 +149,7 @@ class TreeSitterService:
     # C# specific
     # ------------------------------------------------------------------
 
-    def extract_csharp_namespace_types(self, root_node: Any) -> dict[str, list[str]]:
+    def extract_csharp_namespace_types(self, root_node: tree_sitter.Node) -> dict[str, list[str]]:
         """Extract C# namespace-to-types mapping."""
         return self._parser.extract_csharp_namespace_types(root_node)
 
@@ -157,7 +160,7 @@ class TreeSitterService:
 
 
 def _extract_scopes_generic(
-    root: Any,
+    root: tree_sitter.Node,
     scope_types: dict[str, str],
 ) -> list[SyntacticScope]:
     """Walk tree and emit scopes driven by a ``scope_types`` dict.
@@ -186,7 +189,7 @@ def _extract_scopes_generic(
         )
     )
 
-    def walk(node: Any, parent_scope_id: int) -> None:
+    def walk(node: tree_sitter.Node, parent_scope_id: int) -> None:
         nonlocal scope_counter
 
         kind = scope_types.get(node.type)
@@ -216,7 +219,7 @@ def _extract_scopes_generic(
 
 
 def _extract_scopes_by_pattern(
-    root: Any,
+    root: tree_sitter.Node,
     patterns: dict[str, str],
 ) -> list[SyntacticScope]:
     """Fallback scope extractor: matches ``node.type`` substrings.
@@ -239,7 +242,7 @@ def _extract_scopes_by_pattern(
         )
     )
 
-    def walk(node: Any, parent_scope_id: int) -> None:
+    def walk(node: tree_sitter.Node, parent_scope_id: int) -> None:
         nonlocal scope_counter
 
         kind: str | None = None

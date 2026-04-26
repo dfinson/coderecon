@@ -11,7 +11,7 @@ import sys
 from dataclasses import dataclass
 from importlib.util import find_spec
 from pathlib import Path
-from typing import Any
+from collections.abc import Callable
 
 from coderecon.index.models import LanguageFamily
 
@@ -142,7 +142,7 @@ class GrammarInstallResult:
 
 
 def install_grammars(
-    packages: list[tuple[str, str]], quiet: bool = False, status_fn: Any = None
+    packages: list[tuple[str, str]], quiet: bool = False, status_fn: Callable[[str], None] | None = None
 ) -> GrammarInstallResult:
     """Install grammar packages via pip.
 
@@ -251,7 +251,7 @@ def scan_repo_languages(repo_root: Path) -> set[LanguageFamily]:
     return languages
 
 
-def ensure_grammars_for_repo(repo_root: Path, quiet: bool = False, status_fn: Any = None) -> bool:
+def ensure_grammars_for_repo(repo_root: Path, quiet: bool = False, status_fn: Callable[[str], None] | None = None) -> bool:
     """Scan repo and install any missing grammars.
 
     Args:

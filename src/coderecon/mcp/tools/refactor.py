@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
     from coderecon.mcp.context import AppContext
     from coderecon.mcp.session import SessionState
-    from coderecon.refactor.ops import RefactorResult
+    from coderecon.refactor.ops import RefactorPreview, RefactorResult
 
 
 # =============================================================================
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 # =============================================================================
 
 
-def _summarize_refactor(status: str, files_affected: int, preview: Any) -> str:
+def _summarize_refactor(status: str, files_affected: int, preview: RefactorPreview | None) -> str:
     """Generate summary for refactor operations."""
     if status == "cancelled":
         return "refactoring cancelled"
@@ -40,7 +40,7 @@ def _summarize_refactor(status: str, files_affected: int, preview: Any) -> str:
     return status
 
 
-def _display_refactor(status: str, files_affected: int, preview: Any, refactor_id: str) -> str:
+def _display_refactor(status: str, files_affected: int, preview: RefactorPreview | None, refactor_id: str) -> str:
     """Human-friendly message for refactor operations."""
     if status == "cancelled":
         return "Refactoring cancelled."
