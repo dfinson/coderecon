@@ -69,7 +69,6 @@ def status_command(path: Path | None, as_json: bool) -> None:
 
     # Try to find this repo's name in active repos
     active_repos = health_data.get("active_repos", [])
-    repo_name = repo_root.name
 
     # Try querying per-repo status
     status_data: dict = {}

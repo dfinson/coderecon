@@ -3,17 +3,14 @@
 import dataclasses
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from coderecon.git._internal.access import (
-    GitBranchData,
     GitCommitData,
-    GitIndexEntry,
     GitReference,
     GitSignature,
-    GitStashEntry,
     GitTagData,
     RepoAccess,
 )
@@ -33,7 +30,6 @@ from coderecon.git._internal.constants import (
     STATUS_INDEX_DELETED,
     STATUS_INDEX_MODIFIED,
     STATUS_INDEX_NEW,
-    STATUS_WT_DELETED,
     STATUS_WT_MODIFIED,
     STATUS_WT_NEW,
 )

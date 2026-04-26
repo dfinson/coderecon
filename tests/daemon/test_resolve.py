@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -30,7 +30,6 @@ class TestResolveWorktree:
 
     @pytest.mark.asyncio()
     async def test_returns_none_when_worktree_not_found(self, daemon: MagicMock) -> None:
-        wt_slot = MagicMock()
         slot = MagicMock()
         slot.worktrees = {}  # No worktrees
         daemon.get_slot.return_value = slot
@@ -90,7 +89,7 @@ class TestResolveWorktree:
         slot.worktrees = {"main": wt_slot}
         daemon.get_slot.return_value = slot
         before = time.time()
-        result = await resolve_worktree(daemon, "myrepo")
+        _result = await resolve_worktree(daemon, "myrepo")
         after = time.time()
         assert before <= wt_slot.last_request_at <= after
 

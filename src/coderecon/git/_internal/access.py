@@ -813,7 +813,7 @@ class RepoAccess:
             # to match the tree without touching the working tree
             parts = stdout.strip().split(None, 3)
             if len(parts) >= 3:
-                mode, obj_type, sha = parts[0], parts[1], parts[2]
+                mode, _obj_type, sha = parts[0], parts[1], parts[2]
                 # Use update-index to set the entry directly
                 self._git.run(
                     "update-index", "--cacheinfo", f"{mode},{sha},{path}"

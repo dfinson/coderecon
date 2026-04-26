@@ -39,8 +39,6 @@ def create_app(
 
     routes: list[BaseRoute] = list(create_routes(controller))
 
-    coderecon_dir = repo_root / ".recon"
-
     # Single-repo mode: one worktree named "main"
     gate = FreshnessGate()
     router = MutationRouter(coordinator, gate)

@@ -884,7 +884,6 @@ def index_splade_vectors(
 
     # Persist to splade_vecs table
     stored = 0
-    persist_t0 = time.monotonic()
     with db.session() as session:
         # Delete existing vectors for these defs (upsert)
         existing_uids = set(uid_order)

@@ -499,7 +499,6 @@ async def _harvest_imports(
     covered; this harvester fills the remaining import-only gaps.
     """
     from coderecon.index._internal.indexing.graph import FactQueries
-    from coderecon.index.models import File as FileModel
     from coderecon.index.models import ImportFact
 
     coordinator = app_ctx.coordinator

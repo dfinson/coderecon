@@ -1,10 +1,8 @@
 """Tests for index/_internal/db/database.py — Database and BulkWriter."""
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-from sqlmodel import SQLModel
 
 from coderecon.index._internal.db.database import (
     BulkWriter,
@@ -42,7 +40,7 @@ def test_database_session_yields_session(db):
 def test_database_execute_raw(db):
     """execute_raw runs arbitrary SQL."""
     from sqlalchemy import text
-    result = db.execute_raw("SELECT 42 AS answer")
+    _result = db.execute_raw("SELECT 42 AS answer")
     # result is a CursorResult — just verify it ran without error
 
 

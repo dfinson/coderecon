@@ -107,10 +107,7 @@ def clone_facts_from_source(
     with engine.connect() as conn:
         for table, columns in fact_tables:
             # Build column list replacing file_id and unit_id
-            src_columns = columns.replace("file_id", str(source_file_id)).replace(
-                "unit_id", str(target_unit_id)
-            )
-            # Actually needs proper SQL with substitution
+            # Build proper SQL with substitution
             col_list = [c.strip() for c in columns.split(",")]
             select_cols = []
             for c in col_list:

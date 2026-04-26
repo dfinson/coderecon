@@ -1327,7 +1327,6 @@ class StructuralIndexer:
                 # Extract and insert DocCrossRefs from docstrings
                 if extraction.defs:
                     from coderecon.index._internal.analysis.docstring_xref import (
-                        RawCrossRef,
                         extract_cross_refs,
                     )
 
