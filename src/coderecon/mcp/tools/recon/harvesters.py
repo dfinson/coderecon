@@ -592,7 +592,7 @@ async def _harvest_imports(
             reverse_fids_to_lookup = [rfid for rfid in reverse_fids]
             if reverse_fids_to_lookup:
                 reverse_files = fq.batch_get_files(reverse_fids_to_lookup)
-                for rfid, rfile in reverse_files.items():
+                for _rfid, rfile in reverse_files.items():
                     _add_file_defs_as_candidates(
                         fq,
                         rfile,

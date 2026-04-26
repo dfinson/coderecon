@@ -265,7 +265,7 @@ def materialize_thunks(
             )
         ).fetchall()
 
-        for fid, bind_name, imp_name, resolved_path in py_rows:
+        for fid, bind_name, _, resolved_path in py_rows:
             source_unit = file_to_unit.get(fid)
             if source_unit is None:
                 continue

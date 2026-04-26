@@ -129,7 +129,7 @@ async def raw_signals_pipeline(
     # Collect seed file paths for path/package distance computation
     seed_paths: list[str] = []
     seed_modules: list[str] = []
-    for uid, cand in merged.items():
+    for _uid, cand in merged.items():
         if cand.from_explicit:
             if cand.file_path:
                 seed_paths.append(cand.file_path)
@@ -138,7 +138,7 @@ async def raw_signals_pipeline(
 
     # Build candidate list
     candidates_out: list[dict[str, Any]] = []
-    for uid, cand in merged.items():
+    for _uid, cand in merged.items():
         if cand.def_fact is None:
             continue
 

@@ -10,14 +10,14 @@ import urllib.request
 ENDPOINT = subprocess.run(
     ["terraform", "output", "-raw", "ai_services_endpoint"],
     cwd=os.path.dirname(__file__),
-    capture_output=True, text=True, check=True,
+    capture_output=True, text=True, check=True, timeout=30,
 ).stdout.rstrip("/")
 
 TOKEN = subprocess.run(
     ["az", "account", "get-access-token",
      "--resource", "https://cognitiveservices.azure.com",
      "--query", "accessToken", "-o", "tsv"],
-    capture_output=True, text=True, check=True,
+    capture_output=True, text=True, check=True, timeout=30,
 ).stdout.strip()
 
 URL = f"{ENDPOINT}/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2024-12-01-preview"

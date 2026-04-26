@@ -121,7 +121,7 @@ def _run_git_diff(
     changed_files: list[ChangedFile] = []
     hunks: dict[str, list[tuple[int, int]]] = {}
 
-    for status_char, adds, dels, file_path in diff_result.numstat:
+    for status_char, _adds, _dels, file_path in diff_result.numstat:
         if paths and file_path not in paths:
             continue
 

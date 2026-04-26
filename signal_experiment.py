@@ -291,7 +291,7 @@ def analyze_signals(candidates: list[dict], gt_task: dict) -> dict:
         ("package_distance", False),
     ]
 
-    for sig_name, higher_better in signals:
+    for sig_name, _higher_better in signals:
         gt_vals = [c[sig_name] for c in gt_cands if c.get(sig_name) is not None]
         non_gt_vals = [c[sig_name] for c in non_gt_cands if c.get(sig_name) is not None]
 

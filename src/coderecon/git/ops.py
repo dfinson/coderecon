@@ -307,7 +307,7 @@ class GitOps:
                     return candidate
             except (OSError, subprocess.SubprocessError):  # noqa: BLE001
                 log.debug("branch_probe_failed", candidate=candidate, exc_info=True)
-                continue
+                continue  # try next candidate branch name
 
         return "main"
 

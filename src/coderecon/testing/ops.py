@@ -524,7 +524,7 @@ class TestOps:
                 all_targets.extend(targets)
             except (OSError, RuntimeError, ValueError):
                 log.debug("pack_discovery_failed", exc_info=True)
-                continue
+                continue  # skip unavailable test pack
 
         # Deduplicate targets
         seen: set[str] = set()

@@ -215,7 +215,7 @@ def load_trend(recon_dir: Path | str, max_snapshots: int = 20) -> HealthTrend:
             ))
         except (json.JSONDecodeError, KeyError):
             log.debug("health_trend_snapshot_parse_failed", exc_info=True)
-            continue
+            continue  # skip malformed snapshot
 
     # Keep only the most recent
     return HealthTrend(snapshots=snapshots[-max_snapshots:])
