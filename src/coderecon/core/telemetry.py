@@ -40,6 +40,11 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar
 
 if TYPE_CHECKING:
+    from opentelemetry.metrics import Meter
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.trace import Tracer
+
     from coderecon.config.models import TelemetryConfig
 
 import structlog
@@ -51,10 +56,10 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 # Global state - None means not initialized, will use no-ops
-_tracer: Any = None
-_meter: Any = None
-_tracer_provider: Any = None
-_meter_provider: Any = None
+_tracer: Tracer | None = None
+_meter: Meter | None = None
+_tracer_provider: TracerProvider | None = None
+_meter_provider: MeterProvider | None = None
 _initialized: bool = False
 
 # Track whether OpenTelemetry is available

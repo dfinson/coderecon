@@ -24,6 +24,8 @@ if TYPE_CHECKING:
     from fastmcp.server.middleware import CallNext
     from mcp import types as mt
 
+    from coderecon.mcp.session import SessionManager
+
 log = structlog.get_logger(__name__)
 
 # Source tag for agent output - escaped for Rich markup
@@ -46,7 +48,7 @@ class ToolMiddleware(Middleware):
     - No tracebacks printed to console
     """
 
-    def __init__(self, session_manager: Any = None) -> None:
+    def __init__(self, session_manager: SessionManager | None = None) -> None:
         """Initialize with optional session manager for gate/pattern tracking."""
         super().__init__()
         self._session_manager = session_manager
