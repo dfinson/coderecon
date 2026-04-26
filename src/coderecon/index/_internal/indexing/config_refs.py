@@ -371,6 +371,7 @@ def resolve_config_file_refs(
         try:
             content = full_path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
+            log.debug("config_file_read_skip", path=file_path, exc_info=True)
             continue
 
         files_scanned += 1

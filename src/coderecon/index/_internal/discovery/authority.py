@@ -22,10 +22,14 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+import structlog
+
 from coderecon.index.models import CandidateContext, LanguageFamily, ProbeStatus
 
 if TYPE_CHECKING:
     pass
+
+log = structlog.get_logger(__name__)
 
 
 @dataclass
@@ -450,7 +454,7 @@ class Tier1AuthorityFilter:
                                 if item:
                                     members.append(item)
                 except OSError:
-                    pass
+                    log.debug("cargo_toml_read_failed", path=str(marker_path), exc_info=True)
 
         return members
 
@@ -475,7 +479,7 @@ class Tier1AuthorityFilter:
                     for match in re.finditer(r"include\s+['\"]([^'\"]+)['\"]", content):
                         includes.append(match.group(1))
                 except OSError:
-                    pass
+                    log.debug("gradle_settings_read_failed", path=str(marker_path), exc_info=True)
 
         return includes, is_strict
 
@@ -498,7 +502,7 @@ class Tier1AuthorityFilter:
                         ):
                             modules.append(module_match.group(1))
                 except OSError:
-                    pass
+                    log.debug("pom_xml_read_failed", path=str(marker_path), exc_info=True)
 
         return modules
 
@@ -520,7 +524,7 @@ class Tier1AuthorityFilter:
                         if proj_path.endswith((".csproj", ".fsproj", ".vbproj")):
                             projects.append(proj_path)
                 except OSError:
-                    pass
+                    log.debug("sln_read_failed", path=str(marker_path), exc_info=True)
 
         return projects
 

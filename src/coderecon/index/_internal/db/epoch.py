@@ -134,7 +134,7 @@ class EpochManager:
             path.unlink()
             log.debug("epoch_journal_deleted", epoch_id=epoch_id)
         except FileNotFoundError:
-            pass
+            log.debug("epoch_journal_already_deleted", epoch_id=epoch_id)
 
     def _read_journal(self, epoch_id: int) -> EpochJournal | None:
         """Read journal from disk if it exists."""
@@ -156,6 +156,7 @@ class EpochManager:
                     journal = EpochJournal.from_dict(json.load(f))
                     incomplete.append(journal)
             except (json.JSONDecodeError, KeyError, OSError):
+                log.debug("epoch_journal_corrupt", path=str(path), exc_info=True)
                 continue
         return incomplete
 

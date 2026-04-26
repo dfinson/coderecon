@@ -15,9 +15,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+import structlog
+
 if TYPE_CHECKING:
     from coderecon.index.ops import IndexCoordinatorEngine
     from coderecon.mutation.ops import Edit, MutationDelta, MutationOps
+
+log = structlog.get_logger(__name__)
 
 RefactorAction = Literal["rename", "move", "delete", "preview", "apply", "cancel"]
 
@@ -267,7 +271,7 @@ class RefactorOps:
                     if m:
                         return m.group(1)
         except (OSError, UnicodeDecodeError):
-            pass
+            log.debug("symbol_at_line_read_failed", file=file_path, exc_info=True)
 
         return None
 
@@ -456,6 +460,7 @@ class RefactorOps:
             try:
                 content = full_path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
+                log.debug("refactor_comment_scan_skip", path=file_path, exc_info=True)
                 continue
 
             # Detect language from file
@@ -513,6 +518,7 @@ class RefactorOps:
             try:
                 content = full_path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
+                log.debug("refactor_lexical_scan_skip", path=file_path, exc_info=True)
                 continue
 
             # Find all lines containing the symbol with word boundaries
@@ -780,7 +786,7 @@ class RefactorOps:
                                             )
                                         break
                             except (OSError, UnicodeDecodeError):
-                                pass
+                                log.debug("move_import_scan_skip", exc_info=True)
 
         # Lexical fallback: search for module path strings in all files
         await self._add_move_lexical_fallback(
@@ -1061,7 +1067,7 @@ class RefactorOps:
                                     )
                                 break
                     except (OSError, UnicodeDecodeError):
-                        pass
+                        log.debug("delete_import_scan_skip", exc_info=True)
 
     async def _find_symbol_references(
         self,

@@ -313,6 +313,7 @@ def build_js_package_exports(
         try:
             pkg = json.loads(text)
         except (json.JSONDecodeError, ValueError):
+            log.debug("package_json_parse_skip", path=fp, exc_info=True)
             continue
         name = pkg.get("name")
         exports = pkg.get("exports")

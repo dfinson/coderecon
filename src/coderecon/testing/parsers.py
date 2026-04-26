@@ -11,8 +11,12 @@ import re
 import xml.etree.ElementTree as ET
 from typing import Literal
 
+import structlog
+
 # Re-export from models for backward compatibility
 from coderecon.testing.models import ParsedTestCase, ParsedTestSuite
+
+log = structlog.get_logger(__name__)
 
 __all__ = [
     "ParsedTestCase",
@@ -203,6 +207,7 @@ def parse_go_test_json(content: str) -> ParsedTestSuite:
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
+            log.debug("go_test_json_line_skip", exc_info=True)
             continue
 
         action = event.get("Action")
@@ -313,7 +318,7 @@ def auto_parse(content: str, runner: str | None = None) -> ParsedTestSuite:  # n
             if "tests" in data or "summary" in data:
                 return parse_pytest_json(content)
         except json.JSONDecodeError:
-            pass
+            log.debug("pytest_json_detect_failed", exc_info=True)
 
     # Go test JSON (NDJSON)
     if "\n{" in content or content.startswith('{"'):
@@ -332,6 +337,7 @@ def auto_parse(content: str, runner: str | None = None) -> ParsedTestSuite:  # n
             if result.total > 0:
                 return result
         except (OSError, ValueError, KeyError):
+            log.debug("parser_fallback_skip", parser=parser.__name__, exc_info=True)
             continue
 
     return ParsedTestSuite(

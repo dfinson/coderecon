@@ -47,6 +47,7 @@ def compute_file_hashes(repo_root: Path, paths: list[str]) -> dict[str, str]:
                 content = full_path.read_bytes()
                 hashes[path] = hashlib.sha256(content).hexdigest()
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            log.debug("hash_file_failed", path=path, exc_info=True)
             continue
 
     return hashes
@@ -71,7 +72,7 @@ def get_changed_files_since(
         if result.returncode == 0:
             return [f for f in result.stdout.strip().splitlines() if f]
     except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
+        log.debug("changed_files_since_failed", ref=since_ref, exc_info=True)
     return []
 
 
@@ -126,12 +127,15 @@ def remerge_worktree(
 
     # 3. Get existing index state for these files
     with engine.connect() as conn:
-        placeholders = ",".join(f"'{p}'" for p in changed_paths)
-        rows = conn.execute(text(
-            f"SELECT id, path, content_hash FROM files "  # noqa: S608
-            f"WHERE worktree_id = {target_worktree_id} "
-            f"AND path IN ({placeholders})"
-        )).fetchall()
+        from sqlalchemy import bindparam
+        rows = conn.execute(
+            text(
+                "SELECT id, path, content_hash FROM files "
+                "WHERE worktree_id = :wt_id "
+                "AND path IN :paths"
+            ).bindparams(bindparam("paths", expanding=True)),
+            {"wt_id": target_worktree_id, "paths": changed_paths},
+        ).fetchall()
 
     indexed: dict[str, tuple[int, str | None]] = {}
     for row in rows:
@@ -261,19 +265,23 @@ def _find_file_by_hash(
 ) -> int | None:
     """Find a file in a specific worktree with matching path and hash."""
     with engine.connect() as conn:
-        row = conn.execute(text(
-            f"SELECT id FROM files "  # noqa: S608
-            f"WHERE worktree_id = {worktree_id} "
-            f"AND path = '{path}' "
-            f"AND content_hash = '{content_hash}'"
-        )).fetchone()
+        row = conn.execute(
+            text(
+                "SELECT id FROM files "
+                "WHERE worktree_id = :wt_id "
+                "AND path = :path "
+                "AND content_hash = :hash"
+            ),
+            {"wt_id": worktree_id, "path": path, "hash": content_hash},
+        ).fetchone()
         return row[0] if row else None
 
 
 def _update_file_hash(engine: Engine, file_id: int, content_hash: str) -> None:
     """Update a file's content hash."""
     with engine.connect() as conn:
-        conn.execute(text(
-            f"UPDATE files SET content_hash = '{content_hash}' WHERE id = {file_id}"  # noqa: S608
-        ))
+        conn.execute(
+            text("UPDATE files SET content_hash = :hash WHERE id = :fid"),
+            {"hash": content_hash, "fid": file_id},
+        )
         conn.commit()

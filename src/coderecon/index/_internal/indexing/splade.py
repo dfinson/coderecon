@@ -77,7 +77,7 @@ def _ensure_cuda_lib_path() -> None:
             if Path(lib_dir).is_dir():
                 lib_dirs.append(lib_dir)
         except ImportError:
-            pass
+            log.debug("cuda_pkg_not_available", pkg=pkg)
 
     # 2. Well-known system CUDA paths
     if not lib_dirs:
@@ -112,7 +112,7 @@ def _ensure_cuda_lib_path() -> None:
             try:
                 ctypes.CDLL(str(cudnn_path), mode=ctypes.RTLD_GLOBAL)
             except OSError:
-                pass
+                log.debug("cudnn_preload_failed", path=str(cudnn_path), exc_info=True)
             break
 
 
@@ -214,7 +214,7 @@ def _query_gpu_vram_bytes() -> int | None:
             mib = int(result.stdout.strip().split("\n")[0])
             return mib * 1024 * 1024
     except (FileNotFoundError, ValueError, subprocess.TimeoutExpired):
-        pass
+        log.debug("nvidia_smi_query_failed", exc_info=True)
     return None
 
 

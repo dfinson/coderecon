@@ -403,7 +403,7 @@ class ToolMiddleware(Middleware):
                         if isinstance(data, dict):
                             return data
                     except (json.JSONDecodeError, AttributeError):
-                        pass
+                        log.debug("result_parse_skip", exc_info=True)
         # ToolResult with structured_content
         elif hasattr(result, "structured_content") and isinstance(result.structured_content, dict):
             return dict(result.structured_content)  # copy to avoid mutation
@@ -430,7 +430,7 @@ class ToolMiddleware(Middleware):
                         data = json.loads(content_item.text)
                         return self._extract_from_dict(tool_name, data)
             except (json.JSONDecodeError, AttributeError):
-                pass
+                log.debug("summary_extract_parse_skip", exc_info=True)
 
         # Handle ToolResult with structured_content
         if hasattr(result, "structured_content") and result.structured_content:
@@ -499,7 +499,7 @@ class ToolMiddleware(Middleware):
                         data = json.loads(content_item.text)
                         break
             except (json.JSONDecodeError, AttributeError):
-                pass
+                log.debug("display_summary_parse_skip", exc_info=True)
         elif hasattr(result, "structured_content") and result.structured_content:
             data = result.structured_content
         elif isinstance(result, dict):
