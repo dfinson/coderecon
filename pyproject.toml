@@ -41,7 +41,6 @@ dependencies = [
     # Logging
     "structlog>=25.5.0",
     # CLI progress & output
-    "tqdm>=4.66.0",
     "rich>=14.0.0",
     "questionary>=2.0.0",
     # File watching
@@ -235,5 +234,4 @@ coderecon-models-ce-tiny = { path = "model-packages/coderecon-models-ce-tiny" }
 [dependency-groups]
 dev = [
     "evee-ms-core",
-    "types-tqdm>=4.67.0.20250809",
 ]
