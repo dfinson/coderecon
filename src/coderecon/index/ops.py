@@ -32,7 +32,6 @@ from sqlmodel import col, select
 log = structlog.get_logger(__name__)
 
 from coderecon.core.languages import detect_language_family, is_test_file
-from coderecon.daemon.concurrency import FreshnessGate
 from coderecon.index._internal.db import (
     Database,
     EpochManager,
@@ -83,12 +82,10 @@ from coderecon.index.models import (
     TestTarget,
     Worktree,
 )
-from coderecon.lint.tools import registry as lint_registry
-from coderecon.testing.runner_pack import runner_registry
-from coderecon.testing.runtime import ContextRuntime, RuntimeResolver
 from coderecon.tools.map_repo import IncludeOption, MapRepoResult, RepoMapper
 
 if TYPE_CHECKING:
+    from coderecon.daemon.concurrency import FreshnessGate
     from coderecon.index._internal.indexing.import_graph import (
         CoverageGap,
         CoverageSourceResult,
@@ -96,6 +93,7 @@ if TYPE_CHECKING:
     )
     from coderecon.index._internal.indexing.structural import ExtractionResult
     from coderecon.index.models import FileState
+    from coderecon.testing.runtime import ContextRuntime
 
 
 def _glob_to_regex(pattern: str) -> str:
@@ -2494,9 +2492,9 @@ is_main_worktree=self._is_main_worktree(_wt2),
             ContextRuntime if found, None if workspace not indexed
         """
         await self.wait_for_freshness()
+        from coderecon.testing.runtime import ContextRuntime
+
         with self.db.session() as session:
-            # Find context by root_path - normalize to relative path
-            # Convention: root_path="" means repo root (not ".")
             try:
                 rel_path = str(Path(workspace_root).relative_to(self.repo_root))
                 if rel_path == ".":
@@ -2643,6 +2641,8 @@ is_main_worktree=self._is_main_worktree(_wt2),
         logger = structlog.get_logger(__name__)
         runtimes_resolved = 0
 
+        from coderecon.testing.runtime import ContextRuntime, RuntimeResolver
+
         # Create resolver once
         resolver = RuntimeResolver(self.repo_root)
 
@@ -2716,8 +2716,9 @@ is_main_worktree=self._is_main_worktree(_wt2),
         targets_discovered = 0
         discovered_at = time.time()
 
+        from coderecon.testing.runner_pack import runner_registry
+
         with self.db.session() as session:
-            # Get existing target_ids for idempotent init
             existing_ids = set(session.exec(select(TestTarget.target_id)).all())
 
             # Get all valid contexts
@@ -2785,6 +2786,8 @@ is_main_worktree=self._is_main_worktree(_wt2),
         """
         tools_discovered = 0
         discovered_at = time.time()
+
+        from coderecon.lint.tools import registry as lint_registry
 
         with self.db.session() as session:
             # Get existing tool_ids for idempotent init
@@ -2938,6 +2941,8 @@ is_main_worktree=self._is_main_worktree(_wt2),
         targets_changed = 0
         discovered_at = time.time()
 
+        from coderecon.testing.runner_pack import runner_registry
+
         with self.db.session() as session:
             # Remove targets for deleted test files
             if removed_test_files:
@@ -3038,6 +3043,8 @@ is_main_worktree=self._is_main_worktree(_wt2),
             Count of tools updated
         """
         # Get all known config files from registered tools
+        from coderecon.lint.tools import registry as lint_registry
+
         config_filenames: set[str] = set()
         for tool in lint_registry.all():
             for config_spec in tool.config_files:
