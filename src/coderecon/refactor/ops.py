@@ -192,7 +192,7 @@ def _compute_rename_certainty_from_ref(ref: RefFact) -> Literal["high", "medium"
     Also considers the RefFact's own certainty field as a fallback.
     """
     # Check ref_tier first (most authoritative)
-    ref_tier = getattr(ref, "ref_tier", None)
+    ref_tier = ref.ref_tier
     if ref_tier:
         if ref_tier in ("PROVEN", "proven"):
             return "high"
@@ -203,7 +203,7 @@ def _compute_rename_certainty_from_ref(ref: RefFact) -> Literal["high", "medium"
         # UNKNOWN falls through to certainty check
 
     # Fallback to certainty field
-    certainty = getattr(ref, "certainty", None)
+    certainty = ref.certainty
     if certainty in ("CERTAIN", "certain"):
         return "high"
 
