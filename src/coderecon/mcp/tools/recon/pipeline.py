@@ -39,7 +39,7 @@ def _read_snippet(repo_root: Path, path: str, start_line: int, end_line: int) ->
         start = max(0, start_line - 1)
         end = min(len(lines), end_line)
         return "\n".join(lines[start:end])
-    except Exception:  # noqa: BLE001
+    except OSError:
         return None
 
 
@@ -79,7 +79,7 @@ def _read_signature(repo_root: Path, path: str, start_line: int, end_line: int) 
                 break
 
         return "\n".join(sig_lines[:10])  # cap at 10 lines for safety
-    except Exception:  # noqa: BLE001
+    except OSError:
         return None
 
 
@@ -220,7 +220,7 @@ def _fetch_scaffolds(
                 .where(col(SpladeVec.def_uid).in_(def_uids))
             ).all())
             return {uid: txt for uid, txt in rows if txt}
-    except Exception:  # noqa: BLE001 — scaffold lookup is best-effort
+    except (ImportError, OSError):  # scaffold lookup is best-effort
         log.warning("cross_encoder.scaffold_lookup_failed", exc_info=True)
         return {}
 
@@ -256,7 +256,7 @@ def _score_cross_encoder_tiny(
 
     try:
         from coderecon.ranking.cross_encoder import get_tiny_scorer
-    except Exception:  # noqa: BLE001 — optional dependency
+    except ImportError:  # optional dependency
         log.debug("cross_encoder_tiny.unavailable", exc_info=True)
         return candidates
 
@@ -268,7 +268,7 @@ def _score_cross_encoder_tiny(
         scores = scorer.score_pairs(task, documents)
         for c, s in zip(candidates, scores):
             c["ce_score_tiny"] = float(s)
-    except Exception:  # noqa: BLE001 — scoring is best-effort
+    except (ValueError, RuntimeError):  # scoring is best-effort
         log.warning("cross_encoder_tiny.scoring_failed", exc_info=True)
         return candidates
 
@@ -305,7 +305,7 @@ def _score_cross_encoder(
 
     try:
         from coderecon.ranking.cross_encoder import get_scorer
-    except Exception:  # noqa: BLE001 — optional dependency
+    except ImportError:  # optional dependency
         log.debug("cross_encoder.unavailable", exc_info=True)
         return candidates
 
@@ -317,7 +317,7 @@ def _score_cross_encoder(
         scores = scorer.score_pairs(task, documents)
         for c, s in zip(candidates, scores):
             c["ce_score"] = float(s)
-    except Exception:  # noqa: BLE001 — scoring is best-effort
+    except (ValueError, RuntimeError):  # scoring is best-effort
         log.warning("cross_encoder.scoring_failed", exc_info=True)
 
     return candidates
@@ -564,10 +564,10 @@ async def recon_map_core(app_ctx: "AppContext") -> dict[str, Any]:
                     }
                     for s in top_defs
                 ]
-        except Exception:  # noqa: BLE001
+        except (ImportError, OSError, ValueError):  # pagerank is optional
             log.debug("recon_map.pagerank_skipped", exc_info=True)
 
-    except Exception:  # noqa: BLE001
+    except (ImportError, OSError, ValueError, AttributeError):
         log.warning("recon_map.failed", exc_info=True)
         repo_map = {"error": "Failed to build repo map"}
 
