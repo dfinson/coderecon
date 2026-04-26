@@ -18,6 +18,8 @@ from typing import TYPE_CHECKING
 
 import structlog
 
+from coderecon.testing.coverage.models import CoverageParseError
+
 if TYPE_CHECKING:
     from coderecon.index.ops import IndexCoordinatorEngine, IndexStats
     from coderecon.lint.ops import LintOps
@@ -192,7 +194,7 @@ class AnalysisPipeline:
                             base_path=self.repo_root,
                         )
                         reports.append(report)
-                    except Exception:  # noqa: BLE001 — best-effort coverage parse
+                    except (CoverageParseError, OSError):  # best-effort coverage parse
                         log.debug("tier2_coverage_parse_failed", path=cov_path, exc_info=True)
 
                 if reports:
