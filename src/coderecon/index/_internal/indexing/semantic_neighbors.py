@@ -223,7 +223,7 @@ def compute_semantic_neighbors(
                         ))
                         edges_written += 1
 
-                    if len(batch) >= 1000:
+                    if len(batch) >= DB_FLUSH_BATCH_SIZE:
                         session.add_all(batch)
                         session.commit()
                         batch.clear()

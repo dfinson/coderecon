@@ -545,7 +545,7 @@ class SafeExecutionContext:
             # Disable prompts
             "MIX_QUIET": "1",
             # ExCoveralls output
-            "COVERALLS_REPO_TOKEN": "",  # Clear to prevent accidental uploads
+            "COVERALLS_REPO_TOKEN": "",  # Clear to prevent accidental uploads  # nosec B105
             # Coverage output
             "EXCOVERALLS_OUTPUT_DIR": str(coverage_dir),
             # Hex settings - no prompts

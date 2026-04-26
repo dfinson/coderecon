@@ -223,7 +223,15 @@ exclude_lines = [
 
 [tool.bandit]
 exclude_dirs = ["tests", ".venv", "venv"]
-skips = ["B101"]  # Skip assert_used - we use asserts in tests
+skips = [
+    "B101",  # assert_used — asserts are used in tests and internal invariants
+    "B314",  # xml_bad_parse — parses own coverage XML, not untrusted input
+    "B404",  # import_subprocess — informational; subprocess is core to git/test tooling
+    "B405",  # import_xml — coverage XML parsing from trusted local files
+    "B603",  # subprocess_without_shell_equals_true — all calls use list args (safe)
+    "B607",  # start_process_with_partial_path — git/npm/cargo invoked by name (standard)
+    "B608",  # hardcoded_sql — SQLAlchemy text() interpolates model metadata, not user input
+]
 
 [tool.uv.sources]
 evee-ms-core = { path = "assets/evee_wheels/evee_ms_core-0.4.0-py3-none-any.whl" }
