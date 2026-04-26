@@ -12,7 +12,7 @@ import structlog
 from pydantic import Field
 
 from coderecon.git._internal.hooks import run_hook
-from coderecon.git.errors import EmptyCommitMessageError, PathsNotFoundError
+from coderecon.git.errors import EmptyCommitMessageError, GitError, PathsNotFoundError
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -573,7 +573,7 @@ def _ingest_checkpoint_coverage(
             try:
                 report = parse_artifact(f, base_path=app_ctx.repo_root)
                 reports.append(report)
-            except Exception:  # noqa: BLE001 — best-effort artifact parse
+            except (CoverageParseError, OSError):  # best-effort artifact parse
                 log.debug("artifact_parse_failed", path=str(f), exc_info=True)
 
         if not reports:
@@ -1104,7 +1104,7 @@ async def checkpoint_pipeline(
         try:
             wt_status = app_ctx.git_ops.status()
             dirty_files = [p for p, flags in wt_status.items() if flags != 0]
-        except Exception:  # noqa: BLE001
+        except GitError:
             dirty_files = []
         clean = len(dirty_files) == 0
         ro_result: dict[str, Any] = {
@@ -1422,10 +1422,10 @@ async def checkpoint_pipeline(
 
                         scaffold = _build_scaffold(app_ctx, cf, fp)
                         entry["scaffold"] = scaffold
-                    except Exception:  # noqa: BLE001
+                    except (ImportError, OSError, ValueError):  # best-effort scaffold
                         log.debug("checkpoint.scaffold.failed", path=cf, exc_info=True)
                     refreshed.append(entry)
-                except Exception:  # noqa: BLE001
+                except (OSError, UnicodeDecodeError, ValueError):  # best-effort file read
                     log.debug("checkpoint.file_refresh.failed", path=cf, exc_info=True)
                     continue
 
@@ -1521,14 +1521,14 @@ async def checkpoint_pipeline(
                         f"Governance: {len(gate_result.errors)} error(s), "
                         f"{len(gate_result.warnings)} warning(s)"
                     )
-        except Exception:  # noqa: BLE001
+        except (ImportError, OSError, ValueError, AttributeError):  # best-effort governance
             log.debug("checkpoint.governance.failed", exc_info=True)
 
         # ── Reset mutation state ──
         try:
             session.mutation_ctx.clear()
             app_ctx.refactor_ops.clear_pending()
-        except Exception:  # noqa: BLE001
+        except (AttributeError, RuntimeError):  # best-effort reset
             log.debug("checkpoint.mutation_reset.failed", exc_info=True)
 
         # --- Optional: Auto-commit ---
@@ -1596,7 +1596,7 @@ async def checkpoint_pipeline(
                         commit_result["diff"] = f"{diff_summary}: " + ", ".join(change_lines)
                     elif diff_summary:
                         commit_result["diff"] = diff_summary
-                except Exception:
+                except (ImportError, GitError, KeyError, ValueError, OSError, RuntimeError):
                     log.debug("post-commit semantic diff skipped", exc_info=True)
 
             result["agentic_hint"] = (
@@ -1618,7 +1618,7 @@ async def checkpoint_pipeline(
                     result["test_debt"] = debt
                     existing = result.get("agentic_hint", "")
                     result["agentic_hint"] = f"{existing}\n\n{debt['hint']}"
-            except Exception:  # noqa: BLE001
+            except (ImportError, OSError, ValueError):
                 log.debug("test_debt_detection_failed", exc_info=True)
 
     # --- Wrap with delivery envelope ---

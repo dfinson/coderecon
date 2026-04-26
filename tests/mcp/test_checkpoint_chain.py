@@ -223,7 +223,7 @@ class TestCheckpointCommitChain:
         with (
             patch("coderecon.mcp.tools.checkpoint._validate_paths_exist"),
             patch("coderecon.mcp.tools.checkpoint._run_hook_with_retry") as mock_hook,
-            patch("coderecon.mcp.tools.diff._run_git_diff", side_effect=Exception("no index")),
+            patch("coderecon.mcp.tools.diff._run_git_diff", side_effect=ValueError("no index")),
         ):
             mock_hook.return_value = (_hook_ok(), None)
             result = await checkpoint_tool(
