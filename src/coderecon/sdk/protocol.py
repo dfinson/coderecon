@@ -3,18 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import itertools
 import json
 import secrets
 from typing import Any
 
-_REQUEST_ID_COUNTER = 0
+_REQUEST_ID_COUNTER = itertools.count(1)
 
 
 def next_request_id() -> str:
     """Generate a monotonically increasing request ID."""
-    global _REQUEST_ID_COUNTER  # noqa: PLW0603
-    _REQUEST_ID_COUNTER += 1
-    return f"r{_REQUEST_ID_COUNTER}"
+    return f"r{next(_REQUEST_ID_COUNTER)}"
 
 
 def encode_request(
