@@ -244,6 +244,7 @@ class GlobalDaemon:
                             repo=name,
                             worktree=wt.name,
                             error=str(exc),
+                            exc_info=True,
                         )
 
         self._slots[name] = slot
@@ -347,7 +348,7 @@ class GlobalDaemon:
             try:
                 _registry.update_last_indexed_at(_wt_root, time.time())
             except Exception as exc:
-                log.warning("last_indexed_at.update_failed", error=str(exc))
+                log.warning("last_indexed_at.update_failed", error=str(exc), exc_info=True)
 
         repo_slot.indexer.add_on_complete(_update_last_indexed_at)
 
@@ -619,6 +620,7 @@ class GlobalDaemon:
                         repo=name,
                         worktree=wt_name,
                         error=str(exc),
+                        exc_info=True,
                     )
 
     async def refresh_worktrees(self, name: str, *, dev_mode: bool = False) -> list[str]:
@@ -694,6 +696,7 @@ class GlobalDaemon:
                     repo=name,
                     worktree=wt.name,
                     error=str(exc),
+                    exc_info=True,
                 )
 
         if new_names:

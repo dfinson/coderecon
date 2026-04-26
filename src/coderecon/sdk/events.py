@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import fnmatch
+import logging
 from typing import Any, Callable
 
 from coderecon.sdk.types import Event
+
+_log = logging.getLogger(__name__)
 
 
 class EventRouter:
@@ -27,7 +30,7 @@ class EventRouter:
                 try:
                     cb(event)
                 except Exception:  # noqa: BLE001
-                    pass  # Callbacks must not crash the read loop
+                    _log.debug("Event callback failed", exc_info=True)
 
         for patterns, queue in self._queues:
             if any(fnmatch.fnmatch(event.type, p) for p in patterns):

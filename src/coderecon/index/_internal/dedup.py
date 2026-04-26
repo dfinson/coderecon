@@ -131,7 +131,7 @@ def clone_facts_from_source(
                 total += result.rowcount
             except Exception:  # noqa: BLE001
                 # Table might not have all columns — skip silently
-                log.debug("clone_facts_skip", extra={"table": table})
+                log.debug("clone_facts_skip", extra={"table": table}, exc_info=True)
 
         conn.commit()
 

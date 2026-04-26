@@ -120,7 +120,7 @@ class CodeRecon:
             try:
                 await self._call("session_close", {"session_id": session_id}, session_id=None)
             except Exception:  # noqa: BLE001
-                pass
+                log.debug("client.session_close.failed", session_id=session_id, exc_info=True)
 
         if self._process and self._process.returncode is None:
             if self._process.stdin:

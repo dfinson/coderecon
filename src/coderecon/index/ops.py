@@ -1220,7 +1220,7 @@ class IndexCoordinatorEngine:
         try:
             self.db.checkpoint("PASSIVE")
         except Exception:  # noqa: BLE001 — WAL checkpoint is optional maintenance
-            logger.debug("wal_checkpoint_skipped_after_reindex")
+            logger.debug("wal_checkpoint_skipped_after_reindex", exc_info=True)
 
         duration = time.time() - start_time
 
@@ -2700,6 +2700,7 @@ is_main_worktree=self._is_main_worktree(_wt2),
                         "runtime_resolution_failed",
                         context_id=context.id,
                         error=str(e),
+                        exc_info=True,
                     )
 
             session.commit()

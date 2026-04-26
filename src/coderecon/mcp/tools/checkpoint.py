@@ -363,7 +363,7 @@ def _build_coverage_text(
         except CoverageParseError:
             log.debug("coverage_parse_failed", exc_info=True)
         except Exception as e:
-            log.debug("Coverage parse failed", path=path_str, error=str(e))
+            log.debug("Coverage parse failed", path=path_str, error=str(e), exc_info=True)
 
     if not reports:
         return "coverage: parse failed", None
@@ -1423,9 +1423,10 @@ async def checkpoint_pipeline(
                         scaffold = _build_scaffold(app_ctx, cf, fp)
                         entry["scaffold"] = scaffold
                     except Exception:  # noqa: BLE001
-                        pass  # scaffold is best-effort
+                        log.debug("checkpoint.scaffold.failed", path=cf, exc_info=True)
                     refreshed.append(entry)
                 except Exception:  # noqa: BLE001
+                    log.debug("checkpoint.file_refresh.failed", path=cf, exc_info=True)
                     continue
 
             if refreshed:
@@ -1528,7 +1529,7 @@ async def checkpoint_pipeline(
             session.mutation_ctx.clear()
             app_ctx.refactor_ops.clear_pending()
         except Exception:  # noqa: BLE001
-            pass
+            log.debug("checkpoint.mutation_reset.failed", exc_info=True)
 
         # --- Optional: Auto-commit ---
         if commit_message:

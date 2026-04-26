@@ -479,7 +479,7 @@ class FileWatcher:
                     mtimes = current_mtimes
 
                 except Exception as e:
-                    log.error("poll_error", error=str(e))
+                    log.error("poll_error", error=str(e), exc_info=True)
         finally:
             if self._debounce_task:
                 self._debounce_task.cancel()

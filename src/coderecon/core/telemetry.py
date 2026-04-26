@@ -237,7 +237,7 @@ def _instrument_sqlalchemy() -> None:
             "SQLAlchemy instrumentation not available (install opentelemetry-instrumentation-sqlalchemy)"
         )
     except Exception as e:
-        log.warning("sqlalchemy_instrumentation_failed", error=str(e))
+        log.warning("sqlalchemy_instrumentation_failed", error=str(e), exc_info=True)
 
 
 def shutdown_telemetry() -> None:
@@ -256,14 +256,14 @@ def shutdown_telemetry() -> None:
             _tracer_provider.shutdown()
             log.debug("Tracer provider shut down")
         except Exception as e:
-            log.warning("tracer_shutdown_error", error=str(e))
+            log.warning("tracer_shutdown_error", error=str(e), exc_info=True)
 
     if _meter_provider is not None:
         try:
             _meter_provider.shutdown()
             log.debug("meter_provider_shutdown")
         except Exception as e:
-            log.warning("meter_shutdown_error", error=str(e))
+            log.warning("meter_shutdown_error", error=str(e), exc_info=True)
 
     _tracer = None
     _meter = None
@@ -487,7 +487,7 @@ def _set_error_status(span: Any) -> None:
 
         span.set_status(otel_trace.Status(StatusCode.ERROR))
     except Exception:
-        pass  # Ignore errors in error handling
+        log.debug("otel.set_error_status.failed", exc_info=True)
 
 
 @contextmanager

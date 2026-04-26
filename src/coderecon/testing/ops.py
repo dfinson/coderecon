@@ -841,7 +841,7 @@ class TestOps:
                     source_dirs = cov_result.source_dirs
             except Exception:  # noqa: BLE001
                 # Non-fatal: fall back to --cov=. if import graph fails
-                pass
+                log.debug("testing.coverage_sources.failed", exc_info=True)
 
         # Memory budget + history
         budget = MemoryBudget(reserve_mb=self._memory_reserve_mb)
