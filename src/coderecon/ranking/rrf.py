@@ -26,7 +26,6 @@ def rrf_fuse(candidates: list[dict[str, Any]], *, k: int = 60) -> list[dict[str,
     fuses them.  Returns candidates sorted descending by fused score,
     with an ``rrf_score`` key added to each dict.
     """
-    uid_index: dict[str, int] = {c["def_uid"]: i for i, c in enumerate(candidates)}
     scores = [0.0] * len(candidates)
 
     for ranklist in _build_rank_lists(candidates):

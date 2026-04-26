@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
 from coderecon.index._internal.analysis.endpoint_detection import (
-    DetectedEndpoint,
     detect_endpoints_in_source,
 )
 

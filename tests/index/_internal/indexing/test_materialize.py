@@ -1,6 +1,6 @@
 """Tests for index/_internal/indexing/materialize.py — export surfaces, thunks, anchor groups."""
 
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 

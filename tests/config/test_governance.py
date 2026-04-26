@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 class TestGovernanceConfig:
     def test_default_config(self) -> None:
