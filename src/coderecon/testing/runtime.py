@@ -36,9 +36,7 @@ if TYPE_CHECKING:
 log = structlog.get_logger(__name__)
 
 
-# =============================================================================
 # Database Model: ContextRuntime
-# =============================================================================
 
 
 class ContextRuntime(SQLModel, table=True):
@@ -109,9 +107,7 @@ class ContextRuntime(SQLModel, table=True):
         self.env_vars_json = json.dumps(env_vars) if env_vars else None
 
 
-# =============================================================================
 # Non-Table Models: Tool Configuration
-# =============================================================================
 
 
 @dataclass
@@ -211,9 +207,7 @@ class RuntimeExecutionContext:
         return env
 
 
-# =============================================================================
 # Runtime Resolution
-# =============================================================================
 
 RuntimeResolutionMethod = Literal[
     "venv_detected",  # Found .venv or similar
@@ -716,9 +710,7 @@ class RuntimeResolver:
         return self._run_version_check([ruby_exe, "--version"], _parse)
 
 
-# =============================================================================
 # Execution Context Builder
-# =============================================================================
 
 
 class ExecutionContextBuilder:

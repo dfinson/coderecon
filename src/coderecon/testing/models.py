@@ -9,9 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-# =============================================================================
 # Target Kinds - Per ecosystem semantics
-# =============================================================================
 
 TargetKind = Literal["file", "package", "project"]
 """Test target granularity.
@@ -22,9 +20,7 @@ TargetKind = Literal["file", "package", "project"]
 """
 
 
-# =============================================================================
 # Test Targets
-# =============================================================================
 
 
 @dataclass
@@ -55,9 +51,7 @@ class TestTarget:
         )
 
 
-# =============================================================================
 # Progress Tracking - Separate target vs testcase counters
-# =============================================================================
 
 
 @dataclass
@@ -110,9 +104,7 @@ class TestProgress:
         return self.cases.skipped
 
 
-# =============================================================================
 # Test Failures
-# =============================================================================
 
 
 @dataclass
@@ -128,9 +120,7 @@ class TestFailure:
     duration_seconds: float = 0.0
 
 
-# =============================================================================
 # Test Results - Parsed output from runners
-# =============================================================================
 
 
 @dataclass
@@ -225,9 +215,7 @@ class ParsedTestRun:
         self.duration_seconds += suite.duration_seconds
 
 
-# =============================================================================
 # Run Status
-# =============================================================================
 
 
 @dataclass

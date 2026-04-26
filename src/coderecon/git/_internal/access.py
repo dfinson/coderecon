@@ -263,9 +263,7 @@ class RepoAccess:
     def index(self) -> GitIndex:
         return self._index
 
-    # =========================================================================
     # Repository State Facts
-    # =========================================================================
 
     @property
     def is_unborn(self) -> bool:
@@ -361,9 +359,7 @@ class RepoAccess:
             return GIT_REPOSITORY_STATE_BISECT
         return GIT_REPOSITORY_STATE_NONE
 
-    # =========================================================================
     # Resolution Helpers
-    # =========================================================================
 
     def resolve_ref_oid(self, ref: str) -> str:
         """Resolve any ref to a SHA hex string."""
@@ -381,9 +377,7 @@ class RepoAccess:
         sha = stdout.strip()
         return self._parse_commit(sha)
 
-    # =========================================================================
     # Must Helpers
-    # =========================================================================
 
     def must_head_target(self) -> str:
         """Return HEAD target SHA, raising if unborn."""
@@ -414,9 +408,7 @@ class RepoAccess:
             raise GitError(f"Remote branch {name!r} not found")
         return self._get_branch_data(name, remote=True)
 
-    # =========================================================================
     # Normalization Helpers
-    # =========================================================================
 
     def normalize_path(self, path: str | Path) -> str:
         p = Path(path)
@@ -425,9 +417,7 @@ class RepoAccess:
                 p = p.relative_to(self.path)
         return str(p)
 
-    # =========================================================================
     # Remote Access
-    # =========================================================================
 
     def get_remote(self, name: str) -> str:
         """Get remote URL. Raises RemoteError if not found."""
@@ -457,9 +447,7 @@ class RepoAccess:
             for name, urls in remotes_dict.items()
         ]
 
-    # =========================================================================
     # Branch Access
-    # =========================================================================
 
     def has_local_branch(self, name: str) -> bool:
         rc, _, _ = self._git.run_raw("rev-parse", "--verify", f"refs/heads/{name}")
@@ -510,9 +498,7 @@ class RepoAccess:
         """Force delete a local branch."""
         self._git.run("branch", "-D", name)
 
-    # =========================================================================
     # Low-level Git Operations
-    # =========================================================================
 
     def status(self) -> dict[str, int]:
         """Get status flags by path, compatible with existing flag constants."""
@@ -794,9 +780,7 @@ class RepoAccess:
         """Branch helper."""
         return _BranchHelper(self._git)
 
-    # =========================================================================
     # Index Helpers
-    # =========================================================================
 
     def best_effort_index_remove(self, paths: Iterator[str]) -> None:
         """Remove paths from index, suppressing errors for missing entries."""
@@ -824,9 +808,7 @@ class RepoAccess:
             # Not in tree - remove from index
             self._git.run_raw("rm", "--cached", "--ignore-unmatch", "--", path)
 
-    # =========================================================================
     # Tag Iteration
-    # =========================================================================
 
     def iter_tags(self) -> Iterator[GitTagData]:
         """Iterate tags as GitTagData objects."""
@@ -873,9 +855,7 @@ class RepoAccess:
                     is_annotated=False,
                 )
 
-    # =========================================================================
     # Remote Operations
-    # =========================================================================
 
     def run_remote_operation(
         self,
@@ -896,9 +876,7 @@ class RepoAccess:
                 raise AuthenticationError(remote_name, op_name) from e
             raise RemoteError(remote_name, f"{op_name} failed: {e}") from e
 
-    # =========================================================================
     # Worktree Operations
-    # =========================================================================
 
     def list_worktrees(self) -> list[str]:
         """List worktree names (excluding main)."""
@@ -978,9 +956,7 @@ class RepoAccess:
         cmd.append(wt_path)
         self._git.run(*cmd)
 
-    # =========================================================================
     # Submodule Operations
-    # =========================================================================
 
     def listall_submodules(self) -> list[str]:
         """List submodule names."""
@@ -1040,9 +1016,7 @@ class RepoAccess:
             raise GitError(f"Submodule not found at path: {path}")
         return self.lookup_submodule(name)
 
-    # =========================================================================
     # Merge Base
-    # =========================================================================
 
     def merge_base(self, sha1: str, sha2: str) -> str | None:
         """Find merge base of two commits. Returns None if unrelated."""
@@ -1051,9 +1025,7 @@ class RepoAccess:
             return None
         return stdout.strip()
 
-    # =========================================================================
     # Diff Parsing
-    # =========================================================================
 
     def diff_numstat(self, *args: str) -> list[tuple[str, int, int, str]]:
         """Run diff with --numstat and return (status, additions, deletions, path) tuples."""
@@ -1084,9 +1056,7 @@ class RepoAccess:
                 entries.append((status, adds, dels, path))
         return entries
 
-    # =========================================================================
     # Internal Parsing
-    # =========================================================================
 
     def _parse_commit(self, ref: str) -> GitCommitData:
         """Parse a commit into GitCommitData."""

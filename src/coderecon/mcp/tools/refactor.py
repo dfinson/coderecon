@@ -17,9 +17,7 @@ if TYPE_CHECKING:
     from coderecon.refactor.ops import RefactorPreview, RefactorResult
 
 
-# =============================================================================
 # Summary Helpers
-# =============================================================================
 
 
 def _summarize_refactor(status: str, files_affected: int, preview: RefactorPreview | None) -> str:
@@ -218,9 +216,7 @@ def _serialize_impact_result(result: "RefactorResult") -> dict[str, Any]:
     )
 
 
-# =============================================================================
 # Core Functions (transport-agnostic)
-# =============================================================================
 
 
 def _require_recon(session: "SessionState") -> None:
@@ -329,9 +325,7 @@ async def refactor_cancel_core(
     return _serialize_refactor_result(result)
 
 
-# =============================================================================
 # Tool Registration
-# =============================================================================
 
 
 def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:

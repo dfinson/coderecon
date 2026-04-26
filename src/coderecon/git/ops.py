@@ -99,9 +99,7 @@ class GitOps:
         """Repository root path."""
         return self._access.path
 
-    # =========================================================================
     # Read Operations
-    # =========================================================================
 
     def status(self) -> dict[str, int]:
         """Get status flags by path. Use STATUS_* constants to interpret."""
@@ -318,9 +316,7 @@ class GitOps:
         result = self._access.git.run("ls-files")
         return [line for line in result.stdout.strip().splitlines() if line]
 
-    # =========================================================================
     # Write Operations
-    # =========================================================================
 
     def stage(self, paths: Sequence[str | Path]) -> None:
         """Stage files."""
@@ -608,9 +604,7 @@ class GitOps:
             conflict_paths=result.conflict_paths,
         )
 
-    # =========================================================================
     # Worktree Operations
-    # =========================================================================
 
     def worktrees(self) -> list[WorktreeInfo]:
         """List all worktrees including main working directory."""
@@ -786,9 +780,7 @@ class GitOps:
             is_prunable=False,
         )
 
-    # =========================================================================
     # Submodule Operations
-    # =========================================================================
 
     def submodules(self) -> list[SubmoduleInfo]:
         """List all submodules with status."""
@@ -1099,9 +1091,7 @@ class GitOps:
         if modules_path.exists():
             shutil.rmtree(modules_path)
 
-    # =========================================================================
     # Rebase Operations
-    # =========================================================================
 
     def rebase_plan(self, upstream: str, onto: str | None = None) -> RebasePlan:
         """Generate default rebase plan."""

@@ -64,9 +64,7 @@ log = structlog.get_logger(__name__)
 _STDERR_TRUNCATION_CHARS = 2000  # cap stderr in diagnostics to avoid response bloat
 
 
-# =============================================================================
 # Environment Detection
-# =============================================================================
 
 
 def detect_python_venv(workspace_root: Path) -> Path | None:
@@ -203,9 +201,7 @@ def _default_parallelism() -> int:
     return min(cpu_count * 2, 16)
 
 
-# =============================================================================
 # Workspace Detection
-# =============================================================================
 
 
 @dataclass
@@ -385,9 +381,7 @@ def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
     return list(seen.values())
 
 
-# =============================================================================
 # TestOps - Main Implementation
-# =============================================================================
 
 
 def _os_script_path(unix_path: str) -> str:

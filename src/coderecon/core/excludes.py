@@ -13,9 +13,7 @@ The combined PRUNABLE_DIRS = HARDCODED_DIRS | DEFAULT_PRUNABLE_DIRS for backward
 
 from __future__ import annotations
 
-# =============================================================================
 # Tier 0: HARDCODED - Never traverse, not user-configurable
-# =============================================================================
 # These directories are ALWAYS excluded. Users cannot opt-in via .reconignore.
 # Rationale: VCS internals and our own data should never be indexed.
 
@@ -31,9 +29,7 @@ HARDCODED_DIRS: frozenset[str] = frozenset(
     )
 )
 
-# =============================================================================
 # Tier 1: DEFAULT_PRUNABLE - Excluded by default, user can override
-# =============================================================================
 # These directories are excluded by default for performance, but users can
 # opt-in by adding "!dirname" to .reconignore (e.g., "!vendor/" to index vendor).
 #
@@ -171,9 +167,7 @@ DEFAULT_PRUNABLE_DIRS: frozenset[str] = frozenset(
     )
 )
 
-# =============================================================================
 # Combined set for backward compatibility
-# =============================================================================
 # Use this for simple "should we skip this directory" checks.
 # For tiered behavior, use is_hardcoded_dir() and is_default_prunable().
 
@@ -197,17 +191,13 @@ _CPLIGNORE = """\
 # Use !pattern to opt-in directories that are excluded by default.
 # Example: !vendor/ to index the vendor directory.
 
-# =============================================================================
 # VCS (always excluded, cannot be overridden)
-# =============================================================================
 .git/
 .svn/
 .hg/
 .bzr/
 
-# =============================================================================
 # Dependencies and Package Managers
-# =============================================================================
 # JavaScript/Node.js
 node_modules/
 .npm/
@@ -286,9 +276,7 @@ deriveddata/
 # Generic vendor
 vendor/
 
-# =============================================================================
 # Build Outputs
-# =============================================================================
 dist/
 build/
 _build/
@@ -326,9 +314,7 @@ Cargo.lock
 *.o
 *.obj
 
-# =============================================================================
 # Testing & Coverage
-# =============================================================================
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -338,9 +324,7 @@ htmlcov/
 .nyc_output/
 .hypothesis/
 
-# =============================================================================
 # IDE & Editor
-# =============================================================================
 .idea/
 .vscode/
 .vs/
@@ -351,9 +335,7 @@ htmlcov/
 .classpath
 .settings/
 
-# =============================================================================
 # Secrets (NEVER index - security critical)
-# =============================================================================
 .env
 .env.*
 !.env.example
@@ -367,9 +349,7 @@ htmlcov/
 *.keystore
 service-account*.json
 
-# =============================================================================
 # Large & Binary Files
-# =============================================================================
 # Documents
 *.pdf
 *.doc
@@ -416,9 +396,7 @@ service-account*.json
 *.dump
 *.bak
 
-# =============================================================================
 # Logs & Temp
-# =============================================================================
 *.log
 logs/
 tmp/
@@ -427,17 +405,13 @@ temp/
 *.cache
 .cache/
 
-# =============================================================================
 # OS Files
-# =============================================================================
 .DS_Store
 ._*
 Thumbs.db
 desktop.ini
 
-# =============================================================================
 # Lock Files (large, auto-generated)
-# =============================================================================
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
@@ -448,9 +422,7 @@ Pipfile.lock
 uv.lock
 pdm.lock
 
-# =============================================================================
 # Generated Code
-# =============================================================================
 **/generated/
 **/*_generated.*
 **/*.gen.*

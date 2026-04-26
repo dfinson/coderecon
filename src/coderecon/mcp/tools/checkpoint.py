@@ -42,9 +42,7 @@ class ProgressSink(Protocol):
     async def warning(self, message: str) -> None: ...
 
 
-# =============================================================================
 # Test Debt Detection
-# =============================================================================
 
 
 def _detect_test_debt(
@@ -113,9 +111,7 @@ def _detect_test_debt(
     }
 
 
-# =============================================================================
 # Commit Helpers
-# =============================================================================
 
 
 def _validate_commit_message(message: str) -> None:
@@ -231,9 +227,7 @@ def _summarize_commit(sha: str, message: str) -> str:
     return f'{short_sha} "{truncated}"'
 
 
-# =============================================================================
 # Target Matching
-# =============================================================================
 
 
 def _normalize_selector(selector: str) -> str:
@@ -279,9 +273,7 @@ def _target_matches_affected_files(
     return any(p == scope_rel or p.startswith(scope_rel + "/") for p in affected_paths)
 
 
-# =============================================================================
 # Test Result Helpers
-# =============================================================================
 
 
 def _summarize_run(result: "TestResult") -> str:
@@ -377,9 +369,7 @@ def _build_coverage_text(
     return inline, None
 
 
-# =============================================================================
 # Failure-focused snippet extraction
-# =============================================================================
 
 _SNIPPET_CONTEXT_LINES = 15  # lines of context above/below each failure point
 
@@ -540,9 +530,7 @@ def _serialize_test_result(
     return output
 
 
-# =============================================================================
 # Coverage Persistence
-# =============================================================================
 
 
 def _ingest_checkpoint_coverage(
@@ -599,9 +587,7 @@ def _ingest_checkpoint_coverage(
         log.debug("checkpoint.coverage_ingest_failed", exc_info=True)
 
 
-# =============================================================================
 # Verify Summary
-# =============================================================================
 
 
 def _summarize_verify(
@@ -635,9 +621,7 @@ def _summarize_verify(
     return " | ".join(parts)
 
 
-# =============================================================================
 # Tiered Test Execution
-# =============================================================================
 
 # Targets with estimated_cost at or below this threshold are batched together
 # into a single subprocess call when they share the same runner + workspace.
@@ -1058,9 +1042,7 @@ async def _run_tiered_tests(
     }
 
 
-# =============================================================================
 # Core Pipeline (transport-agnostic)
-# =============================================================================
 
 
 class _NullProgress:
@@ -1637,9 +1619,7 @@ async def checkpoint_pipeline(
     )
 
 
-# =============================================================================
 # Tool Registration
-# =============================================================================
 
 
 def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:

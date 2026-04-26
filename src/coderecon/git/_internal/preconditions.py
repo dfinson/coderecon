@@ -10,9 +10,7 @@ from coderecon.git.errors import (
     NothingToCommitError,
 )
 
-# =============================================================================
 # Branch Preconditions
-# =============================================================================
 
 
 def require_not_unborn(access: RepoAccess, operation: str) -> None:
@@ -41,9 +39,7 @@ def require_branch_exists(access: RepoAccess, branch_name: str) -> None:
         raise BranchNotFoundError(branch_name)
 
 
-# =============================================================================
 # Unborn HEAD Policy - centralized rules for unborn state
-# =============================================================================
 
 
 def check_nothing_to_commit(access: RepoAccess, allow_empty: bool) -> None:

@@ -127,9 +127,7 @@ def select_tests_for_changed_defs(
     return result
 
 
-# ============================================================================
 # Layer implementations
-# ============================================================================
 
 
 def _get_direct_coverage(

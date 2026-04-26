@@ -113,7 +113,6 @@ def register_command(path: Path | None, reindex: bool, mcp_targets: tuple[str, .
         click.echo("  (daemon not running — start with 'recon up')")
 
 
-
 @click.command("unregister")
 @click.argument("path", required=False, type=click.Path(exists=True, path_type=Path))
 def unregister_command(path: Path | None) -> None:

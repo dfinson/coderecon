@@ -25,9 +25,7 @@ if TYPE_CHECKING:
 log = structlog.get_logger(__name__)
 
 
-# ===================================================================
 # Harvester B: Term match (SQL LIKE)
-# ===================================================================
 
 
 async def _harvest_term_match(
@@ -137,9 +135,7 @@ async def _harvest_term_match(
     return candidates
 
 
-# ===================================================================
 # Harvester D: Explicit mentions (paths + symbols from task text)
-# ===================================================================
 
 
 async def _harvest_explicit(
@@ -279,9 +275,7 @@ from coderecon.mcp.tools.recon.merge import (  # noqa: E402
     _select_graph_seeds,
 )
 
-# ===================================================================
 # Harvester E: Graph walk (structural adjacency from top candidates)
-# ===================================================================
 
 
 async def _harvest_graph(
@@ -472,9 +466,7 @@ async def _harvest_graph(
     return candidates
 
 
-# ===================================================================
 # Harvester F: Import-chain discovery (dependency + dependent tracing)
-# ===================================================================
 
 
 async def _harvest_imports(
@@ -676,9 +668,7 @@ async def _harvest_imports(
     return candidates
 
 
-# ===================================================================
 # Harvester S: SPLADE sparse retrieval
-# ===================================================================
 
 
 async def _harvest_splade(

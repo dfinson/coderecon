@@ -16,9 +16,7 @@ if TYPE_CHECKING:
     from coderecon.testing.runtime import RuntimeExecutionContext
 
 
-# =============================================================================
 # Runner Pack Configuration
-# =============================================================================
 
 
 @dataclass
@@ -50,9 +48,7 @@ class RunnerCapabilities:
     supports_junit_output: bool = True
 
 
-# =============================================================================
 # Runner Pack Base Class
-# =============================================================================
 
 
 class RunnerPack(abc.ABC):
@@ -151,9 +147,7 @@ class RunnerPack(abc.ABC):
         return Path(target.workspace_root)
 
 
-# =============================================================================
 # Runner Pack Registry
-# =============================================================================
 
 
 class RunnerPackRegistry:

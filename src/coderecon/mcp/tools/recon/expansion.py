@@ -16,9 +16,7 @@ if TYPE_CHECKING:
     from coderecon.index.models import DefFact
 
 
-# ===================================================================
 # Low-level helpers
-# ===================================================================
 
 
 def _compute_sha256(full_path: Path) -> str:

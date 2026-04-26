@@ -239,9 +239,7 @@ class LexicalIndex:
         finally:
             pass
 
-    # =========================================================================
     # Staged Operations (for epoch atomicity)
-    # =========================================================================
 
     def stage_file(
         self,

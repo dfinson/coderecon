@@ -23,9 +23,7 @@ def _compute_file_sha256(full_path: Path) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
-# =============================================================================
 # Parameter Models (used by tests and other modules)
-# =============================================================================
 
 
 class SpanTarget(BaseModel):
@@ -58,9 +56,7 @@ class StructuralTarget(BaseModel):
     )
 
 
-# =============================================================================
 # Summary Helpers
-# =============================================================================
 
 
 def _summarize_read(files: list[dict[str, Any]], not_found: int = 0) -> str:

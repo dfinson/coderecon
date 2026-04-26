@@ -26,7 +26,6 @@ from coderecon.config.constants import BYTES_PER_MB
 _DELETE_KEY = object()
 
 
-
 @dataclass
 class SafeExecutionConfig:
     """Configuration for safe execution context."""
@@ -176,9 +175,7 @@ class SafeExecutionContext:
         # for explicit cleanup if needed
         self._temp_dirs.clear()
 
-    # =========================================================================
     # Universal Environment Overrides
-    # =========================================================================
 
     def _universal_env_overrides(self) -> dict[str, str]:
         """Environment variables that apply to all languages.
@@ -215,9 +212,7 @@ class SafeExecutionContext:
             "CODERECON_RUN_ID": self._config.run_id,
         }
 
-    # =========================================================================
     # Language-Specific Environment Strategies
-    # =========================================================================
 
     def _get_env_strategy(self, lang: LanguageFamily) -> Callable[[], dict[str, str | object]]:
         """Get environment strategy for language family."""
@@ -597,9 +592,7 @@ class SafeExecutionContext:
             "LLVM_PROFILE_FILE": str(coverage_dir / f"{self._config.run_id}-%p.profraw"),
         }
 
-    # =========================================================================
     # Language-Specific Command Sanitization Strategies
-    # =========================================================================
 
     def _get_cmd_strategy(self, lang: LanguageFamily) -> Callable[[list[str]], list[str]]:
         """Get command sanitization strategy for language family."""
@@ -897,9 +890,7 @@ class SafeExecutionContext:
         return result
 
 
-# =============================================================================
 # Factory Function
-# =============================================================================
 
 
 def create_safe_context(

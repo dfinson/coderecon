@@ -85,9 +85,7 @@ class ToolDocumentation:
         }
 
 
-# =============================================================================
 # Tool Documentation Registry
-# =============================================================================
 
 
 TOOL_DOCS: dict[str, ToolDocumentation] = {

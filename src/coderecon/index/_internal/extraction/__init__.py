@@ -18,11 +18,6 @@ if TYPE_CHECKING:
     from tree_sitter import Node, Tree
 
 
-# =============================================================================
-# Extraction Result Dataclasses
-# =============================================================================
-
-
 @dataclass
 class TypeAnnotationData:
     """Extracted type annotation data."""
@@ -136,11 +131,6 @@ class TypeExtractionResult:
     error: str | None = None
 
 
-# =============================================================================
-# Type Extractor Protocol
-# =============================================================================
-
-
 @runtime_checkable
 class TypeExtractor(Protocol):
     """Protocol for language-specific type extraction.
@@ -205,11 +195,6 @@ class TypeExtractor(Protocol):
     ) -> list[InterfaceImplData]:
         """Extract interface/trait implementations."""
         ...
-
-
-# =============================================================================
-# Base Extractor Implementation
-# =============================================================================
 
 
 class BaseTypeExtractor(ABC):
@@ -422,11 +407,6 @@ class BaseTypeExtractor(ABC):
         return t.strip()
 
 
-# =============================================================================
-# Shape-Only Extractor (Fallback)
-# =============================================================================
-
-
 class ShapeOnlyExtractor(BaseTypeExtractor):
     """Extractor for languages without type annotation support.
 
@@ -444,11 +424,6 @@ class ShapeOnlyExtractor(BaseTypeExtractor):
     @property
     def supports_interfaces(self) -> bool:
         return False
-
-
-# =============================================================================
-# Extractor Registry
-# =============================================================================
 
 
 class ExtractorRegistry:
@@ -509,4 +484,3 @@ def _register_builtin_extractors(registry: ExtractorRegistry) -> None:
         except ValueError:
             # Grammar not available - skip this language
             structlog.get_logger().debug("grammar_not_available", grammar=pack.grammar_name, exc_info=True)
-            pass

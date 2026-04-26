@@ -35,9 +35,7 @@ from coderecon.files.ops import atomic_write_text
 from coderecon.templates import get_reconignore_template
 
 log = structlog.get_logger(__name__)
-# =============================================================================
 # Agent Instruction Snippet
-# =============================================================================
 
 _CODERECON_SNIPPET_MARKER = "<!-- coderecon-instructions -->"
 
@@ -259,9 +257,7 @@ def _inject_agent_instructions(
     return modified
 
 
-# =============================================================================
 # VS Code MCP Configuration
-# =============================================================================
 
 
 def _get_mcp_server_name(repo_root: Path) -> str:
@@ -383,9 +379,7 @@ def sync_vscode_mcp_port(repo_root: Path, port: int) -> bool:
     return True
 
 
-# =============================================================================
 # Filesystem Helpers
-# =============================================================================
 
 
 def _is_cross_filesystem(path: Path) -> bool:

@@ -20,9 +20,7 @@ def _severity_from_str(s: str) -> Severity:
     return Severity.HINT
 
 
-# =============================================================================
 # Generic Parsers
-# =============================================================================
 
 
 def parse_sarif(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
@@ -61,9 +59,7 @@ def parse_sarif(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     return ParseResult.ok(diagnostics)
 
 
-# =============================================================================
 # Python Parsers
-# =============================================================================
 
 
 def parse_ruff(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
@@ -184,9 +180,7 @@ def parse_black_check(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     return ParseResult.ok(diagnostics)
 
 
-# =============================================================================
 # JavaScript/TypeScript Parsers
-# =============================================================================
 
 
 def parse_eslint(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
@@ -283,9 +277,7 @@ def parse_biome(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     return ParseResult.ok(diagnostics)
 
 
-# =============================================================================
 # Go Parsers
-# =============================================================================
 
 
 def parse_go_vet(stdout: str, stderr: str) -> ParseResult:
@@ -406,9 +398,7 @@ def parse_ruff_format(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     return ParseResult.ok(diagnostics)
 
 
-# =============================================================================
 # Rust Parsers
-# =============================================================================
 
 
 def parse_clippy(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
@@ -486,9 +476,7 @@ def parse_cargo_audit(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     return ParseResult.ok(diagnostics)
 
 
-# =============================================================================
 # Java/Kotlin Parsers
-# =============================================================================
 
 
 def parse_checkstyle(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
@@ -543,9 +531,7 @@ def parse_ktlint(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     return ParseResult.ok(diagnostics)
 
 
-# =============================================================================
 # C#/.NET Parsers
-# =============================================================================
 
 
 def parse_dotnet_format(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
@@ -567,9 +553,7 @@ def parse_dotnet_format(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG00
     return ParseResult.ok(diagnostics)
 
 
-# =============================================================================
 # Ruby Parsers
-# =============================================================================
 
 
 def parse_rubocop(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
@@ -600,9 +584,7 @@ def parse_rubocop(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     return ParseResult.ok(diagnostics)
 
 
-# =============================================================================
 # PHP Parsers
-# =============================================================================
 
 
 def parse_phpcs(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
@@ -650,9 +632,7 @@ def parse_phpstan(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     return ParseResult.ok(diagnostics)
 
 
-# =============================================================================
 # Shell Parsers
-# =============================================================================
 
 
 def parse_shellcheck(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
@@ -699,9 +679,7 @@ def parse_shfmt(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     return ParseResult.ok(diagnostics)
 
 
-# =============================================================================
 # Misc Parsers
-# =============================================================================
 
 
 def parse_hadolint(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001

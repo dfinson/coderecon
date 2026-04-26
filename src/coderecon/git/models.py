@@ -352,9 +352,7 @@ class OperationResult:
     conflict_paths: tuple[str, ...] = field(default_factory=tuple)
 
 
-# =============================================================================
 # Worktree Types
-# =============================================================================
 
 
 @dataclass(frozen=True, slots=True)
@@ -372,9 +370,7 @@ class WorktreeInfo:
     is_prunable: bool  # True if worktree directory is missing
 
 
-# =============================================================================
 # Submodule Types
-# =============================================================================
 
 SubmoduleState = Literal[
     "uninitialized",  # In .gitmodules but not cloned
@@ -418,9 +414,7 @@ class SubmoduleUpdateResult:
     already_current: tuple[str, ...]
 
 
-# =============================================================================
 # Rebase Types
-# =============================================================================
 
 RebaseAction = Literal["pick", "reword", "edit", "squash", "fixup", "drop"]
 RebaseResultState = Literal["done", "conflict", "edit_pause", "aborted"]

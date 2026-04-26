@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from coderecon.daemon.lifecycle import ServerController
 
 
-
 def _get_version() -> str:
     """Get package version from installed metadata."""
     try:

@@ -22,9 +22,7 @@ if TYPE_CHECKING:
 log = structlog.get_logger(__name__)
 
 
-# =============================================================================
 # Core Functions (transport-agnostic)
-# =============================================================================
 
 
 def graph_cycles_core(
@@ -258,9 +256,7 @@ def graph_export_core(
     )
 
 
-# =============================================================================
 # Tool Registration
-# =============================================================================
 
 
 def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:

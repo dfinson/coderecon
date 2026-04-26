@@ -16,9 +16,7 @@ from sqlalchemy import text
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
-# ============================================================================
 # Regex-based detection patterns (lightweight; no tree-sitter required)
-# ============================================================================
 
 # Python: Flask, FastAPI, Django, Starlette
 _PY_ROUTE_PATTERNS = [

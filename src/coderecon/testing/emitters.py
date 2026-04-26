@@ -18,10 +18,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
 
 
 log = structlog.get_logger(__name__)
@@ -98,9 +94,7 @@ class CoverageEmitter(ABC):
         ...
 
 
-# =============================================================================
 # Python - pytest-cov (lcov output)
-# =============================================================================
 
 
 class PytestCovEmitter(CoverageEmitter):
@@ -137,9 +131,7 @@ class PytestCovEmitter(CoverageEmitter):
         return output_dir / "coverage" / "lcov.info"
 
 
-# =============================================================================
 # JavaScript - Jest/Vitest (istanbul/lcov)
-# =============================================================================
 
 
 class JestCoverageEmitter(CoverageEmitter):
@@ -206,9 +198,7 @@ class VitestCoverageEmitter(CoverageEmitter):
         return output_dir / "coverage"
 
 
-# =============================================================================
 # Go - go test -coverprofile
-# =============================================================================
 
 
 class GoCoverageEmitter(CoverageEmitter):
@@ -238,9 +228,7 @@ class GoCoverageEmitter(CoverageEmitter):
         return output_dir / "coverage" / "coverage.out"
 
 
-# =============================================================================
 # Rust - cargo-llvm-cov (lcov output)
-# =============================================================================
 
 
 class CargoLlvmCovEmitter(CoverageEmitter):
@@ -277,9 +265,7 @@ class CargoLlvmCovEmitter(CoverageEmitter):
         return output_dir / "coverage" / "lcov.info"
 
 
-# =============================================================================
 # Java - JaCoCo (via Maven/Gradle)
-# =============================================================================
 
 
 class MavenJacocoEmitter(CoverageEmitter):
@@ -336,9 +322,7 @@ class GradleJacocoEmitter(CoverageEmitter):
         return output_dir.parent / "build" / "reports" / "jacoco"
 
 
-# =============================================================================
 # .NET - coverlet (cobertura output)
-# =============================================================================
 
 
 class DotnetCoverletEmitter(CoverageEmitter):
@@ -371,9 +355,7 @@ class DotnetCoverletEmitter(CoverageEmitter):
         return output_dir / "coverage"
 
 
-# =============================================================================
 # Ruby - SimpleCov
-# =============================================================================
 
 
 class SimpleCovEmitter(CoverageEmitter):
@@ -406,9 +388,7 @@ class SimpleCovEmitter(CoverageEmitter):
         return output_dir / "coverage"
 
 
-# =============================================================================
 # PHP - PHPUnit coverage
-# =============================================================================
 
 
 class PHPUnitCoverageEmitter(CoverageEmitter):
@@ -441,9 +421,7 @@ class PHPUnitCoverageEmitter(CoverageEmitter):
         return output_dir / "coverage" / "clover.xml"
 
 
-# =============================================================================
 # Dart/Flutter
-# =============================================================================
 
 
 class DartCoverageEmitter(CoverageEmitter):
@@ -471,9 +449,7 @@ class DartCoverageEmitter(CoverageEmitter):
         return output_dir / "coverage"
 
 
-# =============================================================================
 # Emitter Registry
-# =============================================================================
 
 # Map pack_id -> emitter class
 EMITTER_REGISTRY: dict[str, type[CoverageEmitter]] = {

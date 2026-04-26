@@ -24,9 +24,7 @@ if TYPE_CHECKING:
 log = structlog.get_logger(__name__)
 
 
-# ============================================================================
 # Source 1: Current index state
-# ============================================================================
 
 
 def snapshots_from_index(session: Session, file_path: str) -> list[DefSnapshot]:
@@ -55,9 +53,7 @@ def snapshots_from_index(session: Session, file_path: str) -> list[DefSnapshot]:
     ]
 
 
-# ============================================================================
 # Source 2: Published epoch snapshots
-# ============================================================================
 
 
 def snapshots_from_epoch(session: Session, epoch_id: int, file_path: str) -> list[DefSnapshot]:
@@ -110,9 +106,7 @@ def snapshots_from_epoch(session: Session, epoch_id: int, file_path: str) -> lis
     ]
 
 
-# ============================================================================
 # Source 3: Parse git blob on the fly
-# ============================================================================
 
 
 def snapshots_from_blob(

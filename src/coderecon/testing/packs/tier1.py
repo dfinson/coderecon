@@ -39,10 +39,7 @@ from coderecon.config.constants import MS_PER_SEC
 log = structlog.get_logger(__name__)
 
 
-
-# =============================================================================
 # Python - pytest
-# =============================================================================
 
 
 @runner_registry.register
@@ -190,9 +187,7 @@ class PytestPack(RunnerPack):
         return ParsedTestSuite(name="pytest", errors=1)
 
 
-# =============================================================================
 # JavaScript/TypeScript - Jest
-# =============================================================================
 
 
 @runner_registry.register
@@ -347,9 +342,7 @@ class JestPack(RunnerPack):
         )
 
 
-# =============================================================================
 # JavaScript/TypeScript - Vitest
-# =============================================================================
 
 
 @runner_registry.register
@@ -460,9 +453,7 @@ class VitestPack(RunnerPack):
         return ParsedTestSuite(name="vitest", errors=1)
 
 
-# =============================================================================
 # Go - go test
-# =============================================================================
 
 
 @runner_registry.register
@@ -555,9 +546,7 @@ class GoTestPack(RunnerPack):
         return parse_go_test_json(stdout)
 
 
-# =============================================================================
 # Rust - cargo-nextest (preferred) or cargo test
-# =============================================================================
 
 
 @runner_registry.register
@@ -769,9 +758,7 @@ class CargoTestPack(RunnerPack):
         )
 
 
-# =============================================================================
 # Java - Maven Surefire
-# =============================================================================
 
 
 @runner_registry.register
@@ -899,9 +886,7 @@ class MavenSurefirePack(RunnerPack):
         )
 
 
-# =============================================================================
 # Java - Gradle
-# =============================================================================
 
 
 @runner_registry.register
@@ -1046,9 +1031,7 @@ class GradlePack(RunnerPack):
         )
 
 
-# =============================================================================
 # C# - dotnet test
-# =============================================================================
 
 
 @runner_registry.register
@@ -1151,9 +1134,7 @@ class DotnetTestPack(RunnerPack):
         return ParsedTestSuite(name="dotnet", errors=1)
 
 
-# =============================================================================
 # C/C++ - CTest
-# =============================================================================
 
 
 @runner_registry.register
@@ -1248,9 +1229,7 @@ class CTestPack(RunnerPack):
         )
 
 
-# =============================================================================
 # Ruby - RSpec
-# =============================================================================
 
 
 @runner_registry.register
@@ -1454,9 +1433,7 @@ class MinitestPack(RunnerPack):
         return ParsedTestSuite(name="minitest", errors=1)
 
 
-# =============================================================================
 # PHP - PHPUnit
-# =============================================================================
 
 
 @runner_registry.register

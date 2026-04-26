@@ -243,9 +243,7 @@ def get_coverage_summary(engine: Engine) -> dict[str, float | int]:
         }
 
 
-# ============================================================================
 # Internal helpers
-# ============================================================================
 
 
 def _extract_test_ids(file_cov: object, prefix: str) -> list[str]:

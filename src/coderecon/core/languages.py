@@ -69,9 +69,7 @@ class Language:
     priority: int = 50
 
 
-# =============================================================================
 # Language Definitions
-# =============================================================================
 # RULES:
 # 1. All filenames/markers MUST be lowercase (exact filenames, no globs/wildcards)
 # 2. Extensions are case-insensitive (normalized to lowercase during lookup)
@@ -79,9 +77,7 @@ class Language:
 # 4. Grammar must be a real tree-sitter grammar name or None
 
 ALL_LANGUAGES: tuple[Language, ...] = (
-    # =========================================================================
     # Tier 1: Most common languages
-    # =========================================================================
     Language(
         name="python",
         extensions=frozenset({".py", ".pyi", ".pyw", ".pyx", ".pxd", ".pxi"}),
@@ -163,9 +159,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         ),
         priority=80,
     ),
-    # =========================================================================
     # JVM Languages (each has its own grammar)
-    # =========================================================================
     Language(
         name="java",
         extensions=frozenset({".java"}),
@@ -230,9 +224,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         test_patterns=("*Test.groovy", "*Spec.groovy"),
         priority=70,
     ),
-    # =========================================================================
     # .NET Languages (each has its own grammar)
-    # =========================================================================
     Language(
         name="csharp",
         extensions=frozenset({".cs"}),
@@ -265,9 +257,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         test_patterns=("*Tests.vb", "*Test.vb"),
         priority=70,
     ),
-    # =========================================================================
     # C/C++ (unified as c_cpp since .h is genuinely ambiguous)
-    # =========================================================================
     Language(
         name="c_cpp",
         extensions=frozenset({".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hxx", ".hh", ".ino"}),
@@ -286,9 +276,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         exportable_kinds=frozenset({"function", "class", "struct", "enum", "type_alias"}),
         priority=60,
     ),
-    # =========================================================================
     # Objective-C (separate; .m is AMBIGUOUS with MATLAB)
-    # =========================================================================
     Language(
         name="objc",
         extensions=frozenset({".m", ".mm"}),
@@ -299,9 +287,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         grammar="objc",
         priority=60,  # Higher than MATLAB for .m
     ),
-    # =========================================================================
     # MATLAB/Octave (.m is AMBIGUOUS with Objective-C)
-    # =========================================================================
     Language(
         name="matlab",
         extensions=frozenset({".m", ".mlx"}),  # .m is ambiguous; .mlx is MATLAB-only
@@ -312,9 +298,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         grammar=None,  # No tree-sitter-matlab in common registries
         priority=50,  # Lower than objc for .m
     ),
-    # =========================================================================
     # Other mainstream languages
-    # =========================================================================
     Language(
         name="ruby",
         extensions=frozenset({".rb", ".rake", ".gemspec", ".erb"}),
@@ -348,9 +332,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         exportable_kinds=frozenset({"class", "struct", "enum", "protocol", "function"}),
         priority=70,
     ),
-    # =========================================================================
     # Functional languages
-    # =========================================================================
     Language(
         name="elixir",
         extensions=frozenset({".ex", ".exs", ".eex", ".heex"}),
@@ -421,9 +403,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         grammar="elm",
         priority=70,
     ),
-    # =========================================================================
     # Scripting languages
-    # =========================================================================
     # Shell: bash/zsh/ksh (POSIX-compatible shells)
     Language(
         name="shell",
@@ -495,9 +475,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         exportable_kinds=frozenset({"function", "macro", "struct", "module", "abstract_type", "constant"}),
         priority=70,
     ),
-    # =========================================================================
     # Systems languages
-    # =========================================================================
     Language(
         name="zig",
         extensions=frozenset({".zig"}),
@@ -601,9 +579,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         grammar="odin",
         priority=60,
     ),
-    # =========================================================================
     # Hardware Description Languages
-    # =========================================================================
     Language(
         name="verilog",
         extensions=frozenset({".v", ".vh", ".sv", ".svh"}),
@@ -622,9 +598,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         grammar="vhdl",
         priority=60,
     ),
-    # =========================================================================
     # Web/Markup
-    # =========================================================================
     Language(
         name="html",
         extensions=frozenset({".html", ".htm", ".xhtml"}),
@@ -653,9 +627,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         grammar="css",
         priority=50,
     ),
-    # =========================================================================
     # Infrastructure/Config
-    # =========================================================================
     Language(
         name="terraform",
         extensions=frozenset({".tf", ".tfvars"}),
@@ -705,9 +677,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         ambient=True,
         priority=60,
     ),
-    # =========================================================================
     # Data/Documentation
-    # =========================================================================
     Language(
         name="markdown",
         extensions=frozenset({".md", ".mdx", ".markdown"}),
@@ -796,9 +766,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         grammar="nix",
         priority=60,
     ),
-    # =========================================================================
     # Build systems (filename-based, not extension-based)
-    # =========================================================================
     Language(
         name="make",
         extensions=frozenset({".mk"}),
@@ -844,9 +812,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
         grammar="just",
         priority=50,
     ),
-    # =========================================================================
     # Other
-    # =========================================================================
     Language(
         name="assembly",
         extensions=frozenset({".asm", ".s", ".nasm"}),
@@ -858,9 +824,7 @@ ALL_LANGUAGES: tuple[Language, ...] = (
     ),
 )
 
-# =============================================================================
 # Lookup Tables (built from ALL_LANGUAGES)
-# =============================================================================
 
 LANGUAGES_BY_NAME: dict[str, Language] = {lang.name: lang for lang in ALL_LANGUAGES}
 
@@ -980,9 +944,7 @@ _COMPOUND_SUFFIXES: dict[str, str] = {
 }
 
 
-# =============================================================================
 # Ambiguous Extension Documentation
-# =============================================================================
 # These extensions map to multiple families. Use context (project markers,
 # directory structure) to disambiguate when possible.
 
@@ -991,9 +953,7 @@ AMBIGUOUS_EXTENSIONS: dict[str, tuple[str, ...]] = {
 }
 
 
-# =============================================================================
 # Detection Functions
-# =============================================================================
 
 
 def get_families_for_extension(ext: str) -> tuple[str, ...]:
@@ -1068,9 +1028,7 @@ def detect_language_family_enum(path: str | Path) -> LanguageFamily | None:
         return None
 
 
-# =============================================================================
 # Include Glob Generation
-# =============================================================================
 
 
 def _generate_include_globs(lang: Language) -> tuple[str, ...]:
@@ -1104,9 +1062,7 @@ def get_include_globs(name: str) -> tuple[str, ...]:
     return _generate_include_globs(LANGUAGES_BY_NAME[name])
 
 
-# =============================================================================
 # Marker Functions
-# =============================================================================
 
 
 def get_markers(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -1147,9 +1103,7 @@ def build_include_specs() -> dict[str, tuple[str, ...]]:
     return result
 
 
-# =============================================================================
 # Other Accessors
-# =============================================================================
 
 
 def get_test_patterns(name: str) -> tuple[str, ...]:
@@ -1193,9 +1147,7 @@ def is_test_file(path: str | Path) -> bool:
     return False
 
 
-# =============================================================================
 # Convention-based test file pairing
-# =============================================================================
 
 # Common source→test directory mappings.  Order matters: first match wins.
 _SRC_TEST_DIR_PAIRS: tuple[tuple[str, str], ...] = (
@@ -1479,9 +1431,7 @@ def get_all_indexable_filenames() -> set[str]:
     return set(FILENAME_TO_NAME.keys())
 
 
-# =============================================================================
 # Validation (for tests only - NOT run at import time)
-# =============================================================================
 
 
 def validate_language_families() -> list[str]:

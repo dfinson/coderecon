@@ -109,9 +109,7 @@ def classify_oom(
     return False
 
 
-# =========================================================================
 # Persistent per-repo history
-# =========================================================================
 
 _HISTORY_FILENAME = "test_memory_profile.json"
 

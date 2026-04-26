@@ -22,9 +22,7 @@ if TYPE_CHECKING:
     pass
 
 
-# ============================================================================
 # ENUMS
-# ============================================================================
 
 
 class LanguageFamily(StrEnum):
@@ -373,9 +371,7 @@ class ResolutionMethod(StrEnum):
     UNRESOLVED = "unresolved"  # Could not resolve
 
 
-# ============================================================================
 # TIER 1 FACT TABLES (per SPEC.md §7.3)
-# ============================================================================
 
 
 class Worktree(SQLModel, table=True):
@@ -827,9 +823,7 @@ class DynamicAccessSite(SQLModel, table=True):
         return result
 
 
-# ============================================================================
 # TIER 2 TYPE-AWARE FACT TABLES (Type-traced refactoring support)
-# ============================================================================
 
 
 class TypeAnnotationFact(SQLModel, table=True):
@@ -1093,9 +1087,7 @@ class DefSnapshotRecord(SQLModel, table=True):
     end_line: int | None = None
 
 
-# ============================================================================
 # TIER 3: BEHAVIORAL FACTS (coverage, lint — populated from tool execution)
-# ============================================================================
 
 
 class TestCoverageFact(SQLModel, table=True):
@@ -1278,9 +1270,7 @@ class DocCodeEdgeFact(SQLModel, table=True):
     model_version: str = Field(index=True)
 
 
-# ============================================================================
 # NON-TABLE MODELS (Pydantic only, for data transfer)
-# ============================================================================
 
 
 class FileState(SQLModel):

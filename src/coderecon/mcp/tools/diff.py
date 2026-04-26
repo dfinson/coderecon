@@ -39,9 +39,7 @@ if TYPE_CHECKING:
 log = structlog.get_logger(__name__)
 
 
-# =============================================================================
 # Core Function (transport-agnostic)
-# =============================================================================
 
 
 def semantic_diff_core(
@@ -69,9 +67,7 @@ def semantic_diff_core(
     )
 
 
-# =============================================================================
 # Tool Registration
-# =============================================================================
 
 
 def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
@@ -434,9 +430,7 @@ def _annotate_change_previews(
                     nc.change_preview = "\n".join(nc_relevant)
 
 
-# =============================================================================
 # Domain Classification
-# =============================================================================
 
 # Default: group by first 2 path segments (e.g. src/coderecon → "src/coderecon")
 _DOMAIN_PREFIX_DEPTH = 2
@@ -556,9 +550,7 @@ def _detect_cross_domain_edges(
     return [{"from_domain": a, "to_domain": b, "relationship": "import"} for a, b in sorted(edges)]
 
 
-# =============================================================================
 # Agentic Hint
-# =============================================================================
 
 
 def _build_agentic_hint(

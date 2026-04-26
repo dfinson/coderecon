@@ -27,11 +27,6 @@ if TYPE_CHECKING:
     from tree_sitter import Language, Node, Query, Tree
 
 
-# =============================================================================
-# Query-Based Extractor
-# =============================================================================
-
-
 class QueryBasedExtractor(BaseTypeExtractor):
     """Type extractor driven by tree-sitter queries.
 
@@ -449,10 +444,6 @@ class QueryBasedExtractor(BaseTypeExtractor):
             start_line=impl_node.start_point[0] + 1,
             start_col=impl_node.start_point[1],
         )
-
-    # =========================================================================
-    # Utility Methods
-    # =========================================================================
 
     def _node_text(self, node: Node | None) -> str:
         """Extract text from a node."""

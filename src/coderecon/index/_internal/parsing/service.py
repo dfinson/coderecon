@@ -154,9 +154,7 @@ class TreeSitterService:
         return self._parser.extract_csharp_namespace_types(root_node)
 
 
-# ======================================================================
 # Generic scope walker -- replaces 3 near-identical methods (~170 lines)
-# ======================================================================
 
 
 def _extract_scopes_generic(
@@ -277,6 +275,5 @@ def _extract_scopes_by_pattern(
 
 
 # Module-level singleton
-# ======================================================================
 
 tree_sitter_service = TreeSitterService.get()

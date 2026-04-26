@@ -271,9 +271,7 @@ _PATH_STOP_TOKENS = frozenset(
 )
 
 
-# ===================================================================
 # ArtifactKind — classify what kind of artifact a definition lives in
-# ===================================================================
 
 
 class ArtifactKind(StrEnum):
@@ -302,9 +300,7 @@ def _classify_artifact(path: str) -> ArtifactKind:
     return ArtifactKind.code
 
 
-# ===================================================================
 # TaskIntent — what the user is trying to accomplish
-# ===================================================================
 
 
 class TaskIntent(StrEnum):
@@ -425,9 +421,7 @@ def _extract_intent(task: str) -> TaskIntent:
     return best_intent
 
 
-# ===================================================================
 # EvidenceRecord — structured evidence from harvesters
-# ===================================================================
 
 
 @dataclass
@@ -439,9 +433,7 @@ class EvidenceRecord:
     score: float = 0.0  # Normalized [0, 1] contribution
 
 
-# ===================================================================
 # HarvestCandidate — unified representation from all harvesters
-# ===================================================================
 
 
 @dataclass
@@ -556,9 +548,7 @@ class HarvestCandidate:
         return self.from_explicit or self.hub_score >= 8 or len(self.matched_terms) >= 3
 
 
-# ===================================================================
 # ParsedTask — structured extraction from free-text
-# ===================================================================
 
 
 @dataclass(frozen=True)
@@ -595,10 +585,7 @@ class ParsedTask:
     is_test_driven: bool = False
 
 
-# ===================================================================
-# ===================================================================
 # File-type classifiers
-# ===================================================================
 
 
 def _is_test_file(path: str) -> bool:

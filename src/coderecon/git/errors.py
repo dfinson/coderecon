@@ -120,9 +120,7 @@ class NoStashEntriesError(StashError):
         super().__init__("No stash entries")
 
 
-# =============================================================================
 # Worktree Errors
-# =============================================================================
 
 
 class WorktreeError(GitError):
@@ -157,9 +155,7 @@ class WorktreeLockedError(WorktreeError):
         self.reason = reason
 
 
-# =============================================================================
 # Submodule Errors
-# =============================================================================
 
 
 class SubmoduleError(GitError):
@@ -184,9 +180,7 @@ class SubmoduleNotInitializedError(SubmoduleError):
         self.path = path
 
 
-# =============================================================================
 # Rebase Errors
-# =============================================================================
 
 
 class RebaseError(GitError):
@@ -219,9 +213,7 @@ class RebaseConflictError(RebaseError):
         self.paths = paths
 
 
-# =============================================================================
 # Commit Validation Errors
-# =============================================================================
 
 
 class EmptyCommitMessageError(GitError):

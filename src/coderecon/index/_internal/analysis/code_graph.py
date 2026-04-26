@@ -18,9 +18,7 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
 
-# ============================================================================
 # Data models
-# ============================================================================
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,9 +62,7 @@ class GraphAnalysisResult:
     communities: list[Community] = field(default_factory=list)
 
 
-# ============================================================================
 # Graph construction
-# ============================================================================
 
 
 def build_file_graph(engine: Engine) -> nx.DiGraph:
@@ -146,9 +142,7 @@ def build_def_graph(engine: Engine) -> nx.DiGraph:
     return g
 
 
-# ============================================================================
 # Algorithms
-# ============================================================================
 
 
 def compute_pagerank(
@@ -249,9 +243,7 @@ def detect_communities(
     return communities
 
 
-# ============================================================================
 # Full analysis (convenience)
-# ============================================================================
 
 
 def analyze_file_graph(engine: Engine) -> GraphAnalysisResult:
