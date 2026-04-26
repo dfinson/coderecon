@@ -312,7 +312,7 @@ async def _handle_register(
             "repo": repo.name,
             "worktree": wt.name,
         })
-    except Exception as exc:
+    except (OSError, ValueError, RuntimeError) as exc:
         return _error_response(request_id, "REGISTER_FAILED", str(exc))
 
 
@@ -375,7 +375,7 @@ async def _handle_unregister(
     try:
         ok = registry.unregister(Path(repo_path))
         return _success_response(request_id, {"removed": ok})
-    except Exception as exc:
+    except (OSError, ValueError, RuntimeError) as exc:
         return _error_response(request_id, "UNREGISTER_FAILED", str(exc))
 
 

@@ -440,7 +440,7 @@ class TreeSitterParser:
         """
         try:
             query = _TSQuery(tree.language, config.query)
-        except Exception:
+        except (ValueError, RuntimeError):
             log.debug("ts_query_compile_failed", exc_info=True)
             return []
         cursor = _TSQueryCursor(query)
@@ -570,7 +570,7 @@ class TreeSitterParser:
         assert pack.declared_module_query is not None
         try:
             query = _TSQuery(tree.language, pack.declared_module_query)
-        except Exception:
+        except (ValueError, RuntimeError):
             log.debug("ts_query_compile_failed", exc_info=True)
             return None
         cursor = _TSQueryCursor(query)
@@ -806,7 +806,7 @@ class TreeSitterParser:
         assert pack.dynamic_query is not None
         try:
             query = _TSQuery(tree.language, pack.dynamic_query)
-        except Exception:
+        except (ValueError, RuntimeError):
             log.debug("ts_query_compile_failed", exc_info=True)
             return []
         cursor = _TSQueryCursor(query)

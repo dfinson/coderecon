@@ -76,7 +76,7 @@ def status_command(path: Path | None, as_json: bool) -> None:
             resp = httpx.get(f"http://127.0.0.1:{port}/repos/{name}/status", timeout=5.0)
             status_data = resp.json()
             break
-        except Exception:  # noqa: BLE001
+        except (ImportError, OSError, ValueError, KeyError):  # noqa: BLE001
             log.debug("repo_status_query_failed", exc_info=True)
             continue
 

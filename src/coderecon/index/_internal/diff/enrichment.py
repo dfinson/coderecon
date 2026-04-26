@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import structlog
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import select
 
 from coderecon.index._internal.diff.models import (
@@ -124,22 +125,22 @@ def _enrich_single_change(
         ref_tiers, ref_files, ref_basis, entity_id = _enrich_references(
             session, rc.path, rc.kind, rc.name
         )
-    except Exception:
+    except SQLAlchemyError:
         log.debug("enrich_refs_failed", extra={"path": rc.path, "name": rc.name}, exc_info=True)
 
     try:
         imp_files = _enrich_imports(session, rc.name)
-    except Exception:
+    except SQLAlchemyError:
         log.debug("enrich_imports_failed", extra={"path": rc.path, "name": rc.name}, exc_info=True)
 
     try:
         test_files = _enrich_test_files(ref_files, imp_files)
-    except Exception:
+    except (SQLAlchemyError, ValueError):
         log.debug("enrich_tests_failed", extra={"path": rc.path, "name": rc.name}, exc_info=True)
 
     try:
         visibility, is_static = _enrich_visibility(session, rc.path, rc.kind, rc.name)
-    except Exception:
+    except SQLAlchemyError:
         log.debug("enrich_visibility_failed", extra={"path": rc.path, "name": rc.name}, exc_info=True)
 
     ref_count = ref_tiers.total if ref_tiers else None
@@ -184,7 +185,7 @@ def _enrich_single_change(
             old_entity_id = _resolve_entity_id(session, rc.path, rc.kind, rc.old_name)
             if old_entity_id:
                 previous_entity_id = old_entity_id
-        except Exception:
+        except SQLAlchemyError:
             log.debug("old_entity_id_failed", extra={"path": rc.path, "old_name": rc.old_name}, exc_info=True)
 
     return StructuralChange(

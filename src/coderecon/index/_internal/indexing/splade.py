@@ -24,6 +24,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy.exc import SQLAlchemyError
+
 import numpy as np
 import onnxruntime as ort
 from sqlalchemy import text
@@ -461,7 +463,7 @@ def build_scaffolds_for_defs(
                     ):
                         d_types.add(btype)
                 type_refs_by_uid[d.def_uid] = list(d_types)[:20]
-        except Exception:
+        except (SQLAlchemyError, ValueError):
             log.debug("type_annotation_lookup_failed", exc_info=True)
 
     # ── Build scaffolds ──────────────────────────────────────────
@@ -542,7 +544,7 @@ class SpladeEncoder:
             return
         try:
             model = onnx.load(str(onnx_path), load_external_data=False)
-        except Exception:
+        except (OSError, RuntimeError, ValueError):
             log.debug("onnx_model_load_failed", exc_info=True)
             return
         for out in model.graph.output:

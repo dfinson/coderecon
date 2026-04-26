@@ -107,7 +107,7 @@ def register_command(path: Path | None, reindex: bool, mcp_targets: tuple[str, .
                 mcp = data.get("mcp_endpoint")
                 if mcp:
                     click.echo(f"  MCP endpoint: http://127.0.0.1:{server_port}{mcp}")
-            except Exception as exc:  # noqa: BLE001
+            except (ImportError, OSError, ValueError, KeyError) as exc:
                 click.echo(f"  Warning: daemon notification failed: {exc}", err=True)
     else:
         click.echo("  (daemon not running — start with 'recon up')")
@@ -144,7 +144,7 @@ def unregister_command(path: Path | None) -> None:
                 else:
                     click.echo(f"Daemon error: {resp.text}", err=True)
                 return
-            except Exception as exc:  # noqa: BLE001
+            except (ImportError, OSError, ValueError, KeyError) as exc:  # noqa: BLE001
                 click.echo(f"Warning: daemon notification failed: {exc}", err=True)
                 # Fall through to direct catalog write below
 
@@ -214,7 +214,7 @@ def register_worktree_command(path: Path | None) -> None:
                         "Restart with 'recon down && recon up'.",
                         err=True,
                     )
-            except Exception as exc:  # noqa: BLE001
+            except (ImportError, OSError, ValueError, KeyError) as exc:
                 click.echo(f"  Warning: daemon notification failed: {exc}", err=True)
     else:
         click.echo("  (daemon not running — start with 'recon up')")
@@ -278,5 +278,5 @@ def global_status_command() -> None:
                 click.echo(f"  Active repos: {', '.join(active)}")
                 for name in active:
                     click.echo(f"    {name}: http://127.0.0.1:{port}/repos/{name}/mcp")
-        except Exception:  # noqa: BLE001
+        except (ImportError, OSError, ValueError, KeyError):  # noqa: BLE001
             log.debug("health_check_failed", exc_info=True)

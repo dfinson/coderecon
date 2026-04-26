@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -157,7 +158,7 @@ def _check_coverage_floor(
                     message=f"{msg} Current: {pct:.1f}%",
                     details={"current": pct, "threshold": threshold},
                 ))
-    except Exception:
+    except SQLAlchemyError:
         log.debug("gate.coverage_floor.failed", exc_info=True)
 
 
@@ -215,7 +216,7 @@ def _check_no_new_cycles(
                     ),
                 },
             ))
-    except Exception:
+    except SQLAlchemyError:
         log.debug("gate.no_new_cycles.failed", exc_info=True)
 
 
@@ -271,7 +272,7 @@ def _check_coverage_regression(
                     message=f"{msg} Current: {avg_rate * 100:.1f}%",
                     details={"current_rate": avg_rate, "threshold": threshold},
                 ))
-    except Exception:
+    except SQLAlchemyError:
         log.debug("gate.coverage_regression.failed", exc_info=True)
 
 
@@ -306,5 +307,5 @@ def _check_centrality_impact(
                 ),
                 details={"impacted_symbols": impacted[:5], "count": len(impacted)},
             ))
-    except Exception:
+    except SQLAlchemyError:
         log.debug("gate.centrality_impact.failed", exc_info=True)

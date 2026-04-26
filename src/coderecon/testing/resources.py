@@ -168,7 +168,7 @@ class MemoryHistory:
                     last_run_ts=d.get("last_run_ts", 0.0),
                     oom_count=d.get("oom_count", 0),
                 )
-        except Exception:
+        except (OSError, json.JSONDecodeError, KeyError, ValueError):
             log.debug("memory_history.load_failed", exc_info=True)
 
     def _save(self) -> None:
@@ -183,5 +183,5 @@ class MemoryHistory:
                 for tid, p in self._data.items()
             }
             self._path.write_text(json.dumps(payload, indent=2) + "\n")
-        except Exception:
+        except OSError:
             log.debug("memory_history.save_failed", exc_info=True)

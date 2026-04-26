@@ -717,7 +717,7 @@ class IndexCoordinatorEngine:
             log.info("initial_coverage.ingested", extra={"facts": written})
             return written
 
-        except Exception:  # noqa: BLE001 — coverage ingestion is best-effort
+        except (OSError, ValueError, RuntimeError):  # coverage ingestion is best-effort
             log.debug("initial_coverage.failed", exc_info=True)
             return 0
 
@@ -1103,7 +1103,7 @@ class IndexCoordinatorEngine:
                     # Commit all staged changes atomically
                     try:
                         self._lexical.commit_staged()
-                    except Exception:  # noqa: BLE001 — tantivy commit is best-effort fallback
+                    except (OSError, RuntimeError):  # tantivy commit is best-effort fallback
                         logger.exception("tantivy_commit_failed")
                         # NULL content_hash for all changed files so reconcile
                         # retries them — DB facts are already committed.
@@ -1219,7 +1219,7 @@ class IndexCoordinatorEngine:
         # WAL checkpoint to keep WAL file bounded after bulk writes
         try:
             self.db.checkpoint("PASSIVE")
-        except Exception:  # noqa: BLE001 — WAL checkpoint is optional maintenance
+        except (OSError, RuntimeError):  # WAL checkpoint is optional maintenance
             logger.debug("wal_checkpoint_skipped_after_reindex", exc_info=True)
 
         duration = time.time() - start_time
@@ -2695,7 +2695,7 @@ is_main_worktree=self._is_main_worktree(_wt2),
                         python_exe=result.runtime.python_executable,
                     )
 
-                except Exception as e:
+                except (OSError, RuntimeError, ValueError) as e:
                     logger.warning(
                         "runtime_resolution_failed",
                         context_id=context.id,
@@ -2748,7 +2748,7 @@ is_main_worktree=self._is_main_worktree(_wt2),
                     pack = pack_class()
                     try:
                         targets = await pack.discover(ws_root)
-                    except Exception:
+                    except (OSError, RuntimeError, ValueError):
                         logger.debug("test_pack_discover_failed", exc_info=True)
                         continue
 
@@ -3372,7 +3372,7 @@ is_main_worktree=self._is_main_worktree(_wt2),
             shapes = resolve_unresolved_shapes(self.db, file_ids=changed_file_ids)
             log.debug("reindex.semantic_resolve.complete",
                       extra={"refs": refs, "accesses": accesses, "shapes": shapes})
-        except Exception:  # noqa: BLE001 — semantic resolution is best-effort
+        except (ImportError, OSError, RuntimeError, ValueError):  # semantic resolution is best-effort
             log.warning("reindex.semantic_resolve.failed", exc_info=True)
 
         # Pass 6: Semantic neighbors — recompute for changed defs.
@@ -3381,7 +3381,7 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 self.db, changed_file_ids=changed_file_ids
             )
             log.debug("reindex.semantic_neighbors.complete", extra={"edges": edges})
-        except Exception:  # noqa: BLE001 — semantic neighbors is best-effort
+        except (ImportError, OSError, RuntimeError, ValueError):  # semantic neighbors is best-effort
             log.warning("reindex.semantic_neighbors.failed", exc_info=True)
 
         # Pass 7: Doc chunk linking — re-link doc chunks that may
@@ -3394,7 +3394,7 @@ is_main_worktree=self._is_main_worktree(_wt2),
             # Re-link chunks in changed doc files against updated def vectors
             edges = link_doc_chunks_to_defs(self.db, file_ids=doc_file_ids)
             log.debug("reindex.doc_chunks.link", extra={"edges": edges})
-        except Exception:  # noqa: BLE001 — doc chunk linking is best-effort
+        except (ImportError, OSError, RuntimeError, ValueError):  # doc chunk linking is best-effort
             log.warning("reindex.doc_chunks.failed", exc_info=True)
 
     def _get_doc_file_ids(self, file_ids: list[int]) -> list[int]:

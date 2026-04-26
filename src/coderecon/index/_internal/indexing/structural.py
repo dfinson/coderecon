@@ -128,7 +128,7 @@ def _discover_string_node_types(ts_language: Any) -> frozenset[str]:
                 continue
             if _STRING_NODE_PATTERN.match(name):
                 types.add(name)
-    except Exception:
+    except (AttributeError, TypeError, RuntimeError):
         log.debug("string_node_introspection_failed", exc_info=True)
 
     result = frozenset(types)
@@ -265,7 +265,7 @@ def _extract_sem_facts(
             from tree_sitter import QueryCursor as _TSQueryCursor  # noqa: F841
 
             compiled = _TSQuery(ts_language, query_text)
-        except Exception:
+        except (ValueError, RuntimeError, TypeError):
             log.debug("sem_query_compile_failed", exc_info=True)
             compiled = None
         _sem_query_cache[cache_key] = compiled
@@ -279,7 +279,7 @@ def _extract_sem_facts(
 
         cursor = _TSQueryCursor(compiled)
         matches: list[tuple[int, dict[str, list[Any]]]] = cursor.matches(root_node)
-    except Exception:
+    except (RuntimeError, TypeError, ValueError):
         log.debug("sem_query_execute_failed", exc_info=True)
         return
 
@@ -860,7 +860,7 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
 
         result.parse_time_ms = int((time.monotonic() - start) * 1000)
 
-    except Exception as e:
+    except (OSError, UnicodeDecodeError, RuntimeError, ValueError) as e:
         result.error = str(e)
 
     return result
@@ -979,8 +979,8 @@ def _extract_type_aware_facts(
     except ImportError:
         # Extraction module not available - skip type-aware extraction
         pass
-    except Exception:
-        # Don't fail extraction for type-aware facts - they're supplementary
+    except (RuntimeError, TypeError, ValueError):
+        # Don't fail extraction for type-aware facts — they're supplementary
         log.debug("type_aware_facts_failed", exc_info=True)
 
 
@@ -1624,7 +1624,7 @@ class StructuralIndexer:
                 try:
                     result = future.result()
                     results.append(result)
-                except Exception as e:
+                except (OSError, UnicodeDecodeError, RuntimeError, ValueError) as e:
                     path = futures[future]
                     results.append(ExtractionResult(file_path=path, error=str(e)))
 

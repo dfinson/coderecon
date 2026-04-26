@@ -119,7 +119,7 @@ class CodeRecon:
         for session_id in list(self._sessions.values()):
             try:
                 await self._call("session_close", {"session_id": session_id}, session_id=None)
-            except Exception:  # noqa: BLE001
+            except (OSError, RuntimeError, ValueError):  # noqa: BLE001
                 log.debug("client.session_close.failed", session_id=session_id, exc_info=True)
 
         if self._process and self._process.returncode is None:
@@ -464,7 +464,7 @@ class CodeRecon:
 
             try:
                 msg = decode_message(line)
-            except Exception:  # noqa: BLE001
+            except (ValueError, KeyError, UnicodeDecodeError):  # noqa: BLE001
                 log.debug("sdk.read_loop.decode_error", line=line[:200])
                 continue
 

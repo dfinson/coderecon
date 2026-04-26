@@ -502,7 +502,7 @@ class TestOps:
                         if any(t.selector.startswith(p) or p.startswith(t.selector) for p in paths)
                     ]
                 all_targets.extend(targets)
-            except Exception:
+            except (OSError, RuntimeError, ValueError):
                 log.debug("pack_discovery_failed", exc_info=True)
                 continue
 
@@ -531,7 +531,7 @@ class TestOps:
 
         try:
             contexts = await self._coordinator.get_contexts()
-        except Exception:
+        except (OSError, RuntimeError, ValueError):
             # Index not ready, return empty to trigger filesystem fallback
             log.debug("index_context_lookup_failed", exc_info=True)
             return []
@@ -631,7 +631,7 @@ class TestOps:
         try:
             file_stats = await self._coordinator.get_file_stats()
             languages = set(file_stats.keys())
-        except Exception:
+        except (OSError, RuntimeError, ValueError):
             log.debug("file_stats_lookup_failed", exc_info=True)
             languages = set()
 
@@ -798,7 +798,7 @@ class TestOps:
         start_time = time.time()
         try:
             run_status = await task
-        except Exception:
+        except (OSError, RuntimeError, asyncio.CancelledError):
             log.warning("test_execution_failed", exc_info=True)
             run_status = TestRunStatus(
                 run_id=run_id,
@@ -839,7 +839,7 @@ class TestOps:
                 cov_result = await self._coordinator.get_coverage_sources(test_files)
                 if cov_result.source_dirs:
                     source_dirs = cov_result.source_dirs
-            except Exception:  # noqa: BLE001
+            except (OSError, RuntimeError, ValueError, TypeError):  # noqa: BLE001
                 # Non-fatal: fall back to --cov=. if import graph fails
                 log.debug("testing.coverage_sources.failed", exc_info=True)
 
@@ -1091,7 +1091,7 @@ class TestOps:
             # This should rarely happen if indexing is working correctly
             return None
 
-        except Exception:
+        except (OSError, RuntimeError, ValueError):
             log.debug("runtime_resolution_failed", exc_info=True)
             return None
 

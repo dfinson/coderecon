@@ -153,7 +153,7 @@ class GitOps:
             if result.returncode != 0:
                 return []
             return [line for line in result.stdout.splitlines() if line]
-        except Exception:  # noqa: BLE001
+        except (OSError, subprocess.SubprocessError):  # noqa: BLE001
             return []
 
     def diff_summary(
@@ -293,7 +293,7 @@ class GitOps:
             if result.returncode == 0:
                 ref = result.stdout.strip()  # refs/remotes/origin/main
                 return ref.rsplit("/", 1)[-1]
-        except Exception:  # noqa: BLE001
+        except (OSError, subprocess.SubprocessError):  # noqa: BLE001
             log.debug("symbolic_ref_failed", exc_info=True)
 
         # 3. Probe common branch names
@@ -305,7 +305,7 @@ class GitOps:
                 )
                 if result.returncode == 0:
                     return candidate
-            except Exception:  # noqa: BLE001
+            except (OSError, subprocess.SubprocessError):  # noqa: BLE001
                 log.debug("branch_probe_failed", candidate=candidate, exc_info=True)
                 continue
 
@@ -722,7 +722,7 @@ class GitOps:
 
         try:
             self._access.remove_worktree(name, force)
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError) as e:
             raise WorktreeError(f"Failed to remove worktree '{name}': {e}") from e
 
     def worktree_lock(self, name: str, reason: str | None = None) -> None:

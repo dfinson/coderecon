@@ -205,7 +205,7 @@ def init_telemetry(config: TelemetryConfig | None = None) -> bool:
     except ImportError as e:
         log.warning("otlp_exporter_import_failed", error=str(e))
         return False
-    except Exception as e:
+    except (RuntimeError, OSError, ValueError) as e:
         log.error("telemetry_init_failed", error=str(e))
         return False
 
@@ -215,8 +215,10 @@ def _get_version() -> str:
     try:
         from importlib.metadata import version
 
+        from importlib.metadata import PackageNotFoundError
+
         return version("coderecon")
-    except Exception:
+    except (PackageNotFoundError, ImportError):
         return "unknown"
 
 
@@ -236,7 +238,7 @@ def _instrument_sqlalchemy() -> None:
         log.debug(
             "SQLAlchemy instrumentation not available (install opentelemetry-instrumentation-sqlalchemy)"
         )
-    except Exception as e:
+    except (RuntimeError, AttributeError) as e:
         log.warning("sqlalchemy_instrumentation_failed", error=str(e), exc_info=True)
 
 
@@ -255,14 +257,14 @@ def shutdown_telemetry() -> None:
         try:
             _tracer_provider.shutdown()
             log.debug("Tracer provider shut down")
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             log.warning("tracer_shutdown_error", error=str(e), exc_info=True)
 
     if _meter_provider is not None:
         try:
             _meter_provider.shutdown()
             log.debug("meter_provider_shutdown")
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             log.warning("meter_shutdown_error", error=str(e), exc_info=True)
 
     _tracer = None
@@ -486,7 +488,7 @@ def _set_error_status(span: Any) -> None:
         from opentelemetry.trace import StatusCode
 
         span.set_status(otel_trace.Status(StatusCode.ERROR))
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         log.debug("otel.set_error_status.failed", exc_info=True)
 
 

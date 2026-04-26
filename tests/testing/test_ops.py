@@ -429,7 +429,7 @@ class TestAgenticHint:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
-            coordinator.get_file_stats = AsyncMock(side_effect=Exception("Index error"))
+            coordinator.get_file_stats = AsyncMock(side_effect=RuntimeError("Index error"))
 
             ops = TestOps(root, coordinator)
             hint = await ops._generate_agentic_hint()
