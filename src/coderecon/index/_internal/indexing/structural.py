@@ -1707,7 +1707,7 @@ class StructuralIndexer:
 
 
 def index_context(
-    db: Any,
+    db: Database,
     repo_path: Path | str,
     context_id: int,
     file_paths: list[str],
