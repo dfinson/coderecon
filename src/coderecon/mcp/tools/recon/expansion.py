@@ -14,7 +14,6 @@ log = structlog.get_logger(__name__)
 
 if TYPE_CHECKING:
     from coderecon.index.models import DefFact
-    from coderecon.mcp.context import AppContext
 
 
 # ===================================================================
@@ -49,12 +48,3 @@ def _def_signature_text(d: DefFact) -> str:
     if d.return_type:
         parts.append(f" -> {d.return_type}")
     return "".join(parts)
-
-
-async def _file_path_for_id(app_ctx: AppContext, file_id: int) -> str:
-    """Resolve a file_id to its repo-relative path."""
-    from coderecon.index.models import File as FileModel
-
-    with app_ctx.coordinator.db.session() as session:
-        f = session.get(FileModel, file_id)
-        return f.path if f else "unknown"
