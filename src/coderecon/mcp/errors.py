@@ -87,8 +87,6 @@ class MCPError(ToolError):
     and returns the structured error code.
     """
 
-    """Base exception for MCP tool errors with structured response."""
-
     def __init__(
         self,
         code: MCPErrorCode,

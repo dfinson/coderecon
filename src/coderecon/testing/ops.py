@@ -402,6 +402,26 @@ def _os_script_path(unix_path: str) -> str:
     return unix_path
 
 
+def _classify_result_error(
+    result: ParsedTestSuite,
+    output_path: Path,
+    stdout: str,
+    exit_code: int | None,
+) -> None:
+    """Classify error type on a parsed test result based on output and exit code."""
+    if result.errors > 0 and result.total == 0:
+        if not output_path.exists() and not stdout.strip():
+            result.error_type = "output_missing"
+            result.error_detail = "No output file or stdout from test runner"
+        elif result.error_type == "none":
+            result.error_type = "parse_failed"
+            result.error_detail = "Could not parse test output"
+    elif exit_code and exit_code != 0 and result.failed == 0 and result.errors == 0:
+        result.error_type = "command_failed"
+        result.error_detail = f"Command exited with code {exit_code}"
+        result.errors = 1
+
+
 class TestOps:
     """Test discovery and execution operations.
 
@@ -1322,24 +1342,7 @@ class TestOps:
             else:
                 result.parsed_test_count = None
 
-            # Classify error type based on result
-            # Only set suggested_action when we have certainty about the cause
-            if result.errors > 0 and result.total == 0:
-                # Parser returned errors with no tests - likely parse failure
-                if not output_path.exists() and not stdout.strip():
-                    result.error_type = "output_missing"
-                    result.error_detail = "No output file or stdout from test runner"
-                    # No suggested_action - we don't know why output is missing
-                elif result.error_type == "none":  # Only set if not already set by parser
-                    result.error_type = "parse_failed"
-                    result.error_detail = "Could not parse test output"
-                    # No suggested_action - could be many causes
-            elif exit_code and exit_code != 0 and result.failed == 0 and result.errors == 0:
-                # Non-zero exit but no failures detected - command crashed
-                result.error_type = "command_failed"
-                result.error_detail = f"Command exited with code {exit_code}"
-                # No suggested_action - we don't know the cause, agent should read stderr
-                result.errors = 1
+            _classify_result_error(result, output_path, stdout, exit_code)
 
             return (result, cov_artifact, peak_rss_mb)
 
@@ -1545,17 +1548,7 @@ class TestOps:
             if result.tests is not None:
                 result.parsed_test_count = len(result.tests)
 
-            if result.errors > 0 and result.total == 0:
-                if not output_path.exists() and not stdout.strip():
-                    result.error_type = "output_missing"
-                    result.error_detail = "No output file or stdout from test runner"
-                elif result.error_type == "none":
-                    result.error_type = "parse_failed"
-                    result.error_detail = "Could not parse test output"
-            elif exit_code and exit_code != 0 and result.failed == 0 and result.errors == 0:
-                result.error_type = "command_failed"
-                result.error_detail = f"Command exited with code {exit_code}"
-                result.errors = 1
+            _classify_result_error(result, output_path, stdout, exit_code)
 
             return result, cov_artifact
 
