@@ -1694,17 +1694,6 @@ class StructuralIndexer:
         """Extract facts from a single file without storing."""
         return _extract_file(file_path, str(self.repo_path), unit_id)
 
-    def compute_batch_interface_hash(self, file_paths: list[str]) -> str:
-        """Compute combined interface hash for multiple files."""
-        hashes = []
-        for path in sorted(file_paths):
-            result = self.extract_single(path)
-            if result.interface_hash:
-                hashes.append(result.interface_hash)
-
-        combined = "\n".join(hashes)
-        return hashlib.sha256(combined.encode()).hexdigest()
-
 
 def index_context(
     db: Database,

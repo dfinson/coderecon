@@ -996,35 +996,6 @@ def backfill_scaffold_text(
     return updated
 
 
-def remove_splade_vectors_for_files(
-    db: Database,
-    file_ids: list[int],
-) -> int:
-    """Remove SPLADE vectors for defs in the given files."""
-    if not file_ids:
-        return 0
-
-    with db.session() as session:
-        # Get def_uids for these files
-        def_uids = list(
-            session.exec(
-                select(DefFact.def_uid).where(col(DefFact.file_id).in_(file_ids))
-            ).all()
-        )
-        if not def_uids:
-            return 0
-
-        removed = 0
-        for uid in def_uids:
-            existing = session.get(SpladeVec, uid)
-            if existing is not None:
-                session.delete(existing)
-                removed += 1
-        session.commit()
-
-    return removed
-
-
 # ── Query-time retrieval ─────────────────────────────────────────
 
 # Score floor: minimum SPLADE dot-product to be considered a candidate.
