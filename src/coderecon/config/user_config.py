@@ -120,7 +120,7 @@ def load_user_config(path: Path) -> UserConfig:
         with path.open() as f:
             data = yaml.safe_load(f) or {}
         return UserConfig(**data)
-    except Exception:
+    except (OSError, yaml.YAMLError, TypeError, ValueError):
         log.debug("user_config_parse_failed", exc_info=True)
         return UserConfig()
 
@@ -133,6 +133,6 @@ def load_runtime_state(path: Path) -> RuntimeState | None:
         with path.open() as f:
             data = yaml.safe_load(f) or {}
         return RuntimeState(**data)
-    except Exception:
+    except (OSError, yaml.YAMLError, TypeError, ValueError):
         log.debug("runtime_state_parse_failed", exc_info=True)
         return None

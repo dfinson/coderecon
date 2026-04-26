@@ -362,7 +362,7 @@ def _build_coverage_text(
             reports.append(report)
         except CoverageParseError:
             log.debug("coverage_parse_failed", exc_info=True)
-        except Exception as e:
+        except OSError as e:
             log.debug("Coverage parse failed", path=path_str, error=str(e), exc_info=True)
 
     if not reports:
@@ -592,7 +592,7 @@ def _ingest_checkpoint_coverage(
         if written:
             log.debug("checkpoint.coverage_ingested", facts=written)
 
-    except Exception:
+    except (OSError, CoverageParseError, ImportError, RuntimeError, ValueError):
         log.debug("checkpoint.coverage_ingest_failed", exc_info=True)
 
 
@@ -1161,7 +1161,7 @@ async def checkpoint_pipeline(
                     changed_files=changed_files,
                     current_epoch=app_ctx.coordinator.get_current_epoch(),
                 )
-            except Exception:  # noqa: BLE001
+            except (ImportError, OSError, RuntimeError, ValueError):  # noqa: BLE001
                 cached_lint = None
 
         if cached_lint is not None:
@@ -1481,7 +1481,7 @@ async def checkpoint_pipeline(
                 result["failure_scaffolds"] = failure_scaffolds
                 result["file_manifest"] = file_manifest
 
-        except Exception:  # noqa: BLE001
+        except (ImportError, OSError, RuntimeError, TypeError, ValueError, KeyError):  # noqa: BLE001
             log.debug("checkpoint_failure_enrichment_failed", exc_info=True)
 
         result["agentic_hint"] = " ".join(hints)

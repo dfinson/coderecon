@@ -875,6 +875,23 @@ def exportable_kinds_for_language(language_name: str) -> frozenset[str]:
     return _DEFAULT_EXPORTABLE_KINDS
 
 
+def is_name_exported(name: str, language_name: str) -> bool:
+    """Check if a symbol name is exported according to language conventions.
+
+    Per-language rules:
+    - Python: names starting with ``_`` are private
+    - Go: names starting with a lowercase letter are unexported
+    - All other languages: names are exported by default (visibility is
+      controlled by language keywords that we don't track in DefFact)
+    """
+    if language_name == "python":
+        return not name.startswith("_")
+    if language_name == "go":
+        return len(name) > 0 and name[0].isupper()
+    # Default: assume exported (most languages use keyword-based visibility)
+    return True
+
+
 # ── Cross-language kind taxonomies ───────────────────────────────
 #
 # These are UNIVERSAL sets covering all languages.  Extra entries that
@@ -1485,7 +1502,7 @@ def validate_language_families() -> list[str]:
                 f"Families defined in languages.py but missing from LanguageFamily enum: "
                 f"{sorted(missing_in_enum)}"
             )
-    except Exception as e:
+    except (ImportError, AttributeError) as e:
         errors.append(f"Could not import LanguageFamily: {e}")
 
     return errors
