@@ -1,33 +1,8 @@
 """OpenTelemetry telemetry module for CodeRecon.
 
 Provides tracing, metrics, and instrumentation with lazy initialization.
-Only activates when:
-- OTEL_EXPORTER_OTLP_ENDPOINT env var is set, OR
-- telemetry.enabled=true in CodeRecon config
-
-Usage:
-    from coderecon.core.telemetry import init_telemetry, traced, get_tracer, get_meter
-
-    # Initialize at startup (typically in daemon entry point)
-    init_telemetry(config)
-
-    # Decorate functions for automatic tracing
-    @traced("my_operation")
-    def my_function():
-        ...
-
-    # Or use tracer directly
-    tracer = get_tracer()
-    with tracer.start_as_current_span("my_span"):
-        ...
-
-    # Metrics
-    meter = get_meter()
-    counter = meter.create_counter("my_counter")
-    counter.add(1)
-
-    # Cleanup at shutdown
-    shutdown_telemetry()
+Only activates when OTEL_EXPORTER_OTLP_ENDPOINT is set or
+telemetry.enabled=true in CodeRecon config.
 """
 
 from __future__ import annotations
@@ -274,108 +249,16 @@ def shutdown_telemetry() -> None:
     _initialized = False
 
 
-class _NoOpSpan:
-    """No-op span for when telemetry is disabled."""
-
-    def __enter__(self) -> _NoOpSpan:
-        return self
-
-    def __exit__(self, *args: Any) -> None:
-        """No-op: span cleanup disabled when telemetry is off."""
-        return None
-
-    def set_attribute(self, key: str, value: Any) -> None:
-        """No-op: attribute ignored when telemetry is disabled."""
-        return None
-
-    def set_attributes(self, attributes: dict[str, Any]) -> None:
-        """No-op: attributes ignored when telemetry is disabled."""
-        return None
-
-    def add_event(self, name: str, attributes: dict[str, Any] | None = None) -> None:
-        """No-op: event ignored when telemetry is disabled."""
-        return None
-
-    def set_status(self, status: Any) -> None:
-        """No-op: status ignored when telemetry is disabled."""
-        return None
-
-    def record_exception(self, exception: Exception) -> None:
-        """No-op: exception recording disabled when telemetry is off."""
-        return None
-
-    def is_recording(self) -> bool:
-        return False
-
-
-class _NoOpTracer:
-    """No-op tracer for when telemetry is disabled."""
-
-    def start_span(self, _name: str, **_kwargs: Any) -> _NoOpSpan:
-        return _NoOpSpan()
-
-    def start_as_current_span(self, _name: str, **_kwargs: Any) -> _NoOpSpan:
-        return _NoOpSpan()
-
-    @contextmanager
-    def start_as_current_span_cm(self, _name: str, **_kwargs: Any) -> Any:  # noqa: ANN401 — Generator yield type
-        """Context manager version of start_as_current_span."""
-        yield _NoOpSpan()
-
-
-class _NoOpMeter:
-    """No-op meter for when telemetry is disabled."""
-
-    def create_counter(self, _name: str, **_kwargs: Any) -> _NoOpCounter:
-        return _NoOpCounter()
-
-    def create_up_down_counter(self, _name: str, **_kwargs: Any) -> _NoOpCounter:
-        return _NoOpCounter()
-
-    def create_histogram(self, _name: str, **_kwargs: Any) -> _NoOpHistogram:
-        return _NoOpHistogram()
-
-    def create_observable_gauge(
-        self, _name: str, _callbacks: Any = None, **_kwargs: Any
-    ) -> _NoOpObservable:
-        return _NoOpObservable()
-
-    def create_observable_counter(
-        self, _name: str, _callbacks: Any = None, **_kwargs: Any
-    ) -> _NoOpObservable:
-        return _NoOpObservable()
-
-    def create_observable_up_down_counter(
-        self, _name: str, _callbacks: Any = None, **_kwargs: Any
-    ) -> _NoOpObservable:
-        return _NoOpObservable()
-
-
-class _NoOpCounter:
-    """No-op counter instrument."""
-
-    def add(self, amount: int | float, attributes: dict[str, Any] | None = None) -> None:
-        """No-op: counter increment ignored when telemetry is disabled."""
-        return None
-
-
-class _NoOpHistogram:
-    """No-op histogram instrument."""
-
-    def record(self, amount: int | float, attributes: dict[str, Any] | None = None) -> None:
-        """No-op: histogram recording ignored when telemetry is disabled."""
-        return None
-
-
-class _NoOpObservable:
-    """No-op observable instrument."""
-
-    pass
-
-
-# Singleton no-op instances
-_noop_tracer = _NoOpTracer()
-_noop_meter = _NoOpMeter()
+from coderecon.core._noop_telemetry import (
+    NoOpCounter as _NoOpCounter,
+    NoOpHistogram as _NoOpHistogram,
+    NoOpMeter as _NoOpMeter,
+    NoOpObservable as _NoOpObservable,
+    NoOpSpan as _NoOpSpan,
+    NoOpTracer as _NoOpTracer,
+    noop_meter as _noop_meter,
+    noop_tracer as _noop_tracer,
+)
 
 
 def get_tracer() -> _NoOpTracer:
