@@ -1,7 +1,5 @@
 """Tests for index/_internal/indexing/doc_chunks.py — chunk_file and chunking logic."""
 
-import pytest
-
 from coderecon.index._internal.indexing.doc_chunks import (
     chunk_file,
 )
