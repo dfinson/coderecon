@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from contextlib import AbstractContextManager
-from typing import TYPE_CHECKING, Any
+from contextlib import AbstractContextManager, contextmanager
+from typing import TYPE_CHECKING, Any, Generator
 
 if TYPE_CHECKING:
     from coderecon.sdk.client import CodeRecon
@@ -21,6 +21,20 @@ if TYPE_CHECKING:
         RefactorResult,
         UnderstandResult,
     )
+
+
+@contextmanager
+def _override_session(
+    sdk: "CodeRecon", session_id: str | None,
+) -> Generator[None, None, None]:
+    """Temporarily set *session_id* on *sdk*, restoring the previous value on exit."""
+    old = sdk._explicit_session
+    if session_id is not None:
+        sdk._explicit_session = session_id
+    try:
+        yield
+    finally:
+        sdk._explicit_session = old
 
 
 class SessionHandle:
@@ -146,18 +160,7 @@ class RepoHandle:
 
     def _with_session(self) -> AbstractContextManager[None]:
         """Context manager to temporarily set explicit session on SDK."""
-        class _Ctx:
-            def __init__(ctx, sdk: "CodeRecon", session_id: str | None) -> None:
-                ctx._sdk = sdk
-                ctx._session_id = session_id
-                ctx._old: str | None = None
-            def __enter__(ctx) -> None:
-                ctx._old = ctx._sdk._explicit_session
-                if ctx._session_id is not None:
-                    ctx._sdk._explicit_session = ctx._session_id
-            def __exit__(ctx, *exc: object) -> None:
-                ctx._sdk._explicit_session = ctx._old
-        return _Ctx(self._sdk, self._explicit_session)
+        return _override_session(self._sdk, self._explicit_session)
 
     async def recon(self, task: str, **kwargs: Any) -> "ReconResult":
         with self._with_session():

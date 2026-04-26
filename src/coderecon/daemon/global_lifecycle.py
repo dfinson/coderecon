@@ -20,6 +20,13 @@ from coderecon.files.ops import atomic_write_text
 log = structlog.get_logger(__name__)
 
 
+class _Server(uvicorn.Server):
+    """Uvicorn server that skips built-in signal handler installation."""
+
+    def install_signal_handlers(self) -> None:
+        return None
+
+
 def _coderecon_dir() -> Path:
     return _default_coderecon_home()
 
@@ -139,11 +146,6 @@ async def run_global_server(
         ws="none",
         timeout_graceful_shutdown=2,
     )
-
-    class _Server(uvicorn.Server):
-        def install_signal_handlers(self) -> None:
-            """No-op: signal handlers are installed externally."""
-            return None
 
     server = _Server(uvicorn_config)
 

@@ -92,15 +92,10 @@ class ConsoleSuppressingFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:  # noqa: ARG002
-        # Import here to avoid circular dependency
-        from coderecon.core.progress import is_console_suppressed
-
-        # Block all logs during Live displays (spinners, progress bars)
-        if is_console_suppressed():
-            return False
-
-        # Block ALL structlog output from console - use Rich console.print() instead
-        # This prevents error/stacktrace leakage to terminal
+        # Block ALL structlog output from console - use Rich console.print() instead.
+        # This prevents error/stacktrace leakage to terminal.
+        # During Live displays (spinners, progress bars) this also prevents
+        # corruption of the Rich layout.
         return False
 
 

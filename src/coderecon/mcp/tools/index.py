@@ -14,6 +14,16 @@ if TYPE_CHECKING:
     from coderecon.tools.map_repo import MapRepoResult
 
 
+class _DirNode:
+    """Trie node for directory tree formatting."""
+
+    __slots__ = ("children", "files")
+
+    def __init__(self) -> None:
+        self.children: dict[str, _DirNode] = {}
+        self.files: list[str] = []
+
+
 def _change_to_text(c: StructuralChange, depth: int = 0) -> list[str]:
     """Convert a StructuralChange to compact text lines.
 
@@ -110,14 +120,6 @@ def _tree_to_hybrid_text(
 
     Root-level files appear at indent level 0 at the end.
     """
-
-    # ---- build trie ----
-    class _DirNode:
-        __slots__ = ("children", "files")
-
-        def __init__(self) -> None:
-            self.children: dict[str, _DirNode] = {}
-            self.files: list[str] = []
 
     root = _DirNode()
     for path, lc in all_paths:
