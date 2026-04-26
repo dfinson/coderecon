@@ -87,27 +87,16 @@ def graph_communities_core(
     )
 
 
-async def recon_understand_core(
-    app_ctx: "AppContext",
-) -> dict[str, Any]:
-    """Full codebase narrative briefing (transport-agnostic)."""
+def _sync_analysis_sections(engine: Any) -> tuple[dict[str, Any], Any]:
+    """Run sync graph analysis and return (sections, file_analysis).
+
+    Separated from the async recon_understand_core so that sync DB queries
+    are not misleadingly wrapped in an async function.
+    """
     sections: dict[str, Any] = {}
-    engine = app_ctx.coordinator.db.engine
     file_analysis = None
 
-    # Section 1: Repo structure
-    try:
-        map_result = await app_ctx.coordinator.map_repo(
-            include=["structure", "languages", "entry_points"],
-            depth=3, limit=100,
-        )
-        from coderecon.mcp.tools.index import _build_overview
-
-        sections["structure"] = _build_overview(map_result)
-    except Exception:  # noqa: BLE001
-        log.warning("understand.structure.failed", exc_info=True)
-
-    # Section 2: Top symbols by PageRank
+    # PageRank analysis
     try:
         from coderecon.index._internal.analysis.code_graph import (
             analyze_def_graph,
@@ -136,7 +125,7 @@ async def recon_understand_core(
     except Exception:  # noqa: BLE001
         log.warning("understand.pagerank.failed", exc_info=True)
 
-    # Section 3: Community clusters
+    # Community clusters
     try:
         if file_analysis and file_analysis.communities:
             sections["communities"] = [
@@ -148,16 +137,20 @@ async def recon_understand_core(
                 }
                 for c in file_analysis.communities[:10]
             ]
-    except Exception:  # noqa: BLE001  # graceful degradation — section is optional
+    except Exception:  # noqa: BLE001
         log.debug("understand.communities.failed", exc_info=True)
+
+    # Cycles
     try:
         if file_analysis and file_analysis.cycles:
             sections["cycles"] = [
                 {"size": c.size, "nodes": sorted(c.nodes)[:10]}
                 for c in file_analysis.cycles[:5]
             ]
-    except Exception:  # noqa: BLE001  # graceful degradation — section is optional
+    except Exception:  # noqa: BLE001
         log.debug("understand.cycles.failed", exc_info=True)
+
+    # Coverage
     try:
         from coderecon.index._internal.analysis.coverage_ingestion import get_coverage_summary
 
@@ -167,7 +160,7 @@ async def recon_understand_core(
     except Exception:  # noqa: BLE001
         log.warning("understand.coverage.failed", exc_info=True)
 
-    # Section 6: Lint health
+    # Lint health
     try:
         from coderecon.index._internal.analysis.lint_status import get_lint_summary
 
@@ -176,6 +169,32 @@ async def recon_understand_core(
             sections["lint"] = lint
     except Exception:  # noqa: BLE001
         log.warning("understand.lint.failed", exc_info=True)
+
+    return sections, file_analysis
+
+
+async def recon_understand_core(
+    app_ctx: "AppContext",
+) -> dict[str, Any]:
+    """Full codebase narrative briefing (transport-agnostic)."""
+    engine = app_ctx.coordinator.db.engine
+
+    # Section 1: Repo structure (async — uses coordinator.map_repo)
+    sections: dict[str, Any] = {}
+    try:
+        map_result = await app_ctx.coordinator.map_repo(
+            include=["structure", "languages", "entry_points"],
+            depth=3, limit=100,
+        )
+        from coderecon.mcp.tools.index import _build_overview
+
+        sections["structure"] = _build_overview(map_result)
+    except Exception:  # noqa: BLE001
+        log.warning("understand.structure.failed", exc_info=True)
+
+    # Sections 2-6: Sync graph analysis
+    analysis_sections, _file_analysis = _sync_analysis_sections(engine)
+    sections.update(analysis_sections)
 
     # Build summary text
     parts: list[str] = []
