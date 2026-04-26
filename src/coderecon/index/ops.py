@@ -1,7 +1,7 @@
 """High-level orchestration of the indexing engine.
 
-This module implements the CplIndexCoordinator - the entry point for all index
-operations. It enforces critical serialization invariants:
+This module implements the IndexCoordinatorEngine - the entry point for all
+index operations. It enforces critical serialization invariants:
 
 - reconcile_lock: Only ONE reconcile() at a time (prevents RepoState corruption)
 - tantivy_write_lock: Only ONE Tantivy write batch at a time (prevents crashes)
