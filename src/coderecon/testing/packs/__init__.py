@@ -31,6 +31,35 @@ def _is_prunable_path(
     except ValueError:
         return True
 
+
+async def _discover_dart_tests(
+    pack: object,
+    workspace_root: Path,
+) -> list:
+    """Discover dart/flutter test files in a workspace.
+
+    Shared by DartTestPack and FlutterTestPack.
+    """
+    from coderecon.testing.models import TestTarget
+
+    targets: list[TestTarget] = []
+    for path in workspace_root.glob("test/**/*_test.dart"):
+        if _is_prunable_path(path, workspace_root):
+            continue
+        rel = str(path.relative_to(workspace_root))
+        targets.append(
+            TestTarget(
+                target_id=f"test:{rel}",
+                selector=rel,
+                kind="file",
+                language="dart",
+                runner_pack_id=pack.pack_id,  # type: ignore[attr-defined]
+                workspace_root=str(workspace_root),
+            )
+        )
+    return targets
+
+
 # Import tiers to register packs
 from coderecon.testing.packs import tier1 as _tier1  # noqa: F401, E402
 from coderecon.testing.packs import tier1_compiled as _tier1c  # noqa: F401, E402

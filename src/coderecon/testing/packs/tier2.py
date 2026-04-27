@@ -310,22 +310,8 @@ class DartTestPack(RunnerPack):
                 return 0.8
         return 0.0
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
-        targets: list[TestTarget] = []
-        for path in workspace_root.glob("test/**/*_test.dart"):
-            if _is_prunable_path(path, workspace_root):
-                continue
-            rel = str(path.relative_to(workspace_root))
-            targets.append(
-                TestTarget(
-                    target_id=f"test:{rel}",
-                    selector=rel,
-                    kind="file",
-                    language="dart",
-                    runner_pack_id=self.pack_id,
-                    workspace_root=str(workspace_root),
-                )
-            )
-        return targets
+        from coderecon.testing.packs import _discover_dart_tests
+        return await _discover_dart_tests(self, workspace_root)
     def build_command(
         self,
         target: TestTarget,
