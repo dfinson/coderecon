@@ -85,12 +85,10 @@ class PytestPack(RunnerPack):
         if list(workspace_root.glob("**/test_*.py")) or list(workspace_root.glob("**/*_test.py")):
             return 0.5
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         patterns = ["**/test_*.py", "**/*_test.py"]
         seen: set[str] = set()
-
         for pattern in patterns:
             for path in workspace_root.glob(pattern):
                 # Skip prunable directories (.venv, __pycache__, etc.)
@@ -134,7 +132,6 @@ class PytestPack(RunnerPack):
         else:
             # No execution context, use bare pytest (legacy behavior)
             cmd = ["pytest"]
-
         cmd.extend([target.selector, f"--junitxml={output_path}", "--tb=short", "-q"])
         if pattern:
             cmd.extend(["-k", pattern])
@@ -153,7 +150,6 @@ class PytestPack(RunnerPack):
         """Run multiple test files in a single pytest invocation."""
         if not targets:
             return None
-
         # Use execution context if available
         if exec_ctx:
             tool_config = exec_ctx.get_test_runner(self.pack_id)
@@ -163,11 +159,9 @@ class PytestPack(RunnerPack):
                 cmd = ["pytest"]
         else:
             cmd = ["pytest"]
-
         # Add all selectors (file paths) as positional args
         for t in targets:
             cmd.append(t.selector)
-
         cmd.extend([f"--junitxml={output_path}", "--tb=short", "-q"])
         if pattern:
             cmd.extend(["-k", pattern])
@@ -176,7 +170,6 @@ class PytestPack(RunnerPack):
         return cmd
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
-
         if output_path.exists():
             return parse_junit_xml(output_path.read_text())
         return ParsedTestSuite(name="pytest", errors=1)
@@ -221,7 +214,6 @@ class JestPack(RunnerPack):
             except (OSError, json.JSONDecodeError, KeyError):
                 log.debug("jest_config_read_failed", exc_info=True)
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         patterns = [
@@ -233,7 +225,6 @@ class JestPack(RunnerPack):
             "**/*.spec.ts",
         ]
         seen: set[str] = set()
-
         for pattern in patterns:
             for path in workspace_root.glob(pattern):
                 if _is_prunable_path(path, workspace_root):
@@ -295,7 +286,6 @@ class JestPack(RunnerPack):
             data = json.loads(content)
         except json.JSONDecodeError:
             return ParsedTestSuite(name="jest", errors=1)
-
         tests: list[ParsedTestCase] = []
         for result in data.get("testResults", []):
             for assertion in result.get("assertionResults", []):
@@ -315,7 +305,6 @@ class JestPack(RunnerPack):
                         message="\n".join(assertion.get("failureMessages", [])) or None,
                     )
                 )
-
         return ParsedTestSuite(
             name="jest",
             tests=tests,
@@ -373,13 +362,11 @@ class VitestPack(RunnerPack):
             except (OSError, json.JSONDecodeError):
                 log.debug("vitest_deps_read_failed", exc_info=True)
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         # Same patterns as Jest
         targets: list[TestTarget] = []
         patterns = ["**/*.test.js", "**/*.test.ts", "**/*.spec.js", "**/*.spec.ts"]
         seen: set[str] = set()
-
         for pattern in patterns:
             for path in workspace_root.glob(pattern):
                 if _is_prunable_path(path, workspace_root):
@@ -430,7 +417,6 @@ class VitestPack(RunnerPack):
         return cmd
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
-
         if output_path.exists():
             return parse_junit_xml(output_path.read_text())
         return ParsedTestSuite(name="vitest", errors=1)
@@ -466,13 +452,11 @@ class GoTestPack(RunnerPack):
         if list(workspace_root.glob("**/*.go")):
             return 0.3
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         seen_packages: set[str] = set()
         # Go standard directories that may be in PRUNABLE_DIRS (e.g., 'pkg' for Ruby)
         go_allowed = frozenset({"pkg", "internal", "cmd"})
-
         for path in workspace_root.glob("**/*_test.go"):
             if _is_prunable_path(path, workspace_root, allowed_dirs=go_allowed):
                 continue
@@ -481,7 +465,6 @@ class GoTestPack(RunnerPack):
             if rel_pkg in seen_packages:
                 continue
             seen_packages.add(rel_pkg)
-
             selector = f"./{rel_pkg}" if rel_pkg != "." else "./..."
             targets.append(
                 TestTarget(
@@ -520,7 +503,6 @@ class GoTestPack(RunnerPack):
         return cmd
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_go_test_json
-
         return parse_go_test_json(stdout)
 
 # Rust - cargo-nextest (preferred) or cargo test
@@ -551,14 +533,12 @@ class CargoNextestPack(RunnerPack):
         if shutil.which("cargo-nextest"):
             return 0.95
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         # Find workspace members or single package
         cargo_toml = workspace_root / "Cargo.toml"
         if not cargo_toml.exists():
             return targets
-
         try:
             content = cargo_toml.read_text()
             if "[workspace]" in content:
@@ -639,7 +619,6 @@ class CargoNextestPack(RunnerPack):
         return cmd
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
-
         if output_path.exists():
             return parse_junit_xml(output_path.read_text())
         return ParsedTestSuite(name="cargo-nextest", errors=1)
@@ -669,7 +648,6 @@ class CargoTestPack(RunnerPack):
         if shutil.which("cargo-nextest"):
             return 0.5
         return 0.9
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         # Same as nextest
         nextest = CargoNextestPack()
@@ -706,7 +684,6 @@ class CargoTestPack(RunnerPack):
         lines = stdout.split("\n")
         passed = 0
         failed = 0
-
         for line in lines:
             if "test result:" in line:
                 # e.g., "test result: ok. 10 passed; 0 failed;"
@@ -716,7 +693,6 @@ class CargoTestPack(RunnerPack):
                         passed = int(parts[i - 1])
                     if "failed" in part and i > 0 and parts[i - 1].isdigit():
                         failed = int(parts[i - 1])
-
         return ParsedTestSuite(
             name="cargo test",
             total=passed + failed,
@@ -753,14 +729,12 @@ class MavenSurefirePack(RunnerPack):
         if (workspace_root / "mvnw").exists():
             return 0.95
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         # Check for multi-module project
         pom = workspace_root / "pom.xml"
         if not pom.exists():
             return targets
-
         try:
             content = pom.read_text()
             if "<modules>" in content:
@@ -822,20 +796,16 @@ class MavenSurefirePack(RunnerPack):
         return cmd
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
-
         # Surefire writes to target/surefire-reports/*.xml
         reports_dir = output_path.parent / "target" / "surefire-reports"
         if not reports_dir.exists():
             return ParsedTestSuite(name="maven", errors=1)
-
         all_tests: list[ParsedTestCase] = []
         total_duration = 0.0
-
         for xml_file in reports_dir.glob("TEST-*.xml"):
             suite = parse_junit_xml(xml_file.read_text())
             all_tests.extend(suite.tests)
             total_duration += suite.duration_seconds
-
         return ParsedTestSuite(
             name="maven",
             tests=all_tests,
@@ -879,13 +849,11 @@ class GradlePack(RunnerPack):
         if (workspace_root / "gradlew").exists():
             return 0.95
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         # Check for multi-project build
         settings = workspace_root / "settings.gradle"
         settings_kts = workspace_root / "settings.gradle.kts"
-
         subprojects: list[Path] = []
         for settings_file in [settings, settings_kts]:
             if settings_file.exists():
@@ -897,7 +865,6 @@ class GradlePack(RunnerPack):
                             subprojects.append(build.parent)
                 except OSError:
                     log.debug("gradle_subproject_read_failed", exc_info=True)
-
         if subprojects:
             for project_dir in subprojects:
                 if (project_dir / "src" / "test").exists():
@@ -962,20 +929,16 @@ class GradlePack(RunnerPack):
         return cmd
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
-
         # Gradle writes to build/test-results/test/*.xml
         reports_dir = output_path.parent / "build" / "test-results" / "test"
         if not reports_dir.exists():
             return ParsedTestSuite(name="gradle", errors=1)
-
         all_tests: list[ParsedTestCase] = []
         total_duration = 0.0
-
         for xml_file in reports_dir.glob("TEST-*.xml"):
             suite = parse_junit_xml(xml_file.read_text())
             all_tests.extend(suite.tests)
             total_duration += suite.duration_seconds
-
         return ParsedTestSuite(
             name="gradle",
             tests=all_tests,
@@ -1019,7 +982,6 @@ class DotnetTestPack(RunnerPack):
         if (workspace_root / "global.json").exists():
             return 0.7
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         # Find test projects
@@ -1080,7 +1042,6 @@ class DotnetTestPack(RunnerPack):
         return cmd
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
-
         if output_path.exists():
             return parse_junit_xml(output_path.read_text())
         return ParsedTestSuite(name="dotnet", errors=1)
@@ -1117,7 +1078,6 @@ class CTestPack(RunnerPack):
             except OSError:
                 log.debug("cmake_config_read_failed", exc_info=True)
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         cmake = workspace_root / "CMakeLists.txt"
@@ -1154,7 +1114,6 @@ class CTestPack(RunnerPack):
         lines = stdout.split("\n")
         passed = 0
         failed = 0
-
         for line in lines:
             if "tests passed" in line.lower():
                 try:
@@ -1167,7 +1126,6 @@ class CTestPack(RunnerPack):
                             failed = int(parts[i - 1])
                 except (ValueError, IndexError):
                     log.debug("ctest_output_parse_failed", exc_info=True)
-
         return ParsedTestSuite(
             name="ctest",
             total=passed + failed,
@@ -1210,7 +1168,6 @@ class RSpecPack(RunnerPack):
             except OSError:
                 log.debug("rspec_config_read_failed", exc_info=True)
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         for path in workspace_root.glob("spec/**/*_spec.rb"):
@@ -1263,7 +1220,6 @@ class RSpecPack(RunnerPack):
         return cmd
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
-
         if output_path.exists():
             return parse_junit_xml(output_path.read_text())
         return ParsedTestSuite(name="rspec", errors=1)
@@ -1316,13 +1272,11 @@ class MinitestPack(RunnerPack):
                 if p.suffix == ".rb" and (p.stem.endswith("_test") or p.stem.startswith("spec_")):
                     return 0.5
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         test_dir = workspace_root / "test"
         if not test_dir.is_dir():
             return targets
-
         for path in test_dir.rglob("*.rb"):
             if _is_prunable_path(path, workspace_root):
                 continue
@@ -1363,7 +1317,6 @@ class MinitestPack(RunnerPack):
         return cmd
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
-
         if output_path.exists():
             return parse_junit_xml(output_path.read_text())
         return ParsedTestSuite(name="minitest", errors=1)
@@ -1405,7 +1358,6 @@ class PHPUnitPack(RunnerPack):
             except (OSError, json.JSONDecodeError):
                 log.debug("phpunit_config_read_failed", exc_info=True)
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         for path in workspace_root.glob("tests/**/*Test.php"):
@@ -1440,7 +1392,6 @@ class PHPUnitPack(RunnerPack):
         return cmd
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
-
         if output_path.exists():
             return parse_junit_xml(output_path.read_text())
         return ParsedTestSuite(name="phpunit", errors=1)

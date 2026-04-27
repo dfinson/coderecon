@@ -246,7 +246,6 @@ class TestRegistry:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / "pyproject.toml").write_text("[tool.ruff]\n")
-
             detected_pairs = registry.detect(root)
             tool_ids = [t.tool_id for t, _ in detected_pairs]
             assert "python.ruff" in tool_ids
@@ -255,7 +254,6 @@ class TestRegistry:
             root = Path(tmpdir)
             (root / "pyproject.toml").write_text("[tool.ruff]\n[tool.mypy]\n")
             (root / ".eslintrc.json").write_text("{}")
-
             detected_pairs = registry.detect(root)
             tool_ids = [t.tool_id for t, _ in detected_pairs]
             assert "python.ruff" in tool_ids
@@ -272,14 +270,11 @@ class TestRegistry:
             root = Path(tmpdir)
             # Only configure ruff, NOT black/isort
             (root / "pyproject.toml").write_text("[tool.ruff]\nline-length = 88\n")
-
             detected_pairs = registry.detect(root)
             tool_ids = {t.tool_id for t, _ in detected_pairs}
-
             # ruff and ruff-format should be detected (both use [tool.ruff])
             assert "python.ruff" in tool_ids
             assert "python.ruff-format" in tool_ids
-
             # black and isort should NOT be detected (no [tool.black] or [tool.isort])
             assert "python.black" not in tool_ids
             assert "python.isort" not in tool_ids
@@ -319,27 +314,23 @@ class TestLintTool:
 class TestSeverityFromStr:
     def test_error_variants(self) -> None:
         from coderecon.lint.parsers import _severity_from_str
-
         assert _severity_from_str("error") == Severity.ERROR
         assert _severity_from_str("ERROR") == Severity.ERROR
         assert _severity_from_str("e") == Severity.ERROR
         assert _severity_from_str("fatal") == Severity.ERROR
     def test_warning_variants(self) -> None:
         from coderecon.lint.parsers import _severity_from_str
-
         assert _severity_from_str("warning") == Severity.WARNING
         assert _severity_from_str("warn") == Severity.WARNING
         assert _severity_from_str("w") == Severity.WARNING
     def test_info_variants(self) -> None:
         from coderecon.lint.parsers import _severity_from_str
-
         assert _severity_from_str("info") == Severity.INFO
         assert _severity_from_str("information") == Severity.INFO
         assert _severity_from_str("i") == Severity.INFO
         assert _severity_from_str("note") == Severity.INFO
     def test_default_to_hint(self) -> None:
         from coderecon.lint.parsers import _severity_from_str
-
         assert _severity_from_str("unknown") == Severity.HINT
         assert _severity_from_str("") == Severity.HINT
 class TestParsers:
@@ -765,9 +756,7 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             result = await ops.check()
-
             assert isinstance(result, LintResult)
             assert result.action == "fix"
             assert result.dry_run is False
@@ -778,9 +767,7 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             result = await ops.check(dry_run=True)
-
             assert result.action == "check"
             assert result.dry_run is True
     @pytest.mark.asyncio
@@ -789,7 +776,6 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             result = await ops.check(paths=["src/"])
             assert result is not None
     @pytest.mark.asyncio
@@ -799,7 +785,6 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             result = await ops.check(paths=["deleted_file.py", "also_gone.py"])
             assert result.status == "clean"
             assert result.tools_run == []
@@ -810,7 +795,6 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             result = await ops.check(categories=["lint"])
             assert result is not None
     @pytest.mark.asyncio
@@ -819,10 +803,8 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             (root / "pyproject.toml").write_text("[tool.ruff]\n")
-
             ops = LintOps(root, coordinator)
             result = await ops.check(tools=["python.nonexistent"])
-
             assert result is not None
             assert result.tools_run == []
     @pytest.mark.asyncio
@@ -832,13 +814,10 @@ class TestLintOps:
             coordinator = create_mock_coordinator()
             # Create config but executable won't exist
             (root / "setup.cfg").write_text("[flake8]\n")
-
             ops = LintOps(root, coordinator)
-
             # Mock shutil.which to return None
             with patch("shutil.which", return_value=None):
                 result = await ops.check()
-
             # Should have agentic hint when all tools skipped
             assert result is not None
     @pytest.mark.asyncio
@@ -847,7 +826,6 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             tools = await ops._resolve_tools(["python.ruff"], None)
             assert len(tools) == 1
             assert tools[0].tool_id == "python.ruff"
@@ -858,7 +836,6 @@ class TestLintOps:
             coordinator = create_mock_coordinator()
             (root / "pyproject.toml").write_text("[tool.ruff]\n")
             ops = LintOps(root, coordinator)
-
             tools = await ops._resolve_tools(None, ["lint"])
             # Should filter detected tools by category
             assert all(t.category == ToolCategory.LINT for t in tools)
@@ -867,7 +844,6 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             paths = ops._resolve_paths(None)
             assert paths == [root]
     def test_resolve_paths_specific(self) -> None:
@@ -877,7 +853,6 @@ class TestLintOps:
             (root / "tests").mkdir()
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             paths = ops._resolve_paths(["src/", "tests/"])
             assert len(paths) == 2
             assert paths[0] == root / "src/"
@@ -889,7 +864,6 @@ class TestLintOps:
             (root / "existing.py").write_text("x = 1")
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             paths = ops._resolve_paths(["existing.py", "deleted.py"])
             assert paths == [root / "existing.py"]
     def test_resolve_paths_all_deleted_returns_empty(self) -> None:
@@ -898,7 +872,6 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             paths = ops._resolve_paths(["deleted.py", "also_deleted.py"])
             assert paths == []
     def test_filter_paths_for_tool_repo_root_passes_through(self) -> None:
@@ -907,10 +880,8 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             tool = registry.get("python.ruff")
             assert tool is not None
-
             result = ops._filter_paths_for_tool(tool, [root], root)
             assert result == [root]
     def test_filter_paths_for_tool_keeps_matching_language(self) -> None:
@@ -919,10 +890,8 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             tool = registry.get("python.ruff")
             assert tool is not None
-
             paths = [root / "app.py", root / "lib.py"]
             result = ops._filter_paths_for_tool(tool, paths, root)
             assert result == paths
@@ -932,10 +901,8 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             tool = registry.get("python.ruff")
             assert tool is not None
-
             paths = [
                 root / "app.py",
                 root / "config.yaml",
@@ -951,10 +918,8 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             tool = registry.get("python.ruff")
             assert tool is not None
-
             paths = [root / "config.yaml", root / "data.json"]
             result = ops._filter_paths_for_tool(tool, paths, root)
             assert result == []
@@ -964,10 +929,8 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             tool = registry.get("python.ruff")
             assert tool is not None
-
             count = await ops._get_file_count_from_index(tool, [root])
             assert count == 10  # From mock
     @pytest.mark.asyncio
@@ -976,10 +939,8 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             tool = registry.get("python.ruff")
             assert tool is not None
-
             count = await ops._get_file_count_from_index(tool, [root / "src"])
             # Should filter indexed files
             assert count >= 0
@@ -988,10 +949,8 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             tool = registry.get("python.ruff")
             assert tool is not None
-
             cmd = ops._build_command(tool, [root], dry_run=True)
             assert cmd[0] == "ruff"
             assert "check" in cmd
@@ -1000,10 +959,8 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             tool = registry.get("python.ruff")
             assert tool is not None
-
             cmd = ops._build_command(tool, [root], dry_run=False)
             assert cmd[0] == "ruff"
             assert "--fix" in cmd
@@ -1014,22 +971,18 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             tool = registry.get("python.ruff")
             assert tool is not None
-
             # Mock subprocess with clean output (ruff returns "[]" when no issues)
             mock_proc = MagicMock()
             mock_proc.returncode = 0
             mock_proc.communicate = AsyncMock(return_value=(b"[]", b""))
-
             with (
                 patch.object(ops, "_build_command", return_value=["ruff", "check", "."]),
                 patch("shutil.which", return_value="/usr/bin/ruff"),
                 patch("asyncio.create_subprocess_exec", return_value=mock_proc),
             ):
                 result = await ops._run_tool(tool, [root], dry_run=True)
-
             assert result.status == "clean"
             assert result.diagnostics == []
     @pytest.mark.asyncio
@@ -1039,24 +992,19 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             tool = registry.get("python.ruff")
             assert tool is not None
-
             # Ruff JSON output with a diagnostic
             ruff_output = '[{"filename": "test.py", "code": "E501", "message": "Line too long", "location": {"row": 1, "column": 80}}]'
-
             mock_proc = MagicMock()
             mock_proc.returncode = 1
             mock_proc.communicate = AsyncMock(return_value=(ruff_output.encode(), b""))
-
             with (
                 patch.object(ops, "_build_command", return_value=["ruff", "check", "."]),
                 patch("shutil.which", return_value="/usr/bin/ruff"),
                 patch("asyncio.create_subprocess_exec", return_value=mock_proc),
             ):
                 result = await ops._run_tool(tool, [root], dry_run=True)
-
             assert result.status == "dirty"
             assert len(result.diagnostics) > 0
     @pytest.mark.asyncio
@@ -1066,21 +1014,17 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             tool = registry.get("python.ruff")
             assert tool is not None
-
             mock_proc = MagicMock()
             mock_proc.returncode = 127  # Command not found style error
             mock_proc.communicate = AsyncMock(return_value=(b"", b"Command failed"))
-
             with (
                 patch.object(ops, "_build_command", return_value=["ruff", "check", "."]),
                 patch("shutil.which", return_value="/usr/bin/ruff"),
                 patch("asyncio.create_subprocess_exec", return_value=mock_proc),
             ):
                 result = await ops._run_tool(tool, [root], dry_run=True)
-
             assert result.status == "error"
             assert result.error_detail is not None
     @pytest.mark.asyncio
@@ -1090,22 +1034,18 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             tool = registry.get("python.ruff")
             assert tool is not None
-
             # Exit 1 with unparseable output (should be marked dirty)
             mock_proc = MagicMock()
             mock_proc.returncode = 1
             mock_proc.communicate = AsyncMock(return_value=(b"not json", b""))
-
             with (
                 patch.object(ops, "_build_command", return_value=["ruff", "check", "."]),
                 patch("shutil.which", return_value="/usr/bin/ruff"),
                 patch("asyncio.create_subprocess_exec", return_value=mock_proc),
             ):
                 result = await ops._run_tool(tool, [root], dry_run=True)
-
             # Exit code 1 with unparseable output = error (parser failed)
             assert result.status == "error"
     @pytest.mark.asyncio
@@ -1115,17 +1055,14 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             tool = registry.get("python.ruff")
             assert tool is not None
-
             with (
                 patch.object(ops, "_build_command", return_value=["ruff", "check", "."]),
                 patch("shutil.which", return_value="/usr/bin/ruff"),
                 patch("asyncio.create_subprocess_exec", side_effect=OSError("No such file")),
             ):
                 result = await ops._run_tool(tool, [root], dry_run=True)
-
             assert result.status == "error"
             assert "No such file" in (result.error_detail or "")
     @pytest.mark.asyncio
@@ -1135,7 +1072,6 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             # Create an error-returning tool result
             error_result = ToolResult(
                 tool_id="python.ruff",
@@ -1143,18 +1079,15 @@ class TestLintOps:
                 error_detail="Connection refused",
                 duration_seconds=0.1,
             )
-
             async def mock_run_tool(
                 _tool: LintTool, _paths: list[Path], _dry_run: bool
             ) -> ToolResult:  # noqa: ARG001
                 return error_result
-
             with (
                 patch.object(ops, "_run_tool", mock_run_tool),
                 patch.object(ops, "_resolve_tools", return_value=[registry.get("python.ruff")]),
             ):
                 result = await ops.check()
-
             # Should have agentic hint when tools fail
             assert result.agentic_hint is not None
             assert (
@@ -1167,24 +1100,19 @@ class TestLintOps:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = LintOps(root, coordinator)
-
             tool = registry.get("python.ruff")
             assert tool is not None
-
             # Output with fix_applied (ruff doesn't report this in check mode,
             # but we test the counting logic)
             ruff_output = '[{"filename": "test.py", "code": "E501", "message": "Fixed", "location": {"row": 1, "column": 80}, "fix": {"message": "Fix applied"}}]'
-
             mock_proc = MagicMock()
             mock_proc.returncode = 0  # Fixed successfully
             mock_proc.communicate = AsyncMock(return_value=(ruff_output.encode(), b""))
-
             with (
                 patch.object(ops, "_build_command", return_value=["ruff", "check", "."]),
                 patch("shutil.which", return_value="/usr/bin/ruff"),
                 patch("asyncio.create_subprocess_exec", return_value=mock_proc),
             ):
                 result = await ops._run_tool(tool, [root], dry_run=False)
-
             # Should have diagnostics from parsing
             assert result.files_checked >= 0

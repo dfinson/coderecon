@@ -37,9 +37,7 @@ class TestParseBasics:
         """Parser should successfully parse Python files."""
         file_path = temp_dir / "test.py"
         file_path.write_text(sample_python_content)
-
         result = parser.parse(file_path, sample_python_content.encode())
-
         assert result is not None
         assert isinstance(result, ParseResult)
         assert result.language == "python"
@@ -51,9 +49,7 @@ class TestParseBasics:
         """Parser should successfully parse JavaScript files."""
         file_path = temp_dir / "test.js"
         file_path.write_text(sample_javascript_content)
-
         result = parser.parse(file_path, sample_javascript_content.encode())
-
         assert result is not None
         assert result.language == "javascript"
         assert result.error_count == 0
@@ -63,9 +59,7 @@ class TestParseBasics:
         """Parser should successfully parse Go files."""
         file_path = temp_dir / "test.go"
         file_path.write_text(sample_go_content)
-
         result = parser.parse(file_path, sample_go_content.encode())
-
         assert result is not None
         assert result.language == "go"
         assert result.error_count == 0
@@ -84,9 +78,7 @@ class MyGreeter implements Greeter {
 """
         file_path = temp_dir / "test.ts"
         file_path.write_text(content)
-
         result = parser.parse(file_path, content.encode())
-
         assert result is not None
         assert result.language == "typescript"
         assert result.error_count == 0
@@ -98,16 +90,13 @@ def broken_function(
 """
         file_path = temp_dir / "broken.py"
         file_path.write_text(content)
-
         result = parser.parse(file_path, content.encode())
-
         assert result is not None
         assert result.error_count > 0
     def test_parse_unknown_extension(self, parser: TreeSitterParser, temp_dir: Path) -> None:
         """Parser should raise ValueError for unknown file types."""
         file_path = temp_dir / "test.xyz"
         file_path.write_text("unknown content")
-
         with pytest.raises(ValueError, match="Unsupported file extension"):
             parser.parse(file_path, b"unknown content")
 
@@ -119,12 +108,9 @@ class TestSymbolExtraction:
         """Should extract function definitions from Python."""
         file_path = temp_dir / "test.py"
         file_path.write_text(sample_python_content)
-
         result = parser.parse(file_path, sample_python_content.encode())
         assert result is not None
-
         symbols = parser.extract_symbols(result)
-
         # Find the hello function
         function_names = {s.name for s in symbols if s.kind == "function"}
         assert "hello" in function_names
@@ -134,12 +120,9 @@ class TestSymbolExtraction:
         """Should extract class definitions from Python."""
         file_path = temp_dir / "test.py"
         file_path.write_text(sample_python_content)
-
         result = parser.parse(file_path, sample_python_content.encode())
         assert result is not None
-
         symbols = parser.extract_symbols(result)
-
         # Find the Greeter class
         class_names = {s.name for s in symbols if s.kind == "class"}
         assert "Greeter" in class_names
@@ -149,12 +132,9 @@ class TestSymbolExtraction:
         """Should extract method definitions from Python classes."""
         file_path = temp_dir / "test.py"
         file_path.write_text(sample_python_content)
-
         result = parser.parse(file_path, sample_python_content.encode())
         assert result is not None
-
         symbols = parser.extract_symbols(result)
-
         # Find methods
         method_names = {s.name for s in symbols if s.kind == "method"}
         assert "__init__" in method_names or "greet" in method_names
@@ -164,12 +144,9 @@ class TestSymbolExtraction:
         """Should extract function definitions from JavaScript."""
         file_path = temp_dir / "test.js"
         file_path.write_text(sample_javascript_content)
-
         result = parser.parse(file_path, sample_javascript_content.encode())
         assert result is not None
-
         symbols = parser.extract_symbols(result)
-
         function_names = {s.name for s in symbols if s.kind == "function"}
         assert "hello" in function_names
     def test_extract_javascript_classes(
@@ -178,12 +155,9 @@ class TestSymbolExtraction:
         """Should extract class definitions from JavaScript."""
         file_path = temp_dir / "test.js"
         file_path.write_text(sample_javascript_content)
-
         result = parser.parse(file_path, sample_javascript_content.encode())
         assert result is not None
-
         symbols = parser.extract_symbols(result)
-
         class_names = {s.name for s in symbols if s.kind == "class"}
         assert "Greeter" in class_names
     def test_extract_go_functions(
@@ -192,12 +166,9 @@ class TestSymbolExtraction:
         """Should extract function definitions from Go."""
         file_path = temp_dir / "test.go"
         file_path.write_text(sample_go_content)
-
         result = parser.parse(file_path, sample_go_content.encode())
         assert result is not None
-
         symbols = parser.extract_symbols(result)
-
         function_names = {s.name for s in symbols if s.kind == "function"}
         assert "Hello" in function_names
     def test_extract_go_types(
@@ -206,12 +177,9 @@ class TestSymbolExtraction:
         """Should extract type definitions from Go."""
         file_path = temp_dir / "test.go"
         file_path.write_text(sample_go_content)
-
         result = parser.parse(file_path, sample_go_content.encode())
         assert result is not None
-
         symbols = parser.extract_symbols(result)
-
         # Should have Greeter struct or type
         names = {s.name for s in symbols}
         assert "Greeter" in names
@@ -221,13 +189,10 @@ class TestSymbolExtraction:
         """Extracted symbols should have line/column information."""
         file_path = temp_dir / "test.py"
         file_path.write_text(sample_python_content)
-
         result = parser.parse(file_path, sample_python_content.encode())
         assert result is not None
-
         symbols = parser.extract_symbols(result)
         assert len(symbols) > 0
-
         for symbol in symbols:
             assert isinstance(symbol, SyntacticSymbol)
             assert symbol.line >= 0
@@ -244,12 +209,9 @@ def foo():
 """
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
-
         result = parser.parse(file_path, content.encode())
         assert result is not None
-
         occurrences = parser.extract_identifier_occurrences(result)
-
         # Should find x and y multiple times
         names = [occ.name for occ in occurrences]
         assert "x" in names
@@ -259,13 +221,10 @@ def foo():
         content = "x = 1"
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
-
         result = parser.parse(file_path, content.encode())
         assert result is not None
-
         occurrences = parser.extract_identifier_occurrences(result)
         assert len(occurrences) > 0
-
         for occ in occurrences:
             assert isinstance(occ, IdentifierOccurrence)
             assert occ.line >= 0
@@ -279,13 +238,10 @@ class TestInterfaceHash:
         """Should compute interface hash from symbols."""
         file_path = temp_dir / "test.py"
         file_path.write_text(sample_python_content)
-
         result = parser.parse(file_path, sample_python_content.encode())
         assert result is not None
-
         symbols = parser.extract_symbols(result)
         hash1 = parser.compute_interface_hash(symbols)
-
         assert hash1 is not None
         assert len(hash1) > 0
     def test_interface_hash_changes_with_symbols(
@@ -303,21 +259,18 @@ def bar():
     pass
 """
         file_path = temp_dir / "test.py"
-
         # Parse first version
         file_path.write_text(content1)
         result1 = parser.parse(file_path, content1.encode())
         assert result1 is not None
         symbols1 = parser.extract_symbols(result1)
         hash1 = parser.compute_interface_hash(symbols1)
-
         # Parse second version
         file_path.write_text(content2)
         result2 = parser.parse(file_path, content2.encode())
         assert result2 is not None
         symbols2 = parser.extract_symbols(result2)
         hash2 = parser.compute_interface_hash(symbols2)
-
         # Hashes should differ
         assert hash1 != hash2
     def test_interface_hash_stable_for_body_changes(
@@ -333,21 +286,18 @@ def foo():
     return 2
 """
         file_path = temp_dir / "test.py"
-
         # Parse first version
         file_path.write_text(content1)
         result1 = parser.parse(file_path, content1.encode())
         assert result1 is not None
         symbols1 = parser.extract_symbols(result1)
         hash1 = parser.compute_interface_hash(symbols1)
-
         # Parse second version (only body changed)
         file_path.write_text(content2)
         result2 = parser.parse(file_path, content2.encode())
         assert result2 is not None
         symbols2 = parser.extract_symbols(result2)
         hash2 = parser.compute_interface_hash(symbols2)
-
         # Hashes should be the same (interface didn't change)
         # Note: This depends on what "interface" means - function name + signature
         # If only body changed and signature is the same, hash should match
@@ -362,12 +312,9 @@ class TestProbeValidation:
         """Valid code file should pass validation."""
         file_path = temp_dir / "test.py"
         file_path.write_text(sample_python_content)
-
         result = parser.parse(file_path, sample_python_content.encode())
         assert result is not None
-
         validation = parser.validate_code_file(result)
-
         assert isinstance(validation, ProbeValidation)
         assert validation.is_valid
         assert validation.has_meaningful_content
@@ -386,12 +333,9 @@ syntax everywhere
 """
         file_path = temp_dir / "broken.py"
         file_path.write_text(content)
-
         result = parser.parse(file_path, content.encode())
         assert result is not None
-
         validation = parser.validate_code_file(result)
-
         # Should fail due to high error ratio
         # Note: exact behavior depends on implementation threshold
         assert validation.error_count > 0
@@ -400,13 +344,10 @@ syntax everywhere
         content = '{"key": "value", "number": 42}'
         file_path = temp_dir / "test.json"
         file_path.write_text(content)
-
         result = parser.parse(file_path, content.encode())
         if result is None:
             pytest.skip("JSON parser not available")
-
         validation = parser.validate_data_file(result)
-
         assert validation.is_valid
         assert validation.error_count == 0
     def test_validate_empty_file(self, parser: TreeSitterParser, temp_dir: Path) -> None:
@@ -414,12 +355,9 @@ syntax everywhere
         content = ""
         file_path = temp_dir / "empty.py"
         file_path.write_text(content)
-
         result = parser.parse(file_path, content.encode())
         assert result is not None
-
         validation = parser.validate_code_file(result)
-
         # Empty Python file has module root node (total_nodes=1)
         # Implementation considers this valid (parseable, no errors)
         assert validation.total_nodes == 1
@@ -470,9 +408,7 @@ class Bar:
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         scopes = parser.extract_scopes(result)
-
         # Should have file scope (0), function scope (foo), class scope (Bar), method scope
         assert len(scopes) >= 4
         kinds = [s.kind for s in scopes]
@@ -490,9 +426,7 @@ y = {k: v for k, v in items}
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         scopes = parser.extract_scopes(result)
-
         # Should have file scope + comprehension scopes
         kinds = [s.kind for s in scopes]
         assert "comprehension" in kinds
@@ -506,13 +440,10 @@ class Foo:
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         scopes = parser.extract_scopes(result)
-
         # File scope has no parent
         file_scope = next(s for s in scopes if s.kind == "file")
         assert file_scope.parent_scope_id is None
-
         # Class scope's parent is file scope
         class_scope = next(s for s in scopes if s.kind == "class")
         assert class_scope.parent_scope_id == file_scope.scope_id
@@ -530,20 +461,16 @@ from collections import defaultdict as dd
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         imports = parser.extract_imports(result, str(file_path))
-
         assert len(imports) >= 4
         names = [i.imported_name for i in imports]
         assert "os" in names
         assert "sys" in names
         assert "Path" in names
         assert "defaultdict" in names
-
         # Check aliases
         sys_import = next(i for i in imports if i.imported_name == "sys")
         assert sys_import.alias == "system"
-
         dd_import = next(i for i in imports if i.imported_name == "defaultdict")
         assert dd_import.alias == "dd"
     def test_extract_python_from_import_source(
@@ -557,9 +484,7 @@ from typing import Optional
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         imports = parser.extract_imports(result, str(file_path))
-
         # Check source_literal
         od_import = next(i for i in imports if i.imported_name == "OrderedDict")
         assert od_import.import_kind == "python_from"
@@ -573,14 +498,11 @@ import * as utils from './utils';
         file_path = temp_dir / "test.js"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         imports = parser.extract_imports(result, str(file_path))
-
         # Should find React, useState, useEffect, and namespace import
         names = [i.imported_name for i in imports]
         assert "React" in names
         assert "useState" in names
-
         # Check namespace import
         namespace_import = next((i for i in imports if i.imported_name == "*"), None)
         if namespace_import:
@@ -593,21 +515,16 @@ from collections import *
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         imports = parser.extract_imports(result, str(file_path))
-
         # Should find two star imports
         star_imports = [i for i in imports if i.imported_name == "*"]
         assert len(star_imports) == 2
-
         # Check source modules
         sources = sorted(i.source_literal for i in star_imports if i.source_literal)
         assert "collections" in sources
         assert "os.path" in sources
-
         # All should be python_from kind
         assert all(i.import_kind == "python_from" for i in star_imports)
-
         # No alias for star imports
         assert all(i.alias is None for i in star_imports)
     def test_extract_python_wildcard_import_relative(
@@ -618,9 +535,7 @@ from collections import *
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         imports = parser.extract_imports(result, str(file_path))
-
         star_imports = [i for i in imports if i.imported_name == "*"]
         assert len(star_imports) == 1
         assert star_imports[0].import_kind == "python_from"
@@ -633,15 +548,12 @@ using Newtonsoft.Json;
         file_path = temp_dir / "test.cs"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         imports = parser.extract_imports(result, str(file_path))
-
         assert len(imports) == 3
         names = [i.imported_name for i in imports]
         assert "System" in names
         assert "System.Collections.Generic" in names
         assert "Newtonsoft.Json" in names
-
         # All should be csharp_using kind, no aliases
         assert all(i.import_kind == "csharp_using" for i in imports)
         assert all(i.alias is None for i in imports)
@@ -651,9 +563,7 @@ using Newtonsoft.Json;
         file_path = temp_dir / "test.cs"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         imports = parser.extract_imports(result, str(file_path))
-
         assert len(imports) == 1
         assert imports[0].imported_name == "System.Math"
         assert imports[0].import_kind == "csharp_using"
@@ -664,9 +574,7 @@ using Newtonsoft.Json;
         file_path = temp_dir / "test.cs"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         imports = parser.extract_imports(result, str(file_path))
-
         assert len(imports) == 1
         # Declarative handler captures the full text after "using "
         assert "System.Collections.Generic.List" in imports[0].imported_name
@@ -684,9 +592,7 @@ namespace Foo {
         file_path = temp_dir / "test.cs"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         imports = parser.extract_imports(result, str(file_path))
-
         assert len(imports) == 3
         names = [i.imported_name for i in imports]
         assert "System" in names
@@ -694,7 +600,6 @@ namespace Foo {
         self, parser: TreeSitterParser, temp_dir: Path
     ) -> None:
         """Should extract using directives inside namespace declarations.
-
         C# allows using directives inside namespace blocks, not just at file scope.
         """
         content = """using System;
@@ -702,25 +607,19 @@ namespace Foo {
 namespace MyApp {
     using System.Linq;
     using static System.Math;
-
     namespace Nested {
         using Newtonsoft.Json;
-
         public class Foo { }
     }
-
     public class Bar { }
 }
 """
         file_path = temp_dir / "test.cs"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         imports = parser.extract_imports(result, str(file_path))
-
         # Should find all 4 usings: root-level + namespace-scoped + nested namespace
         assert len(imports) == 4
-
         names = [i.imported_name for i in imports]
         assert "System" in names  # root level
         assert "System.Linq" in names  # inside MyApp namespace
@@ -741,9 +640,7 @@ class TestNamespaceTypeExtraction:
         file_path = temp_dir / "test.cs"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         ns_map = parser.extract_csharp_namespace_types(result.root_node)
-
         assert "Foo.Bar" in ns_map
         types = ns_map["Foo.Bar"]
         assert "MyClass" in types
@@ -762,9 +659,7 @@ namespace B {
         file_path = temp_dir / "test.cs"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         ns_map = parser.extract_csharp_namespace_types(result.root_node)
-
         assert "A" in ns_map
         assert "Foo" in ns_map["A"]
         assert "B" in ns_map
@@ -779,9 +674,7 @@ public interface IBaz { }
         file_path = temp_dir / "test.cs"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         ns_map = parser.extract_csharp_namespace_types(result.root_node)
-
         assert "Foo.Bar" in ns_map
         types = ns_map["Foo.Bar"]
         assert "Baz" in types
@@ -792,9 +685,7 @@ public interface IBaz { }
         file_path = temp_dir / "test.cs"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         ns_map = parser.extract_csharp_namespace_types(result.root_node)
-
         # Empty namespace should not appear in map
         assert "Empty" not in ns_map
     def test_extract_nested_namespaces(self, parser: TreeSitterParser, temp_dir: Path) -> None:
@@ -810,14 +701,11 @@ public interface IBaz { }
         file_path = temp_dir / "test.cs"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         ns_map = parser.extract_csharp_namespace_types(result.root_node)
-
         # Nested namespace should be composed as Outer.Inner
         assert "Outer.Inner" in ns_map
         assert "Foo" in ns_map["Outer.Inner"]
         assert "IBar" in ns_map["Outer.Inner"]
-
         # Types declared directly in Outer should also be extracted
         assert "Outer" in ns_map
         assert "OuterOnly" in ns_map["Outer"]
@@ -836,9 +724,7 @@ public interface IBaz { }
         file_path = temp_dir / "test.cs"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         ns_map = parser.extract_csharp_namespace_types(result.root_node)
-
         assert "A.B.C" in ns_map
         assert "DeepClass" in ns_map["A.B.C"]
 
@@ -853,9 +739,7 @@ y = getattr(obj, attr_name)
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         dynamics = parser.extract_dynamic_accesses(result)
-
         # Should find at least one getattr pattern
         getattrs = [d for d in dynamics if d.pattern_type == "getattr"]
         assert len(getattrs) >= 1
@@ -868,12 +752,9 @@ y = obj[variable]
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         dynamics = parser.extract_dynamic_accesses(result)
-
         brackets = [d for d in dynamics if d.pattern_type == "bracket_access"]
         assert len(brackets) >= 2
-
         # One should have extracted literal, one should have dynamic key
         static = [d for d in brackets if not d.has_non_literal_key]
         dynamic = [d for d in brackets if d.has_non_literal_key]
@@ -888,8 +769,6 @@ exec("print('hello')")
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
         result = parser.parse(file_path, content.encode())
-
         dynamics = parser.extract_dynamic_accesses(result)
-
         evals = [d for d in dynamics if d.pattern_type == "eval"]
         assert len(evals) >= 2

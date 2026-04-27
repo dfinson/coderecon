@@ -53,23 +53,18 @@ _gpu_active: bool | None = None
 
 def _ensure_cuda_lib_path() -> None:
     """Make cuDNN / cuBLAS findable for onnxruntime-gpu.
-
     On Linux, ``onnxruntime-gpu`` needs ``libcudnn.so.9`` at runtime.
     We search pip-installed nvidia packages and well-known system paths,
     then **preload** the library via ctypes so ``dlopen`` finds it even
     when LD_LIBRARY_PATH wasn't set at process start.
-
     This must be called **before** the first ``InferenceSession`` creation.
     """
     import ctypes
     import os
     import sys
-
     if sys.platform != "linux":
         return
-
     lib_dirs: list[str] = []
-
     # 1. Pip-installed nvidia packages (canonical for venv-based installs)
     for pkg in ("nvidia.cudnn", "nvidia.cublas", "nvidia.cuda_nvrtc"):
         try:
@@ -79,7 +74,6 @@ def _ensure_cuda_lib_path() -> None:
                 lib_dirs.append(lib_dir)
         except ImportError:
             log.debug("cuda_pkg_not_available", pkg=pkg)
-
     # 2. Well-known system CUDA paths
     if not lib_dirs:
         candidates = [
@@ -95,17 +89,14 @@ def _ensure_cuda_lib_path() -> None:
             if cudnn.exists():
                 lib_dirs.append(candidate)
                 break
-
     if not lib_dirs:
         return
-
     # Update LD_LIBRARY_PATH for any child processes
     existing = os.environ.get("LD_LIBRARY_PATH", "")
     existing_parts = set(existing.split(":")) if existing else set()
     new_parts = [d for d in lib_dirs if d not in existing_parts]
     if new_parts:
         os.environ["LD_LIBRARY_PATH"] = ":".join(new_parts + ([existing] if existing else []))
-
     # Preload libcudnn.so.9 so dlopen() finds it in the current process
     for d in lib_dirs:
         cudnn_path = Path(d) / "libcudnn.so.9"
@@ -120,27 +111,21 @@ def _select_onnx_providers(
     vram_bytes: int | None = None,
 ) -> list[str | tuple[str, dict[str, Any]]]:
     """Select the best available ONNX Runtime execution providers.
-
     Tries GPU providers first (CUDA, ROCm, CoreML), falls back to CPU.
     Respects CODERECON_ONNX_DEVICE env var to force a specific provider.
-
     When *vram_bytes* is given and CUDA is available, configures the BFC
     arena to use ``kSameAsRequested`` (no power-of-two overshoot) and
     caps ``gpu_mem_limit`` at 85 % of VRAM so the arena never grabs
     everything.
     """
     import os
-
     forced = os.environ.get("CODERECON_ONNX_DEVICE", "").lower()
     if forced == "cpu":
         return ["CPUExecutionProvider"]
-
     # Ensure CUDA libs are findable before querying providers
     _ensure_cuda_lib_path()
-
     available = set(ort.get_available_providers())
     providers: list[str | tuple[str, dict[str, Any]]] = []
-
     # Prefer CUDA > ROCm > CoreML > CPU
     if "CUDAExecutionProvider" in available:
         cuda_opts: dict[str, Any] = {
@@ -156,14 +141,12 @@ def _select_onnx_providers(
         providers.append("ROCMExecutionProvider")
     if "CoreMLExecutionProvider" in available:
         providers.append("CoreMLExecutionProvider")
-
     # Always include CPU as fallback
     providers.append("CPUExecutionProvider")
     return providers
 
 def is_gpu_active() -> bool:
     """Return True if the last ONNX session loaded a GPU provider.
-
     Only valid after at least one encoder has been loaded.
     """
     return _gpu_active is True
@@ -192,11 +175,9 @@ _VRAM_UTILIZATION = 0.90  # use at most 90% of total VRAM
 
 def _query_gpu_vram_bytes() -> int | None:
     """Query total GPU VRAM in bytes via nvidia-smi.
-
     Returns None if nvidia-smi is unavailable or fails.
     """
     import subprocess
-
     try:
         result = subprocess.run(
             [
@@ -305,49 +286,40 @@ def build_def_scaffold(
     type_ref_names: list[str] | None = None,
 ) -> str:
     """Build an anglicised scaffold for a single DefFact.
-
     Fields present unconditionally.  Order follows measured marginal
     recall contribution from bge-small ablation.
     """
     if not name:
         return ""
-
     lines: list[str] = []
-
     path_phrase = _path_to_phrase(file_path)
     if path_phrase:
         lines.append(f"module {path_phrase}")
-
     sig = signature_text or ""
     if sig:
         lines.append(f"{kind} {_compact_sig(name, sig)}")
     else:
         lines.append(f"{kind} {' '.join(word_split(name))}")
-
     qualified = qualified_name or lexical_path or ""
     if qualified and "." in qualified:
         parent = qualified.rsplit(".", 1)[0]
         parent_words = " ".join(word_split(parent))
         if parent_words:
             lines.append(f"in {parent_words}")
-
     if callee_names:
         sorted_calls = sorted({c for c in callee_names if c and len(c) >= 2})
         if sorted_calls:
             lines.append(f"calls {', '.join(sorted_calls)}")
-
     if type_ref_names:
         callee_set = set(callee_names or [])
         unique_refs = sorted({r for r in type_ref_names if r and r not in callee_set})
         if unique_refs:
             lines.append(f"uses {', '.join(unique_refs)}")
-
     doc = (docstring or "").strip()
     if doc and len(doc) > 15:
         first = doc.split(".")[0].strip() if "." in doc else doc
         if first:
             lines.append(f"describes {first}")
-
     return "\n".join(lines) if lines else ""
 
 
@@ -359,18 +331,14 @@ def build_scaffolds_for_defs(
     def_facts: list[DefFact],
 ) -> dict[str, str]:
     """Build scaffolds for a batch of DefFacts using index data.
-
     Uses bulk queries for callees and type annotations instead of
     per-def queries — reduces ~2N SQL queries to 2 bulk queries.
-
     Returns {def_uid: scaffold_text}.
     """
     from coderecon.index.models import RefFact, TypeAnnotationFact
-
     result: dict[str, str] = {}
     if not def_facts:
         return result
-
     # Pre-fetch file paths for all defs
     file_ids = list({d.file_id for d in def_facts if d.file_id})
     file_map: dict[int, str] = {}
@@ -379,7 +347,6 @@ def build_scaffolds_for_defs(
             select(File).where(col(File.id).in_(file_ids))
         ).all()
         file_map = {f.id: f.path for f in files if f.id is not None}
-
     # ── Bulk callee query ────────────────────────────────────────
     # For each def, find resolved refs whose start_line falls within
     # [def.start_line, def.end_line] in the same file, then join to
@@ -387,18 +354,14 @@ def build_scaffolds_for_defs(
     #
     # Instead of N individual queries, we do one query that returns
     # (caller_def_uid, callee_name, callee_def_uid) for all defs.
-
     # Build a lookup: (file_id, start_line, end_line) → def_uid
     callees_by_uid: dict[str, list[str]] = {d.def_uid: [] for d in def_facts}
     type_refs_by_uid: dict[str, list[str]] = {d.def_uid: [] for d in def_facts}
-
     # Process in chunks of file_ids to keep SQL manageable
     for fid_chunk_start in range(0, len(file_ids), 100):
         fid_chunk = file_ids[fid_chunk_start:fid_chunk_start + 100]
-
         # Get defs in this chunk for range-matching
         chunk_defs = [d for d in def_facts if d.file_id in set(fid_chunk)]
-
         # Bulk fetch all resolved refs in these files
         refs_with_targets = session.exec(
             select(
@@ -410,7 +373,6 @@ def build_scaffolds_for_defs(
                 RefFact.target_def_uid.is_not(None),  # type: ignore[union-attr]
             )
         ).all()
-
         # Fetch target def names in bulk
         target_uids = list({r[2] for r in refs_with_targets if r[2]})
         target_names: dict[str, str] = {}
@@ -423,7 +385,6 @@ def build_scaffolds_for_defs(
             ).all()
             for uid, name in rows:
                 target_names[uid] = name
-
         # Assign refs to their enclosing defs by range containment
         for d in chunk_defs:
             d_callees: set[str] = set()
@@ -436,7 +397,6 @@ def build_scaffolds_for_defs(
                 ):
                     d_callees.add(target_names[tuid])
             callees_by_uid[d.def_uid] = list(d_callees)[:30]
-
         # Bulk fetch type annotations in these files
         try:
             annotations = session.exec(
@@ -448,7 +408,6 @@ def build_scaffolds_for_defs(
                     col(TypeAnnotationFact.file_id).in_(fid_chunk),
                 )
             ).all()
-
             for d in chunk_defs:
                 d_types: set[str] = set()
                 for fid, line, btype in annotations:
@@ -461,13 +420,11 @@ def build_scaffolds_for_defs(
                 type_refs_by_uid[d.def_uid] = list(d_types)[:20]
         except (SQLAlchemyError, ValueError):
             log.debug("type_annotation_lookup_failed", exc_info=True)
-
     # ── Build scaffolds ──────────────────────────────────────────
     for d in def_facts:
         file_path = file_map.get(d.file_id, "")
         if not file_path:
             continue
-
         scaffold = build_def_scaffold(
             file_path,
             kind=d.kind,
@@ -481,7 +438,6 @@ def build_scaffolds_for_defs(
         )
         if scaffold:
             result[d.def_uid] = scaffold
-
     return result
 
 
@@ -491,11 +447,9 @@ def build_scaffolds_for_defs(
 @dataclass
 class SpladeEncoder:
     """ONNX-based SPLADE encoder (splade-mini via onnxruntime + tokenizers).
-
     No torch dependency.  Loads the vendored ONNX model and tokenizer
     from the package data directory.
     """
-
     onnx_path: Path = _ONNX_PATH
     tokenizer_path: Path = _TOKENIZER_PATH
     _session: ort.InferenceSession | None = field(default=None, repr=False)
@@ -507,7 +461,6 @@ class SpladeEncoder:
         vram_bytes: int | None = None,
     ) -> ort.InferenceSession:
         """Create a CUDA InferenceSession with arena-safe settings.
-
         Separated from :meth:`load` so we can build a *fresh* session
         after an OOM (the BFC arena resets with a new session).
         """
@@ -526,7 +479,6 @@ class SpladeEncoder:
     @staticmethod
     def _validate_model_batch_axis(onnx_path: Path) -> None:
         """Verify the ONNX model has a dynamic batch axis on its output.
-
         Models with a hardcoded batch dimension (e.g. ``[1, seq, vocab]``)
         cause CUDA buffer-reuse failures when batch > 1.  Fail fast with
         a clear message instead of surfacing a cryptic shape-mismatch
@@ -582,21 +534,17 @@ class SpladeEncoder:
         session: ort.InferenceSession | None = None,
     ) -> list[dict[int, float]]:
         """Run a batch of texts through the ONNX model → sparse vectors.
-
         The ONNX model has SPLADE pooling (ReLU → log1p → max-over-seq)
         baked into the graph, outputting (batch, vocab_size) directly.
-
         *session* overrides the default session (used by CPU fallback).
         """
         sess = session or self._session
         if sess is None or self._tokenizer is None:
             raise RuntimeError("SPLADE model not loaded: call load() first")
-
         encodings = self._tokenizer.encode_batch(texts)
         ids = np.array([e.ids for e in encodings], dtype=np.int64)
         mask = np.array([e.attention_mask for e in encodings], dtype=np.int64)
         tids = np.zeros_like(ids)
-
         (raw,) = sess.run(
             None,
             {
@@ -605,13 +553,11 @@ class SpladeEncoder:
                 "token_type_ids": tids,
             },
         )
-
         # SPLADE pooling: ReLU → log1p → max-over-sequence
         if raw.ndim == 3:
             pooled = np.log1p(np.maximum(raw, 0)).max(axis=1)
         else:
             pooled = raw  # already (batch, vocab_size)
-
         results: list[dict[int, float]] = []
         for row in pooled:
             nz = np.nonzero(row)[0]
@@ -634,11 +580,9 @@ class SpladeEncoder:
         return self._cpu_session
     def _encode_batch_safe(self, texts: list[str]) -> list[dict[int, float]]:
         """Encode with OOM recovery: fresh GPU session, then CPU fallback.
-
         On a CUDA OOM error the BFC arena's internal free-lists may be
         fragmented.  Retrying on the *same* session often cascades into
         repeated failures even for smaller batches.
-
         Strategy:
         1. Try the batch on the current GPU session.
         2. On OOM → create a **fresh** GPU session (new BFC arena),
@@ -675,7 +619,6 @@ class SpladeEncoder:
             return self._encode_batch(texts, session=self._get_cpu_session())
     def encode_documents(self, texts: list[str], batch_size: int = BATCH_SIZE) -> list[dict[int, float]]:
         """Encode document texts → sparse vectors (batched ONNX inference).
-
         Sorts texts by tokenized length before batching.  When GPU is
         active and VRAM is known, batch size is computed per-chunk from
         the longest sequence in that chunk so that the estimated peak
@@ -687,12 +630,10 @@ class SpladeEncoder:
             return []
         if self._tokenizer is None:
             raise RuntimeError("SPLADE tokenizer not loaded after load()")
-
         # Sort by token count → similar lengths in each batch → less padding
         indexed = list(enumerate(texts))
         tok_lengths = [len(self._tokenizer.encode(t).ids) for _, t in indexed]
         indexed.sort(key=lambda x: tok_lengths[x[0]])
-
         ordered_vecs: list[tuple[int, dict[int, float]]] = []
         pos = 0
         batch_num = 0
@@ -708,7 +649,6 @@ class SpladeEncoder:
                 bs = max(1, min(max_possible, _compute_gpu_batch_size(longest_seq, self._vram_bytes)))
             else:
                 bs = min(remaining, batch_size)
-
             batch_items = indexed[pos : pos + bs]
             batch_texts = [t for _, t in batch_items]
             bt0 = time.monotonic()
@@ -724,13 +664,11 @@ class SpladeEncoder:
             for (orig_idx, _), vec in zip(batch_items, batch_vecs):
                 ordered_vecs.append((orig_idx, vec))
             pos += bs
-
         # Restore original order
         ordered_vecs.sort(key=lambda x: x[0])
         return [vec for _, vec in ordered_vecs]
     def encode_queries(self, texts: list[str], batch_size: int = BATCH_SIZE) -> list[dict[int, float]]:
         """Encode query texts → sparse vectors.
-
         For splade-mini there is no separate query encoder; the same
         model is used for both documents and queries.
         """
@@ -799,7 +737,6 @@ def load_all_vectors_fast(
     db: "Database",
 ) -> dict[str, dict[int, float]]:
     """Load all SPLADE vectors from DB.
-
     Prefers binary vector_blob column (fast struct unpack).
     Falls back to JSON parse for rows that only have vector_json.
     """
@@ -820,18 +757,15 @@ def index_splade_vectors(
     progress_cb: Callable[[int, int], None] | None = None,
 ) -> int:
     """Compute and persist SPLADE vectors for definitions.
-
     Args:
         db: Database instance.
         file_ids: If provided, only index defs in these files (incremental).
                   If None, index ALL defs (full index).
         progress_cb: Optional callback(encoded, total).
-
     Returns:
         Number of vectors stored.
     """
     encoder = _get_encoder()
-
     # Collect defs to encode
     with db.session() as session:
         if file_ids is not None:
@@ -842,20 +776,15 @@ def index_splade_vectors(
             )
         else:
             defs = list(session.exec(select(DefFact)).all())
-
         if not defs:
             return 0
-
         # Build scaffolds (needs callees + type refs from DB)
         scaffolds = build_scaffolds_for_defs(session, defs)
-
     if not scaffolds:
         return 0
-
     # Order for batch encoding
     uid_order = list(scaffolds.keys())
     texts = [scaffolds[uid] for uid in uid_order]
-
     # Encode in batches
     log.info("splade.encode_start n_defs=%d", len(texts))
     t0 = time.monotonic()
@@ -866,7 +795,6 @@ def index_splade_vectors(
         len(texts), elapsed,
         len(texts) / elapsed if elapsed > 0 else 0,
     )
-
     # Persist to splade_vecs table
     stored = 0
     with db.session() as session:
@@ -882,7 +810,6 @@ def index_splade_vectors(
                 if existing is not None:
                     session.delete(existing)
             session.flush()
-
         merge_t0 = time.monotonic()
         for uid, vec in zip(uid_order, all_vecs):
             if not vec:
@@ -903,12 +830,10 @@ def index_splade_vectors(
                 )
                 if progress_cb:
                     progress_cb(stored, len(uid_order))
-
         commit_t0 = time.monotonic()
         log.info("splade.commit_start stored=%d merge_elapsed=%.1fs", stored, commit_t0 - merge_t0)
         session.commit()
         log.info("splade.commit_done commit_elapsed=%.1fs", time.monotonic() - commit_t0)
-
     log.info("splade.stored", extra={"count": stored})
     return stored
 
@@ -917,15 +842,12 @@ def backfill_scaffold_text(
     file_ids: list[int] | None = None,
 ) -> int:
     """Populate scaffold_text on SpladeVec rows where it is NULL.
-
     Builds scaffolds from the DB (callees + type refs) and writes them
     to existing SpladeVec rows without re-encoding the SPLADE vector.
-
     Args:
         db: Database instance.
         file_ids: If provided, only backfill defs in these files.
                   If None, backfill ALL rows with NULL scaffold_text.
-
     Returns:
         Number of rows updated.
     """
@@ -960,12 +882,9 @@ def backfill_scaffold_text(
                     select(DefFact).where(col(DefFact.def_uid).in_(list(null_uids)))
                 ).all()
             )
-
         if not defs:
             return 0
-
         scaffolds = build_scaffolds_for_defs(session, defs)
-
         updated = 0
         for uid, text_val in scaffolds.items():
             row = session.get(SpladeVec, uid)
@@ -973,9 +892,7 @@ def backfill_scaffold_text(
                 row.scaffold_text = text_val
                 session.add(row)
                 updated += 1
-
         session.commit()
-
     log.info("splade.scaffold_backfill_done", extra={"updated": updated})
     return updated
 
@@ -1001,7 +918,6 @@ def retrieve_splade(
     hard_cap: int = _HARD_CAP,
 ) -> dict[str, float]:
     """Retrieve defs by SPLADE sparse dot-product.
-
     Selection strategy (no arbitrary K):
       1. Sparsity gate — most defs share zero active dims with the query,
          producing score=0.  These are never candidates.
@@ -1010,16 +926,13 @@ def retrieve_splade(
       3. Hard cap — safety valve.  If more than ``hard_cap`` defs pass
          the floor, keep the top ``hard_cap`` by score.  This prevents
          pathological broad queries from flooding the merge pool.
-
     Returns {def_uid: splade_score}.
     """
     encoder = _get_encoder()
     query_vecs = encoder.encode_queries([query_text])
     if not query_vecs or not query_vecs[0]:
         return {}
-
     q_vec = query_vecs[0]
-
     # Score all stored vectors (uses binary cache when available)
     all_vecs = load_all_vectors_fast(db)
     scores: dict[str, float] = {}
@@ -1027,10 +940,8 @@ def retrieve_splade(
         score = sparse_dot(q_vec, doc_vec)
         if score >= score_floor:
             scores[uid] = score
-
     # Hard cap (safety only — sparsity + floor do the real filtering)
     if len(scores) > hard_cap:
         sorted_items = sorted(scores.items(), key=lambda x: -x[1])[:hard_cap]
         return dict(sorted_items)
-
     return scores

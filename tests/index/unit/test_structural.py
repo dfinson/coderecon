@@ -31,16 +31,13 @@ def db(temp_dir: Path) -> Database:
     """Create a test database with schema."""
     from coderecon.index._internal.db import create_additional_indexes
     from coderecon.index.models import Worktree
-
     db_path = temp_dir / "test_structural.db"
     db = Database(db_path)
     db.create_all()
     create_additional_indexes(db.engine)
-
     with db.session() as session:
         session.add(Worktree(name="main", root_path=str(temp_dir), is_main=True))
         session.commit()
-
     return db
 
 @pytest.fixture
@@ -150,9 +147,7 @@ class Greeter:
 """
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
-
         result = _extract_file("test.py", str(temp_dir), unit_id=1)
-
         assert result.error is None
         assert len(result.defs) >= 3  # hello, Greeter, greet
         assert len(result.refs) > 0  # At least definition refs
@@ -165,12 +160,9 @@ from pathlib import Path
 """
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
-
         result = _extract_file("test.py", str(temp_dir), unit_id=1)
-
         assert result.error is None
         assert len(result.imports) >= 2  # os and Path
-
         # Check import structure
         import_names = [i["imported_name"] for i in result.imports]
         assert "os" in import_names
@@ -184,25 +176,20 @@ def foo():
 """
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
-
         result = _extract_file("test.py", str(temp_dir), unit_id=1)
-
         assert result.error is None
         # Should have binding for function definition
         assert len(result.binds) >= 1
     def test_extract_nonexistent_file(self, temp_dir: Path) -> None:
         """Should return error for nonexistent file."""
         result = _extract_file("nonexistent.py", str(temp_dir), unit_id=1)
-
         assert result.error is not None
         assert "not found" in result.error.lower()
     def test_extract_unsupported_extension(self, temp_dir: Path) -> None:
         """Should gracefully skip unsupported file types."""
         file_path = temp_dir / "test.unknown"
         file_path.write_text("content")
-
         result = _extract_file("test.unknown", str(temp_dir), unit_id=1)
-
         # Unsupported files are skipped (no error), but marked as no-grammar
         assert result.error is None
         assert result.skipped_no_grammar is True
@@ -211,9 +198,7 @@ def foo():
         content = "def foo(): pass"
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
-
         result = _extract_file("test.py", str(temp_dir), unit_id=1)
-
         assert result.content_hash is not None
         assert len(result.content_hash) == 64  # SHA256 hex
     def test_extract_dynamic_access(self, temp_dir: Path) -> None:
@@ -224,9 +209,7 @@ y = obj["key"]
 """
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
-
         result = _extract_file("test.py", str(temp_dir), unit_id=1)
-
         assert result.error is None
         # Should detect getattr and bracket access
         assert len(result.dynamic_sites) >= 2
@@ -236,7 +219,6 @@ class TestExtractionResult:
     def test_extraction_result_defaults(self) -> None:
         """ExtractionResult should have correct defaults."""
         result = ExtractionResult(file_path="test.py")
-
         assert result.file_path == "test.py"
         assert result.defs == []
         assert result.refs == []
@@ -250,7 +232,6 @@ class TestBatchResult:
     def test_batch_result_defaults(self) -> None:
         """BatchResult should have correct defaults."""
         result = BatchResult()
-
         assert result.files_processed == 0
         assert result.defs_extracted == 0
         assert result.refs_extracted == 0
@@ -275,7 +256,6 @@ def hello():
 """
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
-
         db.create_all()
         # Create a context first
         with db.session() as session:
@@ -287,9 +267,7 @@ def hello():
             session.add(ctx)
             session.commit()
             context_id = ctx.id
-
         result = indexer.index_files(["test.py"], context_id=context_id or 1, worktree_id=1)
-
         assert result.files_processed == 1
         assert result.defs_extracted >= 1  # hello function
         assert result.errors == []
@@ -299,7 +277,6 @@ def hello():
         """Should index multiple files."""
         (temp_dir / "a.py").write_text("def foo(): pass")
         (temp_dir / "b.py").write_text("def bar(): pass")
-
         db.create_all()
         with db.session() as session:
             ctx = Context(
@@ -310,9 +287,7 @@ def hello():
             session.add(ctx)
             session.commit()
             context_id = ctx.id
-
         result = indexer.index_files(["a.py", "b.py"], context_id=context_id or 1, worktree_id=1)
-
         assert result.files_processed == 2
         assert result.defs_extracted >= 2  # foo and bar
     def test_index_with_errors(
@@ -320,7 +295,6 @@ def hello():
     ) -> None:
         """Should handle files with errors gracefully."""
         (temp_dir / "good.py").write_text("def foo(): pass")
-
         db.create_all()
         with db.session() as session:
             ctx = Context(
@@ -331,9 +305,7 @@ def hello():
             session.add(ctx)
             session.commit()
             context_id = ctx.id
-
         result = indexer.index_files(["good.py", "nonexistent.py"], context_id=context_id or 1, worktree_id=1)
-
         assert result.files_processed == 2
         assert result.defs_extracted >= 1  # From good.py
         assert len(result.errors) >= 1  # From nonexistent.py
@@ -345,9 +317,7 @@ class TestRefTierAssignment:
         content = "def foo(): pass"
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
-
         result = _extract_file("test.py", str(temp_dir), unit_id=1)
-
         # Find the definition ref for foo
         def_refs = [r for r in result.refs if r["role"] == Role.DEFINITION.value]
         assert len(def_refs) >= 1
@@ -362,9 +332,7 @@ x = foo()
 """
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
-
         result = _extract_file("test.py", str(temp_dir), unit_id=1)
-
         # Find reference to foo (not the definition)
         usage_refs = [
             r for r in result.refs if r["token_text"] == "foo" and r["role"] == Role.REFERENCE.value
@@ -380,9 +348,7 @@ os.path.exists(".")
 """
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
-
         result = _extract_file("test.py", str(temp_dir), unit_id=1)
-
         # Find import ref
         import_refs = [r for r in result.refs if r["role"] == Role.IMPORT.value]
         assert len(import_refs) >= 1
@@ -401,9 +367,7 @@ namespace Test {
 """
         file_path = temp_dir / "test.cs"
         file_path.write_text(content)
-
         result = _extract_file("test.cs", str(temp_dir), unit_id=1)
-
         import_names = [i["imported_name"] for i in result.imports]
         assert "System" in import_names
         assert "Newtonsoft.Json" in import_names
@@ -419,9 +383,7 @@ namespace Test {
 """
         file_path = temp_dir / "test.cs"
         file_path.write_text(content)
-
         result = _extract_file("test.cs", str(temp_dir), unit_id=1)
-
         # The identifier 'MyAlias' should be STRONG (matched via import_uid_by_alias)
         alias_refs = [
             r
@@ -441,9 +403,7 @@ namespace Foo.Bar {
 """
         file_path = temp_dir / "test.cs"
         file_path.write_text(content)
-
         result = _extract_file("test.cs", str(temp_dir), unit_id=1)
-
         assert "Foo.Bar" in result.namespace_type_map
         assert "Baz" in result.namespace_type_map["Foo.Bar"]
         assert "IBaz" in result.namespace_type_map["Foo.Bar"]
@@ -460,9 +420,7 @@ namespace My.App.Tests {
 """
         file_path = temp_dir / "test.cs"
         file_path.write_text(content)
-
         result = _extract_file("test.cs", str(temp_dir), unit_id=1)
-
         assert "My.App.Tests" in result.namespace_type_map
         assert "MyTestClass" in result.namespace_type_map["My.App.Tests"]
         assert "HelperClass" in result.namespace_type_map["My.App.Tests"]
@@ -478,9 +436,7 @@ namespace My.App {
 """
         file_path = temp_dir / "test.cs"
         file_path.write_text(content)
-
         result = _extract_file("test.cs", str(temp_dir), unit_id=1)
-
         assert "My.App" in result.namespace_type_map
         assert "Foo" in result.namespace_type_map["My.App"]
     def test_python_wildcard_import_extracted(self, temp_dir: Path) -> None:
@@ -488,9 +444,7 @@ namespace My.App {
         content = "from os.path import *\n"
         file_path = temp_dir / "test.py"
         file_path.write_text(content)
-
         result = _extract_file("test.py", str(temp_dir), unit_id=1)
-
         star_imports = [i for i in result.imports if i["imported_name"] == "*"]
         assert len(star_imports) == 1
         assert star_imports[0]["import_kind"] == "python_from"
@@ -517,23 +471,18 @@ namespace App {
 }
 """
         )
-
         db.create_all()
         with db.session() as session:
             ctx = Context(name="test", language_family="dotnet", root_path=str(temp_dir))
             session.add(ctx)
             session.commit()
             context_id = ctx.id
-
         indexer = StructuralIndexer(db, temp_dir)
         indexer.index_files(["Resolver.cs", "Client.cs"], context_id=context_id or 1, worktree_id=1)
-
         # Before resolution: the ref to DefaultContractResolver in Client.cs is UNKNOWN
         with db.session() as session:
             from sqlmodel import select
-
             from coderecon.index.models import File
-
             client_file = session.exec(select(File).where(File.path == "Client.cs")).first()
             assert client_file is not None
             dcr_refs = session.exec(
@@ -545,13 +494,10 @@ namespace App {
             ).all()
             assert len(dcr_refs) >= 1
             assert all(r.ref_tier == RefTier.UNKNOWN.value for r in dcr_refs)
-
         # Run DB-backed resolution (Pass 1.5)
         from coderecon.index._internal.indexing.resolver import resolve_namespace_refs
-
         stats = resolve_namespace_refs(db, context_id)
         assert stats.refs_upgraded >= 1
-
         # After resolution: should be STRONG with target_def_uid linked
         with db.session() as session:
             dcr_refs_after = session.exec(
@@ -562,7 +508,6 @@ namespace App {
                 )
             ).all()
             assert all(r.ref_tier == RefTier.STRONG.value for r in dcr_refs_after)
-
             # target_def_uid must be set for rename to discover these refs
             resolver_def = session.exec(
                 select(DefFact).where(DefFact.name == "DefaultContractResolver")
@@ -583,27 +528,20 @@ namespace App {
 }
 """
         )
-
         db.create_all()
         with db.session() as session:
             ctx = Context(name="test", language_family="dotnet", root_path=str(temp_dir))
             session.add(ctx)
             session.commit()
             context_id = ctx.id
-
         indexer = StructuralIndexer(db, temp_dir)
         indexer.index_files(["Client.cs"], context_id=context_id or 1, worktree_id=1)
-
         from coderecon.index._internal.indexing.resolver import resolve_namespace_refs
-
         resolve_namespace_refs(db, context_id)
-
         # 'List' comes from System.Collections.Generic (external) — stays UNKNOWN
         with db.session() as session:
             from sqlmodel import select
-
             from coderecon.index.models import File
-
             client_file = session.exec(select(File).where(File.path == "Client.cs")).first()
             assert client_file is not None
             list_refs = session.exec(
@@ -633,23 +571,18 @@ x = helper()
 y = Utility()
 """
         )
-
         db.create_all()
         with db.session() as session:
             ctx = Context(name="test", language_family="python", root_path=str(temp_dir))
             session.add(ctx)
             session.commit()
             context_id = ctx.id
-
         indexer = StructuralIndexer(db, temp_dir)
         indexer.index_files(["utils.py", "main.py"], context_id=context_id or 1, worktree_id=1)
-
         # Before resolution: helper and Utility refs should be UNKNOWN
         with db.session() as session:
             from sqlmodel import select
-
             from coderecon.index.models import File
-
             main_file = session.exec(select(File).where(File.path == "main.py")).first()
             assert main_file is not None
             helper_refs = session.exec(
@@ -661,13 +594,10 @@ y = Utility()
             ).all()
             assert len(helper_refs) >= 1
             assert all(r.ref_tier == RefTier.UNKNOWN.value for r in helper_refs)
-
         # Run DB-backed resolution (Pass 1.5)
         from coderecon.index._internal.indexing.resolver import resolve_star_import_refs
-
         stats = resolve_star_import_refs(db, context_id)
         assert stats.refs_upgraded >= 1
-
         # After resolution: should be STRONG with target_def_uid linked
         with db.session() as session:
             helper_refs_after = session.exec(
@@ -678,14 +608,12 @@ y = Utility()
                 )
             ).all()
             assert all(r.ref_tier == RefTier.STRONG.value for r in helper_refs_after)
-
             # target_def_uid must be set for rename to discover these refs
             helper_def = session.exec(select(DefFact).where(DefFact.name == "helper")).first()
             assert helper_def is not None
             assert all(r.target_def_uid == helper_def.def_uid for r in helper_refs_after), (
                 "target_def_uid must link to DefFact for rename discovery"
             )
-
             utility_refs_after = session.exec(
                 select(RefFact).where(
                     RefFact.file_id == main_file.id,
@@ -694,7 +622,6 @@ y = Utility()
                 )
             ).all()
             assert all(r.ref_tier == RefTier.STRONG.value for r in utility_refs_after)
-
             utility_def = session.exec(select(DefFact).where(DefFact.name == "Utility")).first()
             assert utility_def is not None
             assert all(r.target_def_uid == utility_def.def_uid for r in utility_refs_after), (
@@ -708,27 +635,20 @@ y = Utility()
 x = exists("/tmp")
 """
         )
-
         db.create_all()
         with db.session() as session:
             ctx = Context(name="test", language_family="python", root_path=str(temp_dir))
             session.add(ctx)
             session.commit()
             context_id = ctx.id
-
         indexer = StructuralIndexer(db, temp_dir)
         indexer.index_files(["main.py"], context_id=context_id or 1, worktree_id=1)
-
         from coderecon.index._internal.indexing.resolver import resolve_star_import_refs
-
         resolve_star_import_refs(db, context_id)
-
         # 'exists' comes from os.path (external) — stays UNKNOWN
         with db.session() as session:
             from sqlmodel import select
-
             from coderecon.index.models import File
-
             main_file = session.exec(select(File).where(File.path == "main.py")).first()
             assert main_file is not None
             exists_refs = session.exec(
@@ -765,29 +685,23 @@ namespace App {
 }
 """
         )
-
         db.create_all()
         with db.session() as session:
             ctx = Context(name="test", language_family="dotnet", root_path=str(temp_dir))
             session.add(ctx)
             session.commit()
             context_id = ctx.id
-
         indexer = StructuralIndexer(db, temp_dir)
         # Critically: index in SEPARATE batches (simulates the 25-file batching)
         indexer.index_files(["A.cs"], context_id=context_id or 1, worktree_id=1)
         indexer.index_files(["B.cs"], context_id=context_id or 1, worktree_id=1)
         indexer.index_files(["Consumer.cs"], context_id=context_id or 1, worktree_id=1)
-
         from coderecon.index._internal.indexing.resolver import resolve_namespace_refs
-
         stats = resolve_namespace_refs(db, context_id)
         assert stats.refs_upgraded >= 1
         with db.session() as session:
             from sqlmodel import select
-
             from coderecon.index.models import File
-
             consumer_file = session.exec(select(File).where(File.path == "Consumer.cs")).first()
             assert consumer_file is not None
             for type_name in ("TypeA", "TypeB"):
@@ -811,20 +725,16 @@ namespace App {
 }
 """
         )
-
         db.create_all()
         with db.session() as session:
             ctx = Context(name="test", language_family="dotnet", root_path=str(temp_dir))
             session.add(ctx)
             session.commit()
             context_id = ctx.id
-
         indexer = StructuralIndexer(db, temp_dir)
         indexer.index_files(["test.cs"], context_id=context_id or 1, worktree_id=1)
-
         with db.session() as session:
             from sqlmodel import select
-
             defs = session.exec(select(DefFact)).all()
             baz_def = next((d for d in defs if d.name == "Baz"), None)
             ibaz_def = next((d for d in defs if d.name == "IBaz"), None)
@@ -850,23 +760,18 @@ namespace App {
 }
 """
         )
-
         db.create_all()
         with db.session() as session:
             ctx = Context(name="test", language_family="dotnet", root_path=str(temp_dir))
             session.add(ctx)
             session.commit()
             context_id = ctx.id
-
         indexer = StructuralIndexer(db, temp_dir)
         indexer.index_files(["JsonSerializer.cs", "JsonConvert.cs"], context_id=context_id or 1, worktree_id=1)
-
         # Before resolution: the ref should be UNKNOWN (no using directive)
         with db.session() as session:
             from sqlmodel import select
-
             from coderecon.index.models import File
-
             convert_file = session.exec(select(File).where(File.path == "JsonConvert.cs")).first()
             assert convert_file is not None
             js_refs = session.exec(
@@ -878,20 +783,16 @@ namespace App {
             ).all()
             assert len(js_refs) >= 1
             assert all(r.ref_tier == RefTier.UNKNOWN.value for r in js_refs)
-
         # namespace-using resolution should NOT match (no using directive)
         from coderecon.index._internal.indexing.resolver import (
             resolve_namespace_refs,
             resolve_same_namespace_refs,
         )
-
         ns_stats = resolve_namespace_refs(db, context_id)
         assert ns_stats.refs_upgraded == 0  # No using directive → no match
-
         # Same-namespace resolution SHOULD match
         same_stats = resolve_same_namespace_refs(db, context_id)
         assert same_stats.refs_upgraded >= 1
-
         # After resolution: STRONG with target_def_uid
         with db.session() as session:
             js_refs_after = session.exec(
@@ -902,7 +803,6 @@ namespace App {
                 )
             ).all()
             assert all(r.ref_tier == RefTier.STRONG.value for r in js_refs_after)
-
             serializer_def = session.exec(
                 select(DefFact).where(DefFact.name == "JsonSerializer")
             ).first()
@@ -928,23 +828,18 @@ namespace App {
 }
 """
         )
-
         db.create_all()
         with db.session() as session:
             ctx = Context(name="test", language_family="dotnet", root_path=str(temp_dir))
             session.add(ctx)
             session.commit()
             context_id = ctx.id
-
         indexer = StructuralIndexer(db, temp_dir)
         indexer.index_files(["JsonSerializer.cs", "RegexConverter.cs"], context_id=context_id or 1, worktree_id=1)
-
         # Before: UNKNOWN (no using directive)
         with db.session() as session:
             from sqlmodel import select
-
             from coderecon.index.models import File
-
             converter_file = session.exec(
                 select(File).where(File.path == "RegexConverter.cs")
             ).first()
@@ -958,12 +853,9 @@ namespace App {
             ).all()
             assert len(js_refs) >= 1
             assert all(r.ref_tier == RefTier.UNKNOWN.value for r in js_refs)
-
         from coderecon.index._internal.indexing.resolver import resolve_same_namespace_refs
-
         stats = resolve_same_namespace_refs(db, context_id)
         assert stats.refs_upgraded >= 1
-
         # After: STRONG with target_def_uid linked
         with db.session() as session:
             js_refs_after = session.exec(
@@ -974,7 +866,6 @@ namespace App {
                 )
             ).all()
             assert all(r.ref_tier == RefTier.STRONG.value for r in js_refs_after)
-
             serializer_def = session.exec(
                 select(DefFact).where(DefFact.name == "JsonSerializer")
             ).first()
@@ -1000,27 +891,20 @@ namespace App {
 }
 """
         )
-
         db.create_all()
         with db.session() as session:
             ctx = Context(name="test", language_family="dotnet", root_path=str(temp_dir))
             session.add(ctx)
             session.commit()
             context_id = ctx.id
-
         indexer = StructuralIndexer(db, temp_dir)
         indexer.index_files(["A.cs", "B.cs"], context_id=context_id or 1, worktree_id=1)
-
         from coderecon.index._internal.indexing.resolver import resolve_same_namespace_refs
-
         resolve_same_namespace_refs(db, context_id)
-
         # Foo in Namespace.A is NOT visible from Namespace.B
         with db.session() as session:
             from sqlmodel import select
-
             from coderecon.index.models import File
-
             b_file = session.exec(select(File).where(File.path == "B.cs")).first()
             assert b_file is not None
             foo_refs = session.exec(
@@ -1039,41 +923,32 @@ class TestExtractionResultUnifiedFields:
         """content_text should contain the file's UTF-8 content."""
         content = "def hello(): pass\n"
         (temp_dir / "test.py").write_text(content)
-
         result = _extract_file("test.py", str(temp_dir), unit_id=1)
-
         assert result.error is None
         assert result.content_text == content
     def test_content_text_populated_no_grammar(self, temp_dir: Path) -> None:
         """content_text should be populated even for files without a tree-sitter grammar."""
         content = "some plain text content"
         (temp_dir / "test.txt").write_text(content)
-
         result = _extract_file("test.txt", str(temp_dir), unit_id=1)
-
         assert result.skipped_no_grammar is True
         assert result.content_text == content
     def test_content_text_empty_for_binary(self, temp_dir: Path) -> None:
         """content_text should be empty string for non-UTF-8 binary files."""
         (temp_dir / "test.py").write_bytes(b"\x80\x81\x82\x83")
-
         result = _extract_file("test.py", str(temp_dir), unit_id=1)
-
         assert result.content_text == ""
         assert result.error is None
     def test_content_text_none_for_nonexistent(self, temp_dir: Path) -> None:
         """content_text should remain None when file does not exist."""
         result = _extract_file("nonexistent.py", str(temp_dir), unit_id=1)
-
         assert result.error is not None
         assert result.content_text is None
     def test_symbol_names_python(self, temp_dir: Path) -> None:
         """symbol_names should contain extracted symbol names from tree-sitter."""
         content = "def hello(): pass\ndef world(): pass\nclass Greeter: pass\n"
         (temp_dir / "test.py").write_text(content)
-
         result = _extract_file("test.py", str(temp_dir), unit_id=1)
-
         assert result.error is None
         assert "hello" in result.symbol_names
         assert "world" in result.symbol_names
@@ -1081,29 +956,23 @@ class TestExtractionResultUnifiedFields:
     def test_symbol_names_empty_no_grammar(self, temp_dir: Path) -> None:
         """symbol_names should be empty for files without a grammar."""
         (temp_dir / "test.unknown").write_text("content")
-
         result = _extract_file("test.unknown", str(temp_dir), unit_id=1)
-
         assert result.skipped_no_grammar is True
         assert result.symbol_names == []
     def test_symbol_names_empty_for_nonexistent(self, temp_dir: Path) -> None:
         """symbol_names should be empty for nonexistent files."""
         result = _extract_file("nonexistent.py", str(temp_dir), unit_id=1)
-
         assert result.symbol_names == []
     def test_defaults_content_text_none(self) -> None:
         """Default ExtractionResult should have content_text=None and empty symbol_names."""
         result = ExtractionResult(file_path="test.py")
-
         assert result.content_text is None
         assert result.symbol_names == []
     def test_content_text_matches_defs(self, temp_dir: Path) -> None:
         """symbol_names count should match defs count for simple files."""
         content = "def alpha(): pass\ndef beta(): pass\n"
         (temp_dir / "test.py").write_text(content)
-
         result = _extract_file("test.py", str(temp_dir), unit_id=1)
-
         # Each def produces a symbol name
         def_names = [d["name"] for d in result.defs]
         for name in def_names:
@@ -1116,9 +985,7 @@ class TestExtractFilesMethod:
         """extract_files should return a list of ExtractionResult."""
         (temp_dir / "a.py").write_text("def foo(): pass")
         (temp_dir / "b.py").write_text("def bar(): pass")
-
         results = indexer.extract_files(["a.py", "b.py"], context_id=1)
-
         assert len(results) == 2
         assert all(isinstance(r, ExtractionResult) for r in results)
     def test_extract_files_populates_content_text(
@@ -1127,9 +994,7 @@ class TestExtractFilesMethod:
         """extract_files results should have content_text populated."""
         content = "def foo(): pass\n"
         (temp_dir / "a.py").write_text(content)
-
         results = indexer.extract_files(["a.py"], context_id=1)
-
         assert len(results) == 1
         assert results[0].content_text == content
     def test_extract_files_populates_symbol_names(
@@ -1137,9 +1002,7 @@ class TestExtractFilesMethod:
     ) -> None:
         """extract_files results should have symbol_names populated."""
         (temp_dir / "a.py").write_text("def foo(): pass\nclass Bar: pass\n")
-
         results = indexer.extract_files(["a.py"], context_id=1)
-
         assert "foo" in results[0].symbol_names
         assert "Bar" in results[0].symbol_names
     def test_extract_files_handles_missing_files(
@@ -1147,9 +1010,7 @@ class TestExtractFilesMethod:
     ) -> None:
         """extract_files should handle missing files gracefully."""
         (temp_dir / "good.py").write_text("def foo(): pass")
-
         results = indexer.extract_files(["good.py", "missing.py"], context_id=1)
-
         assert len(results) == 2
         good = next(r for r in results if r.file_path == "good.py")
         missing = next(r for r in results if r.file_path == "missing.py")
@@ -1165,7 +1026,6 @@ class TestPrecomputedExtractions:
         """index_files(_extractions=...) should persist facts without re-extracting."""
         content = "def foo(): pass\ndef bar(): pass\n"
         (temp_dir / "a.py").write_text(content)
-
         with db.session() as session:
             ctx = Context(
                 name="test",
@@ -1175,25 +1035,20 @@ class TestPrecomputedExtractions:
             session.add(ctx)
             session.commit()
             context_id = ctx.id
-
         # Extract first
         extractions = indexer.extract_files(["a.py"], context_id=context_id or 1)
         assert len(extractions) == 1
         assert extractions[0].content_text == content
-
         # Index with pre-computed extractions
         result = indexer.index_files(["a.py"], context_id=context_id or 1, _extractions=extractions, worktree_id=1)
-
         assert result.files_processed == 1
         assert result.defs_extracted >= 2  # foo and bar
         assert result.errors == []
     def test_precomputed_produces_same_facts(self, db: Database, temp_dir: Path) -> None:
         """Pre-computed extractions should produce equivalent persisted facts."""
         from sqlmodel import select
-
         content = "def alpha(): pass\ndef beta(): pass\n"
         (temp_dir / "a.py").write_text(content)
-
         with db.session() as session:
             ctx = Context(
                 name="test",
@@ -1203,27 +1058,21 @@ class TestPrecomputedExtractions:
             session.add(ctx)
             session.commit()
             context_id = ctx.id
-
         indexer = StructuralIndexer(db, temp_dir)
-
         # Direct indexing (extracts internally)
         direct_result = indexer.index_files(["a.py"], context_id=context_id or 1, worktree_id=1)
-
         with db.session() as session:
             direct_def_count = len(list(session.exec(select(DefFact)).all()))
             direct_ref_count = len(list(session.exec(select(RefFact)).all()))
-
         # Re-index with pre-computed extractions (idempotent overwrite)
         extractions = indexer.extract_files(["a.py"], context_id=context_id or 1)
         precomputed_result = indexer.index_files(
             ["a.py"], context_id=context_id or 1, _extractions=extractions,
             worktree_id=1,
         )
-
         with db.session() as session:
             precomputed_def_count = len(list(session.exec(select(DefFact)).all()))
             precomputed_ref_count = len(list(session.exec(select(RefFact)).all()))
-
         assert direct_result.defs_extracted == precomputed_result.defs_extracted
         assert direct_result.refs_extracted == precomputed_result.refs_extracted
         assert direct_def_count == precomputed_def_count
@@ -1258,30 +1107,24 @@ class TestApplyWorktreeUidRemap:
         ex = _make_extraction()
         original_def_uid = ex.defs[0]["def_uid"]
         original_import_uid = ex.imports[0]["import_uid"]
-
         _apply_worktree_uid_remap(ex, worktree_id=1, is_main_worktree=True)
-
         assert ex.defs[0]["def_uid"] == original_def_uid
         assert ex.imports[0]["import_uid"] == original_import_uid
     def test_def_uid_is_remapped(self) -> None:
         """def_uid must be replaced by sha256(f'{wt_id}:{old_uid}')[:16]."""
         import hashlib
-
         old_uid = "aabbccdd11223344"
         ex = _make_extraction(def_uid=old_uid)
         _apply_worktree_uid_remap(ex, worktree_id=3, is_main_worktree=False)
-
         expected = hashlib.sha256(f"3:{old_uid}".encode()).hexdigest()[:16]
         assert ex.defs[0]["def_uid"] == expected
         assert ex.defs[0]["def_uid"] != old_uid
     def test_import_uid_is_remapped(self) -> None:
         """import_uid must also be remapped to prevent cross-worktree import PK collisions."""
         import hashlib
-
         old_uid = "eeff00112233aabb"
         ex = _make_extraction(import_uid=old_uid)
         _apply_worktree_uid_remap(ex, worktree_id=2, is_main_worktree=False)
-
         expected = hashlib.sha256(f"2:{old_uid}".encode()).hexdigest()[:16]
         assert ex.imports[0]["import_uid"] == expected
     def test_different_worktree_ids_produce_different_uids(self) -> None:
@@ -1289,10 +1132,8 @@ class TestApplyWorktreeUidRemap:
         old_uid = "aabbccdd11223344"
         ex1 = _make_extraction(def_uid=old_uid)
         ex2 = _make_extraction(def_uid=old_uid)
-
         _apply_worktree_uid_remap(ex1, worktree_id=1, is_main_worktree=False)
         _apply_worktree_uid_remap(ex2, worktree_id=2, is_main_worktree=False)
-
         assert ex1.defs[0]["def_uid"] != ex2.defs[0]["def_uid"]
         assert ex1.defs[0]["def_uid"] != old_uid
         assert ex2.defs[0]["def_uid"] != old_uid
@@ -1301,7 +1142,6 @@ class TestApplyWorktreeUidRemap:
         old_uid = "aabbccdd11223344"
         ex = _make_extraction(def_uid=old_uid)
         _apply_worktree_uid_remap(ex, worktree_id=1, is_main_worktree=False)
-
         new_uid = ex.defs[0]["def_uid"]
         assert ex.type_members[0]["parent_def_uid"] == new_uid
         assert ex.type_members[0]["member_def_uid"] == new_uid
@@ -1310,7 +1150,6 @@ class TestApplyWorktreeUidRemap:
         old_uid = "aabbccdd11223344"
         ex = _make_extraction(def_uid=old_uid)
         _apply_worktree_uid_remap(ex, worktree_id=1, is_main_worktree=False)
-
         new_uid = ex.defs[0]["def_uid"]
         assert ex.interface_impls[0]["implementor_def_uid"] == new_uid
         assert ex.interface_impls[0]["interface_def_uid"] == new_uid
@@ -1319,7 +1158,6 @@ class TestApplyWorktreeUidRemap:
         old_uid = "aabbccdd11223344"
         ex = _make_extraction(def_uid=old_uid)
         _apply_worktree_uid_remap(ex, worktree_id=1, is_main_worktree=False)
-
         new_uid = ex.defs[0]["def_uid"]
         # First bind has target_kind=def — must be remapped via def_uid_remap
         assert ex.binds[0]["target_uid"] == new_uid

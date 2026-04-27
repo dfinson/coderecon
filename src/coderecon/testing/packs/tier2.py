@@ -76,7 +76,6 @@ class KotlinGradlePack(RunnerPack):
         if (workspace_root / "settings.gradle.kts").exists():
             return 0.5
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         if (workspace_root / "src" / "test").exists():
@@ -118,19 +117,15 @@ class KotlinGradlePack(RunnerPack):
         return cmd
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
-
         reports_dir = output_path.parent / "build" / "test-results" / "test"
         if not reports_dir.exists():
             return ParsedTestSuite(name="kotlin", errors=1)
-
         all_tests: list[ParsedTestCase] = []
         total_duration = 0.0
-
         for xml_file in reports_dir.glob("TEST-*.xml"):
             suite = parse_junit_xml(xml_file.read_text())
             all_tests.extend(suite.tests)
             total_duration += suite.duration_seconds
-
         return ParsedTestSuite(
             name="kotlin",
             tests=all_tests,
@@ -168,7 +163,6 @@ class SwiftTestPack(RunnerPack):
         if (workspace_root / "Package.swift").exists():
             return 1.0
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         if (workspace_root / "Package.swift").exists():
@@ -201,7 +195,6 @@ class SwiftTestPack(RunnerPack):
         lines = stdout.split("\n")
         passed = 0
         failed = 0
-
         for line in lines:
             if "Test Suite" in line and "passed" in line:
                 # e.g., "Test Suite 'All tests' passed at ..."
@@ -212,7 +205,6 @@ class SwiftTestPack(RunnerPack):
                     passed += 1
                 elif "failed" in line:
                     failed += 1
-
         return ParsedTestSuite(
             name="swift test",
             total=passed + failed,
@@ -249,7 +241,6 @@ class SbtTestPack(RunnerPack):
         if (workspace_root / "project" / "build.properties").exists():
             return 0.8
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         if (workspace_root / "build.sbt").exists():
@@ -281,19 +272,15 @@ class SbtTestPack(RunnerPack):
         return cmd
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
-
         reports_dir = output_path.parent / "target" / "test-reports"
         if not reports_dir.exists():
             return ParsedTestSuite(name="sbt", errors=1)
-
         all_tests: list[ParsedTestCase] = []
         total_duration = 0.0
-
         for xml_file in reports_dir.glob("*.xml"):
             suite = parse_junit_xml(xml_file.read_text())
             all_tests.extend(suite.tests)
             total_duration += suite.duration_seconds
-
         return ParsedTestSuite(
             name="sbt",
             tests=all_tests,
@@ -337,7 +324,6 @@ class DartTestPack(RunnerPack):
             except OSError:
                 return 0.8
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         for path in workspace_root.glob("test/**/*_test.dart"):
@@ -373,7 +359,6 @@ class DartTestPack(RunnerPack):
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         # Parse dart test JSON output (NDJSON format)
         tests: dict[int, ParsedTestCase] = {}
-
         for line in stdout.strip().split("\n"):
             if not line.strip():
                 continue
@@ -382,9 +367,7 @@ class DartTestPack(RunnerPack):
             except json.JSONDecodeError:
                 log.debug("dart_output_parse_failed", exc_info=True)
                 continue
-
             event_type = event.get("type")
-
             if event_type == "testStart":
                 test = event.get("test", {})
                 test_id = test.get("id")
@@ -410,7 +393,6 @@ class DartTestPack(RunnerPack):
                         status = "skipped"
                     tests[test_id].status = status
                     tests[test_id].duration_seconds = event.get("time", 0) / MS_PER_SEC
-
         test_list = list(tests.values())
         return ParsedTestSuite(
             name="dart test",
@@ -448,7 +430,6 @@ class FlutterTestPack(RunnerPack):
             except OSError:
                 log.debug("flutter_config_read_failed", exc_info=True)
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         for path in workspace_root.glob("test/**/*_test.dart"):
@@ -516,7 +497,6 @@ class BatsPack(RunnerPack):
         if list(workspace_root.glob("**/*.bats")):
             return 0.7
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         for path in workspace_root.glob("**/*.bats"):
@@ -550,13 +530,11 @@ class BatsPack(RunnerPack):
         return cmd + [">", str(output_path)]
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:
         from coderecon.testing.parsers import parse_junit_xml, parse_tap
-
         # Try JUnit first (if formatter was used)
         if output_path.exists():
             content = output_path.read_text()
             if content.strip().startswith("<"):
                 return parse_junit_xml(content)
-
         # Fall back to TAP
         return parse_tap(stdout)
 
@@ -587,7 +565,6 @@ class PesterPack(RunnerPack):
         if list(workspace_root.glob("**/*.Tests.ps1")):
             return 1.0
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         for path in workspace_root.glob("**/*.Tests.ps1"):
@@ -627,11 +604,9 @@ $config.TestResult.OutputFormat = 'JUnitXml'
         if tags:
             pester_config += f"$config.Filter.Tag = @({', '.join(repr(t) for t in tags)})\n"
         pester_config += "Invoke-Pester -Configuration $config"
-
         return ["pwsh", "-NoProfile", "-Command", pester_config]
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
-
         if output_path.exists():
             return parse_junit_xml(output_path.read_text())
         return ParsedTestSuite(name="pester", errors=1)
@@ -666,7 +641,6 @@ class BustedPack(RunnerPack):
         if list(workspace_root.glob("**/*_spec.lua")):
             return 0.7
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         for path in workspace_root.glob("**/*_spec.lua"):
@@ -701,7 +675,6 @@ class BustedPack(RunnerPack):
         return cmd
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
-
         if output_path.exists():
             return parse_junit_xml(output_path.read_text())
         return ParsedTestSuite(name="busted", errors=1)
@@ -740,7 +713,6 @@ class MixTestPack(RunnerPack):
                 log.debug("elixir_config_read_failed", exc_info=True)
             return 0.9
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         test_dir = workspace_root / "test"
@@ -838,7 +810,6 @@ class CabalTestPack(RunnerPack):
                     log.debug("haskell_config_read_failed", exc_info=True)
             return 0.5  # Cabal file exists but no test-suite stanza
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         # Project-level target for cabal test
         return [
@@ -863,7 +834,6 @@ class CabalTestPack(RunnerPack):
         return ["cabal", "test", "--test-show-details=streaming"]
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         import re
-
         suite = ParsedTestSuite(name="cabal_test")
         # Cabal test output formats:
         # - "Test Cases: 10  Tried: 10  Errors: 0  Failures: 2"
@@ -925,7 +895,6 @@ class JuliaPkgTestPack(RunnerPack):
                 return 1.0
             return 0.5
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         # Project-level target
         return [
@@ -950,7 +919,6 @@ class JuliaPkgTestPack(RunnerPack):
         return ["julia", "--project=.", "-e", "using Pkg; Pkg.test()"]
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         import re
-
         suite = ParsedTestSuite(name="pkg_test")
         # Julia Test Summary format:
         # "Test Summary: | Pass  Fail  Total"
@@ -1018,7 +986,6 @@ class DuneTestPack(RunnerPack):
                     log.debug("ocaml_config_read_failed", exc_info=True)
             return 0.5
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         # Project-level target for dune test
         return [
@@ -1043,7 +1010,6 @@ class DuneTestPack(RunnerPack):
         return ["dune", "test"]
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         import re
-
         suite = ParsedTestSuite(name="dune_test")
         # Dune outputs "PASS" or "FAIL" as whole words in test output.
         # Use word-boundary regex to avoid matching substrings like "passed", "password".

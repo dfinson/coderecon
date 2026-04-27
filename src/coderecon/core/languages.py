@@ -36,13 +36,11 @@ if TYPE_CHECKING:
 
 def _get_language_family() -> type[LanguageFamily]:
     from coderecon.index.models import LanguageFamily
-
     return LanguageFamily
 
 @dataclass(frozen=True, slots=True)
 class Language:
     """Canonical definition for a language name.
-
     Attributes:
         name: Unique identifier (lowercase, e.g., "python", "javascript")
         extensions: File extensions including dot (e.g., ".py", ".js")
@@ -54,7 +52,6 @@ class Language:
         ambient: If True, index files even without project markers
         priority: Higher = preferred when extension is ambiguous (default 50)
     """
-
     name: str
     extensions: frozenset[str]
     filenames: frozenset[str] = field(default_factory=frozenset)
@@ -837,7 +834,6 @@ def exportable_kinds_for_language(language_name: str) -> frozenset[str]:
 
 def is_name_exported(name: str, language_name: str) -> bool:
     """Check if a symbol name is exported according to language conventions.
-
     Per-language rules:
     - Python: names starting with ``_`` are private
     - Go: names starting with a lowercase letter are unexported
@@ -884,7 +880,6 @@ variables, fields).  Used as an exclusion filter in scaffolds."""
 
 def _build_extension_multimap() -> dict[str, tuple[str, ...]]:
     """Build extension -> families mapping, sorted by priority (highest first).
-
     Extensions that appear in multiple families (like .m, .v, .h) will have
     all families listed, with highest-priority first.
     """
@@ -895,7 +890,6 @@ def _build_extension_multimap() -> dict[str, tuple[str, ...]]:
             if key not in ext_to_families:
                 ext_to_families[key] = []
             ext_to_families[key].append((lang.priority, lang.name))
-
     # Sort by priority descending, return just families
     result: dict[str, tuple[str, ...]] = {}
     for ext, families in ext_to_families.items():
@@ -953,13 +947,10 @@ AMBIGUOUS_EXTENSIONS: dict[str, tuple[str, ...]] = {
 
 def get_families_for_extension(ext: str) -> tuple[str, ...]:
     """Get all language families that use this extension, ordered by priority.
-
     For ambiguous extensions like .m (objc, matlab) or .v (verilog, vlang),
     returns all matching families. Caller should use context to pick the right one.
-
     Args:
         ext: File extension including dot (e.g., ".py", ".m")
-
     Returns:
         Tuple of name names, highest priority first. Empty if unknown.
     """
@@ -971,42 +962,34 @@ def is_ambiguous_extension(ext: str) -> bool:
 
 def detect_language_family(path: str | Path) -> str | None:
     """Detect the primary language name for a file path.
-
     Detection order:
     1. Exact filename match (e.g., "Makefile", "Dockerfile")
     2. Compound suffix match (e.g., ".d.ts")
     3. Simple suffix match (e.g., ".py")
-
     For ambiguous extensions (e.g., .v, .m), returns the highest-priority name.
     Use get_families_for_extension() if you need all candidates, or use
     context-aware detection in the scanner layer.
-
     Args:
         path: File path (string or Path)
-
     Returns:
         Family name or None if unknown.
     """
     path_str = str(path) if isinstance(path, Path) else path
     basename = os.path.basename(path_str).lower()
-
     # 1. Exact filename match
     if name := FILENAME_TO_NAME.get(basename):
         return name
-
     # 2. Compound suffix check (only when multiple dots in basename)
     if basename.count(".") >= 2:
         for compound, lang in _COMPOUND_SUFFIXES.items():
             if basename.endswith(compound):
                 return lang
-
     # 3. Simple suffix match (returns highest priority name)
     _, ext = os.path.splitext(path_str)
     return EXTENSION_TO_NAME.get(ext.lower()) if ext else None
 
 def detect_language_family_enum(path: str | Path) -> LanguageFamily | None:
     """Detect language name and return as LanguageFamily enum.
-
     Returns None if:
     - File type is unknown
     - Family string doesn't match any LanguageFamily value
@@ -1025,27 +1008,22 @@ def detect_language_family_enum(path: str | Path) -> LanguageFamily | None:
 
 def _generate_include_globs(lang: Language) -> tuple[str, ...]:
     """Generate include globs from BOTH extensions AND filenames.
-
     This ensures all declared extensions and filenames are covered by globs.
     """
     globs: list[str] = []
-
     # Add extension-based globs
     for ext in sorted(lang.extensions):
         globs.append(f"**/*{ext}")
-
     # Add filename-based globs (exact filename matches at any depth)
     for name in sorted(lang.filenames):
         globs.append(f"**/{name}")
         # Also match common variants (e.g., Dockerfile.dev, Dockerfile.prod)
         if name in ("dockerfile",):
             globs.append(f"**/{name}.*")
-
     return tuple(globs)
 
 def get_include_globs(name: str) -> tuple[str, ...]:
     """Get include globs for a language name.
-
     Globs cover both extensions and special filenames.
     """
     if name not in LANGUAGES_BY_NAME:
@@ -1058,7 +1036,6 @@ def get_include_globs(name: str) -> tuple[str, ...]:
 
 def get_markers(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """Get (workspace_markers, package_markers) for a name.
-
     All markers are EXACT filenames (lowercase).
     """
     if (lang := LANGUAGES_BY_NAME.get(name)) is None:
@@ -1067,7 +1044,6 @@ def get_markers(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
 
 def build_marker_definitions() -> dict[str, dict[str, tuple[str, ...]]]:
     """Build {name: {"workspace": (...), "package": (...)}} for scanner.
-
     All marker strings are exact lowercase filenames.
     """
     result: dict[str, dict[str, tuple[str, ...]]] = {}
@@ -1081,7 +1057,6 @@ def build_marker_definitions() -> dict[str, dict[str, tuple[str, ...]]]:
 
 def build_include_specs() -> dict[str, tuple[str, ...]]:
     """Build {name: globs} for scanner.
-
     Globs cover both extensions and filenames.
     """
     result: dict[str, tuple[str, ...]] = {}
@@ -1101,7 +1076,6 @@ def get_test_patterns(name: str) -> tuple[str, ...]:
 
 def is_test_file(path: str | Path) -> bool:
     """Check if a file path matches any known test file pattern.
-
     Uses the canonical ``test_patterns`` defined on each ``Language`` in
     ``ALL_LANGUAGES``.  Patterns are ``fnmatch``-style globs matched
     against the filename (e.g. ``test_*.py``, ``*_test.go``).
@@ -1109,10 +1083,8 @@ def is_test_file(path: str | Path) -> bool:
     full path string via ``fnmatch``.  Note that ``fnmatch`` requires the
     pattern to match the *entire* string, so a bare prefix like ``tests/``
     will **not** match; use ``tests/*`` or ``tests/*.py`` instead.
-
     Args:
         path: File path (string or Path object).
-
     Returns:
         True if the file matches any test pattern for any language.
     """
@@ -1122,7 +1094,6 @@ def is_test_file(path: str | Path) -> bool:
     # Normalize to POSIX-style separators so directory-style patterns
     # like "spec/**/*.cr" reliably match on Windows as well.
     path_str_posix = path_str.replace(os.sep, "/")
-
     for lang in ALL_LANGUAGES:
         for pattern in lang.test_patterns:
             if "/" in pattern:
@@ -1152,36 +1123,24 @@ _SRC_TEST_DIR_PAIRS: tuple[tuple[str, str], ...] = (
 
 def find_test_pairs(source_path: str) -> list[str]:
     """Return plausible test file paths for a source file.
-
     Uses language-specific naming conventions to derive candidate test
     paths.  The function is *pure* — it does NOT check the filesystem.
     Callers should filter the results to paths that actually exist.
-
     Convention rules (applied per language):
-
     Python (``test_*.py`` / ``*_test.py``)::
-
         src/coderecon/foo/bar.py  →  tests/foo/test_bar.py
                                      tests/foo/bar_test.py
-
     JavaScript / TypeScript (``*.test.{js,ts,tsx}`` / ``*.spec.{…}``)::
-
         src/components/Button.tsx →  src/components/Button.test.tsx
                                      src/components/__tests__/Button.tsx
                                      tests/components/Button.test.tsx
-
     Go (``*_test.go`` — same directory by convention)::
-
         pkg/server/handler.go    →  pkg/server/handler_test.go
-
     Ruby (``*_spec.rb`` / ``*_test.rb``)::
-
         lib/models/user.rb       →  spec/models/user_spec.rb
                                      test/models/user_test.rb
-
     Args:
         source_path: Relative POSIX-style source file path.
-
     Returns:
         List of candidate test paths (may be empty if language unknown
         or the file is already a test file).  Paths are relative,
@@ -1189,18 +1148,14 @@ def find_test_pairs(source_path: str) -> list[str]:
     """
     if is_test_file(source_path):
         return []
-
     lang = detect_language_family(source_path)
     if not lang:
         return []
-
     p = PurePosixPath(source_path)
     stem = p.stem  # "bar" from "bar.py"
     ext = p.suffix  # ".py"
     parent = str(p.parent)  # "src/coderecon/foo"
-
     candidates: list[str] = []
-
     if lang == "python":
         _add_python_test_pairs(candidates, parent, stem, ext)
     elif lang in ("javascript", "typescript"):
@@ -1222,7 +1177,6 @@ def find_test_pairs(source_path: str) -> list[str]:
     else:
         # Generic fallback: test_<stem><ext> and <stem>_test<ext>
         _add_generic_test_pairs(candidates, parent, stem, ext)
-
     # Deduplicate while preserving order
     seen: set[str] = set()
     unique: list[str] = []
@@ -1234,7 +1188,6 @@ def find_test_pairs(source_path: str) -> list[str]:
 
 def _swap_src_dir(parent: str, test_dir_name: str) -> str | None:
     """Swap a source directory prefix with a test directory prefix.
-
     ``src/coderecon/foo`` → ``tests/foo`` (strips the first component
     after ``src/``).  Returns *None* if the parent doesn't start with
     a known source directory.
@@ -1386,7 +1339,6 @@ def _add_generic_test_pairs(
 
 def get_grammar_name(name: str) -> str | None:
     """Get tree-sitter grammar name for a name.
-
     Returns None if no tree-sitter grammar is available for the language.
     """
     return LANGUAGES_BY_NAME[name].grammar if name in LANGUAGES_BY_NAME else None
@@ -1409,7 +1361,6 @@ def get_all_indexable_filenames() -> set[str]:
 
 def validate_language_families() -> list[str]:
     """Validate that all name strings match LanguageFamily enum values.
-
     Returns list of error messages (empty if valid).
     Call this in a unit test to catch definition/enum mismatches.
     """
@@ -1418,7 +1369,6 @@ def validate_language_families() -> list[str]:
         LanguageFamily = _get_language_family()
         enum_values = {e.value for e in LanguageFamily}
         defined_families = set(LANGUAGES_BY_NAME.keys())
-
         missing_in_enum = defined_families - enum_values
         if missing_in_enum:
             errors.append(
@@ -1427,12 +1377,10 @@ def validate_language_families() -> list[str]:
             )
     except (ImportError, AttributeError) as e:
         errors.append(f"Could not import LanguageFamily: {e}")
-
     return errors
 
 def validate_markers_are_exact_filenames() -> list[str]:
     """Validate that all markers are exact filenames (no wildcards/globs).
-
     Returns list of error messages (empty if valid).
     """
     errors: list[str] = []

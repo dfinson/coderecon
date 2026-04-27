@@ -33,30 +33,24 @@ async def _harvest_term_match(
     parsed: ParsedTask,
 ) -> dict[str, HarvestCandidate]:
     """Harvester B: DefFact term matching via SQL LIKE + Tantivy BM25.
-
     Two-phase approach:
       Phase 1 — SQL LIKE on def names/qualified_names/docstrings (existing).
       Phase 2 — Tantivy BM25 file scoring, expand top files to defs.
-
     Returns all matching defs with raw match counts.
     No IDF pre-computation — the ranker learns its own weighting.
     """
     from coderecon.index._internal.indexing.graph import FactQueries
-
     coordinator = app_ctx.coordinator
     candidates: dict[str, HarvestCandidate] = {}
-
     all_terms = parsed.primary_terms + parsed.secondary_terms
     if not all_terms:
         return candidates
-
     # Phase 1: SQL LIKE on def names (existing logic)
     with coordinator.db.session() as session:
         fq = FactQueries(session)
         for term in all_terms:
             matching_defs = fq.find_defs_matching_term(term)
             n_matches = len(matching_defs)
-
             for d in matching_defs:
                 uid = d.def_uid
                 if uid not in candidates:
@@ -83,7 +77,6 @@ async def _harvest_term_match(
                         score=1.0,
                     )
                 )
-
     # Phase 2: Tantivy BM25 file scoring — full-text search on file
     # content+symbols+path.  Expand top-scored files to their defs.
     query_text = parsed.query_text or parsed.raw
@@ -126,7 +119,6 @@ async def _harvest_term_match(
                         candidates[uid].bm25_file_score = max(
                             candidates[uid].bm25_file_score, score,
                         )
-
     log.debug(
         "recon.harvest.term_match",
         count=len(candidates),
@@ -145,7 +137,6 @@ async def _harvest_explicit(
     auto_seeds: list[str] | None = None,
 ) -> dict[str, HarvestCandidate]:
     """Harvester D: Explicit mentions (paths + symbols from task text).
-
     Resolves file paths to defs and symbol names to DefFacts.
     Agent-provided seeds bypass the dual-signal gate (trusted input).
     Auto-seeds (inferred from top files) get lower confidence
@@ -153,10 +144,8 @@ async def _harvest_explicit(
     but don't inflate file-level explicit scores.
     """
     from coderecon.index._internal.indexing.graph import FactQueries
-
     coordinator = app_ctx.coordinator
     candidates: dict[str, HarvestCandidate] = {}
-
     # D0: Auto-seed names (inferred, lower confidence)
     #     from_explicit=False — they won't get the explicit RRF boost.
     #     Still enter merged pool so graph harvester can expand from them.
@@ -178,7 +167,6 @@ async def _harvest_explicit(
                         )
                     ],
                 )
-
     # D1: Explicit seed names provided by the agent
     if explicit_seeds:
         for name in explicit_seeds:
@@ -197,7 +185,6 @@ async def _harvest_explicit(
                         )
                     ],
                 )
-
     # D2: File paths mentioned in the task text
     if parsed.explicit_paths:
         with coordinator.db.session() as session:
@@ -226,7 +213,6 @@ async def _harvest_explicit(
                         candidates[d.def_uid].from_explicit = True
                         if candidates[d.def_uid].symbol_source is None:
                             candidates[d.def_uid].symbol_source = "path_mention"
-
     # D3: Index-validated symbol extraction from task text.
     #
     # Prior version set from_explicit=True on raw regex matches, which
@@ -259,7 +245,6 @@ async def _harvest_explicit(
                 d3_count += 1
         if d3_count:
             log.debug("recon.harvest.explicit.d3", validated=d3_count)
-
     log.debug(
         "recon.harvest.explicit",
         count=len(candidates),
@@ -284,25 +269,19 @@ async def _harvest_graph(
     parsed: ParsedTask,
 ) -> dict[str, HarvestCandidate]:
     """Harvester E: Walk 1-hop graph edges from top merged candidates.
-
     Takes seeds (candidates found by ≥2 retrievers or explicitly mentioned),
     discovers structurally adjacent defs via callees, callers, and siblings.
-
     Emits raw edge type and seed rank per candidate. No quality scoring,
     no budget cap — the ranker learns relevance from data.
     """
     from coderecon.index._internal.indexing.graph import FactQueries
-
     coordinator = app_ctx.coordinator
     candidates: dict[str, HarvestCandidate] = {}
-
     if not merged:
         return candidates
-
     seed_uids = _select_graph_seeds(merged)
     if not seed_uids:
         return candidates
-
     # Resolve DefFacts for seeds — batch lookup for missing ones
     seeds_with_facts: list[tuple[str, HarvestCandidate]] = []
     missing_uids = [uid for uid in seed_uids if merged[uid].def_fact is None]
@@ -314,25 +293,19 @@ async def _harvest_graph(
         cand = merged[uid]
         if cand.def_fact is not None:
             seeds_with_facts.append((uid, cand))
-
     if not seeds_with_facts:
         return candidates
-
     # Collect all edges: (def_uid, def_fact, edge_type, seed_rank, detail, ref_tier)
     EdgeInfo = tuple[str, object, str, int, str, str | None]
     raw_edges: list[EdgeInfo] = []
-
     with coordinator.db.session() as session:
         fq = FactQueries(session)
-
         # Pre-resolve all seed file IDs to File objects in one batch
         seed_file_ids = list({sc.def_fact.file_id for _, sc in seeds_with_facts if sc.def_fact})
         files_by_id = fq.batch_get_files(seed_file_ids)
-
         for seed_idx, (seed_uid, seed_cand) in enumerate(seeds_with_facts, 1):
             seed_def = seed_cand.def_fact
             assert seed_def is not None
-
             # (a) Callees
             callees = fq.list_callees_in_scope(
                 seed_def.file_id,
@@ -346,7 +319,6 @@ async def _harvest_graph(
                     callee.def_uid, callee, "callee", seed_idx,
                     f"callee of {seed_def.name}", None,
                 ))
-
             # (b) Callers — track ref_tier for quality signal
             refs = fq.list_refs_by_def_uid(seed_uid)
             caller_file_ids: set[int] = set()
@@ -368,7 +340,6 @@ async def _harvest_graph(
                             ref.ref_tier,
                         ))
                         break
-
             # (c) Same-file siblings
             frec = files_by_id.get(seed_def.file_id)
             if frec is not None and frec.id is not None:
@@ -382,7 +353,6 @@ async def _harvest_graph(
                         sd.def_uid, sd, "sibling", seed_idx,
                         f"sibling of {seed_def.name} in {frec.path}", None,
                     ))
-
             # (d) Type hierarchy — co-implementors of same interface
             if seed_def.kind in TYPE_KINDS:
                 co_impl_uids = fq.list_co_implementors(seed_uid)
@@ -394,7 +364,6 @@ async def _harvest_graph(
                             f"co-implements interface with {seed_def.name}",
                             None,
                         ))
-
             # (e) DocCrossRef — defs mentioned in this def's docstring
             doc_xrefs = fq.list_doc_xrefs_from(seed_uid)
             for xref in doc_xrefs:
@@ -404,14 +373,12 @@ async def _harvest_graph(
                         xref.target_def_uid, target_def, "doc_xref", seed_idx,
                         f"referenced in docstring of {seed_def.name}", None,
                     ))
-
     # Deduplicate: per uid, keep lowest seed_rank (closest to top seed)
     best_edges: dict[str, EdgeInfo] = {}
     for edge in raw_edges:
         uid = edge[0]
         if uid not in best_edges or edge[3] < best_edges[uid][3]:
             best_edges[uid] = edge
-
     # Track best ref_tier per uid across all caller edges
     _TIER_ORDER = {"proven": 0, "strong": 1, "anchored": 2, "unknown": 3}
     best_ref_tier: dict[str, str | None] = {}
@@ -421,10 +388,8 @@ async def _harvest_graph(
             prev = best_ref_tier.get(uid)
             if prev is None or _TIER_ORDER.get(rtier, 99) < _TIER_ORDER.get(prev, 99):
                 best_ref_tier[uid] = rtier
-
     for uid, (_, def_fact, edge_type, seed_rank, detail, _ref_tier) in best_edges.items():
         caller_tier = best_ref_tier.get(uid)
-
         if uid in merged:
             existing = merged[uid]
             existing.from_graph = True
@@ -457,7 +422,6 @@ async def _harvest_graph(
             graph_caller_max_tier=caller_tier,
             evidence=[EvidenceRecord(category="graph", detail=detail, score=1.0)],
         )
-
     log.debug(
         "recon.harvest.graph",
         count=len(candidates),
@@ -475,45 +439,35 @@ async def _harvest_imports(
     parsed: ParsedTask,
 ) -> dict[str, HarvestCandidate]:
     """Harvester F: Import-chain discovery from top merged candidates.
-
     Traces *resolved* import edges in both directions from seed files:
-
     (a) Forward deps  — files that the seed file imports
     (b) Reverse deps  — files whose ``resolved_path`` points at the seed
     (c) ``__init__.py`` barrels in each seed's package directory
     (d) Test file pattern matching (``src/X.py`` → ``tests/test_X.py``)
-
     These candidates capture the "structural neighbourhood" that
     term-match cannot reach — configuration files, re-export
     barrels, and cross-cut infrastructure modules.
-
     Runs AFTER graph harvester (E) so that callee / caller edges are already
     covered; this harvester fills the remaining import-only gaps.
     """
     from coderecon.index._internal.indexing.graph import FactQueries
     from coderecon.index.models import ImportFact
-
     coordinator = app_ctx.coordinator
     candidates: dict[str, HarvestCandidate] = {}
-
     if not merged:
         return candidates
-
     # Select seeds: top candidates by score (reuse graph-seed logic)
     seed_uids = _select_graph_seeds(merged)
     if not seed_uids:
         return candidates
-
     with coordinator.db.session() as session:
         fq = FactQueries(session)
-
         # Resolve seed file paths — batch lookup for missing defs, then batch file resolution
         missing_uids = [uid for uid in seed_uids if merged[uid].def_fact is None]
         if missing_uids:
             defs_map = coordinator.batch_get_defs(missing_uids)
             for uid, d in defs_map.items():
                 merged[uid].def_fact = d
-
         seed_file_ids_list: list[int] = []
         for uid in seed_uids:
             cand = merged[uid]
@@ -521,17 +475,13 @@ async def _harvest_imports(
                 fid = cand.def_fact.file_id
                 if fid not in seed_file_ids_list:
                     seed_file_ids_list.append(fid)
-
         files_by_id = fq.batch_get_files(seed_file_ids_list)
         seed_file_paths: dict[int, str] = {fid: f.path for fid, f in files_by_id.items()}
         seed_file_ids: set[int] = set(seed_file_paths.keys())
-
         if not seed_file_ids:
             return candidates
-
         # Collect unique seed file paths for reverse lookup
         seed_paths_set = set(seed_file_paths.values())
-
         # (a) Forward deps: files imported by seed files
         # Collect all resolved import paths across all seeds, then batch lookup
         all_import_paths: set[str] = set()
@@ -542,12 +492,10 @@ async def _harvest_imports(
             for imp in imports:
                 if imp.resolved_path:
                     all_import_paths.add(imp.resolved_path)
-
         if all_import_paths:
             import_files_map = fq.batch_get_files_by_paths(list(all_import_paths))
         else:
             import_files_map = {}
-
         seen_import_fids: set[int] = set()
         for fid in seed_file_ids:
             for imp in imports_by_fid.get(fid, []):
@@ -569,11 +517,9 @@ async def _harvest_imports(
                     score=1.0,
                     import_direction="forward",
                 )
-
         # (b) Reverse deps: files that import seed files
         if seed_paths_set:
             from sqlmodel import col, select
-
             reverse_stmt = (
                 select(ImportFact.file_id)
                 .where(col(ImportFact.resolved_path).in_(list(seed_paths_set)))
@@ -595,14 +541,12 @@ async def _harvest_imports(
                         score=1.0,
                         import_direction="reverse",
                     )
-
         # (c) __init__.py barrels + conftest.py in seed directories
         # Collect all candidate barrel/conftest paths, then batch lookup
         barrel_paths: list[str] = []
         seen_dirs: set[str] = set()
         for seed_path in seed_paths_set:
             import os
-
             dir_path = os.path.dirname(seed_path)
             if not dir_path or dir_path in seen_dirs:
                 continue
@@ -611,7 +555,6 @@ async def _harvest_imports(
                 barrel_path = f"{dir_path}/{special_name}"
                 if barrel_path not in seed_paths_set:
                     barrel_paths.append(barrel_path)
-
         # (d) Test file pattern matching — collect all candidate paths
         test_lookup_paths: list[str] = []
         test_path_to_seed: dict[str, str] = {}
@@ -620,14 +563,12 @@ async def _harvest_imports(
             for tp in test_paths:
                 test_lookup_paths.append(tp)
                 test_path_to_seed[tp] = seed_path
-
         # Single batch lookup for all barrel + test paths
         all_lookup_paths = barrel_paths + test_lookup_paths
         if all_lookup_paths:
             lookup_files = fq.batch_get_files_by_paths(all_lookup_paths)
         else:
             lookup_files = {}
-
         # Process barrel files
         for bp in barrel_paths:
             barrel_file = lookup_files.get(bp)
@@ -644,7 +585,6 @@ async def _harvest_imports(
                     score=1.0,
                     import_direction="barrel",
                 )
-
         # Process test files
         for tp in test_lookup_paths:
             tf = lookup_files.get(tp)
@@ -659,7 +599,6 @@ async def _harvest_imports(
                     score=1.0,
                     import_direction="test_pair",
                 )
-
     log.debug(
         "recon.harvest.imports",
         count=len(candidates),
@@ -676,7 +615,6 @@ async def _harvest_splade(
     parsed: ParsedTask,
 ) -> dict[str, HarvestCandidate]:
     """Harvester S: SPLADE sparse dot-product retrieval.
-
     Encodes the query text with splade-mini, scores all stored def
     vectors, and returns candidates above the score floor.
     """
@@ -684,20 +622,14 @@ async def _harvest_splade(
     query_text = parsed.query_text or parsed.raw
     if not query_text:
         return candidates
-
     coordinator = app_ctx.coordinator
-
     from coderecon.index._internal.indexing.splade import retrieve_splade
-
     scores = retrieve_splade(coordinator.db, query_text)
-
     if not scores:
         return candidates
-
     # Resolve DefFacts for scored UIDs
     scored_uids = list(scores.keys())
     def_map = coordinator.batch_get_defs(scored_uids)
-
     for uid, score in scores.items():
         d = def_map.get(uid)
         if d is None:
@@ -715,7 +647,6 @@ async def _harvest_splade(
                 )
             ],
         )
-
     log.debug(
         "recon.harvest.splade",
         count=len(candidates),

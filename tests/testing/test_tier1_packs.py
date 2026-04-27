@@ -77,12 +77,10 @@ class TestPytestPack:
             (root / "tests" / "test_two.py").write_text("")
             (root / "src").mkdir()
             (root / "src" / "module_test.py").write_text("")
-
             pack_class = runner_registry.get("python.pytest")
             assert pack_class is not None
             pack = pack_class()
             targets = await pack.discover(root)
-
             assert len(targets) == 3
             selectors = [t.selector for t in targets]
             assert any("test_one.py" in s for s in selectors)
@@ -95,12 +93,10 @@ class TestPytestPack:
             (root / "tests").mkdir()
             (root / "tests" / "test_foo.py").write_text("")
             (root / "tests" / "conftest.py").write_text("")
-
             pack_class = runner_registry.get("python.pytest")
             assert pack_class is not None
             pack = pack_class()
             targets = await pack.discover(root)
-
             assert len(targets) == 1
             assert "conftest.py" not in targets[0].selector
     @pytest.mark.asyncio
@@ -110,12 +106,10 @@ class TestPytestPack:
             (root / "tests").mkdir()
             (root / "tests" / "test_foo.py").write_text("")
             (root / "tests" / "_test_internal.py").write_text("")
-
             pack_class = runner_registry.get("python.pytest")
             assert pack_class is not None
             pack = pack_class()
             targets = await pack.discover(root)
-
             assert len(targets) == 1
     def test_build_command_basic(self) -> None:
         pack_class = runner_registry.get("python.pytest")
@@ -130,7 +124,6 @@ class TestPytestPack:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/junit.xml"))
-
         assert "pytest" in cmd
         assert "tests/test_foo.py" in cmd
         assert any("junit" in arg for arg in cmd)
@@ -149,7 +142,6 @@ class TestPytestPack:
         cmd = pack.build_command(
             target, output_path=Path("/out/junit.xml"), pattern="test_specific"
         )
-
         assert "-k" in cmd
         assert "test_specific" in cmd
     def test_build_command_with_tags(self) -> None:
@@ -167,7 +159,6 @@ class TestPytestPack:
         cmd = pack.build_command(
             target, output_path=Path("/out/junit.xml"), tags=["slow", "integration"]
         )
-
         assert "-m" in cmd
 
 # =============================================================================
@@ -238,12 +229,10 @@ class TestJestPack:
             (root / "src" / "app.test.js").write_text("")
             (root / "src" / "utils.spec.ts").write_text("")
             (root / "src" / "component.test.tsx").write_text("")
-
             pack_class = runner_registry.get("js.jest")
             assert pack_class is not None
             pack = pack_class()
             targets = await pack.discover(root)
-
             assert len(targets) == 3
     @pytest.mark.asyncio
     async def test_discover_excludes_node_modules(self) -> None:
@@ -253,12 +242,10 @@ class TestJestPack:
             (root / "src" / "app.test.js").write_text("")
             (root / "node_modules").mkdir()
             (root / "node_modules" / "pkg.test.js").write_text("")
-
             pack_class = runner_registry.get("js.jest")
             assert pack_class is not None
             pack = pack_class()
             targets = await pack.discover(root)
-
             assert len(targets) == 1
             assert "node_modules" not in targets[0].selector
     def test_build_command_basic(self) -> None:
@@ -274,7 +261,6 @@ class TestJestPack:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.json"))
-
         assert "jest" in cmd
         assert "src/app.test.js" in cmd
 
@@ -310,7 +296,6 @@ class TestVitestPack:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/junit.xml"))
-
         assert "vitest" in cmd
         assert "run" in cmd
 
@@ -352,12 +337,10 @@ class TestGoTestPack:
             (root / "pkg" / "foo_test.go").write_text("package foo")
             (root / "internal").mkdir()
             (root / "internal" / "bar_test.go").write_text("package bar")
-
             pack_class = runner_registry.get("go.gotest")
             assert pack_class is not None
             pack = pack_class()
             targets = await pack.discover(root)
-
             assert len(targets) >= 2
             assert all(t.kind == "package" for t in targets)
     def test_build_command(self) -> None:
@@ -373,7 +356,6 @@ class TestGoTestPack:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out"))
-
         assert "go" in cmd
         assert "test" in cmd
         assert "-json" in cmd
@@ -390,7 +372,6 @@ class TestGoTestPack:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out"), pattern="TestFoo")
-
         assert "-run" in cmd
         assert "TestFoo" in cmd
 
@@ -422,12 +403,10 @@ class TestCargoNextestPack:
             root = Path(tmpdir)
             (root / "Cargo.toml").write_text('[package]\nname = "mylib"')
             (root / "tests").mkdir()
-
             pack_class = runner_registry.get("rust.nextest")
             assert pack_class is not None
             pack = pack_class()
             targets = await pack.discover(root)
-
             assert len(targets) >= 1
             assert targets[0].kind == "package"
 class TestCargoTestPack:
@@ -463,12 +442,10 @@ class TestMavenSurefirePack:
             root = Path(tmpdir)
             (root / "pom.xml").write_text("<project></project>")
             (root / "src" / "test" / "java").mkdir(parents=True)
-
             pack_class = runner_registry.get("java.maven")
             assert pack_class is not None
             pack = pack_class()
             targets = await pack.discover(root)
-
             assert len(targets) >= 1
             assert targets[0].kind == "project"
 class TestGradlePack:
@@ -565,7 +542,6 @@ class TestCTestPack:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out"))
-
         assert "ctest" in cmd
 
 # =============================================================================
@@ -605,12 +581,10 @@ class TestRSpecPack:
             (root / "spec" / "models" / "user_spec.rb").write_text("")
             (root / "spec" / "controllers").mkdir()
             (root / "spec" / "controllers" / "api_spec.rb").write_text("")
-
             pack_class = runner_registry.get("ruby.rspec")
             assert pack_class is not None
             pack = pack_class()
             targets = await pack.discover(root)
-
             assert len(targets) == 2
 
 # =============================================================================
@@ -650,12 +624,10 @@ class TestPHPUnitPack:
             (root / "tests" / "Unit" / "ExampleTest.php").write_text("")
             (root / "tests" / "Feature").mkdir()
             (root / "tests" / "Feature" / "ApiTest.php").write_text("")
-
             pack_class = runner_registry.get("php.phpunit")
             assert pack_class is not None
             pack = pack_class()
             targets = await pack.discover(root)
-
             assert len(targets) == 2
 
 # =============================================================================
@@ -679,7 +651,6 @@ class TestPytestParseOutput:
             assert pack_class is not None
             pack = pack_class()
             result = pack.parse_output(output, "")
-
             assert result.total == 2
             assert result.passed == 2
     def test_parse_output_missing_file(self) -> None:
@@ -687,7 +658,6 @@ class TestPytestParseOutput:
         assert pack_class is not None
         pack = pack_class()
         result = pack.parse_output(Path("/nonexistent/junit.xml"), "")
-
         assert result.errors >= 1
 
 class TestJestParseOutput:
@@ -713,7 +683,6 @@ class TestJestParseOutput:
             assert pack_class is not None
             pack = pack_class()
             result = pack.parse_output(output, "")
-
             assert result.total == 3
             assert result.passed == 2
             assert result.failed == 1
@@ -729,7 +698,6 @@ class TestGoTestParseOutput:
 {"Action":"pass","Package":"pkg","Elapsed":0.1}
 """
         result = pack.parse_output(Path("/nonexistent.json"), stdout)
-
         assert result.passed >= 1
     def test_parse_output_with_failure(self) -> None:
         pack_class = runner_registry.get("go.gotest")
@@ -740,7 +708,6 @@ class TestGoTestParseOutput:
 {"Action":"fail","Package":"pkg","Elapsed":0.2}
 """
         result = pack.parse_output(Path("/nonexistent.json"), stdout)
-
         assert result.failed >= 1
 
 class TestCargoParseOutput:
@@ -756,7 +723,6 @@ test tests::test_sub ... ok
 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
 """
         result = pack.parse_output(Path("/nonexistent.xml"), stdout)
-
         assert result.total == 2
         assert result.passed == 2
 
@@ -779,7 +745,6 @@ class TestMavenParseOutput:
             pack = pack_class()
             # output_path should be in root so that output_path.parent / target / surefire-reports exists
             result = pack.parse_output(root / "results.xml", "")
-
             assert result.total == 2
             assert result.passed == 2
 
@@ -868,7 +833,6 @@ class TestVitestBuildCommandDetailed:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.json"), pattern="render")
-
         assert any("render" in str(arg) for arg in cmd)
 class TestGradleBuildCommandDetailed:
     """Detailed tests for Gradle build_command method."""
@@ -885,7 +849,6 @@ class TestGradleBuildCommandDetailed:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.xml"))
-
         assert any("gradle" in str(arg) for arg in cmd)
         assert "test" in cmd
 class TestDotNetBuildCommandDetailed:
@@ -903,7 +866,6 @@ class TestDotNetBuildCommandDetailed:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.xml"))
-
         assert "dotnet" in cmd
         assert "test" in cmd
     def test_build_command_with_pattern(self) -> None:
@@ -921,7 +883,6 @@ class TestDotNetBuildCommandDetailed:
         cmd = pack.build_command(
             target, output_path=Path("/out/results.xml"), pattern="SpecificTest"
         )
-
         assert "--filter" in cmd
 class TestCTestBuildCommandDetailed:
     """Detailed tests for CTest build_command method."""
@@ -938,7 +899,6 @@ class TestCTestBuildCommandDetailed:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.xml"))
-
         assert "ctest" in cmd
 class TestRSpecBuildCommandDetailed:
     """Detailed tests for RSpec build_command method."""
@@ -955,7 +915,6 @@ class TestRSpecBuildCommandDetailed:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.xml"))
-
         assert "rspec" in cmd
     def test_build_command_with_pattern(self) -> None:
         pack_class = runner_registry.get("ruby.rspec")
@@ -970,7 +929,6 @@ class TestRSpecBuildCommandDetailed:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.xml"), pattern="validates")
-
         assert any("validates" in str(arg) for arg in cmd)
 class TestPHPUnitBuildCommandDetailed:
     """Detailed tests for PHPUnit build_command method."""
@@ -987,7 +945,6 @@ class TestPHPUnitBuildCommandDetailed:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.xml"))
-
         # PHPUnit uses ./vendor/bin/phpunit
         assert any("phpunit" in arg for arg in cmd)
         assert target.selector in cmd
@@ -1004,5 +961,4 @@ class TestPHPUnitBuildCommandDetailed:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.xml"), pattern="testCreate")
-
         assert any("testCreate" in str(arg) for arg in cmd)

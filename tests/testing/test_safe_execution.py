@@ -913,73 +913,58 @@ class TestIntegration:
             timeout_sec=60,
             strip_coverage_flags=True,
         )
-
         # Prepare environment
         env = ctx.prepare_environment("python.pytest")
-
         # Verify critical Python protections
         assert "COVERAGE_FILE" in env
         assert temp_artifact_dir.as_posix() in env["COVERAGE_FILE"]
         assert env["CI"] == "true"
         assert env["PYTHONDONTWRITEBYTECODE"] == "1"
-
         # Sanitize command with coverage flags
         cmd = ["pytest", "tests/", "--cov=myapp", "--cov-report=html", "-vvv", "--watch"]
         sanitized = ctx.sanitize_command(cmd, "python.pytest")
-
         # Verify sanitization
         assert "--cov=myapp" not in sanitized
         assert "--cov-report=html" not in sanitized
         assert "--watch" not in sanitized
         assert "-vvv" not in sanitized
         assert "-v" in sanitized
-
         # Cleanup
         ctx.cleanup()
     def test_full_javascript_workflow(self, temp_artifact_dir: Path, temp_workspace: Path) -> None:
         """Test complete JavaScript test execution workflow."""
         ctx = create_safe_context(temp_artifact_dir, temp_workspace)
-
         # Prepare environment
         env = ctx.prepare_environment("js.jest")
-
         # Verify critical JS protections
         assert env["NODE_ENV"] == "test"
         assert env["WATCHMAN_SOCK"] == "/dev/null"
         assert env["NX_DAEMON"] == "false"
-
         # Sanitize command
         cmd = ["npx", "jest", "src/", "--watch", "--interactive"]
         sanitized = ctx.sanitize_command(cmd, "js.jest")
-
         # Verify sanitization
         assert "--watch" not in sanitized
         assert "--interactive" not in sanitized
         assert "--forceExit" in sanitized
         assert "--no-watchman" in sanitized
         assert "--detectOpenHandles" in sanitized
-
         ctx.cleanup()
     def test_full_java_maven_workflow(self, temp_artifact_dir: Path, temp_workspace: Path) -> None:
         """Test complete Java/Maven test execution workflow."""
         ctx = create_safe_context(temp_artifact_dir, temp_workspace)
-
         # Prepare environment
         env = ctx.prepare_environment("java.maven")
-
         # Verify critical Java protections
         assert "headless=true" in env["_JAVA_OPTIONS"]
         assert env["MAVEN_BATCH_MODE"] == "true"
         assert "JACOCO_DESTFILE" in env
-
         # Sanitize command
         cmd = ["mvn", "test"]
         sanitized = ctx.sanitize_command(cmd, "java.maven")
-
         # Verify sanitization
         assert "-B" in sanitized
         assert "-DfailIfNoTests=false" in sanitized
-
         ctx.cleanup()
     def test_all_languages_produce_valid_env(
         self, temp_artifact_dir: Path, temp_workspace: Path
@@ -1006,20 +991,16 @@ class TestIntegration:
             "swift.xctest",
             "unknown.runner",
         ]
-
         for pack_id in pack_ids:
             ctx = create_safe_context(temp_artifact_dir, temp_workspace)
             env = ctx.prepare_environment(pack_id)
-
             # All should have universal overrides
             assert env["CI"] == "true", f"{pack_id} missing CI"
             assert env["CODERECON_EXECUTION"] == "1", f"{pack_id} missing marker"
-
             # All values should be strings
             for key, value in env.items():
                 assert isinstance(key, str), f"{pack_id} has non-string key: {key}"
                 assert isinstance(value, str), f"{pack_id} has non-string value for {key}: {value}"
-
             ctx.cleanup()
     def test_all_languages_sanitize_commands(
         self, temp_artifact_dir: Path, temp_workspace: Path
@@ -1042,20 +1023,15 @@ class TestIntegration:
             ("swift.xctest", ["swift", "test"]),
             ("unknown.runner", ["custom", "command"]),
         ]
-
         ctx = create_safe_context(temp_artifact_dir, temp_workspace)
-
         for pack_id, cmd in test_cases:
             result = ctx.sanitize_command(cmd, pack_id)
-
             # Should always return a list
             assert isinstance(result, list), f"{pack_id} returned non-list"
-
             # Should preserve at least the command name
             assert len(result) >= len(cmd) or pack_id.startswith("elixir"), (
                 f"{pack_id} removed too many args"
             )
-
         ctx.cleanup()
 
 # =============================================================================
@@ -1079,7 +1055,6 @@ class TestMemoryCeilingInjection:
     def no_ceiling_ctx(self, base_config: SafeExecutionConfig) -> SafeExecutionContext:
         """Context with no memory ceiling (default)."""
         return SafeExecutionContext(base_config)
-
     # -- Java -Xmx --
     @pytest.mark.parametrize("pack_id", ["java.gradle", "java.maven", "kotlin.gradle", "scala.sbt"])
     def test_java_xmx_injected(self, ceiling_ctx: SafeExecutionContext, pack_id: str) -> None:
@@ -1098,7 +1073,6 @@ class TestMemoryCeilingInjection:
         env = no_ceiling_ctx.prepare_environment("java.gradle")
         assert "-Xmx" not in env["GRADLE_OPTS"]
         assert "-Xmx" not in env["_JAVA_OPTIONS"]
-
     # -- JavaScript --max-old-space-size --
     def test_js_node_options_with_ceiling(self, ceiling_ctx: SafeExecutionContext) -> None:
         env = ceiling_ctx.prepare_environment("js.jest")
@@ -1108,7 +1082,6 @@ class TestMemoryCeilingInjection:
     ) -> None:
         env = no_ceiling_ctx.prepare_environment("js.jest")
         assert "--max-old-space-size=4096" in env["NODE_OPTIONS"]
-
     # -- Go GOMEMLIMIT --
     def test_go_gomemlimit_with_ceiling(self, ceiling_ctx: SafeExecutionContext) -> None:
         env = ceiling_ctx.prepare_environment("go.gotest")
@@ -1116,7 +1089,6 @@ class TestMemoryCeilingInjection:
     def test_go_no_gomemlimit_without_ceiling(self, no_ceiling_ctx: SafeExecutionContext) -> None:
         env = no_ceiling_ctx.prepare_environment("go.gotest")
         assert "GOMEMLIMIT" not in env
-
     # -- .NET GC heap limit --
     def test_dotnet_gc_heap_with_ceiling(self, ceiling_ctx: SafeExecutionContext) -> None:
         env = ceiling_ctx.prepare_environment("csharp.dotnet")
@@ -1127,7 +1099,6 @@ class TestMemoryCeilingInjection:
     ) -> None:
         env = no_ceiling_ctx.prepare_environment("csharp.dotnet")
         assert "DOTNET_GCHeapHardLimit" not in env
-
     # -- Elixir ERL_FLAGS --
     def test_elixir_erl_flags_with_ceiling(self, ceiling_ctx: SafeExecutionContext) -> None:
         env = ceiling_ctx.prepare_environment("elixir.exunit")
@@ -1137,7 +1108,6 @@ class TestMemoryCeilingInjection:
     ) -> None:
         env = no_ceiling_ctx.prepare_environment("elixir.exunit")
         assert "ERL_FLAGS" not in env
-
     # -- PHP memory_limit --
     def test_php_memory_limit_with_ceiling(self, ceiling_ctx: SafeExecutionContext) -> None:
         env = ceiling_ctx.prepare_environment("php.phpunit")
@@ -1147,7 +1117,6 @@ class TestMemoryCeilingInjection:
     ) -> None:
         env = no_ceiling_ctx.prepare_environment("php.phpunit")
         assert env["PHP_MEMORY_LIMIT"] == "-1"
-
     # -- Languages without memory knobs are unaffected --
     def test_python_unaffected(self, ceiling_ctx: SafeExecutionContext) -> None:
         env = ceiling_ctx.prepare_environment("python.pytest")

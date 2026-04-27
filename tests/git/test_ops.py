@@ -75,9 +75,7 @@ class TestDiffSummary:
     ) -> None:
         """Default diff_summary returns stats only (fast path)."""
         ops = GitOps(repo_with_uncommitted)
-
         summary = ops.diff_summary()
-
         assert isinstance(summary, DiffSummary)
         assert summary.files_changed >= 1
         assert summary.total_additions >= 0
@@ -92,9 +90,7 @@ class TestDiffSummary:
     ) -> None:
         """diff_summary with include_per_file=True returns per-file breakdown."""
         ops = GitOps(repo_with_uncommitted)
-
         summary = ops.diff_summary(staged=True, include_per_file=True)
-
         assert isinstance(summary, DiffSummary)
         assert summary.files_changed == 1
         assert summary.per_file is not None
@@ -110,20 +106,16 @@ class TestDiffSummary:
         """diff_summary with include_word_count=True returns word counts (slow path)."""
         workdir = temp_repo
         ops = GitOps(workdir)
-
         # Create and stage files with known content
         (workdir / "small.txt").write_text("one two three")
         (workdir / "medium.txt").write_text("word " * 50)
         (workdir / "large.txt").write_text("token " * 200)
         ops.stage(["small.txt", "medium.txt", "large.txt"])
-
         summary = ops.diff_summary(staged=True, include_word_count=True)
-
         assert summary.files_changed == 3
         assert summary.total_word_count is not None
         assert summary.total_word_count > 0
         assert summary.per_file is not None
-
         # Verify per-file word counts
         paths = {f.path for f in summary.per_file}
         assert paths == {"small.txt", "medium.txt", "large.txt"}
@@ -136,9 +128,7 @@ class TestDiffSummary:
         """diff_summary with base/target refs returns range stats."""
         ops = GitOps(repo_with_history)
         log = ops.log(limit=3)
-
         summary = ops.diff_summary(base=log[2].sha, target=log[0].sha)
-
         assert isinstance(summary, DiffSummary)
         assert summary.files_changed >= 0
         assert summary.total_lines >= 0
@@ -147,9 +137,7 @@ class TestDiffSummary:
     ) -> None:
         """diff_summary on clean working tree returns zeros."""
         ops = GitOps(temp_repo)
-
         summary = ops.diff_summary()
-
         assert summary.files_changed == 0
         assert summary.total_additions == 0
         assert summary.total_deletions == 0
@@ -206,7 +194,6 @@ class TestCommit:
     def test_stage_and_commit(self, temp_repo: Path) -> None:
         workdir = temp_repo
         (workdir / "new.txt").write_text("new content\n")
-
         ops = GitOps(temp_repo)
         ops.stage(["new.txt"])
         sha = ops.commit("Add new file")
@@ -260,16 +247,12 @@ class TestPull:
     def test_pull_fastforward(self, repo_with_remote: Path) -> None:
         """Pull when remote is ahead should fast-forward."""
         import subprocess as sp
-
         from coderecon.git import PullResult
-
         ops = GitOps(repo_with_remote)
         branch = ops.current_branch()
         assert branch is not None
-
         # Push current state
         ops.push()
-
         # Simulate remote advancing: clone, commit, push back
         remotes = ops.remotes()
         bare_path = remotes[0].url
@@ -283,11 +266,9 @@ class TestPull:
             cwd=with_clone, capture_output=True, check=True,
         )
         sp.run(["git", "push", "origin", branch], cwd=with_clone, capture_output=True, check=True)
-
         # Now pull from our original repo
         before_sha = ops.head().target_sha
         result = ops.pull()
-
         assert isinstance(result, PullResult)
         assert result.success is True
         assert result.up_to_date is False
@@ -297,13 +278,10 @@ class TestPull:
     def test_pull_up_to_date(self, repo_with_remote: Path) -> None:
         """Pull when already up-to-date should indicate so."""
         from coderecon.git import PullResult
-
         ops = GitOps(repo_with_remote)
         ops.push()
         ops.fetch()  # Ensure we have remote refs
-
         result = ops.pull()
-
         assert isinstance(result, PullResult)
         assert result.success is True
         assert result.up_to_date is True
@@ -315,7 +293,6 @@ class TestPull:
         ops = GitOps(repo_with_remote)
         ops.push()
         ops.fetch()
-
         with pytest.raises(RefNotFoundError, match="origin/nonexistent"):
             ops.pull(branch="nonexistent")
 class TestCherrypick:
@@ -325,15 +302,12 @@ class TestCherrypick:
     ) -> None:
         """Cherry-picking a non-conflicting commit should succeed."""
         ops = GitOps(repo_with_branches)
-
         # Get the commit from feature branch
         ops.checkout("feature")
         feature_head = ops.head_commit()
         assert feature_head is not None
         ops.checkout("main")
-
         result = ops.cherrypick(feature_head.sha)
-
         assert result.success is True
         assert result.conflict_paths == ()
     def test_given_conflict_when_cherrypick_then_returns_conflicts(
@@ -342,12 +316,10 @@ class TestCherrypick:
         """Cherry-picking a conflicting commit should return conflict paths."""
         workdir = repo_with_branches
         ops = GitOps(repo_with_branches)
-
         # Create a conflicting file on main
         (workdir / "conflict.txt").write_text("main content")
         ops.stage(["conflict.txt"])
         ops.commit("add conflict on main")
-
         # Create conflicting change on feature
         ops.checkout("feature")
         (workdir / "conflict.txt").write_text("feature content")
@@ -356,11 +328,9 @@ class TestCherrypick:
         head_commit = ops.head_commit()
         assert head_commit is not None
         feature_sha = head_commit.sha
-
         # Go back to main and try to cherry-pick
         ops.checkout("main")
         result = ops.cherrypick(feature_sha)
-
         assert result.success is False
         assert "conflict.txt" in result.conflict_paths
 class TestRevert:
@@ -371,15 +341,12 @@ class TestRevert:
         """Reverting a clean commit should succeed."""
         workdir = temp_repo
         ops = GitOps(temp_repo)
-
         # Modify README.md and commit (this is revertable)
         (workdir / "README.md").write_text("modified content")
         ops.stage(["README.md"])
         sha = ops.commit("modify readme")
-
         # Revert it
         result = ops.revert(sha)
-
         assert result.success is True
         # After revert, README.md should have original content
         # The revert creates a new commit undoing the change
@@ -389,30 +356,24 @@ class TestRevert:
         """Reverting when revert changes conflict should return conflict paths."""
         workdir = temp_repo
         ops = GitOps(temp_repo)
-
         # Modify file in a way we can revert
         (workdir / "README.md").write_text("first modification")
         ops.stage(["README.md"])
         ops.commit("first modify")
-
         # Create a file that definitely conflicts: modify same lines differently
         (workdir / "conflict.txt").write_text("a\nb\nc\nd\ne\n")
         ops.stage(["conflict.txt"])
         ops.commit("add conflict.txt")
-
         # Modify middle section
         (workdir / "conflict.txt").write_text("a\nBBB\nCCC\nDDD\ne\n")
         ops.stage(["conflict.txt"])
         modify_sha = ops.commit("modify middle")
-
         # Modify same middle section differently
         (workdir / "conflict.txt").write_text("a\nXXX\nYYY\nZZZ\ne\n")
         ops.stage(["conflict.txt"])
         ops.commit("modify middle differently")
-
         # Try to revert the first middle modification - should conflict
         result = ops.revert(modify_sha)
-
         # Git's 3-way merge may succeed or conflict depending on context
         # We're testing that the method handles both cases correctly
         assert isinstance(result, OperationResult)
@@ -426,9 +387,7 @@ class TestAmend:
         head_commit = ops.head_commit()
         assert head_commit is not None
         original_sha = head_commit.sha
-
         new_sha = ops.amend(message="Amended message")
-
         assert new_sha != original_sha
         amended_commit = ops.head_commit()
         assert amended_commit is not None
@@ -439,14 +398,11 @@ class TestAmend:
         """Amend with staged changes should include them."""
         workdir = temp_repo
         ops = GitOps(temp_repo)
-
         # Stage a new change
         (workdir / "amended_file.txt").write_text("new content")
         ops.stage(["amended_file.txt"])
-
         # Amend without new message
         ops.amend()
-
         # The amended file should exist in working tree
         assert (workdir / "amended_file.txt").exists()
         # And the commit count should stay the same (1 initial + 0 new = 1)
@@ -459,9 +415,7 @@ class TestAmend:
         head_commit = ops.head_commit()
         assert head_commit is not None
         original_message = head_commit.message
-
         ops.amend()
-
         amended_commit = ops.head_commit()
         assert amended_commit is not None
         assert amended_commit.message == original_message
@@ -472,9 +426,7 @@ class TestMergeAnalysis:
     ) -> None:
         """Analyzing merge with HEAD should be up to date."""
         ops = GitOps(temp_repo)
-
         analysis = ops.merge_analysis("HEAD")
-
         assert analysis.up_to_date is True
         assert analysis.fastforward_possible is False
     def test_given_fast_forward_possible_when_analysis_then_detected(
@@ -483,22 +435,17 @@ class TestMergeAnalysis:
         """Analyzing mergeable branch should detect fast-forward possibility."""
         workdir = temp_repo
         ops = GitOps(temp_repo)
-
         # Create feature branch at current HEAD
         ops.create_branch("feature")
-
         # Add commit only on feature (main stays behind)
         ops.checkout("feature")
         (workdir / "feature_only.txt").write_text("feature content")
         ops.stage(["feature_only.txt"])
         ops.commit("feature commit")
-
         # Go back to main
         ops.checkout("main")
-
         # Now feature is ahead, main can fast-forward to feature
         analysis = ops.merge_analysis("feature")
-
         assert analysis.up_to_date is False
         assert analysis.fastforward_possible is True
         # Note: conflicts_likely may also be True (MERGE_NORMAL flag set)
@@ -509,27 +456,21 @@ class TestMergeAnalysis:
         """Analyzing diverged branches should indicate normal merge needed."""
         workdir = temp_repo
         ops = GitOps(temp_repo)
-
         # Create feature branch at current HEAD
         ops.create_branch("feature")
-
         # Add commit on main
         (workdir / "main_only.txt").write_text("main content")
         ops.stage(["main_only.txt"])
         ops.commit("main commit")
-
         # Add commit on feature
         ops.checkout("feature")
         (workdir / "feature_only.txt").write_text("feature content")
         ops.stage(["feature_only.txt"])
         ops.commit("feature commit")
-
         # Go back to main
         ops.checkout("main")
-
         # Now branches have diverged
         analysis = ops.merge_analysis("feature")
-
         assert analysis.up_to_date is False
         assert analysis.conflicts_likely is True
 class TestStash:
@@ -537,18 +478,14 @@ class TestStash:
         """Verify unstage keeps working tree changes."""
         workdir = repo_with_uncommitted
         ops = GitOps(repo_with_uncommitted)
-
         # staged.txt is staged - verify it exists
         assert (workdir / "staged.txt").exists()
         original_content = (workdir / "staged.txt").read_text()
-
         # Unstage it
         ops.unstage(["staged.txt"])
-
         # Working tree file should still exist with same content
         assert (workdir / "staged.txt").exists()
         assert (workdir / "staged.txt").read_text() == original_content
-
         # But it should no longer be staged
         status = ops.status()
         staged_flags = status.get("staged.txt", 0)
@@ -556,16 +493,13 @@ class TestStash:
     def test_stash_push_pop(self, repo_with_uncommitted: Path) -> None:
         ops = GitOps(repo_with_uncommitted)
         ops.unstage(["staged.txt"])
-
         sha = ops.stash_push(message="Test stash")
         assert isinstance(sha, str)
         assert len(sha) == 40
-
         status = ops.status()
         # Modified file should be stashed
         modified_flags = [f for f in status.values() if f & STATUS_WT_MODIFIED]
         assert len(modified_flags) == 0
-
         ops.stash_pop()
         status = ops.status()
         modified_flags = [f for f in status.values() if f & STATUS_WT_MODIFIED]
@@ -574,7 +508,6 @@ class TestStash:
         ops = GitOps(repo_with_uncommitted)
         ops.unstage(["staged.txt"])
         ops.stash_push(message="First")
-
         stashes = ops.stash_list()
         assert len(stashes) >= 1
         assert "First" in stashes[0].message  # Message includes branch prefix
@@ -586,25 +519,19 @@ class TestStash:
         """Stash with include_untracked should stash untracked files."""
         workdir = temp_repo
         ops = GitOps(workdir)
-
         # Create an untracked file
         untracked = workdir / "untracked.txt"
         untracked.write_text("untracked content")
-
         # Verify file exists and is untracked
         status = ops.status()
         assert "untracked.txt" in status
-
         # Stash with untracked
         sha = ops.stash_push(message="With untracked", include_untracked=True)
         assert len(sha) == 40
-
         # Untracked file should be gone
         assert not untracked.exists()
-
         # Pop stash
         ops.stash_pop()
-
         # File should be restored
         assert untracked.exists()
         assert untracked.read_text() == "untracked content"
@@ -623,7 +550,6 @@ class TestTags:
         ops = GitOps(temp_repo)
         ops.create_tag("v1.0.0")
         ops.create_tag("v2.0.0", message="Release 2.0.0")
-
         tags = ops.tags()
         assert all(isinstance(t, TagInfo) for t in tags)
         names = {t.name for t in tags}
@@ -633,17 +559,13 @@ class TestTags:
         """Deleting existing tag should succeed."""
         ops = GitOps(temp_repo)
         ops.create_tag("v1.0.0")
-
         ops.delete_tag("v1.0.0")
-
         tags = ops.tags()
         assert all(t.name != "v1.0.0" for t in tags)
     def test_delete_nonexistent_tag_raises(self, temp_repo: Path) -> None:
         """Deleting nonexistent tag should raise."""
         from coderecon.git import RefNotFoundError
-
         ops = GitOps(temp_repo)
-
         with pytest.raises(RefNotFoundError):
             ops.delete_tag("nonexistent")
 class TestBlame:
@@ -656,23 +578,18 @@ class TestBlame:
         """Blame with line range should work."""
         workdir = temp_repo
         ops = GitOps(temp_repo)
-
         # Create multi-line file
         (workdir / "multiline.txt").write_text("line1\nline2\nline3\nline4\nline5\n")
         ops.stage(["multiline.txt"])
         ops.commit("add multiline")
-
         blame = ops.blame("multiline.txt", min_line=2, max_line=4)
-
         assert isinstance(blame, BlameInfo)
 class TestLogEdgeCases:
     """Additional edge case tests for log."""
     def test_log_nonexistent_ref_raises_error(self, temp_repo: Path) -> None:
         """Log with nonexistent ref should raise RefNotFoundError."""
         from coderecon.git.errors import RefNotFoundError
-
         ops = GitOps(temp_repo)
-
         with pytest.raises(RefNotFoundError):
             ops.log(ref="nonexistent-branch")
 class TestStageUnstage:
@@ -681,29 +598,23 @@ class TestStageUnstage:
         """Staging new file should work."""
         workdir = temp_repo
         ops = GitOps(temp_repo)
-
         (workdir / "new.txt").write_text("content")
         ops.stage(["new.txt"])
-
         status = ops.status()
         assert "new.txt" in status
     def test_stage_deleted_file(self, temp_repo: Path) -> None:
         """Staging deleted file should work."""
         workdir = temp_repo
         ops = GitOps(temp_repo)
-
         # Delete README.md
         (workdir / "README.md").unlink()
         ops.stage(["README.md"])
-
         status = ops.status()
         assert status.get("README.md", 0) & STATUS_INDEX_DELETED
     def test_unstage_file(self, repo_with_uncommitted: Path) -> None:
         """Unstaging file should work."""
         ops = GitOps(repo_with_uncommitted)
-
         ops.unstage(["staged.txt"])
-
         status = ops.status()
         # Should no longer be in index
         flags = status.get("staged.txt", 0)
@@ -716,12 +627,9 @@ class TestDiscard:
         ops = GitOps(temp_repo)
         readme = workdir / "README.md"
         original = readme.read_text()
-
         readme.write_text("modified content")
         assert readme.read_text() == "modified content"
-
         ops.discard(["README.md"])
-
         assert readme.read_text() == original
     def test_discard_deleted_file(self, temp_repo: Path) -> None:
         """Discarding deleted file restores it."""
@@ -729,12 +637,9 @@ class TestDiscard:
         ops = GitOps(temp_repo)
         readme = workdir / "README.md"
         original = readme.read_text()
-
         readme.unlink()
         assert not readme.exists()
-
         ops.discard(["README.md"])
-
         assert readme.exists()
         assert readme.read_text() == original
     def test_discard_untracked_file(self, temp_repo: Path) -> None:
@@ -743,10 +648,8 @@ class TestDiscard:
         ops = GitOps(temp_repo)
         untracked = workdir / "untracked.txt"
         untracked.write_text("untracked")
-
         # Should not raise, file not in index so gets deleted
         ops.discard(["untracked.txt"])
-
         assert not untracked.exists()
 class TestReset:
     """Tests for reset operations."""
@@ -755,9 +658,7 @@ class TestReset:
         ops = GitOps(repo_with_history)
         log = ops.log(limit=2)
         target_sha = log[1].sha
-
         ops.reset(target_sha, mode="soft")
-
         head_commit = ops.head_commit()
         assert head_commit is not None
         assert head_commit.sha == target_sha
@@ -766,9 +667,7 @@ class TestReset:
         ops = GitOps(repo_with_history)
         log = ops.log(limit=2)
         target_sha = log[1].sha
-
         ops.reset(target_sha, mode="mixed")
-
         head_commit = ops.head_commit()
         assert head_commit is not None
         assert head_commit.sha == target_sha
@@ -777,9 +676,7 @@ class TestReset:
         ops = GitOps(repo_with_history)
         log = ops.log(limit=2)
         target_sha = log[1].sha
-
         ops.reset(target_sha, mode="hard")
-
         head_commit = ops.head_commit()
         assert head_commit is not None
         assert head_commit.sha == target_sha
@@ -789,7 +686,6 @@ class TestMergeOperations:
         """Fast-forward merge should succeed."""
         workdir = repo_with_branches
         ops = GitOps(repo_with_branches)
-
         # feature is ahead, this should fast-forward
         # But fixture has both diverged, so create a proper scenario
         ops.create_branch("ff-target")
@@ -798,16 +694,12 @@ class TestMergeOperations:
         ops.stage(["ff.txt"])
         ops.commit("ff commit")
         ops.checkout("main")
-
         result = ops.merge("ff-target")
-
         assert result.success is True
     def test_merge_up_to_date(self, temp_repo: Path) -> None:
         """Merge with HEAD should be up-to-date."""
         ops = GitOps(temp_repo)
-
         result = ops.merge("HEAD")
-
         assert result.success is True
 class TestDiffEdgeCases:
     """Additional edge case tests for diff."""
@@ -815,16 +707,12 @@ class TestDiffEdgeCases:
         """Diff between two refs should work."""
         ops = GitOps(repo_with_history)
         log = ops.log(limit=3)
-
         diff = ops.diff(base=log[2].sha, target=log[0].sha)
-
         assert isinstance(diff, DiffInfo)
     def test_diff_from_ref_to_working_tree(self, repo_with_uncommitted: Path) -> None:
         """Diff from ref to working tree should work."""
         ops = GitOps(repo_with_uncommitted)
-
         diff = ops.diff(base="HEAD")
-
         assert isinstance(diff, DiffInfo)
 class TestCheckoutEdgeCases:
     """Additional edge case tests for checkout."""
@@ -834,48 +722,37 @@ class TestCheckoutEdgeCases:
         head_commit = ops.head_commit()
         assert head_commit is not None
         head_sha = head_commit.sha
-
         ops.checkout(head_sha)
-
         assert ops.current_branch() is None  # Detached
     def test_checkout_create_and_switch(self, temp_repo: Path) -> None:
         """Checkout with create=True should create and switch."""
         ops = GitOps(temp_repo)
-
         ops.checkout("new-branch", create=True)
-
         assert ops.current_branch() == "new-branch"
 class TestBranchEdgeCases:
     """Additional edge case tests for branch operations."""
     def test_delete_branch(self, repo_with_branches: Path) -> None:
         """Deleting branch should work."""
         ops = GitOps(repo_with_branches)
-
         # Force delete since feature has unmerged changes
         ops.delete_branch("feature", force=True)
-
         branches = ops.branches(include_remote=False)
         assert all(b.short_name != "feature" for b in branches)
     def test_delete_current_branch_raises(self, temp_repo: Path) -> None:
         """Deleting current branch should raise."""
         from coderecon.git import GitError
-
         ops = GitOps(temp_repo)
-
         # Can't delete current branch - need to be on another branch first
         # Create and switch to another branch, then try to delete that
         ops.create_branch("to-delete")
         ops.checkout("to-delete")
-
         # Try to delete the branch we're on
         with pytest.raises(GitError, match="Cannot delete current branch"):
             ops.delete_branch("to-delete")
     def test_rename_branch(self, repo_with_branches: Path) -> None:
         """Renaming branch should work."""
         ops = GitOps(repo_with_branches)
-
         ops.rename_branch("feature", "renamed-feature")
-
         branches = ops.branches(include_remote=False)
         names = {b.short_name for b in branches}
         assert "renamed-feature" in names
@@ -885,41 +762,31 @@ class TestShowCommit:
     def test_show_head(self, temp_repo: Path) -> None:
         """Show HEAD should return commit info."""
         ops = GitOps(temp_repo)
-
         commit = ops.show("HEAD")
-
         assert isinstance(commit, CommitInfo)
     def test_show_by_sha(self, repo_with_history: Path) -> None:
         """Show by SHA should work."""
         ops = GitOps(repo_with_history)
         log = ops.log(limit=2)
-
         commit = ops.show(log[1].sha)
-
         assert commit.sha == log[1].sha
 class TestUnbornRepo:
     """Tests for unborn repo state (no commits yet)."""
     def test_unstage_on_unborn_repo(self, tmp_path: Path) -> None:
         """Unstaging on unborn repo should work."""
         import subprocess
-
         repo_path = tmp_path / "unborn"
         repo_path.mkdir()
         subprocess.run(["git", "init"], cwd=repo_path, capture_output=True, check=True)
-
         ops = GitOps(repo_path)
-
         # Stage a file
         (repo_path / "new.txt").write_text("content\n")
         ops.stage(["new.txt"])
-
         # Verify it's staged
         status_before = ops.status()
         assert "new.txt" in status_before
-
         # Unstage should work even without any commits
         ops.unstage(["new.txt"])
-
         # File should be untracked now
         status_after = ops.status()
         # After unstaging, file should still show in status but as untracked
@@ -936,13 +803,10 @@ class TestBranchesWithRemotes:
     def test_list_branches_with_remote(self, repo_with_remote: Path) -> None:
         """Listing branches with include_remote should include tracking branches."""
         ops = GitOps(repo_with_remote)
-
         # Create a branch and push it to create remote tracking branch
         ops.create_branch("feature")
-
         branches = ops.branches(include_remote=True)
         names = {b.name for b in branches}
-
         # Should include local branches
         assert "refs/heads/main" in names or "refs/heads/master" in names
 class TestResetEdgeCases:
@@ -950,7 +814,6 @@ class TestResetEdgeCases:
     def test_reset_invalid_mode_raises(self, temp_repo: Path) -> None:
         """Reset with invalid mode should raise ValueError."""
         ops = GitOps(temp_repo)
-
         with pytest.raises(ValueError, match="Invalid reset mode"):
             ops.reset("HEAD", mode="invalid")
 class TestDeleteBranchEdgeCases:
@@ -960,16 +823,13 @@ class TestDeleteBranchEdgeCases:
     ) -> None:
         """Deleting unmerged branch without force should raise."""
         ops = GitOps(repo_with_branches)
-
         # Make a commit on a branch that diverges from main
         ops.checkout("feature")
         (repo_with_branches / "diverged.txt").write_text("diverged")
         ops.stage(["diverged.txt"])
         ops.commit("Diverged commit")
         ops.checkout("main")
-
         from coderecon.git import UnmergedBranchError
-
         with pytest.raises(UnmergedBranchError):
             ops.delete_branch("feature")
 class TestRenameBranchEdgeCases:
@@ -977,11 +837,8 @@ class TestRenameBranchEdgeCases:
     def test_rename_to_existing_branch_raises(self, repo_with_branches: Path) -> None:
         """Renaming to an existing branch name should raise."""
         ops = GitOps(repo_with_branches)
-
         ops.create_branch("new-feature")
-
         from coderecon.git import BranchExistsError
-
         with pytest.raises(BranchExistsError):
             ops.rename_branch("feature", "new-feature")
 class TestRemoteBranchCheckout:
@@ -991,15 +848,12 @@ class TestRemoteBranchCheckout:
     ) -> None:
         """Checking out remote branch should create local tracking branch."""
         ops = GitOps(repo_with_remote_branch)
-
         # Checkout the remote-only branch
         ops.checkout("origin/remote-only")
-
         # Should create a local branch with the short name
         branches = ops.branches(include_remote=False)
         local_names = {b.short_name for b in branches}
         assert "remote-only" in local_names
-
         # Should be on that branch
         assert ops.current_branch() == "remote-only"
 class TestUnbornRepoEdgeCases:
@@ -1009,42 +863,32 @@ class TestUnbornRepoEdgeCases:
     ) -> None:
         """Current branch on unborn repo should return branch name."""
         import subprocess
-
         repo_path = tmp_path / "unborn"
         repo_path.mkdir()
         subprocess.run(["git", "init"], cwd=repo_path, capture_output=True, check=True)
-
         ops = GitOps(repo_path)
-
         # Current branch should be available even without commits
         branch = ops.current_branch()
         assert branch in ("main", "master")  # Depends on git default
     def test_given_unborn_repo_when_branches_then_empty(self, tmp_path: Path) -> None:
         """Branches on unborn repo should return empty (no commits)."""
         import subprocess
-
         repo_path = tmp_path / "unborn"
         repo_path.mkdir()
         subprocess.run(["git", "init"], cwd=repo_path, capture_output=True, check=True)
-
         ops = GitOps(repo_path)
-
         branches = ops.branches()
         # Unborn repos don't have branches yet
         assert len(branches) == 0
     def test_given_unborn_repo_when_status_then_works(self, tmp_path: Path) -> None:
         """Status on unborn repo should work."""
         import subprocess
-
         repo_path = tmp_path / "unborn"
         repo_path.mkdir()
         subprocess.run(["git", "init"], cwd=repo_path, capture_output=True, check=True)
-
         ops = GitOps(repo_path)
-
         # Add an untracked file
         (repo_path / "file.txt").write_text("content")
-
         status = ops.status()
         assert "file.txt" in status
 class TestMergeBranchRestoration:
@@ -1058,30 +902,23 @@ class TestMergeBranchRestoration:
         """
         ops = GitOps(repo_with_branches)
         workdir = repo_with_branches
-
         # Create "behind" branch at current position
         ops.create_branch("behind")
-
         # Stay on main and make a new commit (advance main)
         (workdir / "advance.txt").write_text("advance main")
         ops.stage(["advance.txt"])
         ops.commit("advance main")
         main_tip = ops.head().target_sha
-
         # Switch to "behind" - it's now behind main
         ops.checkout("behind")
         original_behind_sha = ops.head().target_sha
         assert original_behind_sha != main_tip, "behind should be behind main"
-
         result = ops.merge("main")
-
         # Merge should succeed
         assert result.success
-
         # Key fix verification: should still be on "behind" branch (not detached)
         assert ops.current_branch() == "behind", "Branch should remain checked out"
         assert not ops.head().is_detached, "HEAD should not be detached after FF merge"
-
         # Branch should have advanced to main's tip
         assert ops.head().target_sha == main_tip
 class TestExtractConflictPaths:
@@ -1091,13 +928,10 @@ class TestExtractConflictPaths:
     ) -> None:
         """extract_conflict_paths should return empty tuple when no conflicts."""
         from coderecon.git._internal import RepoAccess, WriteFlows
-
         repo_path, _ = git_repo_with_commit
         access = RepoAccess(repo_path)
         flows = WriteFlows(access)
-
         # No merge in progress, index.conflicts should be None
         result = flows.extract_conflict_paths()
-
         assert result == ()
         assert isinstance(result, tuple)

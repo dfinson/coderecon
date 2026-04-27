@@ -30,7 +30,6 @@ log = structlog.get_logger(__name__)
 
 if TYPE_CHECKING:
     import tree_sitter
-
     from coderecon.index._internal.db import Database
     from coderecon.index._internal.db.database import BulkWriter
 
@@ -108,18 +107,15 @@ _STRING_REGEX_SQ = re.compile(r"'([^']{4,80})'")
 
 def _discover_string_node_types(ts_language: tree_sitter.Language) -> frozenset[str]:
     """Discover string literal node types from tree-sitter Language metadata.
-
     Scans all node kinds in the grammar for types whose name matches
     ``.*string.*`` (case-insensitive) and are marked as named nodes.
     Excludes internal repeat/content types.
-
     Language-agnostic: driven by grammar artifacts, not a manually
     maintained per-language list.  See SPEC.md §16.5.
     """
     lang_id = id(ts_language)
     if lang_id in _string_node_types_cache:
         return _string_node_types_cache[lang_id]
-
     types: set[str] = set()
     try:
         for i in range(ts_language.node_kind_count):
@@ -136,7 +132,6 @@ def _discover_string_node_types(ts_language: tree_sitter.Language) -> frozenset[
                 types.add(name)
     except (AttributeError, TypeError, RuntimeError):
         log.debug("string_node_introspection_failed", exc_info=True)
-
     result = frozenset(types)
     _string_node_types_cache[lang_id] = result
     return result
@@ -149,18 +144,15 @@ def _collect_string_literals(
     string_node_types: frozenset[str],
 ) -> list[str]:
     """Collect string literal content from parse tree within a def span.
-
     Walks the tree and extracts text from nodes whose type is in
     ``string_node_types``.  Prefers child ``string_content`` nodes;
     falls back to slicing source bytes and stripping quotes.
-
     Args:
         root_node: Tree-sitter root node.
         content: Source file as bytes.
         start_line: Def start line (0-indexed tree-sitter convention).
         end_line: Def end line.
         string_node_types: Set of node type names to match.
-
     Returns:
         List of string literal texts (unquoted, non-empty).
     """
@@ -186,7 +178,6 @@ def _collect_string_literals(
             return  # Don't recurse into string children
         for child in node.children:
             walk(child)
-
     walk(root_node)
     return results
 
@@ -196,7 +187,6 @@ def _extract_string_literals_regex(
     end_line: int,
 ) -> list[str]:
     """Regex fallback for string literal extraction.
-
     Used when tree-sitter grammar metadata doesn't yield string node types.
     """
     lines = content_text.split("\n")
@@ -204,7 +194,6 @@ def _extract_string_literals_regex(
     sl = max(0, start_line - 1)
     el = min(len(lines), end_line)
     source_slice = "\n".join(lines[sl:el])
-
     results: list[str] = []
     for match in _STRING_REGEX_DQ.finditer(source_slice):
         text = match.group(1)
@@ -230,11 +219,9 @@ def _extract_sem_facts(
     defs: list[dict[str, Any]],
 ) -> None:
     """Extract SEM_FACTS from parse tree and assign to def dicts.
-
     Runs per-language tree-sitter queries once per file, then distributes
     captured semantic facts (calls, field assigns, returns, raises, key
     literals) to the def whose span contains each match.
-
     Modifies ``defs`` in-place: adds ``_sem_facts`` dict to each def that
     has matches.  Gracefully returns nothing when:
     - No query defined for the language
@@ -242,7 +229,6 @@ def _extract_sem_facts(
     - No captures within any def span
     """
     from coderecon.index._internal.parsing.packs import get_pack
-
     # Mapping from tree-sitter capture names to SEM_FACTS categories
     _capture_categories = {
         "sem_call": "calls",
@@ -251,12 +237,10 @@ def _extract_sem_facts(
         "sem_raise": "raises",
         "sem_key": "literals",
     }
-
     pack = get_pack(language)
     if pack is None or pack.sem_query is None:
         return
     query_text = pack.sem_query
-
     # Compile query (cached per grammar × language)
     cache_key = (id(ts_language), pack.grammar_name)
     if cache_key in _sem_query_cache:
@@ -265,26 +249,21 @@ def _extract_sem_facts(
         try:
             from tree_sitter import Query as _TSQuery
             from tree_sitter import QueryCursor as _TSQueryCursor  # noqa: F841
-
             compiled = _TSQuery(ts_language, query_text)
         except (ValueError, RuntimeError, TypeError):
             log.debug("sem_query_compile_failed", exc_info=True)
             compiled = None
         _sem_query_cache[cache_key] = compiled
-
     if compiled is None:
         return
-
     # Run query once over the entire file
     try:
         from tree_sitter import QueryCursor as _TSQueryCursor
-
         cursor = _TSQueryCursor(compiled)
         matches: list[tuple[int, dict[str, list[Any]]]] = cursor.matches(root_node)
     except (RuntimeError, TypeError, ValueError):
         log.debug("sem_query_execute_failed", exc_info=True)
         return
-
     # Collect captures: (category, raw_text, line_0idx)
     all_captures: list[tuple[str, str, int]] = []
     for _pattern_idx, captures in matches:
@@ -297,18 +276,14 @@ def _extract_sem_facts(
                 text = raw.decode("utf-8", errors="replace").strip("\"'`")
                 if text and len(text) <= 80:
                     all_captures.append((category, text, node.start_point[0]))
-
     if not all_captures:
         return
-
     # Sort by line for efficient bucketing
     all_captures.sort(key=lambda x: x[2])
-
     # Distribute captures into def spans
     for def_dict in defs:
         start_line_0 = def_dict["start_line"] - 1  # tree-sitter 0-indexed
         end_line_0 = def_dict["end_line"] - 1
-
         facts: dict[str, list[str]] = {}
         for category, text, line in all_captures:
             if line < start_line_0 or line > end_line_0:
@@ -316,7 +291,6 @@ def _extract_sem_facts(
             cat_list = facts.setdefault(category, [])
             if text not in cat_list:
                 cat_list.append(text)
-
         if facts:
             def_dict["_sem_facts"] = facts
 
@@ -329,7 +303,6 @@ def _compute_def_uid(
     disambiguator: int = 0,
 ) -> str:
     """Compute stable def_uid per SPEC.md §7.4.
-
     Includes file_path to distinguish same-named symbols in different files.
     Does NOT include worktree_id here; worktree scoping is applied at insert
     time by _apply_worktree_uid_remap.
@@ -342,13 +315,11 @@ def _apply_worktree_uid_remap(
     extraction: "ExtractionResult", worktree_id: int, *, is_main_worktree: bool = True
 ) -> None:
     """Remap def_uid and import_uid values to be scoped to a worktree.
-
     def_uid and import_uid are PRIMARY KEYs computed purely from syntactic
     identity (file path + symbol shape), so two worktrees indexing the same
     file would produce identical UIDs and collide on INSERT.  This function
     rewrites every UID inside the extraction dicts to include worktree_id,
     preserving all intra-extraction cross-references.
-
     Call this once per extraction, after extraction and before bulk insert.
     The main worktree keeps canonical UIDs; secondary worktrees get remapped.
     """
@@ -356,7 +327,6 @@ def _apply_worktree_uid_remap(
         return  # main worktree keeps canonical UIDs
     def _remap(uid: str) -> str:
         return hashlib.sha256(f"{worktree_id}:{uid}".encode()).hexdigest()[:16]
-
     # Build remap tables from this file's own UIDs
     def_uid_remap: dict[str, str] = {
         d["def_uid"]: _remap(d["def_uid"]) for d in extraction.defs
@@ -366,17 +336,14 @@ def _apply_worktree_uid_remap(
         for imp in extraction.imports
         if imp.get("import_uid")
     }
-
     # DefFact PKs
     for d in extraction.defs:
         d["def_uid"] = def_uid_remap[d["def_uid"]]
-
     # TypeMemberFact — parent_def_uid / member_def_uid
     for m in extraction.type_members:
         m["parent_def_uid"] = def_uid_remap.get(m["parent_def_uid"], m["parent_def_uid"])
         if m.get("member_def_uid"):
             m["member_def_uid"] = def_uid_remap.get(m["member_def_uid"], m["member_def_uid"])
-
     # InterfaceImplFact — implementor_def_uid / interface_def_uid
     for impl in extraction.interface_impls:
         impl["implementor_def_uid"] = def_uid_remap.get(
@@ -385,13 +352,11 @@ def _apply_worktree_uid_remap(
         iface_uid = impl.get("interface_def_uid")
         if iface_uid:
             impl["interface_def_uid"] = def_uid_remap.get(iface_uid, iface_uid)
-
     # RefFact — target_def_uid when already resolved during extraction
     for r in extraction.refs:
         old_target = r.get("target_def_uid")
         if old_target:
             r["target_def_uid"] = def_uid_remap.get(old_target, old_target)
-
     # LocalBindFact — target_uid points to either a def_uid or import_uid
     for b in extraction.binds:
         target_uid = b.get("target_uid")
@@ -402,7 +367,6 @@ def _apply_worktree_uid_remap(
             b["target_uid"] = def_uid_remap.get(target_uid, target_uid)
         elif kind == BindTargetKind.IMPORT.value:
             b["target_uid"] = import_uid_remap.get(target_uid, target_uid)
-
     # ImportFact PKs
     for imp in extraction.imports:
         old_uid = imp.get("import_uid")
@@ -411,7 +375,6 @@ def _apply_worktree_uid_remap(
 
 def _has_grammar_for_family(language_family: str | None) -> bool:
     """Check if a language family has a tree-sitter grammar available.
-
     Returns True if the language has a grammar available on PyPI.
     Returns False for languages like F#, VB.NET, Erlang, etc. that lack PyPI grammars.
     Also returns False for None (unknown file types).
@@ -478,22 +441,18 @@ class BatchResult:
     files_skipped_no_grammar: int = 0
 def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionResult:
     """Extract all facts from a single file (worker function).
-
     Extracts: DefFact, RefFact, ScopeFact, ImportFact, LocalBindFact, DynamicAccessSite
-
     Files whose language has no tree-sitter grammar (e.g., F#, VB.NET, Erlang)
     are gracefully skipped - they will still be indexed in Tantivy for lexical
     search, but no structural facts are extracted.
     """
     start = time.monotonic()
     result = ExtractionResult(file_path=file_path)
-
     try:
         full_path = Path(repo_root) / file_path
         if not full_path.exists():
             result.error = "File not found"
             return result
-
         # Skip files that are too large for tree-sitter (data files, generated
         # code, minified bundles etc.).  They still appear in the file table
         # for lexical search but get no structural facts.
@@ -505,22 +464,18 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
         if file_size > _MAX_FILE_BYTES:
             result.error = f"Skipped: {file_size} bytes exceeds limit"
             return result
-
         content = full_path.read_bytes()
         result.content_hash = hashlib.sha256(content).hexdigest()
         result.line_count = content.count(b"\n") + (
             1 if content and not content.endswith(b"\n") else 0
         )
-
         # Decode to UTF-8 text for lexical index (single-pass)
         try:
             result.content_text = content.decode("utf-8")
         except UnicodeDecodeError:
             result.content_text = ""
-
         family = detect_language_family(file_path)
         result.language_family = family
-
         # Check if grammar is available BEFORE attempting to parse
         # This gracefully handles languages like F#, VB.NET, Erlang that
         # have language definitions but no PyPI-available tree-sitter grammar
@@ -528,38 +483,29 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
             result.skipped_no_grammar = True
             result.parse_time_ms = int((time.monotonic() - start) * MS_PER_SEC)
             return result
-
         parser = tree_sitter_service.parser
         try:
             parse_result = parser.parse(full_path, content)
         except ValueError as e:
             result.error = str(e)
             return result
-
         # Extract symbols (for DefFact)
         symbols = parser.extract_symbols(parse_result)
         result.interface_hash = parser.compute_interface_hash(symbols)
         # Populate symbol names for Tantivy lexical indexing (single-pass)
         result.symbol_names = [s.name for s in symbols]
-
         # Extract scopes (for ScopeFact)
         scopes = parser.extract_scopes(parse_result)
-
         # Extract imports (for ImportFact)
         imports = parser.extract_imports(parse_result, file_path)
-
         # Extract declared module/package/namespace identity
         result.declared_module = parser.extract_declared_module(parse_result, file_path)
-
         # Extract dynamic accesses (for DynamicAccessSite)
         dynamics = parser.extract_dynamic_accesses(parse_result)
-
         # Track language for cross-file resolution
         result.language = parse_result.language
-
         # Build type_name -> namespace inversion map (C# only, empty for others)
         _type_to_ns: dict[str, str] = {}
-
         if parse_result.language == "csharp":
             result.namespace_type_map = parser.extract_csharp_namespace_types(
                 parse_result.root_node
@@ -567,7 +513,6 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
             for _ns_name, _type_names in result.namespace_type_map.items():
                 for _tname in _type_names:
                     _type_to_ns[_tname] = _ns_name
-
         # Convert scopes to dicts with file-local IDs (resolved to DB IDs during insert)
         for scope in scopes:
             scope_dict = {
@@ -581,7 +526,6 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                 "end_col": scope.end_col,
             }
             result.scopes.append(scope_dict)
-
         # Build def_uid -> scope mapping for binding resolution
         def_uid_by_name: dict[str, str] = {}  # name -> def_uid (latest in file)
         def_scope_by_name: dict[str, int] = {}  # name -> local_scope_id containing def
@@ -595,10 +539,8 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                 # Never overwrite the file-scope sentinel
                 continue
             _scope_parent[scope.scope_id] = parent
-
         # Track disambiguator for symbols with same (lexical_path, sig_hash)
         disambiguator_counts: dict[tuple[str, str | None], int] = {}
-
         # Convert symbols to DefFact dicts
         for sym in symbols:
             sig_hash = (
@@ -607,19 +549,15 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                 else None
             )
             lexical_path = _compute_lexical_path(sym, symbols)
-
             # Compute disambiguator for same-signature siblings
             key = (lexical_path, sig_hash)
             disambiguator = disambiguator_counts.get(key, 0)
             disambiguator_counts[key] = disambiguator + 1
-
             def_uid = _compute_def_uid(
                 unit_id, file_path, sym.kind, lexical_path, sig_hash, disambiguator
             )
-
             # Find containing scope
             containing_scope = _find_containing_scope(scopes, sym.line, sym.column)
-
             lp = _compute_lexical_path(sym, symbols)
             def_dict = {
                 "def_uid": def_uid,
@@ -641,12 +579,10 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                 "return_type": sym.return_type,
             }
             result.defs.append(def_dict)
-
             # Track for binding resolution
             def_uid_by_name[sym.name] = def_uid
             def_scope_by_name[sym.name] = containing_scope
             _def_by_scope_name[(containing_scope, sym.name)] = def_uid
-
             # Create a definition RefFact (definition sites are PROVEN refs to themselves)
             ref_dict = {
                 "unit_id": unit_id,
@@ -662,7 +598,6 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                 "local_scope_id": containing_scope,
             }
             result.refs.append(ref_dict)
-
             # Create LocalBindFact for the definition binding
             bind_dict = {
                 "unit_id": unit_id,
@@ -674,7 +609,6 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                 "local_scope_id": containing_scope,
             }
             result.binds.append(bind_dict)
-
         # Extract string literals per def for LIT_HINTS (SPEC §16.5)
         string_types = frozenset[str]()
         if parse_result.ts_language is not None:
@@ -699,7 +633,6 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                 )
             if literals:
                 def_dict["_string_literals"] = literals
-
         # Extract SEM_FACTS per def via tree-sitter queries (SPEC §16.6)
         if parse_result.ts_language is not None and parse_result.language:
             _extract_sem_facts(
@@ -709,7 +642,6 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                 parse_result.language,
                 result.defs,
             )
-
         # Convert imports to ImportFact dicts and create bindings
         import_uid_by_alias: dict[str, str] = {}  # alias/name -> import_uid
         for imp in imports:
@@ -731,11 +663,9 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                 "_start_col": imp.start_col,
             }
             result.imports.append(import_dict)
-
             # Track for binding resolution
             local_name = imp.alias or imp.imported_name
             import_uid_by_alias[local_name] = imp.import_uid
-
             # Create LocalBindFact for import binding
             bind_dict = {
                 "unit_id": unit_id,
@@ -747,7 +677,6 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                 "local_scope_id": imp.scope_id or 0,
             }
             result.binds.append(bind_dict)
-
             # Create RefFact for the import statement
             ref_dict = {
                 "unit_id": unit_id,
@@ -763,7 +692,6 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                 "local_scope_id": imp.scope_id or 0,
             }
             result.refs.append(ref_dict)
-
         # Extract identifier occurrences for reference RefFacts
         occurrences = parser.extract_identifier_occurrences(parse_result)
         for occ in occurrences:
@@ -776,7 +704,6 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
             )
             if is_def_site:
                 continue
-
             # Skip if this is an import site
             is_import_site = any(
                 i["imported_name"] == occ.name and i["_start_line"] == occ.line
@@ -784,14 +711,11 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
             )
             if is_import_site:
                 continue
-
             containing_scope = _find_containing_scope(scopes, occ.line, occ.column)
-
             # Determine ref_tier and target based on local bindings
             ref_tier = RefTier.UNKNOWN.value
             target_def_uid = None
             certainty = Certainty.UNCERTAIN.value
-
             # Scope-aware same-file resolution: walk from innermost scope outward
             _resolved_scope_def = False
             _walk_scope = containing_scope
@@ -804,7 +728,6 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                     _resolved_scope_def = True
                     break
                 _walk_scope = _scope_parent.get(_walk_scope, -1)
-
             # Fallback to flat dict for defs not in any scope (e.g. module-level)
             if not _resolved_scope_def and occ.name in def_uid_by_name:
                 ref_tier = RefTier.PROVEN.value
@@ -814,7 +737,6 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
             elif not _resolved_scope_def and occ.name in import_uid_by_alias:
                 ref_tier = RefTier.STRONG.value  # Cross-file with explicit trace
                 certainty = Certainty.CERTAIN.value
-
             ref_dict = {
                 "unit_id": unit_id,
                 "token_text": occ.name,
@@ -829,7 +751,6 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                 "local_scope_id": containing_scope,
             }
             result.refs.append(ref_dict)
-
         # Convert dynamic accesses to DynamicAccessSite dicts
         for dyn in dynamics:
             dyn_dict = {
@@ -843,15 +764,11 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                 "has_non_literal_key": dyn.has_non_literal_key,
             }
             result.dynamic_sites.append(dyn_dict)
-
         # Extract type-aware facts (Tier 2) using language-specific extractors
         _extract_type_aware_facts(result, parse_result, content, unit_id, file_path)
-
         result.parse_time_ms = int((time.monotonic() - start) * MS_PER_SEC)
-
     except (OSError, UnicodeDecodeError, RuntimeError, ValueError) as e:
         result.error = str(e)
-
     return result
 
 def _extract_type_aware_facts(
@@ -862,25 +779,20 @@ def _extract_type_aware_facts(
     file_path: str,
 ) -> None:
     """Extract type-aware facts using language-specific extractors.
-
     Populates extraction.type_annotations, type_members, member_accesses.
     This is called after the base extraction for Tier 2 indexing.
     """
     try:
         from coderecon.index._internal.extraction import get_registry
         from coderecon.index._internal.parsing.packs import get_pack
-
         language = extraction.language
         if not language:
             return
-
         pack = get_pack(language)
         if pack is None or pack.type_config is None:
             return
-
         registry = get_registry()
         extractor = registry.get_or_fallback(pack.type_config.language_family)
-
         # Extract type annotations
         annotations = extractor.extract_type_annotations(tree, file_path, extraction.scopes)
         for ann in annotations:
@@ -901,7 +813,6 @@ def _extract_type_aware_facts(
                     "start_col": ann.start_col,
                 }
             )
-
         # Extract type members
         members = extractor.extract_type_members(tree, file_path, extraction.defs)
         for mem in members:
@@ -924,7 +835,6 @@ def _extract_type_aware_facts(
                     "start_col": mem.start_col,
                 }
             )
-
         # Extract member accesses
         accesses = extractor.extract_member_accesses(
             tree, file_path, extraction.scopes, annotations
@@ -947,7 +857,6 @@ def _extract_type_aware_facts(
                     "end_col": acc.end_col,
                 }
             )
-
         # Extract interface implementations (if extractor supports it)
         impls = extractor.extract_interface_impls(tree, file_path, extraction.defs)
         for impl in impls:
@@ -963,7 +872,6 @@ def _extract_type_aware_facts(
                     "start_col": impl.start_col,
                 }
             )
-
     except ImportError:
         # Extraction module not available - skip type-aware extraction
         log.debug("type_extraction_module_unavailable")
@@ -973,7 +881,6 @@ def _extract_type_aware_facts(
 
 def _find_containing_scope(scopes: list[SyntacticScope], line: int, col: int) -> int:
     """Find the innermost scope containing the given position.
-
     Returns the file-local scope_id (0 for file scope).
     """
     # Sort by specificity (smaller ranges are more specific)
@@ -983,10 +890,8 @@ def _find_containing_scope(scopes: list[SyntacticScope], line: int, col: int) ->
             scope.end_line > line or (scope.end_line == line and scope.end_col >= col)
         ):
             containing.append(scope)
-
     if not containing:
         return 0  # File scope
-
     # Return innermost (smallest range)
     innermost = min(
         containing,
@@ -998,11 +903,9 @@ def _compute_lexical_path(sym: SyntacticSymbol, all_symbols: list[SyntacticSymbo
     """Compute the lexical path for a symbol (e.g., 'Class.method')."""
     if sym.parent_name:
         return f"{sym.parent_name}.{sym.name}"
-
     # For classes/functions at module level, just use the name
     if sym.kind in ("class", "function"):
         return sym.name
-
     # For methods, try to find the innermost containing class
     best: SyntacticSymbol | None = None
     best_span = float("inf")
@@ -1014,15 +917,12 @@ def _compute_lexical_path(sym: SyntacticSymbol, all_symbols: list[SyntacticSymbo
             if span < best_span:
                 best = other
                 best_span = span
-
     if best is not None:
         return f"{best.name}.{sym.name}"
-
     return sym.name
 
 class StructuralIndexer:
     """Extracts facts from source files using Tree-sitter.
-
     This is the Tier 1 (syntactic) indexing layer. It provides:
     - DefFact extraction (function/class/method definitions)
     - RefFact extraction (identifier occurrences)
@@ -1030,13 +930,10 @@ class StructuralIndexer:
     - ImportFact extraction (import statements)
     - LocalBindFact extraction (same-file bindings)
     - DynamicAccessSite extraction (dynamic access telemetry)
-
     Files whose language has no tree-sitter grammar (e.g., F#, VB.NET, Erlang)
     are gracefully skipped by this indexer. They will still be searchable via
     the lexical (Tantivy) index.
-
     Usage::
-
         indexer = StructuralIndexer(db, repo_path)
         result = indexer.index_files(file_paths, context_id=1, worktree_id=wt_id)
     """
@@ -1052,13 +949,10 @@ class StructuralIndexer:
         repo_root: Path | str | None = None,
     ) -> list[ExtractionResult]:
         """Extract facts from files without persisting.
-
         Returns ExtractionResult list that can be passed to
         index_files(_extractions=...) for persistence.
-
         Each result includes content_text and symbol_names for
         unified single-pass indexing (lexical + structural).
-
         ``repo_root`` overrides the default ``self.repo_path`` for file
         reading.  Pass the worktree checkout directory when indexing a
         git worktree so files are read from the correct location.
@@ -1079,7 +973,6 @@ class StructuralIndexer:
         _extractions: list[ExtractionResult] | None = None,
     ) -> BatchResult:
         """Index a batch of files.
-
         If _extractions is provided, uses pre-computed extraction results
         instead of extracting from disk. This enables single-pass indexing
         where the coordinator extracts once and reuses results for both
@@ -1087,24 +980,20 @@ class StructuralIndexer:
         """
         start = time.monotonic()
         result = BatchResult()
-
         if _extractions is not None:
             extractions = _extractions
         elif workers > 1:
             extractions = self._parallel_extract(file_paths, context_id, workers)
         else:
             extractions = self._sequential_extract(file_paths, context_id)
-
         # Augment declared_module for languages needing config file resolution
         # (Go → go.mod, Rust → Cargo.toml). Tree-sitter gives Go only the
         # short package name; the full import path needs go.mod context.
         self._augment_declared_modules(extractions)
-
         # Resolve import source_literal → target file path (all languages).
         # Must run after _augment_declared_modules so Go/Rust declared_modules
         # are fully resolved.  Populates import_dict["resolved_path"].
         self._resolve_import_paths(extractions)
-
         # Pre-create all files BEFORE entering bulk_writer to avoid lock contention
         if file_id_map is None:
             file_id_map = {}
@@ -1137,7 +1026,6 @@ class StructuralIndexer:
                     worktree_id=worktree_id,
                     parse_status=_ps,
                 )
-
         # Remap def_uid / import_uid to include worktree_id so that two
         # worktrees indexing the same file don't collide on PK constraints.
         for extraction in extractions:
@@ -1145,37 +1033,30 @@ class StructuralIndexer:
                 _apply_worktree_uid_remap(
                     extraction, worktree_id, is_main_worktree=is_main_worktree
                 )
-
         with self.db.bulk_writer() as writer:
             for extraction in extractions:
                 result.files_processed += 1
-
                 if extraction.error:
                     result.errors.append(f"{extraction.file_path}: {extraction.error}")
                     continue
-
                 # Track files skipped due to no grammar (not errors)
                 if extraction.skipped_no_grammar:
                     result.files_skipped_no_grammar += 1
                     continue
-
                 file_id = file_id_map.get(extraction.file_path)
                 if file_id is None:
                     result.errors.append(f"{extraction.file_path}: File ID not found")
                     continue
-
                 # Delete existing facts for this file (idempotent re-indexing)
                 for fact_model in _FILE_FACT_TABLES:
                     writer.delete_where(fact_model, "file_id = :fid", {"fid": file_id})
                 # DocCrossRef uses source_file_id, not file_id
                 writer.delete_where(DocCrossRef, "source_file_id = :fid", {"fid": file_id})
-
                 # Build local_scope_id -> db_scope_id mapping.
                 # Scopes are extracted in dependency order (parent before child),
                 # so parent_scope_id is always resolvable from the map.
                 scope_id_map: dict[int, int] = {}  # local_scope_id -> db scope_id
                 from sqlalchemy import text as _sa_text
-
                 for scope_dict in extraction.scopes:
                     local_id = scope_dict.pop("local_scope_id")
                     parent_local_id = scope_dict.pop("parent_local_scope_id")
@@ -1190,13 +1071,11 @@ class StructuralIndexer:
                     if row is not None:
                         scope_id_map[local_id] = row[0]
                     result.scopes_extracted += 1
-
                 # Insert DefFacts
                 for def_dict in extraction.defs:
                     def_dict["file_id"] = file_id
                     writer.insert_many(DefFact, [def_dict])
                     result.defs_extracted += 1
-
                 # Insert RefFacts — resolve local_scope_id to DB scope_id
                 for ref_dict in extraction.refs:
                     ref_dict["file_id"] = file_id
@@ -1206,7 +1085,6 @@ class StructuralIndexer:
                     )
                     writer.insert_many(RefFact, [ref_dict])
                     result.refs_extracted += 1
-
                 # Insert ImportFacts (deduplicate by import_uid to guard
                 # against extractors producing duplicates on the same line)
                 seen_import_uids: set[str] = set()
@@ -1225,7 +1103,6 @@ class StructuralIndexer:
                     import_dict.pop("_start_col", None)
                     writer.insert_many(ImportFact, [import_dict])
                     result.imports_extracted += 1
-
                 # Insert LocalBindFacts — resolve local_scope_id to DB scope_id
                 for bind_dict in extraction.binds:
                     bind_dict["file_id"] = file_id
@@ -1235,49 +1112,41 @@ class StructuralIndexer:
                     )
                     writer.insert_many(LocalBindFact, [bind_dict])
                     result.binds_extracted += 1
-
                 # Insert DynamicAccessSites
                 for dyn_dict in extraction.dynamic_sites:
                     dyn_dict["file_id"] = file_id
                     writer.insert_many(DynamicAccessSite, [dyn_dict])
                     result.dynamic_sites_extracted += 1
-
                 # Insert TypeAnnotationFacts (Tier 2)
                 for ann_dict in extraction.type_annotations:
                     ann_dict["file_id"] = file_id
                     writer.insert_many(TypeAnnotationFact, [ann_dict])
                     result.type_annotations_extracted += 1
-
                 # Insert TypeMemberFacts (Tier 2)
                 for mem_dict in extraction.type_members:
                     mem_dict["file_id"] = file_id
                     writer.insert_many(TypeMemberFact, [mem_dict])
                     result.type_members_extracted += 1
-
                 # Insert MemberAccessFacts (Tier 2)
                 for acc_dict in extraction.member_accesses:
                     acc_dict["file_id"] = file_id
                     writer.insert_many(MemberAccessFact, [acc_dict])
                     result.member_accesses_extracted += 1
-
                 # Insert InterfaceImplFacts (Tier 2)
                 for impl_dict in extraction.interface_impls:
                     impl_dict["file_id"] = file_id
                     writer.insert_many(InterfaceImplFact, [impl_dict])
                     result.interface_impls_extracted += 1
-
                 # Insert ReceiverShapeFacts (Tier 2) - computed during resolution, not extraction
                 for shape_dict in extraction.receiver_shapes:
                     shape_dict["file_id"] = file_id
                     writer.insert_many(ReceiverShapeFact, [shape_dict])
                     result.receiver_shapes_extracted += 1
-
                 # Detect and insert EndpointFacts
                 if extraction.content_text and extraction.language:
                     from coderecon.index._internal.analysis.endpoint_detection import (
                         detect_endpoints_in_source,
                     )
-
                     endpoints = detect_endpoints_in_source(
                         extraction.content_text, extraction.language
                     )
@@ -1302,13 +1171,11 @@ class StructuralIndexer:
                                 "end_line": ep.line,
                                 "framework": ep.framework,
                             }])
-
                 # Extract and insert DocCrossRefs from docstrings
                 if extraction.defs:
                     from coderecon.index._internal.analysis.docstring_xref import (
                         extract_cross_refs,
                     )
-
                     for def_dict in extraction.defs:
                         docstring = def_dict.get("docstring")
                         if not docstring:
@@ -1333,49 +1200,40 @@ class StructuralIndexer:
                                     "target_def_uid": target_uid,
                                     "confidence": ref.confidence,
                                 }])
-
         result.duration_ms = int((time.monotonic() - start) * MS_PER_SEC)
         return result
     def _augment_declared_modules(self, extractions: list[ExtractionResult]) -> None:
         """Post-process declared_module for languages needing config files.
-
         Go files get only the short package name from tree-sitter (e.g.
         ``mypackage``).  This method resolves the full import path using
         ``go.mod`` (e.g. ``github.com/user/repo/pkg/mypackage``).
-
         Rust files have no source-level package declaration.  The crate
         name is read from ``Cargo.toml`` and combined with the directory
         structure (e.g. ``my_crate::auth::token``).
-
         During batched initial indexing, config files (go.mod, Cargo.toml)
         may have been indexed in an earlier batch.  We seed the resolver
         with ALL file paths from the DB so config discovery works cross-batch.
         """
         from sqlmodel import select
-
         from coderecon.index._internal.indexing.config_resolver import (
             ConfigResolver,
         )
-
         # Seed file paths from DB (cross-batch config discovery)
         all_paths_set: set[str] = set()
         with self.db.session() as session:
             rows = session.exec(select(File.path)).all()
             for path in rows:
                 all_paths_set.add(path)
-
         # Overlay current batch paths
         for e in extractions:
             if not e.error:
                 all_paths_set.add(e.file_path)
-
         # Config files (go.mod, Cargo.toml) are not source code so they
         # may not be indexed by tree-sitter.  Discover them from the
         # filesystem so ConfigResolver can find them.
         for pattern in ("**/go.mod", "**/Cargo.toml"):
             for cfg in self.repo_path.glob(pattern):
                 all_paths_set.add(str(cfg.relative_to(self.repo_path)))
-
         resolver = ConfigResolver(str(self.repo_path), list(all_paths_set))
         def _read_file(rel_path: str) -> str | None:
             full = self.repo_path / rel_path
@@ -1384,7 +1242,6 @@ class StructuralIndexer:
             except (OSError, UnicodeDecodeError):
                 log.debug("module_config_read_failed", exc_info=True)
                 return None
-
         for ex in extractions:
             if ex.error or ex.skipped_no_grammar:
                 continue
@@ -1395,11 +1252,9 @@ class StructuralIndexer:
                 )
                 if resolved:
                     ex.declared_module = resolved
-
         # Fallback: derive declared_module from file path for languages
         # that don't have source-level module declarations (e.g. Python, JS/TS)
         from coderecon.index._internal.indexing.module_mapping import path_to_module
-
         for ex in extractions:
             if ex.error or ex.skipped_no_grammar:
                 continue
@@ -1408,7 +1263,6 @@ class StructuralIndexer:
     def _resolve_xref_target(self, writer: BulkWriter, target_name: str) -> str | None:
         """Resolve a cross-ref target name to a def_uid using the BulkWriter's connection."""
         from sqlalchemy import text as sa_text
-
         conn = writer.conn
         # 1. Exact def_uid
         row = conn.execute(
@@ -1435,15 +1289,12 @@ class StructuralIndexer:
         return None
     def _resolve_import_paths(self, extractions: list[ExtractionResult]) -> None:
         """Resolve every import's source_literal to a target file path.
-
         Populates ``import_dict["resolved_path"]`` for each import in each
         extraction.  Uses the ``ImportPathResolver`` which supports:
-
         - Python: dotted module → file path via ``module_mapping``
         - JS/TS: relative path resolution with extension probing
         - C/C++: relative header resolution
         - Declaration-based (Java, Kotlin, etc.): match against ``declared_module``
-
         During initial indexing files are processed in batches of 50.  To
         resolve cross-batch imports (e.g. a Java import in batch 3 targeting
         a class declared in batch 1) we seed the resolver with ALL file paths
@@ -1451,15 +1302,12 @@ class StructuralIndexer:
         current batch on top (which may have fresher data).
         """
         from sqlmodel import select
-
         from coderecon.index._internal.indexing.config_resolver import (
             ImportPathResolver,
             build_js_package_exports,
         )
         from coderecon.index.models import File
-
         valid = [e for e in extractions if not e.error and not e.skipped_no_grammar]
-
         # Seed from DB: all previously-indexed file paths + declared_modules.
         # This ensures cross-batch resolution works during initial indexing.
         all_paths_set: set[str] = set()
@@ -1470,15 +1318,12 @@ class StructuralIndexer:
                 all_paths_set.add(path)
                 if dm:
                     declared_modules[path] = dm
-
         # Overlay current batch (may contain new/updated data not yet persisted).
         for e in valid:
             all_paths_set.add(e.file_path)
             if e.declared_module:
                 declared_modules[e.file_path] = e.declared_module
-
         all_paths_list = list(all_paths_set)
-
         # Build JS/TS package.json exports map for bare specifier resolution
         def _read_file(rel_path: str) -> str | None:
             full = self.repo_path / rel_path
@@ -1487,11 +1332,8 @@ class StructuralIndexer:
             except (OSError, UnicodeDecodeError):
                 log.debug("js_package_read_failed", exc_info=True)
                 return None
-
         js_exports = build_js_package_exports(all_paths_list, _read_file)
-
         resolver = ImportPathResolver(all_paths_list, declared_modules, js_exports)
-
         for ex in valid:
             for imp in ex.imports:
                 source_literal = imp.get("source_literal")
@@ -1501,21 +1343,17 @@ class StructuralIndexer:
                     imp["resolved_path"] = resolved
     def resolve_all_imports(self) -> int:
         """Re-resolve all unresolved import paths using the complete DB.
-
         Called once after all batches have been indexed so that imports
         from early batches can resolve to files indexed in later batches.
-
         Returns:
             Number of imports that were newly resolved.
         """
         from sqlmodel import select
-
         from coderecon.index._internal.indexing.config_resolver import (
             ImportPathResolver,
             build_js_package_exports,
         )
         from coderecon.index.models import File, ImportFact
-
         # Build resolver from the complete DB
         all_paths: list[str] = []
         declared_modules: dict[str, str] = {}
@@ -1525,7 +1363,6 @@ class StructuralIndexer:
                 all_paths.append(path)
                 if dm:
                     declared_modules[path] = dm
-
         # Build JS/TS package.json exports map for bare specifier resolution
         def _read_file(rel_path: str) -> str | None:
             full = self.repo_path / rel_path
@@ -1534,11 +1371,8 @@ class StructuralIndexer:
             except (OSError, UnicodeDecodeError):
                 log.debug("js_package_read_failed", exc_info=True)
                 return None
-
         js_exports = build_js_package_exports(all_paths, _read_file)
-
         resolver = ImportPathResolver(all_paths, declared_modules, js_exports)
-
         # Find all unresolved imports and try to resolve them
         newly_resolved = 0
         with self.db.session() as session:
@@ -1548,7 +1382,6 @@ class StructuralIndexer:
                 .where(ImportFact.source_literal.isnot(None))  # type: ignore[union-attr]
             )
             unresolved = list(session.exec(stmt).all())
-
             # Build file_id -> path mapping for importer_path lookup
             file_ids = {imp.file_id for imp in unresolved}
             file_map: dict[int, str] = {}
@@ -1559,7 +1392,6 @@ class StructuralIndexer:
                     )
                 ).all()
                 file_map = {int(fid): fp for fid, fp in file_rows if fid is not None}
-
             for imp in unresolved:
                 importer_path = file_map.get(imp.file_id, "")
                 resolved = resolver.resolve(
@@ -1569,10 +1401,8 @@ class StructuralIndexer:
                     imp.resolved_path = resolved
                     session.add(imp)
                     newly_resolved += 1
-
             if newly_resolved:
                 session.commit()
-
         return newly_resolved
     def _sequential_extract(
         self, file_paths: list[str], unit_id: int, repo_root: Path | None = None
@@ -1590,13 +1420,11 @@ class StructuralIndexer:
         """Extract facts in parallel using process pool."""
         results = []
         root = str(repo_root if repo_root is not None else self.repo_path)
-
         with ProcessPoolExecutor(max_workers=workers) as executor:
             futures = {
                 executor.submit(_extract_file, path, root, unit_id): path
                 for path in file_paths
             }
-
             for future in as_completed(futures):
                 try:
                     result = future.result()
@@ -1604,7 +1432,6 @@ class StructuralIndexer:
                 except (OSError, UnicodeDecodeError, RuntimeError, ValueError) as e:
                     path = futures[future]
                     results.append(ExtractionResult(file_path=path, error=str(e)))
-
         return results
     def _ensure_file_id(
         self,
@@ -1620,16 +1447,13 @@ class StructuralIndexer:
     ) -> int:
         """Ensure file exists in database and return its ID."""
         import time
-
         with self.db.session() as session:
             from sqlmodel import select
-
             stmt = select(File).where(
                 File.path == file_path,
                 File.worktree_id == worktree_id,
             )
             existing = session.exec(stmt).first()
-
             if existing and existing.id is not None:
                 _changed = False
                 if existing.declared_module != declared_module:
@@ -1646,7 +1470,6 @@ class StructuralIndexer:
                     session.add(existing)
                     session.commit()
                 return existing.id
-
             file = File(
                 path=file_path,
                 content_hash=content_hash,

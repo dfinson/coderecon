@@ -134,12 +134,10 @@ class GitIndex:
         """Get conflict entries, or None if no conflicts."""
         if self._conflicts is not None:
             return self._conflicts if self._conflicts else None
-
         result = self._git.run("ls-files", "-u")
         if not result.stdout.strip():
             self._conflicts = []
             return None
-
         # Parse default ls-files -u output: <mode> <sha> <stage>\t<path>
         conflicts_by_path: dict[str, list[GitIndexEntry | None]] = {}
         for line in result.stdout.strip().splitlines():
@@ -154,7 +152,6 @@ class GitIndex:
                 conflicts_by_path[path] = [None, None, None]
             if 1 <= stage <= 3:
                 conflicts_by_path[path][stage - 1] = GitIndexEntry(path, sha, mode)
-
         self._conflicts = [
             (entries[0], entries[1], entries[2]) for entries in conflicts_by_path.values()
         ]
@@ -220,7 +217,6 @@ class RepoAccess:
     @property
     def index(self) -> GitIndex:
         return self._index
-
     # Repository State Facts
     @property
     def is_unborn(self) -> bool:
@@ -261,7 +257,6 @@ class RepoAccess:
         name = self._git.run("config", "user.name").stdout.strip()
         email = self._git.run("config", "user.email").stdout.strip()
         import time
-
         ts = int(time.time())
         # Get timezone offset
         local = time.localtime(ts)
@@ -307,7 +302,6 @@ class RepoAccess:
         if (git_dir / "BISECT_LOG").exists():
             return GIT_REPOSITORY_STATE_BISECT
         return GIT_REPOSITORY_STATE_NONE
-
     # Resolution Helpers
     def resolve_ref_oid(self, ref: str) -> str:
         """Resolve any ref to a SHA hex string."""
@@ -323,7 +317,6 @@ class RepoAccess:
             raise RefNotFoundError(f"{ref} is not a commit")
         sha = stdout.strip()
         return self._parse_commit(sha)
-
     # Must Helpers
     def must_head_target(self) -> str:
         """Return HEAD target SHA, raising if unborn."""
@@ -349,7 +342,6 @@ class RepoAccess:
         if not self.has_remote_branch(name):
             raise GitError(f"Remote branch {name!r} not found")
         return self._get_branch_data(name, remote=True)
-
     # Normalization Helpers
     def normalize_path(self, path: str | Path) -> str:
         p = Path(path)
@@ -357,7 +349,6 @@ class RepoAccess:
             with contextlib.suppress(ValueError):
                 p = p.relative_to(self.path)
         return str(p)
-
     # Remote Access
     def get_remote(self, name: str) -> str:
         """Get remote URL. Raises RemoteError if not found."""
@@ -385,7 +376,6 @@ class RepoAccess:
             (name, urls.get("fetch", ""), urls.get("push"))
             for name, urls in remotes_dict.items()
         ]
-
     # Branch Access
     def has_local_branch(self, name: str) -> bool:
         rc, _, _ = self._git.run_raw("rev-parse", "--verify", f"refs/heads/{name}")
@@ -398,7 +388,6 @@ class RepoAccess:
         prefix = "refs/remotes/" if remote else "refs/heads/"
         refname = f"{prefix}{name}"
         sha = self._git.run("rev-parse", refname).stdout.strip()
-
         # Get upstream if local branch
         upstream: str | None = None
         if not remote:
@@ -413,7 +402,6 @@ class RepoAccess:
                 if rc2 == 0:
                     merge_ref = stdout2.strip()
                     upstream = f"{remote_name}/{merge_ref.removeprefix('refs/heads/')}"
-
         return GitBranchData(
             name=refname if remote else name,
             shorthand=name,
@@ -430,7 +418,6 @@ class RepoAccess:
     def delete_branch(self, name: str) -> None:
         """Force delete a local branch."""
         self._git.run("branch", "-D", name)
-
     # Low-level Git Operations
     def status(self) -> dict[str, int]:
         """Get status flags by path, compatible with existing flag constants."""
@@ -446,7 +433,6 @@ class RepoAccess:
             if " -> " in path_part and x_char == "R":
                 _, path_part = path_part.rsplit(" -> ", 1)
             path = path_part
-
             flags = 0
             # Index flags (X column)
             if x_char in _INDEX_STATUS_MAP:
@@ -457,10 +443,8 @@ class RepoAccess:
             # Untracked: ?? means both columns are ?
             if x_char == "?" and y_char == "?":
                 flags = STATUS_WT_NEW
-
             if flags:
                 status_dict[path] = flags
-
         return status_dict
     def blame(self, path: str, **kwargs: int) -> list[dict]:
         """Get blame data as list of hunk dicts."""
@@ -529,19 +513,15 @@ class RepoAccess:
             MERGE_NORMAL,
             MERGE_UP_TO_DATE,
         )
-
         head_sha = self.must_head_target()
-
         # Check if already up-to-date (their commit is ancestor of HEAD)
         rc, _, _ = self._git.run_raw("merge-base", "--is-ancestor", their_sha, head_sha)
         if rc == 0:
             return MERGE_UP_TO_DATE
-
         # Check if fast-forward is possible (HEAD is ancestor of their commit)
         rc, _, _ = self._git.run_raw("merge-base", "--is-ancestor", head_sha, their_sha)
         if rc == 0:
             return MERGE_FASTFORWARD
-
         # Normal merge needed
         return MERGE_NORMAL
     def merge(self, their_sha: str) -> None:
@@ -632,7 +612,6 @@ class RepoAccess:
     ) -> str:
         """Create a commit using git commit-tree. Returns commit SHA."""
         import os
-
         env_overrides = {
             "GIT_AUTHOR_NAME": author.name,
             "GIT_AUTHOR_EMAIL": author.email,
@@ -641,14 +620,11 @@ class RepoAccess:
             "GIT_COMMITTER_EMAIL": committer.email,
             "GIT_COMMITTER_DATE": f"@{committer.time} {'+' if committer.offset >= 0 else '-'}{abs(committer.offset) // 60:02d}{abs(committer.offset) % 60:02d}",
         }
-
         cmd = ["commit-tree", tree_sha]
         for parent in parent_shas:
             cmd.extend(["-p", parent])
-
         # Use subprocess directly to set env vars
         import subprocess
-
         full_cmd = ["git", *cmd]
         env = {**os.environ, **env_overrides}
         result = subprocess.run(
@@ -662,13 +638,10 @@ class RepoAccess:
         )
         if result.returncode != 0:
             raise GitError(f"commit-tree failed: {result.stderr.strip()}")
-
         oid = result.stdout.strip()
-
         # Update ref if specified
         if ref:
             self._git.run("update-ref", ref, oid)
-
         return oid
     def descendant_of(self, commit_sha: str, ancestor_sha: str) -> bool:
         """Check if commit is a descendant of ancestor."""
@@ -682,7 +655,6 @@ class RepoAccess:
     def branches(self) -> _BranchHelper:
         """Branch helper."""
         return _BranchHelper(self._git)
-
     # Index Helpers
     def best_effort_index_remove(self, paths: Iterator[str]) -> None:
         """Remove paths from index, suppressing errors for missing entries."""
@@ -708,7 +680,6 @@ class RepoAccess:
         else:
             # Not in tree - remove from index
             self._git.run_raw("rm", "--cached", "--ignore-unmatch", "--", path)
-
     # Tag Iteration
     def iter_tags(self) -> Iterator[GitTagData]:
         """Iterate tags as GitTagData objects."""
@@ -731,7 +702,6 @@ class RepoAccess:
             tagger_name = parts[5] if len(parts) > 5 else None
             tagger_email = parts[6] if len(parts) > 6 else None
             tagger_time = parts[7] if len(parts) > 7 else None
-
             if obj_type == "tag":
                 # Annotated tag
                 target = deref_sha or tag_sha
@@ -754,7 +724,6 @@ class RepoAccess:
                     target_sha=tag_sha,
                     is_annotated=False,
                 )
-
     # Remote Operations
     def run_remote_operation(
         self,
@@ -774,7 +743,6 @@ class RepoAccess:
             if "authentication" in msg or "credential" in msg:
                 raise AuthenticationError(remote_name, op_name) from e
             raise RemoteError(remote_name, f"{op_name} failed: {e}") from e
-
     # Worktree Operations
     def list_worktrees(self) -> list[str]:
         """List worktree names (excluding main)."""
@@ -846,7 +814,6 @@ class RepoAccess:
             cmd.extend(["--force", "--force"])
         cmd.append(wt_path)
         self._git.run(*cmd)
-
     # Submodule Operations
     def listall_submodules(self) -> list[str]:
         """List submodule names."""
@@ -870,7 +837,6 @@ class RepoAccess:
         url = url_out.strip() if rc2 == 0 else ""
         rc3, branch_out, _ = self._git.run_raw("config", "--file", ".gitmodules", f"submodule.{name}.branch")
         branch = branch_out.strip() if rc3 == 0 else None
-
         # Get recorded HEAD sha from index
         head_id = None
         rc4, ls_out, _ = self._git.run_raw("ls-tree", "HEAD", "--", path)
@@ -878,7 +844,6 @@ class RepoAccess:
             parts = ls_out.strip().split()
             if len(parts) >= 3:
                 head_id = parts[2]
-
         return {"name": name, "path": path, "url": url, "branch": branch, "head_id": head_id}
     def init_submodule(self, name: str) -> None:
         """Initialize a submodule."""
@@ -901,7 +866,6 @@ class RepoAccess:
         if name is None:
             raise GitError(f"Submodule not found at path: {path}")
         return self.lookup_submodule(name)
-
     # Merge Base
     def merge_base(self, sha1: str, sha2: str) -> str | None:
         """Find merge base of two commits. Returns None if unrelated."""
@@ -909,14 +873,12 @@ class RepoAccess:
         if rc != 0:
             return None
         return stdout.strip()
-
     # Diff Parsing
     def diff_numstat(self, *args: str) -> list[tuple[str, int, int, str]]:
         """Run diff with --numstat and return (status, additions, deletions, path) tuples."""
         result = self._git.run("diff", "--numstat", "--diff-filter=ACDMR", "--no-color", *args)
         # Also get name-status for the delta status
         status_result = self._git.run("diff", "--name-status", "--diff-filter=ACDMR", "--no-color", *args)
-
         status_map: dict[str, str] = {}
         for line in status_result.stdout.strip().splitlines():
             if not line:
@@ -926,7 +888,6 @@ class RepoAccess:
                 status_char = parts[0][0]  # First char of status
                 path = parts[-1]  # Last part is the path (handles renames)
                 status_map[path] = status_char
-
         entries = []
         for line in result.stdout.strip().splitlines():
             if not line:
@@ -939,7 +900,6 @@ class RepoAccess:
                 status = status_map.get(path, "M")
                 entries.append((status, adds, dels, path))
         return entries
-
     # Internal Parsing
     def _parse_commit(self, ref: str) -> GitCommitData:
         """Parse a commit into GitCommitData."""
@@ -948,7 +908,6 @@ class RepoAccess:
         lines = result.stdout.split("\n")
         if len(lines) < 9:
             raise GitError(f"Failed to parse commit {ref}")
-
         sha = lines[0]
         tree_sha = lines[1]
         parent_line = lines[2]
@@ -967,7 +926,6 @@ class RepoAccess:
         )
         # Message is everything after line 9
         message = "\n".join(lines[9:]).strip()
-
         return GitCommitData(
             sha=sha,
             tree_sha=tree_sha,
@@ -1024,7 +982,6 @@ class RepoAccess:
                 orig_line = int(parts[1])
                 final_line = int(parts[2])
                 num_lines = int(parts[3]) if len(parts) > 3 else 1
-
                 # If this is a new hunk or different commit
                 if current is None or current["sha"] != sha or current["final_line"] + current["num_lines"] != final_line:
                     if current:
@@ -1048,7 +1005,6 @@ class RepoAccess:
             elif current and line.startswith("author-time "):
                 current["author_time"] = int(line[len("author-time "):])
             i += 1
-
         if current:
             hunks.append(current)
         return hunks

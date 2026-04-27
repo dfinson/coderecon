@@ -16,9 +16,7 @@ from coderecon.git.errors import EmptyCommitMessageError, GitError, PathsNotFoun
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-
     from fastmcp import FastMCP
-
     from coderecon.index._internal.indexing.import_graph import ImportGraphResult
     from coderecon.mcp.context import AppContext
     from coderecon.mcp.session import SessionState
@@ -32,11 +30,9 @@ log = structlog.get_logger(__name__)
 
 class ProgressSink(Protocol):
     """Minimal progress reporting interface for checkpoint_pipeline.
-
     Decouples from FastMCP's Context so the pipeline can be called from
     both MCP tool wrappers and the stdio dispatch layer.
     """
-
     async def report_progress(self, current: int, total: int, message: str) -> None: ...
     async def info(self, message: str) -> None: ...
     async def warning(self, message: str) -> None: ...
@@ -49,25 +45,19 @@ def _detect_test_debt(
     repo_root: Path,
 ) -> dict[str, Any] | None:
     """Detect source files changed without corresponding test updates.
-
     Scans ``changed_files`` for source files, uses convention-based
     pairing to find their expected test counterparts, and reports any
     that exist on disk but were NOT included in ``changed_files``.
-
     Returns a dict with ``source_files``, ``missing_test_updates``, and
     ``hint`` if debt is found, otherwise ``None``.
     """
     from coderecon.core.languages import find_test_pairs, is_test_file
-
     changed_set = set(changed_files)
-
     # Separate source files from test files
     source_files = [f for f in changed_files if not is_test_file(f)]
     test_files_changed = [f for f in changed_files if is_test_file(f)]
-
     if not source_files:
         return None
-
     missing: list[dict[str, str]] = []
     for src in source_files:
         pairs = find_test_pairs(src)
@@ -85,21 +75,17 @@ def _detect_test_debt(
                         "test_file": existing_tests[0],
                     }
                 )
-
     if not missing:
         return None
-
     sources_str = ", ".join(m["source"].split("/")[-1] for m in missing[:5])
     tests_str = ", ".join(m["test_file"] for m in missing[:5])
     truncated = " (and more)" if len(missing) > 5 else ""
-
     hint = (
         f"TEST DEBT: {len(missing)} source file(s) changed without test updates"
         f"{truncated}. Source: {sources_str}. "
         f"Test counterpart(s): {tests_str}. "
         "Consider updating tests to cover your changes."
     )
-
     return {
         "source_files_changed": len(source_files),
         "test_files_changed": len(test_files_changed),
@@ -122,13 +108,11 @@ def _validate_paths_exist(
     repo_path: Path, paths: list[str], *, tracked_files: set[str] | None = None
 ) -> None:
     """Validate paths are known to the repository.
-
     A path is valid if it exists on disk OR is tracked by git (i.e. a deletion).
     Only truly unknown paths (typos, never-existed) raise PathsNotFoundError.
     """
     if not paths:
         return
-
     tracked = tracked_files or set()
     unknown: list[str] = []
     for p in paths:
@@ -137,7 +121,6 @@ def _validate_paths_exist(
         if p in tracked:
             continue  # tracked deletion — valid
         unknown.append(p)
-
     if unknown:
         raise PathsNotFoundError(unknown)
 
@@ -147,18 +130,14 @@ def _run_hook_with_retry(
     stage_fn: Callable[[list[str]], None],
 ) -> tuple[Any, dict[str, Any] | None]:
     """Run pre-commit hooks with auto-fix retry logic.
-
     Returns:
         Tuple of (hook_result, failure_response).
         If failure_response is None, hooks passed and commit can proceed.
     """
     hook_result = run_hook(repo_path, "pre-commit")
-
     if hook_result.success:
         return hook_result, None
-
     auto_fixed = hook_result.modified_files or []
-
     if not auto_fixed:
         return hook_result, {
             "hook_failure": {
@@ -175,13 +154,10 @@ def _run_hook_with_retry(
                 "Review the output above and fix the reported issues, then retry."
             ),
         }
-
     # Hook auto-fixed files — re-stage and retry
     restage_paths = list(set(auto_fixed + paths_to_restage))
     stage_fn(restage_paths)
-
     retry_result = run_hook(repo_path, "pre-commit")
-
     if not retry_result.success:
         return hook_result, {
             "hook_failure": {
@@ -211,12 +187,10 @@ def _run_hook_with_retry(
                 "This requires manual fixing."
             ),
         }
-
     return hook_result, None
 
 def _summarize_commit(sha: str, message: str) -> str:
     from coderecon.core.formatting import truncate_at_word
-
     short_sha = sha[:7]
     first_line = message.split("\n")[0]
     truncated = truncate_at_word(first_line, 45)
@@ -228,7 +202,6 @@ def _summarize_commit(sha: str, message: str) -> str:
 
 def _normalize_selector(selector: str) -> str:
     """Normalize target selector for path matching.
-
     Handles Go package selectors (./path), wildcard selectors (./...),
     and project root selectors (.).
     """
@@ -244,7 +217,6 @@ def _target_matches_affected_files(
     repo_root: Path,
 ) -> bool:
     """Check if a test target's scope contains any affected test file.
-
     For 'file' targets (e.g., Python pytest), this is an exact path match.
     For 'package' targets (e.g., Go packages), checks if any affected file
     is within the package directory.
@@ -254,17 +226,14 @@ def _target_matches_affected_files(
     ws = Path(target.workspace_root)
     sel = _normalize_selector(target.selector)
     scope_abs = ws / sel if sel else ws
-
     try:
         scope_rel = str(scope_abs.relative_to(repo_root))
     except ValueError:
         # Target workspace outside repo root, fall back to exact selector match
         return target.selector in affected_paths
-
     if scope_rel == ".":
         # Scope is the entire repo — all files match
         return bool(affected_paths)
-
     return any(p == scope_rel or p.startswith(scope_rel + "/") for p in affected_paths)
 
 
@@ -275,7 +244,6 @@ def _summarize_run(result: "TestResult") -> str:
     """Generate compact summary for a test run."""
     if not result.run_status:
         return "no run status"
-
     status = result.run_status
     if status.progress:
         p = status.progress
@@ -302,7 +270,6 @@ def _summarize_run(result: "TestResult") -> str:
             if p.cases.failed:
                 status_parts.append(f"{p.cases.failed} failed")
         return ", ".join(status_parts)
-
     return status.status
 
 def _build_coverage_text(
@@ -310,7 +277,6 @@ def _build_coverage_text(
     filter_paths: set[str] | None = None,
 ) -> tuple[str, str | None]:
     """Build tiered inline coverage summary.
-
     Returns:
         (inline_summary, coverage_hint) where:
         - inline_summary: tiered multi-line coverage text
@@ -323,10 +289,8 @@ def _build_coverage_text(
         merge,
         parse_artifact,
     )
-
     if not coverage_artifacts:
         return "coverage: no data", None
-
     # Dedupe by path
     seen: set[str] = set()
     deduped: list[dict[str, str]] = []
@@ -335,7 +299,6 @@ def _build_coverage_text(
         if p and p not in seen:
             seen.add(p)
             deduped.append(c)
-
     # Parse all
     reports: list[CoverageReport] = []
     for cov in deduped:
@@ -353,13 +316,10 @@ def _build_coverage_text(
             log.debug("coverage_parse_failed", exc_info=True)
         except OSError as e:
             log.debug("Coverage parse failed", path=path_str, error=str(e), exc_info=True)
-
     if not reports:
         return "coverage: parse failed", None
-
     merged = merge(*reports) if len(reports) > 1 else reports[0]
     inline = build_tiered_coverage(merged, filter_paths=filter_paths)
-
     return inline, None
 
 
@@ -370,14 +330,12 @@ _SNIPPET_CONTEXT_LINES = 15  # lines of context above/below each failure point
 
 def _extract_traceback_locations(traceback: str | None) -> list[tuple[str, int]]:
     """Extract (file_path, line_number) pairs from a pytest traceback string.
-
     Looks for patterns like ``path/to/file.py:123: in function_name``.
     Returns all unique (path, line) tuples found.
     """
     if not traceback:
         return []
     import re
-
     locations: list[tuple[str, int]] = []
     for m in re.finditer(r"(\S+\.py):(\d+):", traceback):
         path, line = m.group(1), int(m.group(2))
@@ -390,11 +348,9 @@ def _build_failure_snippets(
     context_lines: int = _SNIPPET_CONTEXT_LINES,
 ) -> dict[str, str]:
     """Build focused code snippets around failure locations.
-
     For each file referenced in failures, extracts the lines around each
     failure point (± context_lines).  Adjacent/overlapping ranges are merged.
     Returns a dict of ``{path: rendered_snippet_text}``.
-
     Each snippet includes line numbers and ``>`` markers at failure lines,
     so the agent sees exactly where the problem is.
     """
@@ -409,14 +365,12 @@ def _build_failure_snippets(
         for tb_path, tb_line in _extract_traceback_locations(f.get("traceback")):
             if tb_path in file_contents:
                 locations_by_file.setdefault(tb_path, []).append(tb_line)
-
     snippets: dict[str, str] = {}
     for path, lines_list in locations_by_file.items():
         content = file_contents[path]
         file_lines = content.splitlines()
         total = len(file_lines)
         failure_lines_set = set(lines_list)
-
         # Build merged ranges
         ranges: list[tuple[int, int]] = []
         for line_no in sorted(set(lines_list)):
@@ -427,7 +381,6 @@ def _build_failure_snippets(
                 ranges[-1] = (ranges[-1][0], end)
             else:
                 ranges.append((start, end))
-
         # Render snippet with line numbers and failure markers
         parts: list[str] = []
         for i, (start, end) in enumerate(ranges):
@@ -437,9 +390,7 @@ def _build_failure_snippets(
                 marker = ">" if ln in failure_lines_set else " "
                 line_text = file_lines[ln - 1] if ln <= total else ""
                 parts.append(f"{ln:4d} {marker}| {line_text}")
-
         snippets[path] = "\n".join(parts)
-
     return snippets
 
 def _serialize_test_result(
@@ -447,11 +398,9 @@ def _serialize_test_result(
     coverage_filter_paths: set[str] | None = None,
 ) -> dict[str, Any]:
     """Convert TestResult to compact serializable dict.
-
     Outer structure is flat JSON for parseability.  Inner details
     (failures, diagnostics) are compressed text strings to minimise
     token count.
-
     Args:
         result: TestResult to serialize.
         coverage_filter_paths: If provided, only include coverage for these
@@ -460,19 +409,16 @@ def _serialize_test_result(
     output: dict[str, Any] = {
         "summary": _summarize_run(result),
     }
-
     if result.run_status:
         status = result.run_status
         output["status"] = status.status
         output["duration"] = round(status.duration_seconds, 2)
-
         if status.progress:
             p = status.progress
             output["passed"] = p.cases.passed
             output["failed"] = p.cases.failed
             output["skipped"] = p.cases.skipped
             output["targets"] = p.targets.total
-
         if status.failures:
             lines: list[str] = []
             for f in status.failures:
@@ -483,7 +429,6 @@ def _serialize_test_result(
                     tb_lines = [ln for ln in f.traceback.strip().splitlines() if ln.strip()][:3]
                     lines.extend(f"  {ln.strip()}" for ln in tb_lines)
             output["failures"] = "\n".join(lines)
-
             # Structured failure list for sidecar rendering — each failure
             # becomes its own cache entry so agents can read one at a time
             output["failure_list"] = [
@@ -496,7 +441,6 @@ def _serialize_test_result(
                 }
                 for f in status.failures
             ]
-
         if status.diagnostics:
             diag_lines: list[str] = []
             for d in status.diagnostics:
@@ -506,7 +450,6 @@ def _serialize_test_result(
                 if d.suggested_action:
                     diag_lines.append(f"  → {d.suggested_action}")
             output["diagnostics"] = "\n".join(diag_lines)
-
         if status.coverage:
             inline_cov, cov_hint = _build_coverage_text(
                 status.coverage,
@@ -515,10 +458,8 @@ def _serialize_test_result(
             output["coverage"] = inline_cov
             if cov_hint:
                 output["coverage_hint"] = cov_hint
-
     if isinstance(result.agentic_hint, str) and result.agentic_hint:
         output["agentic_hint"] = result.agentic_hint
-
     return output
 
 
@@ -531,7 +472,6 @@ def _ingest_checkpoint_coverage(
     failed_test_ids: set[str] | None = None,
 ) -> None:
     """Persist coverage artifacts from a checkpoint test run to TestCoverageFact.
-
     Best-effort: logs and continues on any error.
     """
     try:
@@ -540,15 +480,12 @@ def _ingest_checkpoint_coverage(
             merge,
             parse_artifact,
         )
-
         if not coverage_dir.is_dir():
             return
-
         # Find all coverage artifact files in the directory
         artifact_files = list(coverage_dir.rglob("*"))
         if not artifact_files:
             return
-
         reports = []
         for f in artifact_files:
             if not f.is_file():
@@ -558,14 +495,11 @@ def _ingest_checkpoint_coverage(
                 reports.append(report)
             except (CoverageParseError, OSError):  # best-effort artifact parse
                 log.debug("artifact_parse_failed", path=str(f), exc_info=True)
-
         if not reports:
             return
-
         from coderecon.index._internal.analysis.coverage_ingestion import (
             ingest_coverage,
         )
-
         merged = merge(*reports) if len(reports) > 1 else reports[0]
         engine = app_ctx.coordinator.db.engine
         epoch = app_ctx.coordinator.current_epoch
@@ -574,7 +508,6 @@ def _ingest_checkpoint_coverage(
         )
         if written:
             log.debug("checkpoint.coverage_ingested", facts=written)
-
     except (OSError, CoverageParseError, ImportError, RuntimeError, ValueError):
         log.debug("checkpoint.coverage_ingest_failed", exc_info=True)
 
@@ -591,7 +524,6 @@ def _summarize_verify(
 ) -> str:
     """Generate compact summary for verify result."""
     parts: list[str] = []
-
     if lint_status == "clean":
         parts.append("lint: clean")
     elif lint_status == "skipped":
@@ -600,7 +532,6 @@ def _summarize_verify(
         parts.append(f"lint: {lint_diagnostics} issues")
     else:
         parts.append(f"lint: {lint_status}")
-
     if test_status == "skipped":
         parts.append("tests: skipped")
     elif test_failed > 0:
@@ -609,7 +540,6 @@ def _summarize_verify(
         parts.append(f"tests: {test_passed} passed")
     else:
         parts.append(f"tests: {test_status}")
-
     return " | ".join(parts)
 
 
@@ -626,36 +556,30 @@ def _assign_target_hops(
     repo_root: Path,
 ) -> dict[int, list[TestTarget]]:
     """Map test targets to their import-graph hop distance.
-
     Returns dict[hop_number, list_of_targets].  Targets that don't match any
     hop in the graph result (e.g., discovered-but-not-in-graph) default to
     hop 0 to ensure they always run.
     """
     from coderecon.index._internal.indexing.import_graph import ImportGraphResult
-
     if not isinstance(graph_result, ImportGraphResult):
         raise TypeError(f"Expected ImportGraphResult, got {type(graph_result).__name__}")
     tests_by_hop = graph_result.tests_by_hop()
-
     # Build reverse map: test_file -> hop
     file_to_hop: dict[str, int] = {}
     for hop, files in tests_by_hop.items():
         for f in files:
             if f not in file_to_hop:
                 file_to_hop[f] = hop
-
     # Map targets to hops via _target_matches_affected_files logic
     hop_targets: dict[int, list[Any]] = {}
     for target in targets:
         ws = Path(target.workspace_root)
         sel = _normalize_selector(target.selector)
         scope_abs = ws / sel if sel else ws
-
         try:
             scope_rel = str(scope_abs.relative_to(repo_root))
         except ValueError:
             scope_rel = target.selector
-
         # Find the hop for this target's file path
         if scope_rel in file_to_hop:
             hop = file_to_hop[scope_rel]
@@ -666,49 +590,38 @@ def _assign_target_hops(
                 if fpath == scope_rel or fpath.startswith(scope_rel + "/"):
                     hop = fhop
                     break
-
         hop_targets.setdefault(hop, []).append(target)
-
     return hop_targets
 
 def _partition_for_batching(
     targets: list[Any],
 ) -> tuple[list[list[Any]], list[Any]]:
     """Split targets into batchable groups and solo targets.
-
     Batchable: multiple targets that share the same (runner_pack_id,
     workspace_root) and all have estimated_cost <= _BATCH_COST_THRESHOLD.
-
     Solo: targets with higher estimated cost, or unique runner/workspace
     combinations.
-
     Returns (batch_groups, solo_targets).
     """
     from collections import defaultdict
-
     # Group by (runner_pack_id, workspace_root)
     groups: dict[tuple[str, str], list[Any]] = defaultdict(list)
     for t in targets:
         key = (t.runner_pack_id, t.workspace_root)
         groups[key].append(t)
-
     batch_groups: list[list[Any]] = []
     solo_targets: list[Any] = []
-
     for _key, group in groups.items():
         # Separate low-cost and high-cost targets
         low_cost = [t for t in group if t.estimated_cost <= _BATCH_COST_THRESHOLD]
         high_cost = [t for t in group if t.estimated_cost > _BATCH_COST_THRESHOLD]
-
         solo_targets.extend(high_cost)
-
         if len(low_cost) >= 2:
             # Worth batching: 2+ targets save subprocess overhead
             batch_groups.append(low_cost)
         else:
             # Single target — no point batching
             solo_targets.extend(low_cost)
-
     return batch_groups, solo_targets
 
 
@@ -728,30 +641,24 @@ async def _run_tiered_tests(
     total_phases: int,
 ) -> dict[str, Any]:
     """Execute tests in hop tiers: direct tests first, then transitive.
-
     If direct tests (hop 0) fail, transitive tests (hop 1+) are skipped
     on the assumption that direct-import failures will cascade.
-
     Within each tier, low-cost targets are batched into fewer subprocess
     invocations to reduce startup overhead.
-
     Args:
         coverage_filter_paths: Source files to include in coverage report
             (changed files excluding tests).
         max_test_hops: Maximum hop tier to execute.  0 = direct only,
             1 = direct + first transitive, etc.  Use a large number
             (e.g. 99) for unlimited.
-
     Returns a dict with keys: serialized, status, passed, failed, tier_log.
     """
     hop_targets = _assign_target_hops(filtered_targets, graph_result, repo_root)
     sorted_hops = sorted(hop_targets.keys())
     max_hop = sorted_hops[-1] if sorted_hops else 0
-
     # Limit hops to the requested depth
     executable_hops = [h for h in sorted_hops if h <= max_test_hops]
     skipped_hops = [h for h in sorted_hops if h > max_test_hops]
-
     # Accumulate results across tiers
     total_passed = 0
     total_failed = 0
@@ -762,27 +669,21 @@ async def _run_tiered_tests(
     tier_log: list[dict[str, Any]] = []
     final_status = "completed"
     stopped_at_hop: int | None = None
-
     for hop in executable_hops:
         targets_this_hop = hop_targets[hop]
         target_count = len(targets_this_hop)
-
         tier_label = "direct" if hop == 0 else f"hop {hop}"
         await progress.report_progress(
             phase,
             total_phases,
             f"Running {target_count} {tier_label} test target(s)",
         )
-
         # Partition into batches and solo targets
         batch_groups, solo_targets = _partition_for_batching(targets_this_hop)
-
         batch_count = sum(len(g) for g in batch_groups)
         batched_into = len(batch_groups)
-
         # Build effective target list: solo targets run individually
         effective_target_ids = [t.target_id for t in solo_targets]
-
         # Run solo targets via normal test_ops.run
         solo_result = None
         if effective_target_ids:
@@ -801,12 +702,10 @@ async def _run_tiered_tests(
         # Run batched targets
         import asyncio
         import uuid
-
         hop_batch_results: list[tuple[Any, Any]] = []
         if batch_groups:
             # coverage_dir is passed through to batch execution
             cov_dir_path = Path(coverage_dir) if coverage_dir else None
-
             async def run_batch(
                 group: list[Any], cov_path: Path | None = cov_dir_path
             ) -> tuple[Any, Any]:
@@ -822,7 +721,6 @@ async def _run_tiered_tests(
                     timeout_sec=300,
                     coverage_dir=cov_path,
                 )
-
             batch_tasks = [asyncio.create_task(run_batch(g)) for g in batch_groups]
             hop_batch_results = await asyncio.gather(*batch_tasks)
             # Separate results and coverage artifacts
@@ -830,18 +728,15 @@ async def _run_tiered_tests(
                 all_batch_results.append(result)
                 if cov_artifact:
                     all_batch_coverage.append(cov_artifact)
-
         # Collect per-hop batch results for tier counting (avoid cross-hop bleed)
         hop_batch_parsed: list[Any] = (
             [result for result, _ in hop_batch_results] if batch_groups else []
         )
-
         # Aggregate results for this tier
         tier_passed = 0
         tier_failed = 0
         tier_total = 0
         tier_duration = 0.0
-
         if solo_result and solo_result.run_status:
             rs = solo_result.run_status
             if rs.progress:
@@ -850,7 +745,6 @@ async def _run_tiered_tests(
                 tier_total += rs.progress.cases.total
             tier_duration += rs.duration_seconds
             all_test_results.append(solo_result)
-
             # Collect failure details from solo result
             if rs.failures:
                 for f in rs.failures:
@@ -859,13 +753,11 @@ async def _run_tiered_tests(
                     if f.traceback:
                         tb_lines = [ln for ln in f.traceback.strip().splitlines() if ln.strip()][:3]
                         all_failure_lines.extend(f"  {ln.strip()}" for ln in tb_lines)
-
         for br in hop_batch_parsed:
             tier_passed += br.passed
             tier_failed += br.failed
             tier_total += br.total
             tier_duration += br.duration_seconds
-
             # Collect failure details from batch results
             if br.tests:
                 for tc in br.tests:
@@ -882,10 +774,8 @@ async def _run_tiered_tests(
                                 ln for ln in tc.traceback.strip().splitlines() if ln.strip()
                             ][:3]
                             all_failure_lines.extend(f"  {ln.strip()}" for ln in tb_lines)
-
         total_passed += tier_passed
         total_failed += tier_failed
-
         tier_entry: dict[str, Any] = {
             "hop": hop,
             "label": tier_label,
@@ -898,12 +788,10 @@ async def _run_tiered_tests(
             "duration_seconds": round(tier_duration, 2),
         }
         tier_log.append(tier_entry)
-
         # Tiered fail-fast: if this hop has failures, skip remaining hops
         if tier_failed > 0 and hop < max_hop:
             remaining_hops = [h for h in executable_hops if h > hop] + skipped_hops
             stopped_at_hop = hop
-
             skipped_info = ", ".join(
                 f"hop {h} ({len(hop_targets[h])} targets)" for h in remaining_hops
             )
@@ -911,7 +799,6 @@ async def _run_tiered_tests(
                 f"Failures in {tier_label} — skipped transitive tiers: {skipped_info}"
             )
             break
-
     # Build combined serialized result
     combined: dict[str, Any] = {}
     if all_test_results and all_test_results[0].run_status:
@@ -923,12 +810,10 @@ async def _run_tiered_tests(
                     {"format": cov.format, "path": str(cov.path), "pack_id": cov.pack_id}
                 )
             all_test_results[0].run_status.coverage = existing_cov
-
         combined = _serialize_test_result(
             all_test_results[0],
             coverage_filter_paths=coverage_filter_paths,
         )
-
         # Overlay batch results into flat counters
         for br in all_batch_results:
             combined["passed"] = combined.get("passed", 0) + br.passed
@@ -955,11 +840,9 @@ async def _run_tiered_tests(
             combined["coverage"] = inline_cov
             if cov_hint:
                 combined["coverage_hint"] = cov_hint
-
     # Overlay accumulated failure details from ALL hops and batch results
     if all_failure_lines:
         combined["failures"] = "\n".join(all_failure_lines)
-
     # Compact tier execution as text string
     tier_parts: list[str] = []
     for entry in tier_log:
@@ -973,7 +856,6 @@ async def _run_tiered_tests(
             # Append skip info
             tier_parts.append("→ STOPPED")
     combined["tiers"] = " | ".join(tier_parts)
-
     # Log skipped hops due to hop limit
     if skipped_hops and stopped_at_hop is None:
         skipped_targets = sum(len(hop_targets[h]) for h in skipped_hops)
@@ -992,7 +874,6 @@ async def _run_tiered_tests(
                 "stopped_reason": f"max_test_hops={max_test_hops} \u2014 skipped: {skipped_info}",
             }
         )
-
     # Build transparent summary
     tier_log_idx = next(
         (i for i, t in enumerate(tier_log) if t["hop"] == stopped_at_hop),
@@ -1013,7 +894,6 @@ async def _run_tiered_tests(
             + (f", {total_failed} failed" if total_failed > 0 else "")
             + f" ({total_duration:.1f}s{hop_note}{skip_note})"
         )
-
     # Collect failed test IDs for coverage ingestion
     _failed_test_ids: set[str] = set()
     for _tr in all_test_results:
@@ -1022,7 +902,6 @@ async def _run_tiered_tests(
                 f"{f.path}::{f.name}"
                 for f in _tr.run_status.failures
             )
-
     return {
         "serialized": combined,
         "status": final_status,
@@ -1041,11 +920,9 @@ class _NullProgress:
     async def report_progress(self, current: int, total: int, message: str) -> None:
         """No-op: progress discarded when no listener is attached."""
         return None
-
     async def info(self, message: str) -> None:
         """No-op: info message discarded when no listener is attached."""
         return None
-
     async def warning(self, message: str) -> None:
         """No-op: warning discarded when no listener is attached."""
         return None
@@ -1069,14 +946,12 @@ async def checkpoint_pipeline(
     progress: ProgressSink | None = None,
 ) -> dict[str, Any]:
     """Core checkpoint logic — lint, test, commit, push.
-
     Decoupled from MCP: accepts an ``AppContext``, a ``SessionState``,
     and an optional ``ProgressSink``.  Both the MCP ``@mcp.tool`` wrapper
     and the stdio dispatch layer call this function.
     """
     if progress is None:
         progress = _NullProgress()
-
     # ── Read-only checkpoint: clean-tree verification only ──
     if getattr(session, "read_only", None) is True:
         try:
@@ -1103,36 +978,29 @@ async def checkpoint_pipeline(
             ro_result["agentic_hint"] = (
                 "Read-only session complete — working tree is clean. No mutations were made."
             )
-
         # ── Reset session state so next task starts clean ──
         session.mutation_ctx.clear()
         app_ctx.refactor_ops.clear_pending()
-
         from coderecon.mcp.delivery import wrap_response
-
         return wrap_response(
             ro_result,
             resource_kind="checkpoint",
         )
-
     # Compute total phases for progress reporting
     total_phases = int(lint) + int(tests) * 3  # tests = discover + filter + run
     phase = 0
-
     result: dict[str, Any] = {"action": "checkpoint", "changed_files": changed_files}
     lint_status = "skipped"
     lint_diagnostics = 0
     test_passed = 0
     test_failed = 0
     test_status = "skipped"
-
     if lint:
         # Fast-path: read cached lint facts if background pipeline already ran
         cached_lint = None
         if not autofix and changed_files:
             try:
                 from coderecon.mcp.tools._checkpoint_cache import try_read_lint_facts
-
                 cached_lint = try_read_lint_facts(
                     engine=app_ctx.coordinator.db.engine,
                     changed_files=changed_files,
@@ -1140,18 +1008,15 @@ async def checkpoint_pipeline(
                 )
             except (ImportError, OSError, RuntimeError, ValueError):  # noqa: BLE001
                 cached_lint = None
-
         if cached_lint is not None:
             # Use cached facts — near-instant
             lint_status = "clean" if cached_lint.clean else "dirty"
             lint_diagnostics = cached_lint.total_errors + cached_lint.total_warnings
             phase += 1
-
             if cached_lint.clean:
                 await progress.info("Lint: clean (cached)")
             else:
                 await progress.info(f"Lint: {lint_diagnostics} issue(s) (cached)")
-
             result["lint"] = {
                 "status": lint_status,
                 "diagnostics": lint_diagnostics,
@@ -1164,7 +1029,6 @@ async def checkpoint_pipeline(
                     f"{i['file']} {i['tool']} E:{i['errors']} W:{i['warnings']}"
                     for i in cached_lint.issues
                 ]
-
             if lint_diagnostics > 0 and lint_status != "clean":
                 test_status = "skipped"
                 result["tests"] = {
@@ -1185,7 +1049,6 @@ async def checkpoint_pipeline(
             lint_status = lint_result.status
             lint_diagnostics = lint_result.total_diagnostics
             phase += 1
-
             if lint_status == "clean":
                 await progress.info("Lint: clean")
             else:
@@ -1193,7 +1056,6 @@ async def checkpoint_pipeline(
                     f"Lint: {lint_diagnostics} issue(s), "
                     f"{lint_result.total_files_modified} file(s) modified"
                 )
-
             # Build compact lint result: structured outer keys, text for issues
             issue_lines: list[str] = []
             for t in lint_result.tools_run:
@@ -1207,7 +1069,6 @@ async def checkpoint_pipeline(
                                 break
                     sev = d.severity.value[0].upper()  # W/E/I
                     issue_lines.append(f"{rel_path}:{d.line}:{d.column} {sev} {d.code} {d.message}")
-
             result["lint"] = {
                 "status": lint_result.status,
                 "diagnostics": lint_result.total_diagnostics,
@@ -1216,10 +1077,8 @@ async def checkpoint_pipeline(
             }
             if issue_lines:
                 result["lint"]["issues"] = issue_lines
-
             if lint_result.agentic_hint:
                 result["lint"]["agentic_hint"] = lint_result.agentic_hint
-
             # Fail-fast: skip tests if lint has issues
             if lint_diagnostics > 0 and lint_status != "clean":
                 test_status = "skipped"
@@ -1228,13 +1087,11 @@ async def checkpoint_pipeline(
                     "reason": "lint failed — fix lint issues first",
                 }
                 tests = False
-
     if tests:
         await progress.report_progress(phase, total_phases, "Discovering test targets")
         discover_result = await app_ctx.test_ops.discover(paths=None)
         all_targets = discover_result.targets or []
         phase += 1
-
         if all_targets and changed_files:
             await progress.report_progress(
                 phase,
@@ -1243,14 +1100,12 @@ async def checkpoint_pipeline(
             )
             graph_result = await app_ctx.coordinator.get_affected_test_targets(changed_files)
             affected_paths = set(graph_result.test_files)
-
             filtered = [
                 t
                 for t in all_targets
                 if _target_matches_affected_files(t, affected_paths, app_ctx.repo_root)
             ]
             phase += 1
-
             if not filtered:
                 test_status = "skipped"
                 await progress.info("Tests: no affected targets — skipping")
@@ -1262,9 +1117,7 @@ async def checkpoint_pipeline(
             else:
                 # Auto-derive coverage_dir - coverage is always enabled
                 import uuid
-
                 from coderecon.core.languages import is_test_file
-
                 coverage_dir = str(
                     app_ctx.repo_root
                     / ".recon"
@@ -1273,10 +1126,8 @@ async def checkpoint_pipeline(
                     / uuid.uuid4().hex[:8]
                 )
                 Path(coverage_dir).mkdir(parents=True, exist_ok=True)
-
                 # Filter changed_files to source files only (exclude tests)
                 coverage_filter_paths = {f for f in changed_files if not is_test_file(f)}
-
                 # Resolve effective max_test_hops
                 if max_test_hops is not None:
                     effective_hops = max_test_hops
@@ -1284,7 +1135,6 @@ async def checkpoint_pipeline(
                     effective_hops = _COMMIT_MAX_TEST_HOPS
                 else:
                     effective_hops = _DEFAULT_MAX_TEST_HOPS
-
                 tiered_result = await _run_tiered_tests(
                     app_ctx=app_ctx,
                     progress=progress,
@@ -1303,23 +1153,19 @@ async def checkpoint_pipeline(
                 test_status = tiered_result["status"]
                 test_passed = tiered_result["passed"]
                 test_failed = tiered_result["failed"]
-
                 # Persist coverage facts to DB for recon pipeline
                 _ingest_checkpoint_coverage(
                     app_ctx, Path(coverage_dir),
                     failed_test_ids=tiered_result.get("failed_test_ids"),
                 )
-
                 # Hoist coverage_hint to top-level for agent visibility
                 serialized = tiered_result["serialized"]
                 if isinstance(serialized, dict) and serialized.get("coverage_hint"):
                     result["coverage_hint"] = serialized.pop("coverage_hint")
-
                 if test_failed > 0:
                     await progress.warning(f"Tests: {test_passed} passed, {test_failed} FAILED")
                 elif test_passed > 0:
                     await progress.info(f"Tests: {test_passed} passed")
-
         else:
             test_status = "skipped"
             if not all_targets:
@@ -1331,11 +1177,9 @@ async def checkpoint_pipeline(
                 "status": "skipped",
                 "reason": reason,
             }
-
     result["summary"] = _summarize_verify(
         lint_status, lint_diagnostics, test_passed, test_failed, test_status
     )
-
     has_lint_issues = lint_diagnostics > 0 and lint_status != "clean"
     has_test_failures = test_failed > 0
     has_test_error = test_status == "error"
@@ -1349,7 +1193,6 @@ async def checkpoint_pipeline(
             hints.append(f"Fix {test_failed} failing test(s).")
         if has_test_error:
             hints.append("Test phase errored — check tests section for details.")
-
         # Add tier execution transparency
         tiers_text = (
             result.get("tests", {}).get("tiers", "")
@@ -1358,7 +1201,6 @@ async def checkpoint_pipeline(
         )
         if tiers_text:
             hints.append(f"Tiers: {tiers_text}")
-
         hints.append(
             "STOP! You passed changed_files — lint and tests ran ONLY on "
             "code affected by YOUR changes. These failures are almost "
@@ -1368,11 +1210,9 @@ async def checkpoint_pipeline(
             "dependents. These are still YOUR responsibility. "
             "Fix ALL issues before proceeding."
         )
-
         # ── Build failure-focused enrichment ──
         try:
             import hashlib
-
             repo_root = app_ctx.coordinator.repo_root
             refreshed: list[dict[str, Any]] = []
             for cf in changed_files:
@@ -1393,7 +1233,6 @@ async def checkpoint_pipeline(
                     }
                     try:
                         from coderecon.mcp.tools.files import _build_scaffold
-
                         scaffold = _build_scaffold(app_ctx, cf, fp)
                         entry["scaffold"] = scaffold
                     except (ImportError, OSError, ValueError):  # best-effort scaffold
@@ -1402,13 +1241,10 @@ async def checkpoint_pipeline(
                 except (OSError, UnicodeDecodeError, ValueError):  # best-effort file read
                     log.debug("checkpoint.file_refresh.failed", path=cf, exc_info=True)
                     continue
-
             if refreshed:
                 session.mutation_ctx.clear()
                 app_ctx.refactor_ops.clear_pending()
-
                 file_contents = {r["path"]: r["content"] for r in refreshed}
-
                 # Extract failure list from test results
                 tests_section = result.get("tests", {})
                 fl = (
@@ -1416,10 +1252,8 @@ async def checkpoint_pipeline(
                     if isinstance(tests_section, dict)
                     else []
                 )
-
                 # Build snippets around failure locations
                 failure_snippets = _build_failure_snippets(fl, file_contents) if fl else {}
-
                 # Build scaffolds (compact symbol index)
                 def _render_scaffold(scaffold: dict) -> str:
                     parts: list[str] = []
@@ -1435,13 +1269,11 @@ async def checkpoint_pipeline(
                         line = s.get("line", "")
                         parts.append(f"  {kind} {name} (L{line})" if line else f"  {kind} {name}")
                     return "\n".join(parts)
-
                 failure_scaffolds: dict[str, str] = {}
                 for r in refreshed:
                     raw_scaffold: object = r.get("scaffold")
                     if isinstance(raw_scaffold, dict):
                         failure_scaffolds[r["path"]] = _render_scaffold(raw_scaffold)
-
                 file_manifest = [
                     {
                         "path": r["path"],
@@ -1450,25 +1282,20 @@ async def checkpoint_pipeline(
                     }
                     for r in refreshed
                 ]
-
                 result["failure_snippets"] = failure_snippets
                 result["failure_scaffolds"] = failure_scaffolds
                 result["file_manifest"] = file_manifest
-
         except (ImportError, OSError, RuntimeError, TypeError, ValueError, KeyError):  # noqa: BLE001
             log.debug("checkpoint_failure_enrichment_failed", exc_info=True)
-
         result["agentic_hint"] = " ".join(hints)
     else:
         result["passed"] = True
         await progress.report_progress(total_phases, total_phases, "Checks passed")
-
         # ── Governance gate evaluation ──
         gate_hints: list[str] = []
         try:
             from coderecon.config.loader import load_config
             from coderecon.index._internal.analysis.gate_engine import evaluate_gates
-
             config = load_config(repo_root=app_ctx.repo_root)
             gate_result = evaluate_gates(
                 governance=config.governance,
@@ -1480,14 +1307,12 @@ async def checkpoint_pipeline(
                 if changed_files
                 else None,
             )
-
             if gate_result.violations:
                 result["governance"] = gate_result.to_dict()
                 for v in gate_result.errors:
                     gate_hints.append(f"[GATE ERROR] {v.rule}: {v.message}")
                 for v in gate_result.warnings:
                     gate_hints.append(f"[GATE WARNING] {v.rule}: {v.message}")
-
                 if not gate_result.passed:
                     result["passed"] = False
                     result["agentic_hint"] = " ".join(gate_hints)
@@ -1497,18 +1322,15 @@ async def checkpoint_pipeline(
                     )
         except (ImportError, OSError, ValueError, AttributeError):  # best-effort governance
             log.debug("checkpoint.governance.failed", exc_info=True)
-
         # ── Reset mutation state ──
         try:
             session.mutation_ctx.clear()
             app_ctx.refactor_ops.clear_pending()
         except (AttributeError, RuntimeError):  # best-effort reset
             log.debug("checkpoint.mutation_reset.failed", exc_info=True)
-
         if commit_message:
             _validate_commit_message(commit_message)
             repo_path = Path(app_ctx.git_ops.path)
-
             await progress.report_progress(total_phases, total_phases + 2, "Staging changes")
             if changed_files:
                 tracked = set(app_ctx.git_ops.tracked_files())
@@ -1517,7 +1339,6 @@ async def checkpoint_pipeline(
                 staged_paths = list(changed_files)
             else:
                 staged_paths = app_ctx.git_ops.stage_all()
-
             await progress.report_progress(
                 total_phases + 1, total_phases + 2, "Running pre-commit hooks"
             )
@@ -1546,13 +1367,11 @@ async def checkpoint_pipeline(
                     total_phases + 2,
                     f"Committed {sha[:7]}",
                 )
-
                 try:
                     from coderecon.mcp.tools.diff import (
                         _result_to_dict,
                         _run_git_diff,
                     )
-
                     diff_result = _run_git_diff(
                         app_ctx, base="HEAD~1", target="HEAD", paths=None
                     )
@@ -1570,7 +1389,6 @@ async def checkpoint_pipeline(
                         commit_result["diff"] = diff_summary
                 except (ImportError, GitError, KeyError, ValueError, OSError, RuntimeError):
                     log.debug("post-commit semantic diff skipped", exc_info=True)
-
             result["agentic_hint"] = (
                 "All checks passed and changes committed."
                 if "oid" in result.get("commit", {})
@@ -1581,7 +1399,6 @@ async def checkpoint_pipeline(
                 'All checks passed. Call checkpoint again with commit_message="..." '
                 "to commit your changes."
             )
-
         # ── Test debt detection ──
         if changed_files:
             try:
@@ -1592,9 +1409,7 @@ async def checkpoint_pipeline(
                     result["agentic_hint"] = f"{existing}\n\n{debt['hint']}"
             except (ImportError, OSError, ValueError):
                 log.debug("test_debt_detection_failed", exc_info=True)
-
     from coderecon.mcp.delivery import wrap_response
-
     return wrap_response(
         result,
         resource_kind="checkpoint",
@@ -1647,13 +1462,11 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
         ),
     ) -> dict[str, Any]:
         """Lint, test, and optionally commit+push in one call.
-
         Chains:
         1. lint (full repo, auto-fix by default) — reports and fixes issues
         2. discover + run tests affected by changed_files (via import graph)
         3. (optional) if commit_message is set and all checks pass:
            stage changed_files → pre-commit hooks → commit → push → lean semantic diff
-
         Returns combined results with pass/fail verdict.
         """
         session = app_ctx.session_manager.get_or_create(ctx.session_id)

@@ -34,12 +34,10 @@ def parse_sarif(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
                 rule_id = result.get("ruleId", "")
                 level = result.get("level", "warning")
                 message = result.get("message", {}).get("text", "")
-
                 for location in result.get("locations", []):
                     phys = location.get("physicalLocation", {})
                     artifact = phys.get("artifactLocation", {})
                     region = phys.get("region", {})
-
                     diagnostics.append(
                         Diagnostic(
                             path=artifact.get("uri", ""),
@@ -356,10 +354,8 @@ def parse_gofmt(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
 
 def parse_ruff_format(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse ruff format output.
-
     Fix mode (``ruff format``) prints a summary line like
     ``1 file reformatted, 2 files left unchanged.`` -- no per-file paths.
-
     Check mode (``ruff format --check --diff``) prints
     ``Would reformat: <path>`` lines plus a summary.
     """
@@ -468,7 +464,6 @@ def parse_cargo_audit(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
 def parse_checkstyle(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse checkstyle XML output."""
     import xml.etree.ElementTree as ET
-
     diagnostics: list[Diagnostic] = []
     try:
         root = ET.fromstring(stdout)

@@ -53,7 +53,6 @@ class TestBuildSymbolTree:
     """Test the _build_symbol_tree helper from files.py."""
     def _import_tree_builder(self) -> Any:
         from coderecon.mcp.tools.files import _build_symbol_tree
-
         return _build_symbol_tree
     def test_flat_functions(self) -> None:
         build = self._import_tree_builder()
@@ -74,7 +73,6 @@ class TestBuildSymbolTree:
             FakeDef("standalone", "function", 22, 25, signature_text="()"),
         ]
         tree = build(defs)
-
         # 4 lines total: class, 2 indented methods, standalone
         assert len(tree) == 4
         assert tree[0] == "class MyClass  [1-20]"
@@ -90,7 +88,6 @@ class TestBuildSymbolTree:
             FakeDef("deep_method", "method", 10, 20, signature_text="(self)"),
         ]
         tree = build(defs)
-
         assert len(tree) == 3
         assert tree[0] == "class Outer  [1-30]"
         assert tree[1] == "  class Inner  [5-25]"
@@ -215,7 +212,6 @@ class TestBuildSymbolTree:
         assert len(filtered) == 2
         assert filtered[0].name == "func"
         assert filtered[1].name == "MyClass"
-
         # include constants (include_constants=True means keep all)
         include_constants = True
         filtered_all = [d for d in defs if include_constants or d.kind not in constant_kinds]
@@ -230,13 +226,11 @@ class TestBuildUnindexedFallback:
     """Test the _build_unindexed_fallback helper."""
     def _import_fallback(self) -> Any:
         from coderecon.mcp.tools.files import _build_unindexed_fallback
-
         return _build_unindexed_fallback
     def test_returns_indexed_false(self, tmp_path: Path) -> None:
         fallback = self._import_fallback()
         fp = tmp_path / "test.txt"
         fp.write_text("line 1\nline 2\nline 3\n")
-
         result = fallback(fp, "test.txt")
         assert result["indexed"] is False
         assert result["total_lines"] == 3
@@ -247,7 +241,6 @@ class TestBuildUnindexedFallback:
         fallback = self._import_fallback()
         fp = tmp_path / "empty.txt"
         fp.write_text("")
-
         result = fallback(fp, "empty.txt")
         assert result["indexed"] is False
         assert result["total_lines"] == 0
@@ -255,14 +248,12 @@ class TestBuildUnindexedFallback:
         fallback = self._import_fallback()
         fp = tmp_path / "data.csv"
         fp.write_text("a,b,c\n1,2,3\n")
-
         result = fallback(fp, "data.csv")
         assert result["path"] == "data.csv"
     def test_hint_suggests_read_source(self, tmp_path: Path) -> None:
         fallback = self._import_fallback()
         fp = tmp_path / "config.yaml"
         fp.write_text("key: value\n")
-
         result = fallback(fp, "config.yaml")
         hint = result.get("agentic_hint", "")
         assert "terminal" in hint or "cat" in hint
@@ -294,18 +285,14 @@ class TestBuildLiteScaffold:
     @pytest.fixture
     def _mock_app_ctx(self) -> Any:
         """Build a mock app_ctx wired to return controlled defs/imports.
-
         The fixture stores ``_defs`` and ``_imports`` on itself; callers
         assign lists before invoking the function under test.
         """
         from unittest.mock import MagicMock
-
         file_rec = MagicMock()
         file_rec.id = 42
         file_rec.path = "src/mod.py"
-
         ctx = MagicMock()
-
         # First session → select(File) → returns file_rec
         # Second session → FactQueries → returns stored defs/imports
         # We use side_effect to distinguish the two context-manager calls.
@@ -331,10 +318,8 @@ class TestBuildLiteScaffold:
                 return sess
             def __exit__(self, *_: Any) -> None:
                 pass
-
         call_idx = [0]
         ctx.coordinator.db.session.side_effect = lambda: _FakeSession(call_idx, ctx)
-
         # Patch FactQueries — the function imports it inside the body
         ctx._defs = []
         ctx._imports = []
@@ -346,7 +331,6 @@ class TestBuildLiteScaffold:
         """Reset call counter between tests."""
         _mock_app_ctx._call_idx[0] = 0
         return _mock_app_ctx
-
     async def _run(
         self,
         app_ctx: Any,
@@ -358,16 +342,12 @@ class TestBuildLiteScaffold:
     ) -> dict[str, Any]:
         """Helper to execute _build_lite_scaffold with patched deps."""
         from unittest.mock import patch
-
         from coderecon.mcp.tools.files import _build_lite_scaffold
-
         fp = tmp_path / "mod.py"
         fp.write_text(content)
-
         fq_instance = MagicMock()
         fq_instance.list_defs_in_file.return_value = defs or []
         fq_instance.list_imports.return_value = imports or []
-
         with patch(
             "coderecon.index._internal.indexing.graph.FactQueries",
             return_value=fq_instance,
@@ -430,9 +410,7 @@ class TestBuildLiteScaffold:
     async def test_unindexed_file_returns_empty(self, tmp_path: Path) -> None:
         """When file is not in the index, returns empty symbols/imports."""
         from unittest.mock import MagicMock
-
         from coderecon.mcp.tools.files import _build_lite_scaffold
-
         app_ctx = MagicMock()
         sess = MagicMock()
         exec_result = MagicMock()
@@ -440,10 +418,8 @@ class TestBuildLiteScaffold:
         sess.exec.return_value = exec_result
         app_ctx.coordinator.db.session.return_value.__enter__ = MagicMock(return_value=sess)
         app_ctx.coordinator.db.session.return_value.__exit__ = MagicMock(return_value=False)
-
         fp = tmp_path / "unknown.py"
         fp.write_text("print('hello')\n")
-
         result = _build_lite_scaffold(app_ctx, "unknown.py", fp)
         assert result["total_lines"] == 1
         assert result["imports"] == []
@@ -470,42 +446,34 @@ class TestDefFactNewFields:
     """Test that new DefFact fields are populated by the structural indexer."""
     def test_def_dict_has_scaffold_fields(self, tmp_path: Path) -> None:
         from coderecon.index._internal.indexing.structural import _extract_file
-
         code = '''@staticmethod
 def helper(x: int) -> str:
     """Convert int to string."""
     return str(x)
 '''
         (tmp_path / "test.py").write_text(code)
-
         result = _extract_file("test.py", str(tmp_path), unit_id=1)
         assert not result.error
         assert len(result.defs) > 0
         helper_def = next(d for d in result.defs if d["name"] == "helper")
-
         # signature_text
         assert helper_def.get("signature_text") is not None
         assert "x: int" in helper_def["signature_text"]
-
         # decorators_json
         assert helper_def.get("decorators_json") is not None
         decos = json.loads(helper_def["decorators_json"])
         assert any("staticmethod" in d for d in decos)
-
         # docstring
         assert helper_def.get("docstring") is not None
         assert "Convert" in helper_def["docstring"]
     def test_no_scaffold_fields_when_absent(self, tmp_path: Path) -> None:
         from coderecon.index._internal.indexing.structural import _extract_file
-
         code = """def bare():
     return 1
 """
         (tmp_path / "test.py").write_text(code)
-
         result = _extract_file("test.py", str(tmp_path), unit_id=1)
         assert not result.error
-
         bare_def = next(d for d in result.defs if d["name"] == "bare")
         assert bare_def.get("decorators_json") is None
         assert bare_def.get("docstring") is None
@@ -520,7 +488,6 @@ class TestImportFactLineNumbers:
     """Test that import line numbers are persisted in the indexer."""
     def test_import_dict_has_line_numbers(self, tmp_path: Path) -> None:
         from coderecon.index._internal.indexing.structural import _extract_file
-
         code = """import os
 from pathlib import Path
 
@@ -528,7 +495,6 @@ def main():
     pass
 """
         (tmp_path / "test.py").write_text(code)
-
         result = _extract_file("test.py", str(tmp_path), unit_id=1)
         assert not result.error
         assert len(result.imports) > 0
@@ -539,15 +505,12 @@ def main():
             assert imp_dict["start_line"] > 0
     def test_import_line_numbers_are_correct(self, tmp_path: Path) -> None:
         from coderecon.index._internal.indexing.structural import _extract_file
-
         code = """import os
 from sys import argv
 """
         (tmp_path / "test.py").write_text(code)
-
         result = _extract_file("test.py", str(tmp_path), unit_id=1)
         assert not result.error
-
         # First import should be on line 1, second on line 2
         lines = sorted(imp_dict["start_line"] for imp_dict in result.imports)
         assert lines[0] == 1

@@ -57,7 +57,6 @@ class TestToolMiddleware:
     def mock_console(self):
         """Create a mock console."""
         return MagicMock()
-
     # =========================================================================
     # Success Path Tests
     # =========================================================================
@@ -65,13 +64,10 @@ class TestToolMiddleware:
     async def test_successful_tool_call(self, middleware, mock_context, mock_console):
         """Test successful tool call returns result with logging."""
         expected_result = ToolResult(structured_content={"data": "test", "summary": "test summary"})
-
         async def call_next(_ctx):  # noqa: ARG001
             return expected_result
-
         with patch("coderecon.core.progress.get_console", return_value=mock_console):
             result = await middleware.on_call_tool(mock_context, call_next)
-
         assert result == expected_result
         # Console should have printed success message
         mock_console.print.assert_called()
@@ -81,22 +77,17 @@ class TestToolMiddleware:
     ):
         """Test successful tool call with plain dict result."""
         expected_result = {"data": "test", "summary": "test summary"}
-
         async def call_next(_ctx):  # noqa: ARG001
             return expected_result
-
         with patch("coderecon.core.progress.get_console", return_value=mock_console):
             result = await middleware.on_call_tool(mock_context, call_next)
-
         assert result == expected_result
     @pytest.mark.asyncio
     async def test_truncated_session_id(self, middleware, mock_context, mock_console):
         """Test session ID is truncated to 8 chars for display."""
         mock_context.fastmcp_context.session_id = "very_long_session_id_12345"
-
         async def call_next(_ctx):  # noqa: ARG001
             return {"result": "ok"}
-
         with (
             patch("coderecon.core.progress.get_console", return_value=mock_console),
             patch("coderecon.mcp.middleware.log") as mock_log,
@@ -109,15 +100,11 @@ class TestToolMiddleware:
     async def test_no_fastmcp_context(self, middleware, mock_context, mock_console):
         """Test handling when fastmcp_context is None."""
         mock_context.fastmcp_context = None
-
         async def call_next(_ctx):  # noqa: ARG001
             return {"result": "ok"}
-
         with patch("coderecon.core.progress.get_console", return_value=mock_console):
             result = await middleware.on_call_tool(mock_context, call_next)
-
         assert result == {"result": "ok"}
-
     # =========================================================================
     # Cancellation Tests
     # =========================================================================
@@ -126,10 +113,8 @@ class TestToolMiddleware:
         """Test handling of asyncio.CancelledError."""
         async def call_next(_ctx):  # noqa: ARG001
             raise asyncio.CancelledError()
-
         with patch("coderecon.core.progress.get_console", return_value=mock_console):
             result = await middleware.on_call_tool(mock_context, call_next)
-
         assert isinstance(result, ToolResult)
         content = result.structured_content
         assert content is not None
@@ -137,7 +122,6 @@ class TestToolMiddleware:
         assert content["error"]["code"] == "CANCELLED"
         assert "server shutting down" in content["error"]["message"]
         assert content["summary"] == "error: cancelled"
-
     # =========================================================================
     # Validation Error Tests
     # =========================================================================
@@ -149,18 +133,14 @@ class TestToolMiddleware:
         class TestModel(BaseModel):
             required_field: str
             number_field: int
-
         try:
             TestModel(required_field=123, number_field="not_a_number")
         except ValidationError as e:
             validation_error = e
-
         async def call_next(_ctx):  # noqa: ARG001
             raise validation_error
-
         with patch("coderecon.core.progress.get_console", return_value=mock_console):
             result = await middleware.on_call_tool(mock_context, call_next)
-
         assert isinstance(result, ToolResult)
         content = result.structured_content
         assert content is not None
@@ -176,18 +156,14 @@ class TestToolMiddleware:
         from pydantic import BaseModel, Field
         class TestModel(BaseModel):
             name: str = Field(min_length=3)
-
         try:
             TestModel(name="ab")
         except ValidationError as e:
             validation_error = e
-
         async def call_next(_ctx):  # noqa: ARG001
             raise validation_error
-
         with patch("coderecon.core.progress.get_console", return_value=mock_console):
             result = await middleware.on_call_tool(mock_context, call_next)
-
         content = result.structured_content
         assert content is not None
         details = content["error"]["details"]
@@ -195,7 +171,6 @@ class TestToolMiddleware:
         assert "field" in details[0]
         assert "message" in details[0]
         assert "type" in details[0]
-
     # =========================================================================
     # MCPError Tests
     # =========================================================================
@@ -209,10 +184,8 @@ class TestToolMiddleware:
                 path="test.py",
                 remediation="Check the file path and try again.",
             )
-
         with patch("coderecon.core.progress.get_console", return_value=mock_console):
             result = await middleware.on_call_tool(mock_context, call_next)
-
         assert isinstance(result, ToolResult)
         content = result.structured_content
         assert content is not None
@@ -228,14 +201,11 @@ class TestToolMiddleware:
                 path="src/file.py",
                 remediation="Check the line range is within file bounds.",
             )
-
         with patch("coderecon.core.progress.get_console", return_value=mock_console):
             result = await middleware.on_call_tool(mock_context, call_next)
-
         content = result.structured_content
         assert content is not None
         assert content["error"]["code"] == "INVALID_RANGE"
-
     # =========================================================================
     # Internal Error Tests
     # =========================================================================
@@ -244,10 +214,8 @@ class TestToolMiddleware:
         """Test handling of unexpected exceptions."""
         async def call_next(_ctx):  # noqa: ARG001
             raise RuntimeError("Unexpected failure")
-
         with patch("coderecon.core.progress.get_console", return_value=mock_console):
             result = await middleware.on_call_tool(mock_context, call_next)
-
         assert isinstance(result, ToolResult)
         content = result.structured_content
         assert content is not None
@@ -260,18 +228,15 @@ class TestToolMiddleware:
         """Test internal error prints to console with log file pointer."""
         async def call_next(_ctx):  # noqa: ARG001
             raise ValueError("Test error")
-
         with (
             patch("coderecon.core.progress.get_console", return_value=mock_console),
             patch("coderecon.mcp.middleware.log"),
         ):
             await middleware.on_call_tool(mock_context, call_next)
-
         # Console should have error printed
         mock_console.print.assert_called()
         call_args = str(mock_console.print.call_args)
         assert "failed" in call_args.lower() or "error" in call_args.lower()
-
     # =========================================================================
     # Log Params Extraction Tests
     # =========================================================================
@@ -303,7 +268,6 @@ class TestToolMiddleware:
         kwargs = {"path": "test.py", "optional": None}
         params = middleware._extract_log_params("test_tool", kwargs)
         assert params == {"path": "test.py"}
-
     # =========================================================================
     # Result Summary Extraction Tests
     # =========================================================================
@@ -356,7 +320,6 @@ class TestToolMiddleware:
         summary = middleware._extract_result_summary("checkpoint", result)
         assert summary["passed"] == 10
         assert summary["failed"] == 2
-
     # =========================================================================
     # Format Tool Summary Tests
     # =========================================================================
@@ -396,21 +359,18 @@ class TestToolMiddleware:
         result = {"data": "something"}
         formatted = middleware._format_tool_summary("unknown_tool", result)
         assert formatted == ""
-
     # =========================================================================
     # Error Printing Tests
     # =========================================================================
     def test_print_error_with_log_file(self, middleware):
         """Test error printing includes log file path."""
         mock_console = MagicMock()
-
         with patch(
             "coderecon.core.logging.get_log_file_path", return_value="/var/log/coderecon.log"
         ):
             middleware._print_error_with_log_pointer(
                 mock_console, "test_tool", "ValueError", "test error message"
             )
-
         mock_console.print.assert_called_once()
         call_args = str(mock_console.print.call_args)
         assert "test_tool" in call_args
@@ -419,12 +379,10 @@ class TestToolMiddleware:
     def test_print_error_without_log_file(self, middleware):
         """Test error printing when no log file configured."""
         mock_console = MagicMock()
-
         with patch("coderecon.core.logging.get_log_file_path", return_value=None):
             middleware._print_error_with_log_pointer(
                 mock_console, "test_tool", "ValueError", "test error"
             )
-
         mock_console.print.assert_called_once()
         call_args = str(mock_console.print.call_args)
         assert "test_tool" in call_args
@@ -433,13 +391,10 @@ class TestToolMiddleware:
         """Test long error messages are truncated."""
         mock_console = MagicMock()
         long_msg = "x" * 100
-
         with patch("coderecon.core.logging.get_log_file_path", return_value=None):
             middleware._print_error_with_log_pointer(mock_console, "test_tool", "Error", long_msg)
-
         call_args = str(mock_console.print.call_args)
         assert "..." in call_args
-
     # =========================================================================
     # Tool Schema Extraction Tests
     # =========================================================================
@@ -447,13 +402,11 @@ class TestToolMiddleware:
         """Test schema extraction returns None when no context."""
         mock_context = MagicMock()
         mock_context.fastmcp_context = None
-
         schema = middleware._get_tool_schema(mock_context, "test_tool")
         assert schema is None
     def test_get_tool_schema_handles_exception(self, middleware):
         """Test schema extraction handles exceptions in the except branch."""
         from unittest.mock import patch
-
         mock_context = MagicMock()
         mock_context.fastmcp_context = MagicMock()
         mock_context.fastmcp_context._mcp_context = MagicMock()
@@ -461,7 +414,6 @@ class TestToolMiddleware:
         server = MagicMock()
         server.local_provider = MagicMock()  # Pass the hasattr guard
         mock_context.fastmcp_context._mcp_context.session.app = server
-
         # Patch get_tools_sync to raise, exercising the except Exception branch
         with patch(
             "coderecon.mcp._compat.get_tools_sync",
@@ -472,20 +424,17 @@ class TestToolMiddleware:
     def test_get_tool_schema_with_real_fastmcp(self, middleware):
         """Test schema extraction with a real FastMCP server."""
         from fastmcp import FastMCP
-
         mcp = FastMCP("test")
         @mcp.tool()
         def my_test_tool(name: str, count: int = 1) -> str:
             """Test tool description."""
             return f"{name}:{count}"
-
         # Build mock context chain: context.fastmcp_context._mcp_context.session.app = mcp
         mock_context = MagicMock()
         mock_context.fastmcp_context = MagicMock()
         mock_context.fastmcp_context._mcp_context = MagicMock()
         mock_context.fastmcp_context._mcp_context.session = MagicMock()
         mock_context.fastmcp_context._mcp_context.session.app = mcp
-
         schema = middleware._get_tool_schema(mock_context, "my_test_tool")
         assert schema is not None
         assert schema["name"] == "my_test_tool"
@@ -497,19 +446,16 @@ class TestToolMiddleware:
     def test_get_tool_schema_tool_not_found(self, middleware):
         """Returns None when tool name doesn't match any registered tool."""
         from fastmcp import FastMCP
-
         mcp = FastMCP("test")
         @mcp.tool()
         def existing_tool() -> str:
             """Exists."""
             return "ok"
-
         mock_context = MagicMock()
         mock_context.fastmcp_context = MagicMock()
         mock_context.fastmcp_context._mcp_context = MagicMock()
         mock_context.fastmcp_context._mcp_context.session = MagicMock()
         mock_context.fastmcp_context._mcp_context.session.app = mcp
-
         schema = middleware._get_tool_schema(mock_context, "nonexistent_tool")
         assert schema is None
     def test_get_tool_schema_no_local_provider(self, middleware):
@@ -520,7 +466,6 @@ class TestToolMiddleware:
         mock_context.fastmcp_context._mcp_context.session = MagicMock()
         mock_server = MagicMock(spec=[])  # spec=[] means NO attributes
         mock_context.fastmcp_context._mcp_context.session.app = mock_server
-
         schema = middleware._get_tool_schema(mock_context, "test_tool")
         assert schema is None
 class TestExtractFromDict:
@@ -558,7 +503,6 @@ class TestCallToolResultParsing:
         mock_result = MagicMock()
         mock_result.content = [mock_content]
         mock_result.structured_content = None
-
         summary = middleware._extract_result_summary("tool", mock_result)
         assert summary.get("summary") == "parsed summary"
     def test_parse_call_tool_result_invalid_json(self, middleware):
@@ -568,7 +512,6 @@ class TestCallToolResultParsing:
         mock_result = MagicMock()
         mock_result.content = [mock_content]
         mock_result.structured_content = None
-
         summary = middleware._extract_result_summary("tool", mock_result)
         assert summary == {}  # Empty summary on parse error
     def test_format_tool_summary_parses_call_result(self, middleware):
@@ -577,6 +520,5 @@ class TestCallToolResultParsing:
         mock_content.text = json.dumps({"summary": "formatted result"})
         mock_result = MagicMock()
         mock_result.content = [mock_content]
-
         formatted = middleware._format_tool_summary("tool", mock_result)
         assert formatted == "formatted result"

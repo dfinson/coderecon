@@ -40,12 +40,10 @@ class TestKotlinGradlePack:
             root = Path(tmpdir)
             (root / "build.gradle.kts").write_text('plugins { kotlin("jvm") }')
             (root / "src" / "test" / "kotlin").mkdir(parents=True)
-
             pack_class = runner_registry.get("kotlin.gradle")
             assert pack_class is not None
             pack = pack_class()
             targets = await pack.discover(root)
-
             assert len(targets) >= 1
             assert targets[0].kind == "project"
 
@@ -84,12 +82,10 @@ class TestSwiftTestPack:
             (root / "Tests").mkdir()
             (root / "Tests" / "MyPackageTests").mkdir()
             (root / "Tests" / "MyPackageTests" / "Tests.swift").write_text("")
-
             pack_class = runner_registry.get("swift.swiftpm")
             assert pack_class is not None
             pack = pack_class()
             targets = await pack.discover(root)
-
             assert len(targets) >= 1
 
 # =============================================================================
@@ -126,12 +122,10 @@ class TestSbtTestPack:
             (root / "build.sbt").write_text("")
             (root / "src" / "test" / "scala").mkdir(parents=True)
             (root / "src" / "test" / "scala" / "TestSuite.scala").write_text("")
-
             pack_class = runner_registry.get("scala.sbt")
             assert pack_class is not None
             pack = pack_class()
             targets = await pack.discover(root)
-
             assert len(targets) >= 1
             assert targets[0].kind == "project"
 
@@ -171,12 +165,10 @@ class TestDartTestPack:
             (root / "test").mkdir()
             (root / "test" / "widget_test.dart").write_text("")
             (root / "test" / "unit_test.dart").write_text("")
-
             pack_class = runner_registry.get("dart.dart_test")
             assert pack_class is not None
             pack = pack_class()
             targets = await pack.discover(root)
-
             assert len(targets) >= 2
 
 # =============================================================================
@@ -214,12 +206,10 @@ class TestFlutterTestPack:
             (root / "pubspec.yaml").write_text("dependencies:\n  flutter:\n    sdk: flutter")
             (root / "test").mkdir()
             (root / "test" / "widget_test.dart").write_text("")
-
             pack_class = runner_registry.get("dart.flutter_test")
             assert pack_class is not None
             pack = pack_class()
             targets = await pack.discover(root)
-
             assert len(targets) >= 1
 
 # =============================================================================
@@ -257,12 +247,10 @@ class TestBatsPack:
             (root / "test").mkdir()
             (root / "test" / "test_one.bats").write_text("")
             (root / "test" / "test_two.bats").write_text("")
-
             pack_class = runner_registry.get("bash.bats")
             assert pack_class is not None
             pack = pack_class()
             targets = await pack.discover(root)
-
             assert len(targets) == 2
             assert all(t.kind == "file" for t in targets)
 
@@ -301,12 +289,10 @@ class TestPesterPack:
             (root / "tests").mkdir()
             (root / "tests" / "Unit.Tests.ps1").write_text("")
             (root / "tests" / "Integration.Tests.ps1").write_text("")
-
             pack_class = runner_registry.get("powershell.pester")
             assert pack_class is not None
             pack = pack_class()
             targets = await pack.discover(root)
-
             assert len(targets) == 2
 
 # =============================================================================
@@ -352,12 +338,10 @@ class TestBustedPack:
             (root / "spec").mkdir()
             (root / "spec" / "module_spec.lua").write_text("")
             (root / "spec" / "helper_spec.lua").write_text("")
-
             pack_class = runner_registry.get("lua.busted")
             assert pack_class is not None
             pack = pack_class()
             targets = await pack.discover(root)
-
             assert len(targets) == 2
             assert all(t.kind == "file" for t in targets)
 
@@ -381,7 +365,6 @@ class TestKotlinBuildCommand:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.xml"))
-
         assert "test" in cmd
     def test_build_command_with_pattern(self) -> None:
         pack_class = runner_registry.get("kotlin.gradle")
@@ -396,7 +379,6 @@ class TestKotlinBuildCommand:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.xml"), pattern="MyTest")
-
         assert "--tests" in cmd
         assert "MyTest" in cmd
 class TestSwiftBuildCommand:
@@ -414,7 +396,6 @@ class TestSwiftBuildCommand:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.xml"))
-
         assert "swift" in cmd
         assert "test" in cmd
     def test_build_command_with_pattern(self) -> None:
@@ -430,7 +411,6 @@ class TestSwiftBuildCommand:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.xml"), pattern="testMyFunc")
-
         assert "--filter" in cmd
         assert "testMyFunc" in cmd
 class TestScalaBuildCommand:
@@ -448,7 +428,6 @@ class TestScalaBuildCommand:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.xml"))
-
         assert "sbt" in cmd
         assert "test" in cmd
 class TestDartBuildCommand:
@@ -466,7 +445,6 @@ class TestDartBuildCommand:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.json"))
-
         assert "dart" in cmd
         assert "test" in cmd
     def test_build_command_with_pattern(self) -> None:
@@ -484,7 +462,6 @@ class TestDartBuildCommand:
         cmd = pack.build_command(
             target, output_path=Path("/out/results.json"), pattern="widget renders"
         )
-
         assert "--name" in cmd
 class TestFlutterBuildCommand:
     """Tests for Flutter build_command method."""
@@ -501,7 +478,6 @@ class TestFlutterBuildCommand:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.json"))
-
         assert "flutter" in cmd
         assert "test" in cmd
 class TestBatsBuildCommand:
@@ -519,7 +495,6 @@ class TestBatsBuildCommand:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.tap"))
-
         assert "bats" in cmd
 class TestPesterBuildCommand:
     """Tests for Pester build_command method."""
@@ -536,7 +511,6 @@ class TestPesterBuildCommand:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.xml"))
-
         assert "pwsh" in cmd or "powershell" in cmd
 class TestBustedBuildCommand:
     """Tests for Busted build_command method."""
@@ -553,7 +527,6 @@ class TestBustedBuildCommand:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.xml"))
-
         assert "busted" in cmd
     def test_build_command_with_pattern(self) -> None:
         pack_class = runner_registry.get("lua.busted")
@@ -568,7 +541,6 @@ class TestBustedBuildCommand:
             workspace_root="/repo",
         )
         cmd = pack.build_command(target, output_path=Path("/out/results.xml"), pattern="test_add")
-
         assert "--filter" in cmd
         assert "test_add" in cmd
 
@@ -672,7 +644,6 @@ class TestKotlinParseOutput:
             assert pack_class is not None
             pack = pack_class()
             result = pack.parse_output(root / "results.xml", "")
-
             assert result.total == 2
             assert result.passed == 2
 
@@ -695,7 +666,6 @@ Test Suite 'All tests' passed.
 Executed 2 tests, with 0 failures (0 unexpected) in 0.003 seconds
 """
         result = pack.parse_output(Path("/nonexistent.xml"), stdout)
-
         assert result.total >= 0
 
 class TestDartParseOutput:
@@ -711,7 +681,6 @@ class TestDartParseOutput:
             assert pack_class is not None
             pack = pack_class()
             result = pack.parse_output(output, "")
-
             assert result is not None
 
 class TestBatsParseOutput:
@@ -726,7 +695,6 @@ ok 2 - test two
 not ok 3 - test three
 """
         result = pack.parse_output(Path("/nonexistent.tap"), stdout)
-
         assert result.total == 3
         assert result.passed == 2
         assert result.failed == 1

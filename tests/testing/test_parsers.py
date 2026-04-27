@@ -23,7 +23,6 @@ class TestJunitXmlParser:
 </testsuite>
 """
         result = parse_junit_xml(xml)
-
         assert result.total == 2
         assert result.passed == 2
         assert result.failed == 0
@@ -40,7 +39,6 @@ class TestJunitXmlParser:
 </testsuite>
 """
         result = parse_junit_xml(xml)
-
         assert result.total == 3
         assert result.passed == 2
         assert result.failed == 1
@@ -54,7 +52,6 @@ class TestJunitXmlParser:
 </testsuite>
 """
         result = parse_junit_xml(xml)
-
         assert result.total == 2
         assert result.passed == 1
         assert result.errors == 1
@@ -69,7 +66,6 @@ class TestJunitXmlParser:
 </testsuite>
 """
         result = parse_junit_xml(xml)
-
         assert result.total == 3
         assert result.passed == 2
         assert result.skipped == 1
@@ -90,7 +86,6 @@ class TestJunitXmlParser:
 </testsuites>
 """
         result = parse_junit_xml(xml)
-
         assert result.total == 5
         assert result.passed == 4
         assert result.failed == 1
@@ -100,12 +95,10 @@ class TestJunitXmlParser:
 </testsuite>
 """
         result = parse_junit_xml(xml)
-
         assert result.total == 0
         assert result.passed == 0
     def test_parse_invalid_xml(self) -> None:
         result = parse_junit_xml("not xml at all")
-
         # Parser returns error in the suite
         assert result.errors >= 1
     def test_parse_extracts_test_cases(self) -> None:
@@ -116,7 +109,6 @@ class TestJunitXmlParser:
 </testsuite>
 """
         result = parse_junit_xml(xml)
-
         assert len(result.tests) == 2
         tc = result.tests[0]
         assert tc.name == "test_feature"
@@ -133,7 +125,6 @@ class TestJunitXmlParser:
 </testsuite>
 """
         result = parse_junit_xml(xml)
-
         assert result.total == 1
         tc = result.tests[0]
         assert tc.stdout == "stdout content"
@@ -147,7 +138,6 @@ class TestJunitXmlParser:
 </testsuite>
 """
         result = parse_junit_xml(xml)
-
         tc = result.tests[0]
         assert tc.status == "failed"
         assert tc.message == "assert 1 == 2"
@@ -161,7 +151,6 @@ class TestJunitXmlParser:
 </testsuite>
 """
         result = parse_junit_xml(xml)
-
         assert result.total == 1
         assert result.passed == 1
     def test_parse_duration_from_testsuite(self) -> None:
@@ -172,7 +161,6 @@ class TestJunitXmlParser:
 </testsuite>
 """
         result = parse_junit_xml(xml)
-
         assert result.duration_seconds == pytest.approx(1.5, 0.01)
 
 
@@ -190,7 +178,6 @@ class TestGoTestJsonParser:
 {"Time":"2024-01-01T00:00:01Z","Action":"pass","Package":"example.com/pkg","Elapsed":0.6}
 """
         result = parse_go_test_json(content)
-
         assert result.passed >= 1
         assert result.failed == 0
     def test_parse_with_failure(self) -> None:
@@ -201,7 +188,6 @@ class TestGoTestJsonParser:
 {"Time":"2024-01-01T00:00:01Z","Action":"fail","Package":"example.com/pkg","Elapsed":0.2}
 """
         result = parse_go_test_json(content)
-
         assert result.failed >= 1
     def test_parse_with_skip(self) -> None:
         content = """
@@ -210,7 +196,6 @@ class TestGoTestJsonParser:
 {"Time":"2024-01-01T00:00:00Z","Action":"pass","Package":"example.com/pkg","Elapsed":0.1}
 """
         result = parse_go_test_json(content)
-
         assert result.skipped >= 1
     def test_parse_multiple_tests(self) -> None:
         content = """
@@ -223,7 +208,6 @@ class TestGoTestJsonParser:
 {"Action":"fail","Package":"pkg","Elapsed":0.3}
 """
         result = parse_go_test_json(content)
-
         assert result.total >= 3
         assert result.passed >= 2
         assert result.failed >= 1
@@ -238,7 +222,6 @@ class TestGoTestJsonParser:
 {"Action":"pass","Package":"pkg","Elapsed":0.4}
 """
         result = parse_go_test_json(content)
-
         # Should count subtests
         assert result.passed >= 2
     def test_parse_empty_input(self) -> None:
@@ -260,7 +243,6 @@ not valid json
 {"Action":"fail","Package":"pkg","Elapsed":0.0}
 """
         result = parse_go_test_json(content)
-
         # Build failure counts as package failure - at least has some result
         assert result is not None
 
@@ -280,7 +262,6 @@ ok 2 - test two
 ok 3 - test three
 """
         result = parse_tap(content)
-
         assert result.total == 3
         assert result.passed == 3
         assert result.failed == 0
@@ -291,7 +272,6 @@ not ok 2 - test two
 ok 3 - test three
 """
         result = parse_tap(content)
-
         assert result.total == 3
         assert result.passed == 2
         assert result.failed == 1
@@ -302,7 +282,6 @@ ok 2 - test two # SKIP reason for skipping
 ok 3 - test three
 """
         result = parse_tap(content)
-
         assert result.total == 3
         # Skipped tests are still "ok" in TAP
         assert result.passed == 3 or result.skipped >= 1
@@ -312,7 +291,6 @@ ok 1 - test passes
 not ok 2 - test fails # TODO known issue
 """
         result = parse_tap(content)
-
         # TODO failures don't count as real failures in some interpretations
         assert result.total == 2
     def test_parse_without_plan(self) -> None:
@@ -321,7 +299,6 @@ ok 2 - test two
 1..2
 """
         result = parse_tap(content)
-
         assert result.total == 2
         assert result.passed == 2
     def test_parse_with_diagnostic(self) -> None:
@@ -335,7 +312,6 @@ not ok 2 - test two
   ...
 """
         result = parse_tap(content)
-
         assert result.total == 2
         assert result.failed == 1
     def test_parse_empty_input(self) -> None:
@@ -350,7 +326,6 @@ ok 1 - test one
 Bail out! Critical failure
 """
         result = parse_tap(content)
-
         # After bail out, remaining tests are not run
         assert result.passed >= 1
 
@@ -369,7 +344,6 @@ class TestAutoParse:
 </testsuite>
 """
         result = auto_parse(content)
-
         assert result.total == 1
     def test_auto_parse_go_json(self) -> None:
         content = """{"Action":"run","Package":"pkg","Test":"TestA"}
@@ -377,7 +351,6 @@ class TestAutoParse:
 {"Action":"pass","Package":"pkg","Elapsed":0.1}
 """
         result = auto_parse(content)
-
         assert result is not None
         assert result.total >= 1
     def test_auto_parse_tap(self) -> None:
@@ -386,7 +359,6 @@ ok 1 - test one
 ok 2 - test two
 """
         result = auto_parse(content)
-
         assert result.total == 2
     def test_auto_parse_unparseable_content(self) -> None:
         result = auto_parse("random unparseable content that is not any format")
@@ -403,7 +375,6 @@ ok 2 - test two
 </testsuite>
 """
         result = auto_parse(content)
-
         # Should detect XML even without <?xml?> prologue
         assert result.total == 2
     def test_auto_parse_with_runner_hint(self) -> None:
@@ -414,7 +385,6 @@ ok 2 - test two
 """
         # Runner hint is accepted but currently unused
         result = auto_parse(content, runner="pytest")
-
         assert result.total == 1
 
 
@@ -427,7 +397,6 @@ class TestPytestJsonParser:
     """Tests for pytest JSON output parser."""
     def test_parse_basic_success(self) -> None:
         from coderecon.testing.parsers import parse_pytest_json
-
         content = """{
             "summary": {"total": 2, "passed": 2, "failed": 0, "skipped": 0, "error": 0},
             "tests": [
@@ -436,16 +405,13 @@ class TestPytestJsonParser:
             ],
             "duration": 0.03
         }"""
-
         result = parse_pytest_json(content)
-
         assert result.total == 2
         assert result.passed == 2
         assert result.failed == 0
         assert len(result.tests) == 2
     def test_parse_with_failures(self) -> None:
         from coderecon.testing.parsers import parse_pytest_json
-
         content = """{
             "summary": {"total": 3, "passed": 2, "failed": 1, "skipped": 0, "error": 0},
             "tests": [
@@ -456,9 +422,7 @@ class TestPytestJsonParser:
             ],
             "duration": 0.04
         }"""
-
         result = parse_pytest_json(content)
-
         assert result.total == 3
         assert result.passed == 2
         assert result.failed == 1
@@ -469,7 +433,6 @@ class TestPytestJsonParser:
         assert failed_test.traceback == "Traceback..."
     def test_parse_with_skipped(self) -> None:
         from coderecon.testing.parsers import parse_pytest_json
-
         content = """{
             "summary": {"total": 2, "passed": 1, "failed": 0, "skipped": 1, "error": 0},
             "tests": [
@@ -478,15 +441,12 @@ class TestPytestJsonParser:
             ],
             "duration": 0.01
         }"""
-
         result = parse_pytest_json(content)
-
         assert result.total == 2
         assert result.passed == 1
         assert result.skipped == 1
     def test_parse_with_errors(self) -> None:
         from coderecon.testing.parsers import parse_pytest_json
-
         content = """{
             "summary": {"total": 2, "passed": 1, "failed": 0, "skipped": 0, "error": 1},
             "tests": [
@@ -495,15 +455,12 @@ class TestPytestJsonParser:
             ],
             "duration": 0.01
         }"""
-
         result = parse_pytest_json(content)
-
         assert result.total == 2
         assert result.passed == 1
         assert result.errors == 1
     def test_parse_extracts_file_path(self) -> None:
         from coderecon.testing.parsers import parse_pytest_json
-
         content = """{
             "summary": {"total": 1, "passed": 1},
             "tests": [
@@ -511,9 +468,7 @@ class TestPytestJsonParser:
             ],
             "duration": 0.01
         }"""
-
         result = parse_pytest_json(content)
-
         assert len(result.tests) == 1
         test = result.tests[0]
         assert test.file_path == "tests/unit/test_module.py"
@@ -522,29 +477,23 @@ class TestPytestJsonParser:
         assert test.classname == "tests/unit/test_module.py::TestClass"
     def test_parse_invalid_json(self) -> None:
         from coderecon.testing.parsers import parse_pytest_json
-
         result = parse_pytest_json("not valid json")
-
         # Should return error result
         assert result.errors >= 1
         assert len(result.tests) >= 1
         assert result.tests[0].status == "error"
     def test_parse_empty_tests_array(self) -> None:
         from coderecon.testing.parsers import parse_pytest_json
-
         content = """{
             "summary": {"total": 0, "passed": 0, "failed": 0, "skipped": 0, "error": 0},
             "tests": [],
             "duration": 0.0
         }"""
-
         result = parse_pytest_json(content)
-
         assert result.total == 0
         assert len(result.tests) == 0
     def test_parse_without_summary(self) -> None:
         from coderecon.testing.parsers import parse_pytest_json
-
         content = """{
             "tests": [
                 {"nodeid": "test.py::test_one", "outcome": "passed", "duration": 0.01},
@@ -552,25 +501,20 @@ class TestPytestJsonParser:
             ],
             "duration": 0.03
         }"""
-
         result = parse_pytest_json(content)
-
         # Should compute summary from tests
         assert result.total == 2
         assert result.passed == 1
         assert result.failed == 1
     def test_parse_simple_nodeid(self) -> None:
         from coderecon.testing.parsers import parse_pytest_json
-
         content = """{
             "tests": [
                 {"nodeid": "test_simple", "outcome": "passed", "duration": 0.01}
             ],
             "duration": 0.01
         }"""
-
         result = parse_pytest_json(content)
-
         assert len(result.tests) == 1
         test = result.tests[0]
         assert test.name == "test_simple"

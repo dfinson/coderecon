@@ -30,10 +30,8 @@ class SymbolPattern:
 @dataclass(frozen=True)
 class SymbolQueryConfig:
     """Query configuration for symbol extraction in a language.
-
     Defines S-expression patterns and how to interpret their matches.
     """
-
     query_text: str = ""
     patterns: tuple[SymbolPattern, ...] = ()
     container_types: frozenset[str] = frozenset()
@@ -43,22 +41,17 @@ class SymbolQueryConfig:
 @dataclass(frozen=True)
 class TypeExtractionConfig:
     """Configuration for query-based type extraction.
-
     Used by QueryBasedExtractor to extract type annotations, type members,
     member accesses, and interface implementations.
     """
-
     language_family: str = ""
-
     # Query patterns (S-expression strings)
     type_annotation_query: str = ""
     type_member_query: str = ""
     member_access_query: str = ""
     interface_impl_query: str = ""
-
     # Node types that create scopes
     scope_node_types: tuple[str, ...] = ()
-
     # Member access configuration
     member_access_types: tuple[str, ...] = ("attribute",)
     member_identifier_types: tuple[str, ...] = (
@@ -67,11 +60,9 @@ class TypeExtractionConfig:
         "field_identifier",
     )
     access_styles: tuple[str, ...] = ("dot",)
-
     # Feature flags
     supports_type_annotations: bool = True
     supports_interfaces: bool = False
-
     # Type normalization
     optional_patterns: tuple[str, ...] = ()
     array_patterns: tuple[str, ...] = ()
@@ -84,21 +75,17 @@ class TypeExtractionConfig:
 @dataclass(frozen=True)
 class ImportQueryConfig:
     """Declarative import extraction via multi-pattern tree-sitter queries.
-
     Each pattern captures structured fields directly:
       @source  - source module/path
       @name    - imported symbol name
       @alias   - local alias (for rename imports)
       @node    - container node (for line/col)
-
     ``pattern_kinds`` maps each pattern index to an ``import_kind`` string
     (e.g., ``{0: "python_import", 1: "python_from"}``).
-
     The generic handler iterates query matches and constructs
     ``SyntacticImport`` objects from captures — no per-language Python code
     is needed.
     """
-
     query: str
     pattern_kinds: dict[int, str]
     source_capture: str = "source"
@@ -123,27 +110,22 @@ class ImportQueryConfig:
 @dataclass(frozen=True)
 class DeclaredModuleQueryConfig:
     """Declarative module/package declaration extraction.
-
     Captures ``@module_name`` from the AST.  For languages that derive
     module identity from the file path (OCaml, Python), set
     ``use_file_path=True``.
     """
-
     query: str = ""
     module_capture: str = "module_name"
     use_file_path: bool = False
 @dataclass(frozen=True)
 class DynamicQueryConfig:
     """Declarative dynamic-access-pattern extraction.
-
     Each pattern identifies a different kind of dynamic access.
     ``pattern_types`` maps pattern index → pattern_type string
     (e.g., ``{0: "bracket_access", 1: "eval_call"}``).
-
     Optional ``@literal`` capture extracts string-literal keys from
     dynamic accesses.
     """
-
     query: str
     pattern_types: dict[int, str]
     literal_capture: str = "literal"
@@ -153,44 +135,33 @@ class LanguagePack:
     # -- Identity --
     name: str  # Canonical language name ("python", "typescript", ...)
     grammar_name: str  # tree-sitter grammar module key ("c_sharp", "tsx", ...)
-
     # -- Grammar install --
     grammar_package: str  # PyPI package ("tree-sitter-python")
     grammar_module: str  # Python import ("tree_sitter_python")
     min_version: str  # Minimum version
     # Non-standard function name (e.g. "language_typescript", "language_tsx")
     language_func: str | None = None
-
     # -- File detection --
     extensions: frozenset[str] = field(default_factory=frozenset)
     filenames: frozenset[str] = field(default_factory=frozenset)
-
     # -- Symbol extraction --
     symbol_config: SymbolQueryConfig | None = None
-
     # -- Scope extraction (node_type -> scope_kind) --
     scope_types: dict[str, str] = field(default_factory=dict)
-
     # -- SEM_FACTS body evidence --
     sem_query: str | None = None
-
     # -- Type extraction --
     type_config: TypeExtractionConfig | None = None
-
     # -- Declarative import extraction --
     import_query_config: ImportQueryConfig | None = None
-
     # -- Declared module detection --
     declared_module_query: str | None = None
     declared_module_handler: str | None = None
-
     # -- Declarative module detection (replaces declared_module_query + handler) --
     declared_module_config: DeclaredModuleQueryConfig | None = None
-
     # -- Dynamic access detection (tree-sitter query to find dynamic nodes) --
     dynamic_query: str | None = None
     dynamic_handler: str | None = None
-
     # -- Declarative dynamic detection (replaces dynamic_query + handler) --
     dynamic_config: DynamicQueryConfig | None = None
 

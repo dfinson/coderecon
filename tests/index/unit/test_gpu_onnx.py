@@ -151,7 +151,6 @@ class TestEnsureCudaLibPath:
         cudnn_lib.mkdir(parents=True)
         cublas_lib = tmp_path / "nvidia" / "cublas" / "lib"
         cublas_lib.mkdir(parents=True)
-
         # Mock the nvidia packages in sys.modules
         fake_cudnn = MagicMock()
         fake_cudnn.__path__ = [str(tmp_path / "nvidia" / "cudnn")]
@@ -159,7 +158,6 @@ class TestEnsureCudaLibPath:
         fake_cublas.__path__ = [str(tmp_path / "nvidia" / "cublas")]
         fake_nvrtc = MagicMock()
         fake_nvrtc.__path__ = [str(tmp_path / "nvidia" / "cuda_nvrtc")]  # no lib dir
-
         monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
         with patch.dict(
             "sys.modules",
@@ -170,11 +168,9 @@ class TestEnsureCudaLibPath:
             },
         ):
             _ensure_cuda_lib_path()
-
         ld_path = os.environ.get("LD_LIBRARY_PATH", "")
         assert str(cudnn_lib) in ld_path
         assert str(cublas_lib) in ld_path
-
         # Clean up
         monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
     @pytest.mark.skipif(sys.platform != "linux", reason="Linux-specific test")
@@ -183,18 +179,14 @@ class TestEnsureCudaLibPath:
     ) -> None:
         cudnn_lib = tmp_path / "nvidia" / "cudnn" / "lib"
         cudnn_lib.mkdir(parents=True)
-
         fake_cudnn = MagicMock()
         fake_cudnn.__path__ = [str(tmp_path / "nvidia" / "cudnn")]
-
         monkeypatch.setenv("LD_LIBRARY_PATH", str(cudnn_lib))
         with patch.dict("sys.modules", {"nvidia.cudnn": fake_cudnn}):
             _ensure_cuda_lib_path()
-
         ld_path = os.environ.get("LD_LIBRARY_PATH", "")
         # Should appear exactly once
         assert ld_path.count(str(cudnn_lib)) == 1
-
         # Clean up
         monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
     @pytest.mark.skipif(sys.platform != "linux", reason="Linux-specific test")
@@ -203,18 +195,14 @@ class TestEnsureCudaLibPath:
     ) -> None:
         cudnn_lib = tmp_path / "nvidia" / "cudnn" / "lib"
         cudnn_lib.mkdir(parents=True)
-
         fake_cudnn = MagicMock()
         fake_cudnn.__path__ = [str(tmp_path / "nvidia" / "cudnn")]
-
         monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/local/lib")
         with patch.dict("sys.modules", {"nvidia.cudnn": fake_cudnn}):
             _ensure_cuda_lib_path()
-
         ld_path = os.environ.get("LD_LIBRARY_PATH", "")
         assert "/usr/local/lib" in ld_path
         assert str(cudnn_lib) in ld_path
-
         # Clean up
         monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
     @pytest.mark.skipif(sys.platform != "linux", reason="Linux-specific test")
@@ -222,14 +210,12 @@ class TestEnsureCudaLibPath:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
-
         # Remove any real nvidia modules from sys.modules temporarily
         # and ensure __import__ raises for nvidia.* packages
         removed = {}
         for key in list(sys.modules):
             if key.startswith("nvidia."):
                 removed[key] = sys.modules.pop(key)
-
         try:
             # Also patch system path checks so they don't find real CUDA
             with patch(
@@ -245,7 +231,6 @@ class TestEnsureCudaLibPath:
                 _ensure_cuda_lib_path()
         finally:
             sys.modules.update(removed)
-
         assert os.environ.get("LD_LIBRARY_PATH", "") == ""
 
 # ── Adaptive batch size tests ────────────────────────────────────
@@ -280,15 +265,11 @@ class TestAdaptiveBatchSize:
     def test_batch_size_set_to_gpu_when_gpu_active(self) -> None:
         """Verify SpladeEncoder.load() sets BATCH_SIZE to GPU value when GPU provider is active."""
         from coderecon.index._internal.indexing.splade import SpladeEncoder
-
         original_batch = splade_mod.BATCH_SIZE
         original_gpu = splade_mod._gpu_active
-
         mock_session = MagicMock()
         mock_session.get_providers.return_value = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-
         mock_tokenizer = MagicMock()
-
         try:
             with (
                 patch.object(SpladeEncoder, "_make_gpu_session", return_value=mock_session),
@@ -296,7 +277,6 @@ class TestAdaptiveBatchSize:
                 patch("coderecon.index._internal.indexing.splade.Tokenizer") as mock_tok_cls,
             ):
                 mock_tok_cls.from_file.return_value = mock_tokenizer
-
                 enc = SpladeEncoder.__new__(SpladeEncoder)
                 enc._session = None
                 enc._tokenizer = None
@@ -304,9 +284,7 @@ class TestAdaptiveBatchSize:
                 enc._vram_bytes = None
                 enc.onnx_path = Path("/fake/model.onnx")
                 enc.tokenizer_path = Path("/fake/tokenizer.json")
-
                 enc.load()
-
             assert splade_mod.BATCH_SIZE == BATCH_SIZE_GPU
             assert splade_mod._gpu_active is True
             assert enc._vram_bytes == 4 * 1024**3
@@ -316,15 +294,11 @@ class TestAdaptiveBatchSize:
     def test_batch_size_stays_cpu_when_no_gpu(self) -> None:
         """Verify SpladeEncoder.load() keeps BATCH_SIZE at CPU value when CPU-only."""
         from coderecon.index._internal.indexing.splade import SpladeEncoder
-
         original_batch = splade_mod.BATCH_SIZE
         original_gpu = splade_mod._gpu_active
-
         mock_session = MagicMock()
         mock_session.get_providers.return_value = ["CPUExecutionProvider"]
-
         mock_tokenizer = MagicMock()
-
         try:
             with (
                 patch.object(SpladeEncoder, "_make_gpu_session", return_value=mock_session),
@@ -332,7 +306,6 @@ class TestAdaptiveBatchSize:
                 patch("coderecon.index._internal.indexing.splade.Tokenizer") as mock_tok_cls,
             ):
                 mock_tok_cls.from_file.return_value = mock_tokenizer
-
                 enc = SpladeEncoder.__new__(SpladeEncoder)
                 enc._session = None
                 enc._tokenizer = None
@@ -340,10 +313,8 @@ class TestAdaptiveBatchSize:
                 enc._vram_bytes = None
                 enc.onnx_path = Path("/fake/model.onnx")
                 enc.tokenizer_path = Path("/fake/tokenizer.json")
-
                 splade_mod.BATCH_SIZE = BATCH_SIZE_CPU
                 enc.load()
-
             assert splade_mod.BATCH_SIZE == BATCH_SIZE_CPU
             assert splade_mod._gpu_active is False
             assert enc._vram_bytes is None
@@ -353,12 +324,9 @@ class TestAdaptiveBatchSize:
     def test_load_is_idempotent(self) -> None:
         """Calling load() twice should not create a second session."""
         from coderecon.index._internal.indexing.splade import SpladeEncoder
-
         original_gpu = splade_mod._gpu_active
-
         mock_session = MagicMock()
         mock_session.get_providers.return_value = ["CPUExecutionProvider"]
-
         try:
             with (
                 patch.object(SpladeEncoder, "_make_gpu_session", return_value=mock_session) as mock_make,
@@ -366,7 +334,6 @@ class TestAdaptiveBatchSize:
                 patch("coderecon.index._internal.indexing.splade.Tokenizer") as mock_tok_cls,
             ):
                 mock_tok_cls.from_file.return_value = MagicMock()
-
                 enc = SpladeEncoder.__new__(SpladeEncoder)
                 enc._session = None
                 enc._tokenizer = None
@@ -374,10 +341,8 @@ class TestAdaptiveBatchSize:
                 enc._vram_bytes = None
                 enc.onnx_path = Path("/fake/model.onnx")
                 enc.tokenizer_path = Path("/fake/tokenizer.json")
-
                 enc.load()
                 enc.load()  # second call
-
             # _make_gpu_session should only be called once
             assert mock_make.call_count == 1
         finally:
@@ -437,11 +402,9 @@ class TestOomFallback:
     def test_encode_batch_safe_halves_on_oom(self) -> None:
         """When GPU OOMs on a batch, it should create a fresh session, halve, and retry."""
         from coderecon.index._internal.indexing.splade import SpladeEncoder
-
         original_gpu = splade_mod._gpu_active
         try:
             splade_mod._gpu_active = True
-
             enc = SpladeEncoder.__new__(SpladeEncoder)
             enc._session = MagicMock()
             enc._tokenizer = MagicMock()
@@ -449,10 +412,8 @@ class TestOomFallback:
             enc._vram_bytes = 4 * 1024**3
             enc.onnx_path = Path("/fake/model.onnx")
             enc.tokenizer_path = Path("/fake/tokenizer.json")
-
             fresh_session = MagicMock()
             enc._make_gpu_session = MagicMock(return_value=fresh_session)
-
             call_count = 0
             def mock_encode(texts, session=None):
                 nonlocal call_count
@@ -460,7 +421,6 @@ class TestOomFallback:
                 if len(texts) > 2:
                     raise RuntimeError("CUDA error: out of memory")
                 return [{1: 0.5}] * len(texts)
-
             enc._encode_batch = mock_encode
             result = enc._encode_batch_safe(["a", "b", "c", "d"])
             assert len(result) == 4
@@ -472,11 +432,9 @@ class TestOomFallback:
     def test_encode_batch_safe_cpu_fallback_for_single(self) -> None:
         """When a single item OOMs on GPU, fall back to CPU session."""
         from coderecon.index._internal.indexing.splade import SpladeEncoder
-
         original_gpu = splade_mod._gpu_active
         try:
             splade_mod._gpu_active = True
-
             enc = SpladeEncoder.__new__(SpladeEncoder)
             enc._session = MagicMock()
             enc._tokenizer = MagicMock()
@@ -484,7 +442,6 @@ class TestOomFallback:
             enc._vram_bytes = 4 * 1024**3
             enc.onnx_path = Path("/fake/model.onnx")
             enc.tokenizer_path = Path("/fake/tokenizer.json")
-
             cpu_session = MagicMock()
             fresh_gpu = MagicMock()
             enc._make_gpu_session = MagicMock(return_value=fresh_gpu)
@@ -492,10 +449,8 @@ class TestOomFallback:
                 if session is cpu_session:
                     return [{2: 0.9}]
                 raise RuntimeError("CUDA error: out of memory")
-
             enc._encode_batch = mock_encode
             enc._get_cpu_session = lambda: cpu_session
-
             result = enc._encode_batch_safe(["long text"])
             assert result == [{2: 0.9}]
         finally:
@@ -503,11 +458,9 @@ class TestOomFallback:
     def test_non_oom_errors_propagate(self) -> None:
         """Non-OOM errors should not be caught."""
         from coderecon.index._internal.indexing.splade import SpladeEncoder
-
         original_gpu = splade_mod._gpu_active
         try:
             splade_mod._gpu_active = True
-
             enc = SpladeEncoder.__new__(SpladeEncoder)
             enc._session = MagicMock()
             enc._tokenizer = MagicMock()
@@ -517,9 +470,7 @@ class TestOomFallback:
             enc.tokenizer_path = Path("/fake/tokenizer.json")
             def mock_encode(texts, session=None):
                 raise ValueError("bad input")
-
             enc._encode_batch = mock_encode
-
             with pytest.raises(ValueError, match="bad input"):
                 enc._encode_batch_safe(["text"])
         finally:

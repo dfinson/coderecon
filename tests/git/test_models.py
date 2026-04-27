@@ -92,7 +92,6 @@ class TestCommitInfo:
         now = datetime.now(tz=UTC)
         author = Signature(name="Author", email="author@test.com", time=now)
         committer = Signature(name="Committer", email="committer@test.com", time=now)
-
         commit = CommitInfo(
             sha="abc123def456",
             short_sha="abc123d",
@@ -101,7 +100,6 @@ class TestCommitInfo:
             committer=committer,
             parent_shas=("parent1", "parent2"),
         )
-
         assert commit.sha == "abc123def456"
         assert commit.short_sha == "abc123d"
         assert "test commit" in commit.message

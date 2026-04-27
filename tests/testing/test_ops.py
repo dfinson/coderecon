@@ -68,9 +68,7 @@ class TestDetectWorkspaces:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / "pytest.ini").write_text("[pytest]\n")
-
             workspaces = detect_workspaces(root)
-
             assert len(workspaces) >= 1
             ws = workspaces[0]
             assert isinstance(ws, DetectedWorkspace)
@@ -85,9 +83,7 @@ class TestDetectWorkspaces:
                 '{"devDependencies": {"jest": "1.0"}}'
             )
             (root / "packages" / "app" / "jest.config.js").write_text("")
-
             workspaces = detect_workspaces(root)
-
             # Should detect the package
             assert len(workspaces) >= 1
             pack_ids = {ws.pack.pack_id for ws in workspaces}
@@ -99,9 +95,7 @@ class TestDetectWorkspaces:
             (root / "jest.config.js").write_text("")
             (root / "node_modules" / "lib").mkdir(parents=True)
             (root / "node_modules" / "lib" / "jest.config.js").write_text("")
-
             workspaces = detect_workspaces(root)
-
             # Should only find root, not node_modules
             paths = [ws.root for ws in workspaces]
             assert all("node_modules" not in str(p) for p in paths)
@@ -110,9 +104,7 @@ class TestDetectWorkspaces:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / "pytest.ini").write_text("")
-
             workspaces = detect_workspaces(root)
-
             assert len(workspaces) >= 1
             for ws in workspaces:
                 assert isinstance(ws, DetectedWorkspace)
@@ -131,9 +123,7 @@ class TestDetectWorkspaces:
             # Both markers for pytest
             (root / "pytest.ini").write_text("")
             (root / "conftest.py").write_text("")
-
             workspaces = detect_workspaces(root)
-
             # Should deduplicate
             keys = [(ws.root, ws.pack.pack_id) for ws in workspaces]
             assert len(keys) == len(set(keys))
@@ -147,9 +137,7 @@ class TestDetectWorkspaces:
                 '{"devDependencies": {"jest": "1.0"}}'
             )
             (root / "packages" / "app" / "jest.config.js").write_text("")
-
             workspaces = detect_workspaces(root)
-
             pack_ids = {ws.pack.pack_id for ws in workspaces}
             assert "js.jest" in pack_ids
     def test_npm_workspaces_object_format(self) -> None:
@@ -164,9 +152,7 @@ class TestDetectWorkspaces:
                 '{"devDependencies": {"vitest": "1.0"}}'
             )
             (root / "packages" / "lib" / "vitest.config.ts").write_text("")
-
             workspaces = detect_workspaces(root)
-
             pack_ids = {ws.pack.pack_id for ws in workspaces}
             assert "js.vitest" in pack_ids
 
@@ -181,13 +167,11 @@ class TestDetectedWorkspace:
         pack_class = runner_registry.get("python.pytest")
         assert pack_class is not None
         pack = pack_class()  # Instantiate
-
         ws = DetectedWorkspace(
             root=Path("/repo"),
             pack=pack,
             confidence=0.95,
         )
-
         assert ws.root == Path("/repo")
         assert ws.pack.pack_id == "python.pytest"
         assert ws.confidence == 0.95
@@ -199,7 +183,6 @@ class TestDetectedWorkspace:
 
 class TestTestOpsDiscover:
     """Tests for TestOps.discover().
-
     Note: discover() is now index-first. Tests mock the coordinator to return
     indexed test targets rather than expecting filesystem discovery.
     """
@@ -210,7 +193,6 @@ class TestTestOpsDiscover:
             (root / "pytest.ini").write_text("")
             (root / "tests").mkdir()
             (root / "tests" / "test_example.py").write_text("def test_foo(): pass")
-
             coordinator = create_mock_coordinator()
             # Mock indexed test targets
             mock_target = MagicMock()
@@ -222,11 +204,8 @@ class TestTestOpsDiscover:
             mock_target.workspace_root = str(root)
             mock_target.test_count = None
             coordinator.get_test_targets = AsyncMock(return_value=[mock_target])
-
             ops = TestOps(root, coordinator)
-
             result = await ops.discover()
-
             assert result.action == "discover"
             assert result.targets is not None
             assert len(result.targets) == 1
@@ -234,7 +213,6 @@ class TestTestOpsDiscover:
     async def test_discover_with_paths_filter(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
-
             coordinator = create_mock_coordinator()
             # Mock two indexed targets
             mock_target_a = MagicMock()
@@ -245,7 +223,6 @@ class TestTestOpsDiscover:
             mock_target_a.runner_pack_id = "python.pytest"
             mock_target_a.workspace_root = str(root)
             mock_target_a.test_count = None
-
             mock_target_b = MagicMock()
             mock_target_b.target_id = "test:tests/test_b.py"
             mock_target_b.selector = "tests/test_b.py"
@@ -254,13 +231,9 @@ class TestTestOpsDiscover:
             mock_target_b.runner_pack_id = "python.pytest"
             mock_target_b.workspace_root = str(root)
             mock_target_b.test_count = None
-
             coordinator.get_test_targets = AsyncMock(return_value=[mock_target_a, mock_target_b])
-
             ops = TestOps(root, coordinator)
-
             result = await ops.discover(paths=["tests/test_a.py"])
-
             assert result.action == "discover"
             # Should filter to just test_a
             assert len(result.targets) == 1  # type: ignore
@@ -272,11 +245,8 @@ class TestTestOpsDiscover:
             coordinator = create_mock_coordinator()
             # Empty index - no test targets
             coordinator.get_test_targets = AsyncMock(return_value=[])
-
             ops = TestOps(root, coordinator)
-
             result = await ops.discover()
-
             assert result.action == "discover"
             # With no indexed targets, should have agentic hint
             assert result.agentic_hint is not None
@@ -288,10 +258,8 @@ class TestTestOpsDiscover:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             coordinator.get_test_targets = AsyncMock(return_value=[])
-
             ops = TestOps(root, coordinator)
             result = await ops.discover()
-
             assert result.action == "discover"
             # Should have called get_test_targets
             coordinator.get_test_targets.assert_called_once()
@@ -300,19 +268,15 @@ class TestTestOpsDiscover:
         """Test that discover does not fall back to filesystem - index is authoritative."""
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
-
             # Set up actual test file on filesystem
             (root / "pytest.ini").write_text("")
             (root / "tests").mkdir()
             (root / "tests" / "test_x.py").write_text("def test_x(): pass")
-
             coordinator = create_mock_coordinator()
             # Index returns empty - discover should return empty, not fall back to filesystem
             coordinator.get_test_targets = AsyncMock(return_value=[])
-
             ops = TestOps(root, coordinator)
             result = await ops.discover()
-
             assert result.action == "discover"
             # Should return empty targets from index, not discover from filesystem
             assert result.targets == []
@@ -332,10 +296,8 @@ class TestAgenticHint:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             coordinator.get_file_stats = AsyncMock(return_value={"python": 10})
-
             ops = TestOps(root, coordinator)
             hint = await ops._generate_agentic_hint()
-
             assert "pytest" in hint.lower()
     @pytest.mark.asyncio
     async def test_hint_includes_javascript(self) -> None:
@@ -343,10 +305,8 @@ class TestAgenticHint:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             coordinator.get_file_stats = AsyncMock(return_value={"javascript": 10})
-
             ops = TestOps(root, coordinator)
             hint = await ops._generate_agentic_hint()
-
             assert "npm test" in hint.lower() or "jest" in hint.lower()
     @pytest.mark.asyncio
     async def test_hint_includes_go(self) -> None:
@@ -354,10 +314,8 @@ class TestAgenticHint:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             coordinator.get_file_stats = AsyncMock(return_value={"go": 5})
-
             ops = TestOps(root, coordinator)
             hint = await ops._generate_agentic_hint()
-
             assert "go test" in hint.lower()
     @pytest.mark.asyncio
     async def test_hint_includes_rust(self) -> None:
@@ -365,10 +323,8 @@ class TestAgenticHint:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             coordinator.get_file_stats = AsyncMock(return_value={"rust": 5})
-
             ops = TestOps(root, coordinator)
             hint = await ops._generate_agentic_hint()
-
             assert "cargo test" in hint.lower()
     @pytest.mark.asyncio
     async def test_hint_multiple_languages(self) -> None:
@@ -376,10 +332,8 @@ class TestAgenticHint:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             coordinator.get_file_stats = AsyncMock(return_value={"python": 10, "go": 5})
-
             ops = TestOps(root, coordinator)
             hint = await ops._generate_agentic_hint()
-
             assert "pytest" in hint.lower()
             assert "go test" in hint.lower()
     @pytest.mark.asyncio
@@ -388,10 +342,8 @@ class TestAgenticHint:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             coordinator.get_file_stats = AsyncMock(return_value={})
-
             ops = TestOps(root, coordinator)
             hint = await ops._generate_agentic_hint()
-
             assert "no test framework detected" in hint.lower()
     @pytest.mark.asyncio
     async def test_hint_handles_index_error(self) -> None:
@@ -399,10 +351,8 @@ class TestAgenticHint:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             coordinator.get_file_stats = AsyncMock(side_effect=RuntimeError("Index error"))
-
             ops = TestOps(root, coordinator)
             hint = await ops._generate_agentic_hint()
-
             # Should still return a hint, just without language-specific suggestions
             assert hint is not None
             assert "no test framework detected" in hint.lower()
@@ -414,7 +364,6 @@ class TestAgenticHint:
 
 class TestTestOpsRun:
     """Tests for TestOps.run().
-
     Note: run() is now blocking and index-first. Tests mock the coordinator
     to return indexed test targets. run() always awaits test completion.
     """
@@ -425,7 +374,6 @@ class TestTestOpsRun:
             (root / "pytest.ini").write_text("")
             (root / "tests").mkdir()
             (root / "tests" / "test_x.py").write_text("def test_x(): pass")
-
             coordinator = create_mock_coordinator()
             mock_target = MagicMock()
             mock_target.target_id = "test:tests/test_x.py"
@@ -436,11 +384,8 @@ class TestTestOpsRun:
             mock_target.workspace_root = str(root)
             mock_target.test_count = None
             coordinator.get_test_targets = AsyncMock(return_value=[mock_target])
-
             ops = TestOps(root, coordinator)
-
             result = await ops.run()
-
             assert result.action == "run"
             assert result.run_status is not None
             # Blocking run returns terminal status
@@ -451,7 +396,6 @@ class TestTestOpsRun:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / "pytest.ini").write_text("")
-
             coordinator = create_mock_coordinator()
             mock_target = MagicMock()
             mock_target.target_id = "test:tests/test_x.py"
@@ -462,11 +406,8 @@ class TestTestOpsRun:
             mock_target.workspace_root = str(root)
             mock_target.test_count = None
             coordinator.get_test_targets = AsyncMock(return_value=[mock_target])
-
             ops = TestOps(root, coordinator)
-
             result = await ops.run()
-
             assert result.run_status is not None
             artifact_dir = result.run_status.artifact_dir
             assert artifact_dir is not None
@@ -478,7 +419,6 @@ class TestTestOpsRun:
             (root / "pytest.ini").write_text("")
             (root / "tests").mkdir()
             (root / "tests" / "test_a.py").write_text("def test_a(): pass")
-
             coordinator = create_mock_coordinator()
             mock_target = MagicMock()
             mock_target.target_id = "test:tests/test_a.py"
@@ -489,11 +429,8 @@ class TestTestOpsRun:
             mock_target.workspace_root = str(root)
             mock_target.test_count = None
             coordinator.get_test_targets = AsyncMock(return_value=[mock_target])
-
             ops = TestOps(root, coordinator)
-
             result = await ops.run(targets=["test:tests/test_a.py"])
-
             assert result.action == "run"
             assert result.run_status is not None
 
@@ -509,12 +446,9 @@ class TestPersistAndLoadResult:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = TestOps(root, coordinator)
-
             from coderecon.testing.models import TestRunStatus
-
             artifact_dir = root / "artifacts" / "test-run"
             artifact_dir.mkdir(parents=True)
-
             status = TestRunStatus(
                 run_id="test-run",
                 status="completed",
@@ -525,11 +459,8 @@ class TestPersistAndLoadResult:
                 failures=[],
                 duration_seconds=5.5,
             )
-
             ops._persist_result(artifact_dir, status)
-
             loaded = ops._load_result(artifact_dir)
-
             assert loaded is not None
             assert loaded.run_id == "test-run"
             assert loaded.status == "completed"
@@ -541,24 +472,18 @@ class TestPersistAndLoadResult:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = TestOps(root, coordinator)
-
             artifact_dir = root / "nonexistent"
-
             loaded = ops._load_result(artifact_dir)
-
             assert loaded is None
     def test_load_result_returns_none_for_invalid_json(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             coordinator = create_mock_coordinator()
             ops = TestOps(root, coordinator)
-
             artifact_dir = root / "artifacts" / "bad-run"
             artifact_dir.mkdir(parents=True)
             (artifact_dir / "result.json").write_text("not valid json")
-
             loaded = ops._load_result(artifact_dir)
-
             assert loaded is None
 
 # =============================================================================
@@ -572,15 +497,11 @@ class TestDetectWorkspacesIntegration:
         """Detect workspaces across multiple languages."""
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
-
             # Python project at root
             (root / "pytest.ini").write_text("")
-
             # Go project at root (same directory, different pack)
             (root / "go.mod").write_text("module test")
-
             workspaces = detect_workspaces(root)
-
             pack_ids = {ws.pack.pack_id for ws in workspaces}
             assert "python.pytest" in pack_ids
             assert "go.gotest" in pack_ids
@@ -594,9 +515,7 @@ class TestDetectWorkspacesIntegration:
                 '{"devDependencies": {"vitest": "1.0"}}'
             )
             (root / "apps" / "web" / "vitest.config.ts").write_text("")
-
             workspaces = detect_workspaces(root)
-
             # Should detect vitest in apps/web
             pack_ids = {ws.pack.pack_id for ws in workspaces}
             assert "js.vitest" in pack_ids
@@ -606,9 +525,7 @@ class TestDetectWorkspacesIntegration:
             root = Path(tmpdir)
             # High confidence marker
             (root / "pytest.ini").write_text("")
-
             workspaces = detect_workspaces(root)
-
             pytest_ws = next((ws for ws in workspaces if ws.pack.pack_id == "python.pytest"), None)
             assert pytest_ws is not None
             assert pytest_ws.confidence == 1.0  # pytest.ini gives 1.0

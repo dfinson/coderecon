@@ -89,7 +89,6 @@ def _result(
 
 class TestAgenticHint:
     """Tests for _build_agentic_hint.
-
     The hint is intentionally compact - just counts, no symbol names.
     Full details are in structural_changes.
     """

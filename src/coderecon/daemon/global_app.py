@@ -25,7 +25,6 @@ from coderecon.git.errors import GitError
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
-
     from coderecon.catalog.registry import CatalogRegistry
     from coderecon.config.models import CodeReconConfig
     from coderecon.daemon.indexer import BackgroundIndexer
@@ -52,11 +51,9 @@ class WorktreeSlot:
     last_request_at: float = field(default_factory=time.time)
 class RepoSlot:
     """Runtime state for a single registered repository.
-
     Owns the shared index coordinator, freshness gate, mutation router,
     and background indexer.  Each worktree gets its own WorktreeSlot.
     """
-
     __slots__ = (
         "name",
         "repo_id",
@@ -110,7 +107,6 @@ class GlobalDaemon:
         return list(self._slots.keys())
     def get_slot(self, name: str) -> RepoSlot | None:
         return self._slots.get(name)
-
     async def activate_repo(
         self,
         name: str,
@@ -121,9 +117,7 @@ class GlobalDaemon:
         dev_mode: bool = False,
     ) -> RepoSlot:
         """Activate a registered repo: create shared coordinator + per-worktree slots.
-
         Loads the existing index (no full reindex) so startup is fast.
-
         Only the **main** worktree is eagerly activated (watcher + MCP).
         Non-main worktrees get their freshness gate registered and diff-based
         reindex queued (so their changed files are indexed immediately) but are
@@ -134,14 +128,11 @@ class GlobalDaemon:
         from coderecon.config.loader import load_config
         from coderecon.daemon.indexer import BackgroundIndexer
         from coderecon.index.ops import IndexCoordinatorEngine
-
         config = load_config(repo_root)
-
         recon_dir = repo_root / ".recon"
         recon_dir.mkdir(exist_ok=True)
         db_path = recon_dir / "index.db"
         tantivy_path = recon_dir / "tantivy"
-
         # Shared per-repo resources
         coordinator = IndexCoordinatorEngine(
             repo_root=repo_root,
@@ -150,12 +141,10 @@ class GlobalDaemon:
             busy_timeout_ms=config.database.busy_timeout_ms,
         )
         await coordinator.load_existing()
-
         # Backfill any missing derived signals (e.g. SPLADE vectors for
         # repos indexed before the signal was introduced, or after a model
         # version bump).  Cheap no-op when everything is consistent.
         coordinator.backfill_missing_signals()
-
         gate = FreshnessGate()
         router = MutationRouter(coordinator, gate)
         indexer = BackgroundIndexer(
@@ -164,7 +153,6 @@ class GlobalDaemon:
             config=config.indexer,
         )
         indexer.start()
-
         slot = RepoSlot(
             name=name,
             repo_id=repo_id,
@@ -174,20 +162,16 @@ class GlobalDaemon:
             router=router,
             indexer=indexer,
         )
-
         # Discover worktrees from git
         from coderecon.git.ops import GitOps
-
         git_ops = GitOps(repo_root)
         try:
             worktrees = git_ops.worktrees()
         except GitError:
             log.debug("worktree_discovery_failed", exc_info=True)
             worktrees = []
-
         # Resolve the repo's default branch once for all worktree diffs.
         base_branch = git_ops.default_branch()
-
         if not worktrees:
             # Single worktree (no git worktree setup) — always activate main
             wt_slot = await self._activate_worktree(
@@ -209,7 +193,6 @@ class GlobalDaemon:
                     coordinator.set_freshness_gate(
                         gate, wt.name, worktree_root=str(wt_path),
                     )
-
                     # Queue diff-based reindex so the worktree's changed
                     # files are indexed immediately after registration.
                     try:
@@ -235,9 +218,7 @@ class GlobalDaemon:
                             error=str(exc),
                             exc_info=True,
                         )
-
         self._slots[name] = slot
-
         log.info(
             "repo_activated",
             name=name,
@@ -245,9 +226,7 @@ class GlobalDaemon:
             worktrees=list(slot.worktrees.keys()),
             lazy_worktrees=len(worktrees) - len(slot.worktrees) if worktrees else 0,
         )
-
         return slot
-
     async def _activate_worktree(
         self,
         repo_slot: RepoSlot,
@@ -269,7 +248,6 @@ class GlobalDaemon:
         from coderecon.mutation.ops import MutationOps
         from coderecon.refactor.ops import RefactorOps
         from coderecon.testing.ops import TestOps
-
         # Per-worktree ops
         git_ops = GitOps(wt_root)
         file_ops = FileOps(wt_root)
@@ -278,14 +256,12 @@ class GlobalDaemon:
         test_ops = TestOps(wt_root, repo_slot.coordinator)
         lint_ops = LintOps(wt_root, repo_slot.coordinator)
         session_manager = SessionManager(config.timeouts)
-
         # Inject freshness gate into coordinator for this worktree.
         # Pass the worktree's actual checkout path so the Worktree row gets
         # the correct root_path (not always the main repo root).
         repo_slot.coordinator.set_freshness_gate(
             repo_slot.gate, wt_name, worktree_root=str(wt_root)
         )
-
         app_ctx = AppContext(
             worktree_name=wt_name,
             repo_root=wt_root,
@@ -300,16 +276,13 @@ class GlobalDaemon:
             lint_ops=lint_ops,
             session_manager=session_manager,
         )
-
         mcp = create_mcp_server(app_ctx, dev_mode=dev_mode)
-
         # Build the ASGI app for this worktree and start its lifespan immediately.
         # This means new worktrees activated after build_app() is called are instantly
         # reachable via _DynamicMcpRouter without rebuilding the Starlette app.
         mcp_asgi_app = mcp.http_app(path="/mcp", transport="streamable-http")
         mcp_lifespan_ctx = mcp_asgi_app.router.lifespan_context(mcp_asgi_app)
         await mcp_lifespan_ctx.__aenter__()
-
         # File watcher per worktree, routing changes to shared indexer
         watcher = FileWatcher(
             repo_root=wt_root,
@@ -317,7 +290,6 @@ class GlobalDaemon:
             poll_interval=config.server.poll_interval_sec,
         )
         await watcher.start()
-
         # Wire analysis pipeline
         pipeline = AnalysisPipeline(
             coordinator=repo_slot.coordinator,
@@ -326,11 +298,9 @@ class GlobalDaemon:
             repo_root=wt_root,
         )
         repo_slot.indexer.add_on_complete(pipeline.on_index_complete)
-
         # F3: write last_indexed_at into the catalog after each successful flush.
         _registry = self.registry
         _wt_root = wt_root
-
         async def _update_last_indexed_at(
             stats: IndexStats, paths: list[Path]  # noqa: ARG001
         ) -> None:
@@ -338,9 +308,7 @@ class GlobalDaemon:
                 _registry.update_last_indexed_at(_wt_root, time.time())
             except (OSError, RuntimeError) as exc:
                 log.warning("last_indexed_at.update_failed", error=str(exc), exc_info=True)
-
         repo_slot.indexer.add_on_complete(_update_last_indexed_at)
-
         return WorktreeSlot(
             name=wt_name,
             repo_root=wt_root,
@@ -351,7 +319,6 @@ class GlobalDaemon:
             mcp_asgi_app=mcp_asgi_app,
             _mcp_lifespan_ctx=mcp_lifespan_ctx,
         )
-
     async def _stop_worktree_slot(self, wt_slot: WorktreeSlot) -> None:
         """Stop a single worktree slot: file watcher + MCP app lifespan."""
         await wt_slot.watcher.stop()
@@ -360,7 +327,6 @@ class GlobalDaemon:
                 wt_slot._mcp_lifespan_ctx.__aexit__(None, None, None),
                 timeout=2.0,
             )
-
     async def lazy_activate_worktree(
         self,
         repo_name: str,
@@ -369,31 +335,25 @@ class GlobalDaemon:
         dev_mode: bool = False,
     ) -> WorktreeSlot | None:
         """Activate a worktree on-demand (first MCP connection).
-
         Returns the new WorktreeSlot, or None if the worktree can't be found
         in the catalog or the repo slot doesn't exist.
         """
         from coderecon.config.loader import load_config
         from coderecon.daemon.watcher import FileWatcher
-
         slot = self._slots.get(repo_name)
         if slot is None:
             return None
-
         # Already activated (race between concurrent requests)
         if wt_name in slot.worktrees:
             return slot.worktrees[wt_name]
-
         # Look up worktree path from catalog
         wt_entry = self.registry.lookup_worktree(slot.repo_id, wt_name)
         if wt_entry is None:
             return None
-
         wt_path = Path(wt_entry.root_path)
         if not wt_path.is_dir():
             log.warning("lazy_activate.missing_path", repo=repo_name, worktree=wt_name, path=str(wt_path))
             return None
-
         # Ceiling check: estimate inotify watches and refuse if over budget.
         estimated = FileWatcher.estimate_watch_count(wt_path)
         current = self._current_watch_count()
@@ -407,13 +367,11 @@ class GlobalDaemon:
                 ceiling=self._watch_ceiling,
             )
             return None
-
         config = load_config(wt_path)
         wt_slot = await self._activate_worktree(
             slot, wt_name, wt_path, config, dev_mode=dev_mode,
         )
         slot.worktrees[wt_name] = wt_slot
-
         log.info(
             "lazy_activate.activated",
             repo=repo_name,
@@ -421,23 +379,18 @@ class GlobalDaemon:
             watches=wt_slot.watcher.watch_count,
         )
         return wt_slot
-
     async def deactivate_repo(self, name: str) -> bool:
         """Stop and remove a repo slot."""
         slot = self._slots.pop(name, None)
         if slot is None:
             return False
-
         # Stop all worktree watchers and MCP lifespans
         for wt_slot in slot.worktrees.values():
             await self._stop_worktree_slot(wt_slot)
-
         # Stop shared indexer
         await slot.indexer.stop()
-
         log.info("repo_deactivated", name=name)
         return True
-
     async def lazy_activate_repo(
         self,
         repo_name: str,
@@ -445,23 +398,19 @@ class GlobalDaemon:
         dev_mode: bool = False,
     ) -> RepoSlot | None:
         """Activate a repo on-demand (first MCP connection).
-
         Looks up the repo in the catalog, loads its index, and creates
         the RepoSlot.  Returns None if the repo isn't registered.
         """
         if repo_name in self._slots:
             return self._slots[repo_name]
-
         result = self.registry.lookup_by_name(repo_name)
         if result is None:
             return None
         repo, main_wt = result
-
         repo_root = Path(main_wt.root_path)
         if not repo_root.is_dir():
             log.warning("lazy_activate_repo.missing_path", repo=repo_name, path=str(repo_root))
             return None
-
         storage_dir = self.registry.get_storage_dir(repo)
         try:
             slot = await self.activate_repo(
@@ -476,7 +425,6 @@ class GlobalDaemon:
         except Exception as exc:
             log.warning("lazy_activate_repo.failed", repo=repo_name, error=str(exc))
             return None
-
     async def stop_all(self) -> None:
         """Stop all active repo slots."""
         # Cancel eviction loop first
@@ -485,7 +433,6 @@ class GlobalDaemon:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._eviction_task
             self._eviction_task = None
-
         for name in list(self._slots):
             await self.deactivate_repo(name)
     def _current_watch_count(self) -> int:
@@ -495,10 +442,8 @@ class GlobalDaemon:
             for wt_slot in slot.worktrees.values():
                 total += wt_slot.watcher.watch_count
         return total
-
     async def _eviction_loop(self, idle_timeout: float) -> None:
         """Periodically evict idle non-main WorktreeSlots.
-
         Runs every ``idle_timeout / 2`` seconds.  Only non-main worktrees
         that have been idle longer than ``idle_timeout`` are torn down.
         They can be lazily re-activated on the next MCP request.
@@ -528,7 +473,6 @@ class GlobalDaemon:
             pass
     def start_eviction_loop(self, idle_timeout: float) -> None:
         """Start the idle-eviction background task.
-
         Args:
             idle_timeout: Seconds of inactivity before a non-main worktree
                           is torn down.  Pass 0 to disable.
@@ -538,23 +482,18 @@ class GlobalDaemon:
         if self._eviction_task is not None and not self._eviction_task.done():
             return
         self._eviction_task = asyncio.create_task(self._eviction_loop(idle_timeout))
-
     async def queue_startup_scans(self) -> None:
         """Queue incremental reindex for files changed while the daemon was down.
-
         For the main worktree: uses ``changed_since_last_index()`` (git-diff
         based) to find files changed since the last indexed commit.
-
         For non-main worktrees: diffs against the repo's default branch to
         find files that differ, then queues only those files under the
         worktree's own tag (the diff-only strategy — unchanged files fall
         through to the main worktree's entries in overlay queries).
         """
         from coderecon.git.ops import GitOps
-
         for name, slot in self._slots.items():
             loop = asyncio.get_event_loop()
-
             # Resolve default branch once per repo.
             main_slot = slot.worktrees.get("main")
             base_branch: str | None = None
@@ -565,7 +504,6 @@ class GlobalDaemon:
                 except GitError:
                     log.debug("default_branch_resolution_failed", exc_info=True)
                     base_branch = "main"
-
             # Main worktree: use the coordinator's reconciler (indexed-commit based).
             if main_slot is not None:
                 changed = await loop.run_in_executor(
@@ -581,7 +519,6 @@ class GlobalDaemon:
                     )
                 else:
                     log.debug("startup_scan_clean", repo=name, worktree="main")
-
             # Non-main worktrees: queue files that diff from default branch.
             for wt_name, wt_slot in slot.worktrees.items():
                 if wt_name == "main":
@@ -610,43 +547,34 @@ class GlobalDaemon:
                         error=str(exc),
                         exc_info=True,
                     )
-
     async def refresh_worktrees(self, name: str, *, dev_mode: bool = False) -> list[str]:
         """Discover and register any git worktrees not yet known for a repo.
-
         New worktrees get their freshness gate registered (creates DB row)
         and their diff files queued for reindex into the shared ``index.db``.
         They are NOT eagerly activated (no watcher/MCP) — that happens lazily
         on first MCP connection via ``_DynamicMcpRouter``.
-
         Returns the names of newly discovered worktrees.
         """
         from coderecon.git.ops import GitOps
-
         slot = self._slots.get(name)
         if slot is None:
             return []
-
         # Use the first known worktree root as the git working directory
         any_wt = next(iter(slot.worktrees.values()), None)
         if any_wt is None:
             return []
-
         git_ops = GitOps(any_wt.repo_root)
         try:
             worktrees = git_ops.worktrees()
         except GitError:
             log.debug("refresh_worktrees_failed", exc_info=True)
             return []
-
         base_branch = git_ops.default_branch()
-
         new_names: list[str] = []
         for wt in worktrees:
             # Skip already-activated AND already-known (freshness gate set)
             if wt.name in slot.worktrees:
                 continue
-
             # F2: only accept worktrees that are registered in the catalog.
             wt_path = Path(wt.path)
             if self.registry.lookup_by_path(wt_path) is None:
@@ -655,13 +583,11 @@ class GlobalDaemon:
                     repo=name, worktree=wt.name,
                 )
                 continue
-
             # Register freshness gate (creates DB row) without full activation.
             slot.coordinator.set_freshness_gate(
                 slot.gate, wt.name, worktree_root=str(wt_path),
             )
             new_names.append(wt.name)
-
             # Queue diff-only reindex: files that differ from default branch.
             try:
                 loop = asyncio.get_event_loop()
@@ -686,18 +612,15 @@ class GlobalDaemon:
                     error=str(exc),
                     exc_info=True,
                 )
-
         if new_names:
             log.info("worktrees_refreshed", repo=name, added=new_names)
         return new_names
     def build_app(self, *, dev_mode: bool = False) -> Starlette:
         """Build the global Starlette application with all routes.
-
         Per-repo and per-worktree routes are handled dynamically so that repos
         registered after startup are reachable immediately — the Starlette app
         does not need to be rebuilt.
         """
         from coderecon.daemon.global_routes import build_global_app
-
         return build_global_app(self, dev_mode=dev_mode)
 

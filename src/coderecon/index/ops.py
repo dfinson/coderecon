@@ -91,16 +91,13 @@ if TYPE_CHECKING:
 
 def _glob_to_regex(pattern: str) -> str:
     """Convert a glob pattern to a regex string.
-
     Handles ``**`` (zero or more directories), ``*`` (non-separator chars),
     ``?`` (single non-separator char), and ``[...]`` character classes.
-
     Anchoring rules (matching PurePosixPath.match semantics):
     - Patterns starting with ``/`` are absolute (full-path match).
     - Patterns starting with ``**/`` already anchor via ``(?:.+/)?``.
     - Other patterns with ``/`` are right-anchored (match from the right).
     - Bare patterns (no ``/``) match the last path component.
-
     Unlike PurePosixPath.match in Python < 3.12, ``**`` is correctly treated
     as zero-or-more directory segments, not a single ``*``.
     """
@@ -143,9 +140,7 @@ def _glob_to_regex(pattern: str) -> str:
         else:
             parts.append(re.escape(c))
             i += 1
-
     body = "".join(parts)
-
     if pattern.startswith("/"):
         # Absolute pattern — full match from root
         return "^" + body + "$"
@@ -166,7 +161,6 @@ def _compile_glob_pattern(pattern: str) -> re.Pattern[str]:
 
 def _compile_glob_set(patterns: list[str]) -> re.Pattern[str] | None:
     """Compile a list of glob patterns into a single combined regex.
-
     Returns ``None`` if *patterns* is empty.  The combined regex matches if
     ANY individual pattern matches — equivalent to iterating with
     ``_matches_glob`` and returning on first hit, but in a single
@@ -185,22 +179,18 @@ def _compile_glob_set_cached(patterns: tuple[str, ...]) -> re.Pattern[str]:
 
 def _matches_glob(rel_path: str, pattern: str) -> bool:
     """Check if a path matches a glob pattern, with ``**`` support.
-
     Uses pre-compiled regex (≈82× faster than PurePosixPath.match).
     Handles ``**`` as zero-or-more directory segments correctly — unlike
     PurePosixPath.match in Python < 3.12, which treats ``**`` as ``*``.
     """
     if not pattern:
         return not rel_path  # empty pattern matches only empty path
-
     if not rel_path:
         return False
-
     return bool(_compile_glob_pattern(pattern).search(rel_path))
 
 def _matches_filter_paths(rel_path: str, filter_paths: list[str]) -> bool:
     """Check if a path matches any of the filter_paths patterns.
-
     Supports:
     - Directory prefix matching: "src/" or "src" matches all files under src/
     - Exact file paths: "src/foo.py" matches that specific file
@@ -212,14 +202,11 @@ def _matches_filter_paths(rel_path: str, filter_paths: list[str]) -> bool:
             if _matches_glob(rel_path, pattern):
                 return True
             continue
-
         # Normalize potential directory patterns like "src/" -> "src"
         normalized = pattern.rstrip("/")
-
         # Exact match
         if rel_path in (pattern, normalized):
             return True
-
         # Directory prefix — require path boundary to avoid "src" matching "src2/"
         if normalized and rel_path.startswith(normalized + "/"):
             return True
@@ -265,23 +252,17 @@ class SearchMode:
 class IndexCoordinatorEngine:
     """
     High-level orchestration with serialization guarantees.
-
     SERIALIZATION:
     - Per-worktree locks via _get_worktree_lock(): Only ONE reconcile per worktree
     - _tantivy_write_lock: Only ONE Tantivy write batch at a time (global)
-
     These locks prevent:
     - RepoState corruption from concurrent reconciliations
     - Tantivy crashes from multiple writers
-
     Usage::
-
         coordinator = CplIndexCoordinator(repo_root, db_path, tantivy_path)
         result = await coordinator.initialize()
-
         # Search (thread-safe, no locks needed)
         results = await coordinator.search("query", SearchMode.TEXT)
-
         # Reindex (acquires locks automatically)
         stats = await coordinator.reindex_incremental([Path("a.py")])
     """
@@ -296,25 +277,20 @@ class IndexCoordinatorEngine:
         self.repo_root = repo_root
         self.db_path = db_path
         self.tantivy_path = tantivy_path
-
         # Database
         self.db = Database(db_path, busy_timeout_ms=busy_timeout_ms)
-
         # Serialization locks
         self._worktree_locks: dict[str, threading.Lock] = {}
         self._worktree_locks_guard = threading.Lock()
         self._tantivy_write_lock = threading.Lock()
-
         # Freshness gating — injected by daemon layer.
         # When None (standalone / test), wait_for_freshness is a no-op.
         self._freshness_gate: FreshnessGate | None = None
         self._freshness_worktree: str | None = None
-
         # Ordered worktree overlay for search queries.  Set by daemon via
         # set_freshness_gate().  Index 0 has highest priority; later entries
         # serve as read-through fallbacks (e.g. ["feature-x", "main"]).
         self._search_worktrees: list[str] = ["main"]
-
         # Components (initialized lazily in initialize())
         self._lexical: LexicalIndex | None = None
         self._parser: TreeSitterParser | None = None
@@ -324,16 +300,13 @@ class IndexCoordinatorEngine:
         self._state: FileStateService | None = None
         self._reconciler: Reconciler | None = None
         self._epoch_manager: EpochManager | None = None
-
         self._initialized = False
-
         # Cache of worktree name → DB row ID, populated by _get_or_create_worktree_id.
         self._worktree_id_cache: dict[str, int] = {}
         # Cache of worktree name → is_main flag from DB.
         self._worktree_is_main_cache: dict[str, bool] = {}
         # Cache of worktree name → filesystem root path (non-main worktrees only).
         self._worktree_root_cache: dict[str, Path] = {}
-
         # Optional in-memory cache of all DefFacts (keyed by def_uid).
         # Lazy-loaded on first batch_get_defs() call; cleared on close().
         self._def_cache: dict[str, DefFact] | None = None
@@ -354,7 +327,6 @@ class IndexCoordinatorEngine:
             return is_main
     def _get_or_create_worktree_id(self, name: str, root_path: str | None = None) -> int:
         """Return the `worktrees.id` for *name*, inserting the row if absent.
-
         ``root_path`` should be the filesystem path of this worktree's checkout
         directory.  For the main checkout it defaults to ``self.repo_root``;
         for git worktrees the caller should pass the actual checkout path so
@@ -391,10 +363,8 @@ class IndexCoordinatorEngine:
         self, gate: FreshnessGate, worktree: str, worktree_root: str | None = None
     ) -> None:
         """Inject freshness gate from daemon layer.
-
         Also sets the search worktrees overlay: feature worktrees fall back
         to main so that unchanged files are still found via main's index.
-
         ``worktree_root`` is the filesystem path of the worktree checkout
         directory (needed to insert the Worktree row with the correct path).
         Defaults to the coordinator's repo_root when not supplied.
@@ -408,19 +378,16 @@ class IndexCoordinatorEngine:
         # Store worktree root so extraction reads from the correct checkout dir.
         if worktree_root is not None and worktree != "main":
             self._worktree_root_cache[worktree] = Path(worktree_root)
-
     async def initialize(
         self,
         on_index_progress: Callable[[int, int, dict[str, int], str], None],
     ) -> InitResult:
         """
         Full initialization: discover, probe, index.
-
         Args:
             on_index_progress: Callback(indexed_count, total_count, files_by_ext, phase)
                               called during indexing for progress updates.
                               phase is one of: "indexing", "resolving_refs", "resolving_types"
-
         Flow:
         1. Create database schema
         2. Create additional indexes
@@ -434,24 +401,19 @@ class IndexCoordinatorEngine:
         10. Publish initial epoch
         """
         errors: list[str] = []
-
         # Step 1-2: Database setup
         self.db.create_all()
         create_additional_indexes(self.db.engine)
         # Seed the main worktree row so File.worktree_id is valid from the start.
         self._get_or_create_worktree_id("main")
-
         # Initialize components
         self._parser = tree_sitter_service.parser
         self._lexical = LexicalIndex(self.tantivy_path)
         self._epoch_manager = EpochManager(self.db, self._lexical)
-
         # Step 3: Discover contexts
-
         discovery = ContextDiscovery(self.repo_root)
         discovery_result = discovery.discover_all()
         all_candidates = discovery_result.candidates
-
         # Extract root fallback context before filtering (it bypasses normal flow)
         root_fallback = next(
             (c for c in all_candidates if getattr(c, "is_root_fallback", False)),
@@ -460,22 +422,18 @@ class IndexCoordinatorEngine:
         regular_candidates = [
             c for c in all_candidates if not getattr(c, "is_root_fallback", False)
         ]
-
         # Step 4: Apply authority filter (only to regular candidates)
         authority = Tier1AuthorityFilter(self.repo_root)
         authority_result = authority.apply(regular_candidates)
         pending_candidates = authority_result.pending
         detached_candidates = authority_result.detached
-
         # Step 5: Resolve membership
         membership = MembershipResolver()
         membership_result = membership.resolve(pending_candidates)
         resolved_candidates = membership_result.contexts
-
         # Step 6: Probe contexts (validate each has parseable files)
         probe = ContextProbe(self.repo_root, parser=self._parser)
         probed_candidates: list[CandidateContext] = []
-
         for candidate in resolved_candidates:
             probe_result = probe.validate(candidate)
             if probe_result.valid:
@@ -485,15 +443,12 @@ class IndexCoordinatorEngine:
             else:
                 candidate.probe_status = ProbeStatus.FAILED
             probed_candidates.append(candidate)
-
         # Add root fallback back (already marked VALID, bypasses probing)
         if root_fallback is not None:
             probed_candidates.append(root_fallback)
-
         # Step 7: Persist contexts
         contexts_valid = 0
         contexts_failed = 0
-
         with self.db.session() as session:
             for candidate in probed_candidates:
                 # Use special name for root fallback context
@@ -501,7 +456,6 @@ class IndexCoordinatorEngine:
                     name = "_root"
                 else:
                     name = candidate.root_path or "root"
-
                 context = Context(
                     name=name,
                     language_family=candidate.language_family.value,
@@ -517,7 +471,6 @@ class IndexCoordinatorEngine:
                 )
                 session.add(context)
                 session.flush()
-
                 # Add markers (root fallback has none)
                 for marker_path in candidate.markers:
                     marker = ContextMarker(
@@ -527,12 +480,10 @@ class IndexCoordinatorEngine:
                         detected_at=time.time(),
                     )
                     session.add(marker)
-
                 if candidate.probe_status == ProbeStatus.VALID:
                     contexts_valid += 1
                 elif candidate.probe_status == ProbeStatus.FAILED:
                     contexts_failed += 1
-
             # Persist detached contexts
             for candidate in detached_candidates:
                 context = Context(
@@ -543,59 +494,45 @@ class IndexCoordinatorEngine:
                     probe_status=ProbeStatus.DETACHED.value,
                 )
                 session.add(context)
-
             session.commit()
-
         # Step 7.4: Resolve and persist context runtimes
         # Runtime is captured at discovery time per Design A (SPEC.md §8.4)
         await self._resolve_context_runtimes()
-
         # Step 7.5: Discover test targets
         await self._discover_test_targets()
-
         # Step 7.6: Discover lint tools
         await self._discover_lint_tools()
-
         # Step 7.7: Discover coverage capabilities (after test targets)
         await self._discover_coverage_capabilities()
-
         # Step 8: Initialize router
         self._router = ContextRouter()
-
         # Initialize remaining components
         self._structural = StructuralIndexer(self.db, self.repo_root)
         self._state = FileStateService(self.db)
         self._reconciler = Reconciler(self.db, self.repo_root)
-
         # Establish baseline reconciler state (HEAD, .reconignore hash)
         # This prevents spurious change detection on first incremental call
         self._reconciler.reconcile(
             paths=[],
             worktree_id=self._get_or_create_worktree_id("main"),
         )
-
         # Initialize fact queries
         # Note: FactQueries needs a session, so we create per-request
         self._facts = None  # Created on demand in session context
-
         # Step 9: Index all files
         files_indexed, indexed_paths, files_by_ext = await self._index_all_files(
             on_progress=on_index_progress
         )
-
         # Reload index so searcher sees committed changes
         if self._lexical is not None:
             self._lexical.reload()
-
         # Step 10: Publish initial epoch with indexed file paths
         if self._epoch_manager is not None:
             self._epoch_manager.publish_epoch(
                 files_indexed=files_indexed,
                 indexed_paths=indexed_paths,
             )
-
         self._initialized = True
-
         return InitResult(
             contexts_discovered=len(all_candidates),
             contexts_valid=contexts_valid,
@@ -605,7 +542,6 @@ class IndexCoordinatorEngine:
             errors=errors,
             files_by_ext=files_by_ext,
         )
-
     async def collect_initial_coverage(
         self,
         *,
@@ -614,15 +550,12 @@ class IndexCoordinatorEngine:
         subprocess_memory_limit_mb: int | None = None,
     ) -> int:
         """Run the full test suite with coverage and ingest results.
-
         Best-effort: if no test targets exist, no runner pack is available,
         or tests crash, returns 0 and logs a debug message.  Never raises.
-
         Returns the number of TestCoverageFact rows written.
         """
         try:
             from coderecon.testing.ops import TestOps
-
             test_ops = TestOps(
                 self.repo_root,
                 self,
@@ -635,17 +568,14 @@ class IndexCoordinatorEngine:
                 fail_fast=False,  # collect as much coverage as possible
                 parallelism=parallelism,
             )
-
             if not result.run_status or not result.run_status.coverage:
                 log.debug("initial_coverage.no_artifacts")
                 return 0
-
             from coderecon.testing.coverage import (
                 CoverageParseError,
                 merge,
                 parse_artifact,
             )
-
             reports = []
             for cov in result.run_status.coverage:
                 cov_path = cov.get("path", "")
@@ -661,15 +591,12 @@ class IndexCoordinatorEngine:
                     reports.append(report)
                 except (CoverageParseError, Exception):
                     log.debug("initial_coverage.parse_failed", extra={"path": cov_path}, exc_info=True)
-
             if not reports:
                 log.debug("initial_coverage.no_reports")
                 return 0
-
             from coderecon.index._internal.analysis.coverage_ingestion import (
                 ingest_coverage,
             )
-
             merged = merge(*reports) if len(reports) > 1 else reports[0]
             failed_ids: set[str] | None = None
             if result.run_status and result.run_status.failures:
@@ -683,84 +610,65 @@ class IndexCoordinatorEngine:
             )
             log.info("initial_coverage.ingested", extra={"facts": written})
             return written
-
         except (OSError, ValueError, RuntimeError):  # coverage ingestion is best-effort
             log.debug("initial_coverage.failed", exc_info=True)
             return 0
-
     async def load_existing(self) -> bool:
         """Load existing index without re-indexing.
-
         Use this when starting daemon on an already-initialized repo.
         Performs reconciliation to detect stale files per SPEC §5.5.
-
         Returns True if index loaded successfully, False if index doesn't exist.
         """
         if self._initialized:
             return True
-
         # Check if index exists
         if not self.db_path.exists():
             return False
-
         # Initialize components
         self._parser = tree_sitter_service.parser
         self._lexical = LexicalIndex(self.tantivy_path)
         self._epoch_manager = EpochManager(self.db, self._lexical)
-
         # Initialize router from existing contexts
         self._router = ContextRouter()
-
         # Load existing contexts and populate router
         with self.db.session() as session:
             contexts = session.exec(select(Context)).all()
             if not contexts:
                 return False  # No contexts = not initialized
-
             # Router would be populated from contexts here
             # (Currently router doesn't need initialization data)
-
         # Initialize remaining components
         self._structural = StructuralIndexer(self.db, self.repo_root)
         self._state = FileStateService(self.db)
         self._reconciler = Reconciler(self.db, self.repo_root)
-
         # Skip reconciliation on load - reindex_full handles this if needed
         # The old reconcile(paths=[]) was causing hangs on cross-filesystem mounts
-
         self._facts = None  # Created on demand in session context
-
         # Reload lexical index to pick up existing data
         if self._lexical is not None:
             self._lexical.reload()
-
         # Ensure the main worktree row exists (idempotent).
         self._get_or_create_worktree_id("main")
-
         self._initialized = True
         return True
     def backfill_missing_signals(self) -> dict[str, int]:
         """Detect and backfill missing derived signals.
-
         Runs a cheap SQL scan for each registered signal check.  If gaps
         are found (e.g. defs without SPLADE vectors, or vectors with a
         stale model version), the corresponding backfill pass is run for
         only the affected file IDs.
-
         Safe to call on every load — returns immediately when consistent.
         """
         from coderecon.index._internal.db import (
             backfill_gaps,
             check_consistency,
         )
-
         report = check_consistency(self.db)
         if report.consistent:
             return {}
         return backfill_gaps(self.db, report)
     def changed_since_last_index(self) -> list[Path]:
         """Return paths changed since the last indexed HEAD (git-diff based).
-
         Runs synchronously — call from a thread or before the event loop starts.
         Returns an empty list if the index has never been committed or if HEAD
         matches the last indexed commit.
@@ -769,51 +677,41 @@ class IndexCoordinatorEngine:
             return []
         changed = self._reconciler.get_changed_files()
         return [self.repo_root / cf.path for cf in changed]
-
     async def reindex_incremental(
         self, changed_paths: list[Path], worktree: str = "main"
     ) -> IndexStats:
         """
         Incremental reindex for changed files.
-
         SERIALIZED: Acquires reconcile_lock and tantivy_write_lock.
-
         If .reconignore changes, triggers a full reindex to apply new patterns.
         """
         try:
             return await self._reindex_incremental_impl(changed_paths, worktree)
         finally:
             self._def_cache = None
-
     async def _reindex_incremental_impl(
         self, changed_paths: list[Path], worktree: str = "main"
     ) -> IndexStats:
         """
         Incremental reindex for changed files (unified single-pass).
-
         Single-pass architecture (mirrors _index_all_files):
         - Each file is read and tree-sitter parsed ONCE by extract_files()
         - ExtractionResult carries content_text + symbol_names for Tantivy
         - Same ExtractionResult reused for structural fact persistence
         - Tantivy uses batched stage_file() + single commit_staged()
-
         SERIALIZED: Acquires reconcile_lock and tantivy_write_lock.
-
         If .reconignore changes, triggers a full reindex to apply new patterns.
         File record creation is handled before indexing to satisfy FK constraints.
         """
         if not self._initialized:
             msg = "Coordinator not initialized"
             raise RuntimeError(msg)
-
         # Deduplicate paths to avoid UNIQUE constraint violations
         changed_paths = list(dict.fromkeys(changed_paths))
-
         # Resolve effective root: for non-main worktrees whose checkout
         # lives outside the main repo tree, use the worktree-specific root
         # for all filesystem operations (existence checks, file reads, etc.).
         _effective_root = self._worktree_root_cache.get(worktree, self.repo_root)
-
         # Normalize: convert any absolute worktree paths to repo-relative.
         _normalized: list[Path] = []
         for p in changed_paths:
@@ -829,13 +727,11 @@ class IndexCoordinatorEngine:
                         continue  # skip paths we can't resolve
             _normalized.append(p)
         changed_paths = _normalized
-
         start_time = time.time()
         files_added = 0
         files_updated = 0
         files_removed = 0
         symbols_indexed = 0
-
         with self._get_worktree_lock(worktree):
             # Reconcile changes
             _wt_id = self._get_or_create_worktree_id(worktree)
@@ -844,23 +740,19 @@ class IndexCoordinatorEngine:
                     changed_paths, worktree_id=_wt_id,
                     worktree_root=_effective_root if worktree != "main" else None,
                 )
-
                 # If .reconignore changed, do full reindex to apply new patterns
                 if reconcile_result.reconignore_changed:
                     return await self._reindex_for_reconignore_change()
-
             # Separate existing vs new files
             existing_paths: list[Path] = []
             new_paths: list[Path] = []
             removed_paths: list[Path] = []
-
             with self.db.session() as session:
                 indexed_set = set(
                     session.exec(
                         select(File.path).where(File.worktree_id == _wt_id)
                     ).all()
                 )
-
             for path in changed_paths:
                 full_path = _effective_root / path
                 str_path = str(path)
@@ -872,7 +764,6 @@ class IndexCoordinatorEngine:
                 else:
                     if str_path in indexed_set:
                         removed_paths.append(path)
-
             # Create File records for new files BEFORE structural indexing
             file_id_map: dict[str, int] = {}
             if new_paths:
@@ -900,7 +791,6 @@ class IndexCoordinatorEngine:
                             log.debug("file_read_failed", path=str(path), exc_info=True)
                             continue
                     session.commit()
-
             # === Unified single-pass: extract, stage Tantivy, persist structural facts ===
             # Each file is read and tree-sitter parsed ONCE by the structural
             # extractor.  ExtractionResult carries content_text for Tantivy and
@@ -909,19 +799,16 @@ class IndexCoordinatorEngine:
             all_changed = existing_paths + new_paths
             str_changed = [str(p) for p in all_changed if (_effective_root / p).exists()]
             existing_set = {str(p) for p in existing_paths}
-
             if str_changed and self._structural is not None and self._lexical is not None:
                 with self.db.session() as session:
                     contexts = session.exec(
                         select(Context).where(Context.probe_status == ProbeStatus.VALID.value)
                     ).all()
-
                     specific_contexts = [c for c in contexts if c.tier != 3 and c.id is not None]
                     specific_contexts.sort(
                         key=lambda c: len(c.root_path) if c.root_path else 0,
                         reverse=True,
                     )
-
                     file_to_context: dict[str, int] = {}
                     for ctx in specific_contexts:
                         if ctx.id is None:
@@ -948,7 +835,6 @@ class IndexCoordinatorEngine:
                             ):
                                 continue
                             file_to_context[str_path] = ctx_id
-
                     # Assign unclaimed files to root fallback context
                     root_ctx = next((c for c in contexts if c.tier == 3 and c.id is not None), None)
                     if root_ctx is not None and root_ctx.id is not None:
@@ -964,7 +850,6 @@ class IndexCoordinatorEngine:
                                 ):
                                     continue
                                 file_to_context[str_path] = root_id
-
                     # Populate file_id_map for existing files so index_files()
                     # reuses them instead of querying _ensure_file_id() per file.
                     # NOTE: changed_file_ids is computed AFTER the extraction loop
@@ -978,12 +863,10 @@ class IndexCoordinatorEngine:
                     for f in files:
                         if f.id is not None:
                             file_id_map[f.path] = f.id
-
                 # Group files by context_id
                 context_files: dict[int, list[str]] = {}
                 for str_path, ctx_id in file_to_context.items():
                     context_files.setdefault(ctx_id, []).append(str_path)
-
                 # Use parallel extraction when batch is large enough to
                 # amortise process-pool overhead (~8 files threshold).
                 _PARALLEL_THRESHOLD = 8
@@ -997,7 +880,6 @@ class IndexCoordinatorEngine:
                         extractions = self._structural.extract_files(
                             paths, ctx_id, workers=workers, repo_root=_extract_root
                         )
-
                         failed_paths: list[str] = []
                         for extraction in extractions:
                             if extraction.content_text is None:
@@ -1016,15 +898,12 @@ class IndexCoordinatorEngine:
                                 symbols=extraction.symbol_names,
                                 worktree=worktree,
                             )
-
                             if extraction.file_path in existing_set:
                                 files_updated += 1
                             symbols_indexed += len(extraction.symbol_names)
-
                             # Release file content after staging
                             extraction.content_text = None
                             extraction.symbol_names = []
-
                         # Persist structural facts (reuses pre-computed extractions)
                         # Filter out failed extractions — index_files skips them
                         # but doesn't purge existing facts
@@ -1038,7 +917,6 @@ class IndexCoordinatorEngine:
                             is_main_worktree=self._is_main_worktree(worktree),
                             _extractions=ok_extractions,
                         )
-
                         # Purge stale structural facts for failed extractions
                         if failed_paths:
                             self._remove_structural_facts_for_paths(
@@ -1057,12 +935,10 @@ class IndexCoordinatorEngine:
                                     params={"paths": failed_paths},
                                 )  # type: ignore[call-overload]
                                 session.commit()
-
                     # Stage removals
                     for path in removed_paths:
                         self._lexical.stage_remove(str(path), worktree)
                         files_removed += 1
-
                     # Commit all staged changes atomically
                     try:
                         self._lexical.commit_staged()
@@ -1083,10 +959,8 @@ class IndexCoordinatorEngine:
                             )  # type: ignore[call-overload]
                             session.commit()
                         raise
-
                 # Reload searcher to see committed changes
                 self._lexical.reload()
-
                 # Collect file IDs for scoped resolution passes AFTER extraction
                 # so that File rows created by _ensure_file_id() are included.
                 with self.db.session() as session:
@@ -1097,7 +971,6 @@ class IndexCoordinatorEngine:
                         )
                     ).all()
                     changed_file_ids: list[int] = [fid for fid in _id_rows if fid is not None]
-
                 # Pass 1.5 / 2 / 3: cross-file resolution (scoped to changed files)
                 if changed_file_ids:
                     # Invalidate dangling target_def_uid refs: when defs in changed
@@ -1112,24 +985,18 @@ class IndexCoordinatorEngine:
                     run_pass_1_5(self.db, None, file_ids=_resolve_fids)
                     resolve_references(self.db, file_ids=_resolve_fids, worktree_id=_wt_id)
                     resolve_type_traced(self.db, file_ids=_resolve_fids)
-
                 # Sweep orphaned edge rows after resolution
                 self._sweep_orphaned_edges()
-
                 # Materialize ExportSurface/ExportThunk/AnchorGroup tables
                 materialize_all(self.db)
-
                 # Mark coverage facts as stale for defs in changed files
                 # (def body may have changed even if UID survived).
                 if changed_file_ids:
                     self._mark_coverage_stale(changed_file_ids)
-
                 # SPLADE: re-encode vectors for changed files
                 self._reindex_splade_vectors(changed_file_ids)
-
                 # Passes 5-7: semantic passes scoped to changed files.
                 self._reindex_semantic_passes(changed_file_ids)
-
                 # Mark successfully indexed files as indexed
                 if changed_file_ids:
                     now = time.time()
@@ -1148,21 +1015,17 @@ class IndexCoordinatorEngine:
                         if self._lexical is not None:
                             self._lexical.stage_remove(str(path), worktree)
                         files_removed += 1
-
                     if self._lexical is not None:
                         self._lexical.commit_staged()
                 if self._lexical is not None:
                     self._lexical.reload()
-
             # Propagate def changes to sibling worktrees
             self._propagate_def_changes(_wt_id)
-
             # Remove structural facts for removed files
             if removed_paths:
                 self._remove_structural_facts_for_paths(
                     [str(p) for p in removed_paths], worktree_id=_wt_id,
                 )
-
             # Remove File records for removed paths
             if removed_paths:
                 with self.db.bulk_writer() as writer:
@@ -1172,21 +1035,16 @@ class IndexCoordinatorEngine:
                             "path = :p AND worktree_id = :wt",
                             {"p": str(path), "wt": _wt_id},
                         )
-
             # Incrementally update test targets for changed test files
             await self._update_test_targets_incremental(new_paths, existing_paths, removed_paths)
-
             # Incrementally update lint tools if config files changed
             await self._update_lint_tools_incremental(changed_paths)
-
         # WAL checkpoint to keep WAL file bounded after bulk writes
         try:
             self.db.checkpoint("PASSIVE")
         except (OSError, RuntimeError):  # WAL checkpoint is optional maintenance
             logger.debug("wal_checkpoint_skipped_after_reindex", exc_info=True)
-
         duration = time.time() - start_time
-
         return IndexStats(
             files_processed=len(changed_paths),
             files_added=files_added,
@@ -1195,35 +1053,28 @@ class IndexCoordinatorEngine:
             symbols_indexed=symbols_indexed,
             duration_seconds=duration,
         )
-
     async def _reindex_for_reconignore_change(self) -> IndexStats:
         """Handle .reconignore change by computing file diff and updating index.
-
         Removes files that are now ignored and adds files that are now included.
         Must be called while holding _reconcile_lock.
         """
         start_time = time.time()
         files_added = 0
         files_removed = 0
-
         # Get currently indexed files from database
         with self.db.session() as session:
             file_stmt = select(File.path)
             indexed_paths = set(session.exec(file_stmt).all())
-
         # Get files that should be indexed under current .reconignore rules
         should_index: set[str] = set()
         file_to_context: dict[str, int] = {}  # Map file path to context ID
-
         with self.db.session() as session:
             ctx_stmt = select(Context).where(
                 Context.probe_status == ProbeStatus.VALID.value,
             )
             contexts = list(session.exec(ctx_stmt).all())
-
         # Walk filesystem once, apply reconignore
         all_files = self._walk_all_files()
-
         for context in contexts:
             context_root = self.repo_root / context.root_path
             if not context_root.exists():
@@ -1231,7 +1082,6 @@ class IndexCoordinatorEngine:
             include_globs = context.get_include_globs()
             exclude_globs = context.get_exclude_globs()
             context_id = context.id or 1
-
             for file_path in self._filter_files_for_context(
                 all_files, context_root, include_globs, exclude_globs
             ):
@@ -1239,18 +1089,15 @@ class IndexCoordinatorEngine:
                 if rel_path not in should_index:
                     should_index.add(rel_path)
                     file_to_context[rel_path] = context_id
-
         # Compute diff
         to_remove = indexed_paths - should_index
         to_add = should_index - indexed_paths
-
         # Remove files that are now ignored
         with self._tantivy_write_lock:
             for rel_path in to_remove:
                 if self._lexical is not None:
                     self._lexical.remove_file(rel_path)
                 files_removed += 1
-
             # Add files that are now included
             for rel_path in to_add:
                 full_path = self.repo_root / rel_path
@@ -1268,11 +1115,9 @@ class IndexCoordinatorEngine:
                     except (OSError, UnicodeDecodeError):
                         log.debug("file_index_failed", path=rel_path, exc_info=True)
                         continue
-
         # Reload index
         if self._lexical is not None:
             self._lexical.reload()
-
         # Pre-create File records for added files before structural indexing
         # This ensures FKs are valid within the same transaction
         file_id_map: dict[str, int] = {}
@@ -1286,7 +1131,6 @@ class IndexCoordinatorEngine:
                     content_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
                     # Detect language
                     lang = detect_language_family(full_path)
-
                     file_record = File(
                         path=rel_path,
                         content_hash=content_hash,
@@ -1300,7 +1144,6 @@ class IndexCoordinatorEngine:
                     if file_record.id is not None:
                         file_id_map[rel_path] = file_record.id
                 session.commit()
-
         # Update structural index for added files, grouped by context
         if to_add and self._structural is not None:
             # Group files by context_id
@@ -1310,7 +1153,6 @@ class IndexCoordinatorEngine:
                 if ctx_id not in by_context:
                     by_context[ctx_id] = []
                 by_context[ctx_id].append(rel_path)
-
             _wt = self._freshness_worktree or "main"
             _root = self._worktree_root_cache.get(_wt, self.repo_root)
             for ctx_id, paths in by_context.items():
@@ -1323,32 +1165,24 @@ class IndexCoordinatorEngine:
                     is_main_worktree=self._is_main_worktree(_wt),
                     _extractions=extractions,
                 )
-
             # Create synthetic import edges from config files to source files.
             from coderecon.index._internal.indexing.config_refs import (
                 resolve_config_file_refs,
             )
-
             resolve_config_file_refs(self.db, self.repo_root)
-
             # Pass 1.5: DB-backed cross-file resolution (all languages)
             # Use unit_id=None to allow cross-context resolution, which is the
             # common case (shared libraries, common utilities, framework code).
             # Strict context isolation would break legitimate cross-project refs.
             run_pass_1_5(self.db, None)
-
             # Resolve cross-file references (Pass 2 - follows ImportFact chains)
             resolve_references(self.db)
-
             # Resolve type-traced member accesses (Pass 3 - follows type annotations)
             resolve_type_traced(self.db)
-
         # Sweep orphaned edge rows after resolution
         self._sweep_orphaned_edges()
-
         # Materialize ExportSurface/ExportThunk/AnchorGroup tables
         materialize_all(self.db)
-
         # Remove structural facts for removed files
         if to_remove:
             _ri_wt_id = self._get_or_create_worktree_id(
@@ -1357,7 +1191,6 @@ class IndexCoordinatorEngine:
             self._remove_structural_facts_for_paths(
                 list(to_remove), worktree_id=_ri_wt_id,
             )
-
         # Remove File records for removed paths
         if to_remove:
             with self.db.bulk_writer() as writer:
@@ -1367,16 +1200,13 @@ class IndexCoordinatorEngine:
                         "path = :p AND worktree_id = :wt",
                         {"p": rel_path, "wt": _ri_wt_id},
                     )
-
         # Update test targets for files entering/leaving the index
         await self._update_test_targets_incremental(
             new_paths=[Path(p) for p in to_add],
             existing_paths=[],
             removed_paths=[Path(p) for p in to_remove],
         )
-
         duration = time.time() - start_time
-
         return IndexStats(
             files_processed=len(to_add) + len(to_remove),
             files_added=files_added,
@@ -1389,7 +1219,6 @@ class IndexCoordinatorEngine:
         self, paths: list[str], *, worktree_id: int | None = None,
     ) -> None:
         """Remove all structural facts for the given file paths.
-
         Args:
             paths: Relative file paths to purge.
             worktree_id: If set, only match File rows for this worktree.
@@ -1436,12 +1265,10 @@ class IndexCoordinatorEngine:
         self, changed_file_ids: list[int], worktree_id: int | None = None,
     ) -> list[int]:
         """NULL out target_def_uid on refs whose target no longer exists.
-
         When files are reindexed, their defs may get new UIDs.  Refs in
         *other* files that pointed at the old UIDs become dangling.  This
         method NULLs those out and returns the file_ids that were affected
         so the caller can widen the resolution scope.
-
         If worktree_id is provided, only considers files in that worktree.
         """
         if not changed_file_ids:
@@ -1475,7 +1302,6 @@ class IndexCoordinatorEngine:
                 binds,
             ).fetchall()
             extra_file_ids = [row[0] for row in affected_rows]
-
             if extra_file_ids:
                 eph = ", ".join(f":ef_{i}" for i in range(len(extra_file_ids)))
                 ebinds: dict[str, int] = {
@@ -1503,14 +1329,11 @@ class IndexCoordinatorEngine:
     def _propagate_def_changes(self, worktree_id: int) -> int:
         """Mark files in OTHER worktrees stale when their refs point to
         def_uids that no longer exist.
-
         After a worktree reindex, defs may have been removed or renamed
         (new UIDs).  Files in sibling worktrees that reference the old
         UIDs need re-reconciliation so their refs can be re-resolved.
-
         Sets ``content_hash = NULL`` on affected File rows so the next
         reconcile pass picks them up.
-
         Returns the number of files marked stale.
         """
         with self.db.session() as session:
@@ -1538,7 +1361,6 @@ class IndexCoordinatorEngine:
     def _sweep_orphaned_edges(self) -> None:
         """Delete semantic_neighbor_facts and test_coverage_facts rows that
         reference def_uids no longer present in def_facts.
-
         Run after resolution passes so that any newly-created defs are visible.
         """
         with self.db.session() as session:
@@ -1570,7 +1392,6 @@ class IndexCoordinatorEngine:
             session.commit()
     def _mark_coverage_stale(self, changed_file_ids: list[int]) -> None:
         """Mark test_coverage_facts as stale for defs in changed files.
-
         When a source file is reindexed, defs that survived with the same UID
         may have different bodies.  Coverage data is no longer accurate and
         must be re-collected.
@@ -1590,7 +1411,6 @@ class IndexCoordinatorEngine:
                 binds,
             )
             session.commit()
-
     async def reindex_full(self) -> IndexStats:
         """
         Full repository reindex - idempotent and incremental.
@@ -1599,26 +1419,21 @@ class IndexCoordinatorEngine:
             return await self._reindex_full_impl()
         finally:
             self._def_cache = None
-
     async def _reindex_full_impl(self) -> IndexStats:
         """
         Full repository reindex.
-
         Discovers all files on disk, compares against DB, and indexes new/changed files.
         Removes files that no longer exist.
-
         SERIALIZED: Acquires reconcile_lock and tantivy_write_lock.
         """
         if not self._initialized:
             msg = "Coordinator not initialized"
             raise RuntimeError(msg)
-
         start_time = time.time()
         files_added = 0
         files_updated = 0
         files_removed = 0
         symbols_indexed = 0
-
         with self._get_worktree_lock("main"):
             # Get currently indexed files from database (path → content_hash)
             indexed_hashes: dict[str, str | None] = {}
@@ -1627,19 +1442,15 @@ class IndexCoordinatorEngine:
                 for path, content_hash in session.exec(file_stmt).all():
                     indexed_hashes[path] = content_hash
             indexed_paths = set(indexed_hashes.keys())
-
             # Get files that should be indexed (walk filesystem)
             should_index: set[str] = set()
             file_to_context: dict[str, int] = {}
-
             with self.db.session() as session:
                 ctx_stmt = select(Context).where(
                     Context.probe_status == ProbeStatus.VALID.value,
                 )
                 contexts = list(session.exec(ctx_stmt).all())
-
             all_files = self._walk_all_files()
-
             # Sort contexts by root_path depth descending (deepest first)
             # This ensures the most specific context claims each file
             sorted_contexts = sorted(
@@ -1647,7 +1458,6 @@ class IndexCoordinatorEngine:
                 key=lambda c: c.root_path.count("/") if c.root_path else 0,
                 reverse=True,
             )
-
             for context in sorted_contexts:
                 context_root = self.repo_root / context.root_path
                 if not context_root.exists():
@@ -1655,7 +1465,6 @@ class IndexCoordinatorEngine:
                 include_globs = context.get_include_globs()
                 exclude_globs = context.get_exclude_globs()
                 context_id = context.id or 1
-
                 for file_path in self._filter_files_for_context(
                     all_files, context_root, include_globs, exclude_globs
                 ):
@@ -1664,11 +1473,9 @@ class IndexCoordinatorEngine:
                     if rel_path not in file_to_context:
                         should_index.add(rel_path)
                         file_to_context[rel_path] = context_id
-
             # Compute diff
             to_remove = indexed_paths - should_index
             to_add = should_index - indexed_paths
-
             # Check existing files for content changes
             to_update: set[str] = set()
             common = indexed_paths & should_index
@@ -1685,7 +1492,6 @@ class IndexCoordinatorEngine:
                             to_update.add(rel_path)
             # Combine new + modified for indexing
             to_index = to_add | to_update
-
             # Process removals + updates (remove old Tantivy docs)
             with self._tantivy_write_lock:
                 # Remove files that no longer exist or are now ignored
@@ -1693,12 +1499,10 @@ class IndexCoordinatorEngine:
                     if self._lexical is not None:
                         self._lexical.remove_file(rel_path)
                     files_removed += 1
-
                 # Remove stale Tantivy docs for files being re-indexed
                 for rel_path in to_update:
                     if self._lexical is not None:
                         self._lexical.remove_file(rel_path)
-
                 # Add/update files via lexical index
                 for rel_path in to_index:
                     full_path = self.repo_root / rel_path
@@ -1720,11 +1524,9 @@ class IndexCoordinatorEngine:
                         except (OSError, UnicodeDecodeError):
                             log.debug("incremental_index_failed", path=rel_path, exc_info=True)
                             continue
-
             # Reload lexical index
             if self._lexical is not None:
                 self._lexical.reload()
-
             # Pre-create/update File records before structural indexing
             file_id_map: dict[str, int] = {}
             _full_wt_id = self._get_or_create_worktree_id(
@@ -1756,7 +1558,6 @@ class IndexCoordinatorEngine:
                             continue
                         content_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
                         lang = detect_language_family(full_path)
-
                         file_record = File(
                             path=rel_path,
                             content_hash=content_hash,
@@ -1769,7 +1570,6 @@ class IndexCoordinatorEngine:
                         if file_record.id is not None:
                             file_id_map[rel_path] = file_record.id
                     session.commit()
-
             # Structural indexing for added + modified files
             if to_index and self._structural is not None:
                 # Group files by context_id
@@ -1777,7 +1577,6 @@ class IndexCoordinatorEngine:
                 for rel_path in to_index:
                     ctx_id = file_to_context.get(rel_path, 1)
                     by_context.setdefault(ctx_id, []).append(rel_path)
-
                 _wt2 = self._freshness_worktree or "main"
                 _root2 = self._worktree_root_cache.get(_wt2, self.repo_root)
                 for ctx_id, paths in by_context.items():
@@ -1791,24 +1590,19 @@ class IndexCoordinatorEngine:
 is_main_worktree=self._is_main_worktree(_wt2),
                         _extractions=extractions,
                     )
-
                 # Cross-file resolution passes
                 run_pass_1_5(self.db, None)
                 resolve_references(self.db)
                 resolve_type_traced(self.db)
-
             # Sweep orphaned edge rows after resolution
             self._sweep_orphaned_edges()
-
             # Materialize ExportSurface/ExportThunk/AnchorGroup tables
             materialize_all(self.db)
-
             # Remove structural facts for removed files
             if to_remove:
                 self._remove_structural_facts_for_paths(
                     list(to_remove), worktree_id=_full_wt_id,
                 )
-
             # Remove File records for removed paths
             if to_remove:
                 with self.db.bulk_writer() as writer:
@@ -1818,23 +1612,19 @@ is_main_worktree=self._is_main_worktree(_wt2),
                             "path = :p AND worktree_id = :wt",
                             {"p": rel_path, "wt": _full_wt_id},
                         )
-
             # Update test targets for files entering/leaving the index
             await self._update_test_targets_incremental(
                 new_paths=[Path(p) for p in to_add],
                 existing_paths=[Path(p) for p in to_update],
                 removed_paths=[Path(p) for p in to_remove],
             )
-
             # Publish epoch
             if self._epoch_manager is not None:
                 self._epoch_manager.publish_epoch(
                     files_indexed=files_added,
                     indexed_paths=list(to_add),
                 )
-
         duration = time.time() - start_time
-
         return IndexStats(
             files_processed=len(to_index) + len(to_remove),
             files_added=files_added,
@@ -1843,10 +1633,8 @@ is_main_worktree=self._is_main_worktree(_wt2),
             symbols_indexed=symbols_indexed,
             duration_seconds=duration,
         )
-
     async def wait_for_freshness(self) -> None:
         """Block until index is fresh (no pending writes).
-
         Delegates to :class:`FreshnessGate` when injected by the daemon
         layer.  Without a gate (standalone / test) this is a no-op.
         """
@@ -1857,7 +1645,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
             await self._freshness_gate.wait_fresh(self._freshness_worktree)
     def score_files_bm25(self, query: str, limit: int = 500) -> dict[str, float]:
         """Score files by BM25 relevance to *query* using Tantivy.
-
         Parallel plumbing for recon — does NOT touch the existing search flow.
         Returns ``{repo-relative-path: bm25_score}`` for files with any
         lexical overlap with the query.  Files absent from the dict have
@@ -1868,7 +1655,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
         return self._lexical.score_files_bm25(
             query, limit=limit, worktrees=self._search_worktrees
         )
-
     async def search(
         self,
         query: str,
@@ -1881,7 +1667,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
     ) -> SearchResponse:
         """
         Search the index. Thread-safe, no locks needed.
-
         Args:
             query: Search query string
             mode: SearchMode.TEXT, SYMBOL, or PATH
@@ -1892,14 +1677,12 @@ is_main_worktree=self._is_main_worktree(_wt2),
                              (e.g., ["python", "javascript"]). If None, returns all.
             filter_paths: Optional list of path prefixes or glob patterns to filter by
                          (e.g., ["src/", "lib/**/*.py"]). If None, returns all.
-
         Returns:
             SearchResponse with results and optional fallback_reason
         """
         await self.wait_for_freshness()
         if self._lexical is None:
             return SearchResponse(results=[])
-
         # If filtering by languages, pre-compute the set of allowed paths
         allowed_paths: set[str] | None = None
         if filter_languages:
@@ -1909,13 +1692,11 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 # If no files match the language filter, return empty results early
                 if not allowed_paths:
                     return SearchResponse(results=[])
-
         # Request more results than limit if filtering, to account for filtering
         # Also account for offset to support pagination
         base_limit = offset + limit
         has_filters = filter_languages or filter_paths
         search_limit = base_limit * 3 if has_filters else base_limit
-
         # Use appropriate search method based on mode
         if mode == SearchMode.SYMBOL:
             # Delegate to search_symbols() which uses SQLite + Tantivy fallback.
@@ -1945,18 +1726,15 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 query, limit=search_limit, context_lines=context_lines,
                 worktrees=self._search_worktrees,
             )
-
         # Filter results by language if requested
         filtered_hits = search_results.results
         if allowed_paths is not None:
             filtered_hits = [hit for hit in filtered_hits if hit.file_path in allowed_paths]
-
         # Filter results by path patterns if requested
         if filter_paths:
             filtered_hits = [
                 hit for hit in filtered_hits if _matches_filter_paths(hit.file_path, filter_paths)
             ]
-
         # Apply offset and limit after filtering
         results = [
             SearchResult(
@@ -1968,12 +1746,10 @@ is_main_worktree=self._is_main_worktree(_wt2),
             )
             for hit in filtered_hits[offset : offset + limit]
         ]
-
         return SearchResponse(
             results=results,
             fallback_reason=search_results.fallback_reason,
         )
-
     async def search_symbols(
         self,
         query: str,
@@ -1984,11 +1760,9 @@ is_main_worktree=self._is_main_worktree(_wt2),
         offset: int = 0,
     ) -> SearchResponse:
         """Search symbols by substring match. Thread-safe.
-
         Uses SQLite (DefFact table) as primary source for substring + kind
         filtering, with Tantivy fallback for symbols not in the structural
         index (unsupported languages, parse failures, timing gaps).
-
         Args:
             query: Symbol name or substring to search for
             filter_kinds: Optional list of symbol kinds to filter by
@@ -1996,17 +1770,14 @@ is_main_worktree=self._is_main_worktree(_wt2),
             filter_paths: Optional list of path prefixes/globs to filter by
             limit: Maximum results to return
             offset: Number of results to skip for pagination
-
         Returns:
             SearchResponse with results scored by match quality
         """
         await self.wait_for_freshness()
-
         # Phase 1: SQLite structured search (substring + kind filtering)
         results: list[SearchResult] = []
         seen: set[tuple[str, int, int]] = set()  # (path, line, col) dedup key
         query_lower = query.lower()
-
         with self.db.session() as session:
             # Compute match quality in SQL so ORDER BY is deterministic
             # and the best matches (exact > prefix > substring) come first.
@@ -2015,7 +1786,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 (func.lower(DefFact.name).startswith(query_lower), 0.8),
                 else_=0.6,
             ).label("match_score")
-
             stmt = (
                 select(DefFact, File.path, match_score)
                 .join(
@@ -2035,15 +1805,12 @@ is_main_worktree=self._is_main_worktree(_wt2),
             )
             # Over-fetch to account for offset + path filtering
             stmt = stmt.limit((offset + limit) * 2)
-
             rows = session.exec(stmt).all()
-
         skipped = 0
         for def_fact, file_path, score in rows:
             # Apply path filter if requested
             if filter_paths and not _matches_filter_paths(file_path, filter_paths):
                 continue
-
             key = (file_path, def_fact.start_line, def_fact.start_col)
             if key not in seen:
                 seen.add(key)
@@ -2060,10 +1827,8 @@ is_main_worktree=self._is_main_worktree(_wt2),
                         score=float(score),
                     )
                 )
-
             if len(results) >= limit:
                 break
-
         # Phase 2: Tantivy fallback (only if Phase 1 didn't fill limit)
         # Skip fallback when filter_kinds is set — Tantivy has no kind metadata
         # so we'd return results that violate the caller's kind constraint.
@@ -2093,11 +1858,9 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 )
                 if len(results) >= limit:
                     break
-
         # Sort by score descending
         results.sort(key=lambda r: -r.score)
         return SearchResponse(results=results[:limit])
-
     async def get_def(
         self,
         name: str,
@@ -2105,12 +1868,10 @@ is_main_worktree=self._is_main_worktree(_wt2),
         context_id: int | None = None,
     ) -> DefFact | None:
         """Get first definition by name. Thread-safe.
-
         Args:
             name: Definition name to find
             path: Optional file path filter (reserved)
             context_id: Optional context filter (unit_id)
-
         Returns:
             DefFact if found, None otherwise
         """
@@ -2120,7 +1881,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
             if context_id is not None:
                 stmt = stmt.where(DefFact.unit_id == context_id)
             return session.exec(stmt).first()
-
     async def get_all_defs(
         self,
         name: str,
@@ -2130,16 +1890,13 @@ is_main_worktree=self._is_main_worktree(_wt2),
         limit: int = 100,
     ) -> list[DefFact]:
         """Get all definitions by name. Thread-safe.
-
         Use this for refactoring where multiple symbols may share a name
         (e.g., methods on different classes).
-
         Args:
             name: Definition name to find
             path: Optional file path filter
             context_id: Optional context filter (unit_id)
             limit: Maximum results (default 100)
-
         Returns:
             List of DefFact objects matching the name
         """
@@ -2153,7 +1910,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 stmt = stmt.where(DefFact.unit_id == context_id)
             stmt = stmt.limit(limit)
             return list(session.exec(stmt).all())
-
     async def get_references(
         self,
         def_fact: DefFact,
@@ -2163,13 +1919,11 @@ is_main_worktree=self._is_main_worktree(_wt2),
         offset: int = 0,
     ) -> list[RefFact]:
         """Get references to a definition. Thread-safe.
-
         Args:
             def_fact: DefFact to find references for
             _context_id: Context to search in (reserved for future use)
             limit: Maximum number of results per page (bounded query)
             offset: Number of rows to skip for pagination
-
         Returns:
             List of RefFact objects
         """
@@ -2177,21 +1931,17 @@ is_main_worktree=self._is_main_worktree(_wt2),
         with self.db.session() as session:
             facts = FactQueries(session)
             return facts.list_refs_by_def_uid(def_fact.def_uid, limit=limit, offset=offset)
-
     async def get_all_references(
         self,
         def_fact: DefFact,
         _context_id: int,
     ) -> list[RefFact]:
         """Get ALL references to a definition exhaustively. Thread-safe.
-
         Paginates internally to guarantee completeness. Use this for
         mutation operations (rename, delete) that must see every reference.
-
         Args:
             def_fact: DefFact to find references for
             _context_id: Context to search in (reserved for future use)
-
         Returns:
             Complete list of RefFact objects
         """
@@ -2199,7 +1949,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
         with self.db.session() as session:
             facts = FactQueries(session)
             return facts.list_all_refs_by_def_uid(def_fact.def_uid)
-
     async def get_callees(
         self,
         def_fact: DefFact,
@@ -2207,11 +1956,9 @@ is_main_worktree=self._is_main_worktree(_wt2),
         limit: int = 50,
     ) -> list[DefFact]:
         """Get definitions referenced (called/used) by a definition. Thread-safe.
-
         Args:
             def_fact: The definition whose callees to find.
             limit: Maximum callees to return.
-
         Returns:
             Deduplicated list of DefFact objects referenced within
             the definition's span.
@@ -2225,7 +1972,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 def_fact.end_line,
                 limit=limit,
             )
-
     async def get_file_imports(
         self,
         rel_path: str,
@@ -2233,11 +1979,9 @@ is_main_worktree=self._is_main_worktree(_wt2),
         limit: int = 100,
     ) -> list[ImportFact]:
         """Get import facts for a file by its repo-relative path. Thread-safe.
-
         Args:
             rel_path: Repo-relative file path.
             limit: Maximum imports to return.
-
         Returns:
             List of ImportFact objects for the file.
         """
@@ -2248,20 +1992,15 @@ is_main_worktree=self._is_main_worktree(_wt2),
             if file_rec is None or file_rec.id is None:
                 return []
             return facts.list_imports(file_rec.id, limit=limit)
-
     async def get_file_state(self, file_id: int, context_id: int) -> FileState:
         """Get computed file state for mutation gating."""
         await self.wait_for_freshness()
         if self._state is None:
             from coderecon.index.models import FileState, Freshness
-
             return FileState(freshness=Freshness.UNINDEXED, certainty=Certainty.UNCERTAIN)
-
         return self._state.get_file_state(file_id, context_id)
-
     async def get_file_stats(self) -> dict[str, int]:
         """Get file counts by language family from the index.
-
         Returns:
             Dict mapping language_family to file count (e.g., {"python": 42, "javascript": 15})
         """
@@ -2274,13 +2013,10 @@ is_main_worktree=self._is_main_worktree(_wt2),
             )
             results = session.exec(stmt).all()
             return {lang: count for lang, count in results if lang}
-
     async def get_indexed_file_count(self, language_family: str | None = None) -> int:
         """Get count of indexed files, optionally filtered by language.
-
         Args:
             language_family: Optional language family filter (e.g., "python", "javascript")
-
         Returns:
             Number of indexed files matching the criteria
         """
@@ -2291,18 +2027,15 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 stmt = stmt.where(File.language_family == language_family)
             result = session.exec(stmt).one()
             return result or 0
-
     async def get_indexed_files(
         self,
         language_family: str | None = None,
         path_prefix: str | None = None,
     ) -> list[str]:
         """Get paths of indexed files.
-
         Args:
             language_family: Optional language family filter
             path_prefix: Optional path prefix filter (e.g., "src/")
-
         Returns:
             List of file paths relative to repo root
         """
@@ -2314,10 +2047,8 @@ is_main_worktree=self._is_main_worktree(_wt2),
             if path_prefix:
                 stmt = stmt.where(File.path.startswith(path_prefix))
             return list(session.exec(stmt).all())
-
     async def get_contexts(self) -> list[Context]:
         """Get all valid contexts from the index.
-
         Returns:
             List of Context objects for valid contexts
         """
@@ -2327,17 +2058,14 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 Context.probe_status == ProbeStatus.VALID.value,
             )
             return list(session.exec(stmt).all())
-
     async def get_test_targets(
         self,
         target_ids: list[str] | None = None,
     ) -> list[TestTarget]:
         """Get test targets from the index.
-
         Args:
             target_ids: Optional list of specific target IDs to fetch.
                        If None, returns all targets.
-
         Returns:
             List of TestTarget objects
         """
@@ -2348,79 +2076,64 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 # Use col() for SQLAlchemy column access
                 stmt = stmt.where(col(TestTarget.target_id).in_(target_ids))
             return list(session.exec(stmt).all())
-
     async def get_affected_test_targets(
         self,
         changed_files: list[str],
     ) -> ImportGraphResult:
         """Given changed source files, find test targets affected by those changes.
-
         Uses the reverse import graph to trace which test files import
         the changed modules, then maps those back to TestTarget records.
-
         Args:
             changed_files: File paths that changed (relative to repo root).
-
         Returns:
             ImportGraphResult with matches and confidence.
         """
         from coderecon.index._internal.indexing.import_graph import (
             ImportGraph,
         )
-
         await self.wait_for_freshness()
         with self.db.session() as session:
             graph = ImportGraph(session)
             return graph.affected_tests(changed_files)
-
     async def get_coverage_sources(
         self,
         test_files: list[str],
     ) -> CoverageSourceResult:
         """Given test files, find source directories for --cov scoping.
-
         Args:
             test_files: Test file paths about to be executed.
-
         Returns:
             CoverageSourceResult with source_dirs and confidence.
         """
         from coderecon.index._internal.indexing.import_graph import (
             ImportGraph,
         )
-
         await self.wait_for_freshness()
         with self.db.session() as session:
             graph = ImportGraph(session)
             return graph.imported_sources(test_files)
-
     async def get_coverage_gaps(self) -> list[CoverageGap]:
         """Find source modules with no test imports.
-
         Returns:
             List of CoverageGap for each uncovered module.
         """
         from coderecon.index._internal.indexing.import_graph import (
             ImportGraph,
         )
-
         await self.wait_for_freshness()
         with self.db.session() as session:
             graph = ImportGraph(session)
             return graph.uncovered_modules()
-
     async def get_lint_tools(
         self,
         tool_ids: list[str] | None = None,
         category: str | None = None,
     ) -> list[IndexedLintTool]:
         """Get lint tools from the index.
-
         Args:
             tool_ids: Optional list of specific tool IDs to fetch.
                      If None, returns all tools.
             category: Optional category filter ("lint", "format", "type_check", "security").
-
         Returns:
             List of IndexedLintTool objects
         """
@@ -2432,25 +2145,20 @@ is_main_worktree=self._is_main_worktree(_wt2),
             if category:
                 stmt = stmt.where(IndexedLintTool.category == category)
             return list(session.exec(stmt).all())
-
     async def get_context_runtime(
         self,
         workspace_root: str,
     ) -> ContextRuntime | None:
         """Get pre-indexed runtime context for a workspace root.
-
         Runtime contexts are resolved during indexing (Design A - capture at discovery time).
         This provides O(1) lookup instead of re-resolving at execution time.
-
         Args:
             workspace_root: Absolute path to the workspace root
-
         Returns:
             ContextRuntime if found, None if workspace not indexed
         """
         await self.wait_for_freshness()
         from coderecon.testing.runtime import ContextRuntime
-
         with self.db.session() as session:
             try:
                 rel_path = str(Path(workspace_root).relative_to(self.repo_root))
@@ -2458,7 +2166,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
                     rel_path = ""
             except ValueError:
                 rel_path = ""  # workspace_root is repo_root itself
-
             # Find context for this workspace
             stmt = select(Context).where(
                 Context.root_path == rel_path,
@@ -2467,26 +2174,21 @@ is_main_worktree=self._is_main_worktree(_wt2),
             context = session.exec(stmt).first()
             if not context or context.id is None:
                 return None
-
             # Get associated runtime
             runtime_stmt = select(ContextRuntime).where(ContextRuntime.context_id == context.id)
             return session.exec(runtime_stmt).first()
-
     async def get_coverage_capability(
         self,
         workspace_root: str,
         runner_pack_id: str,
     ) -> dict[str, bool]:
         """Get pre-indexed coverage tools for a (workspace, runner_pack) pair.
-
         Coverage capabilities are detected during indexing and stored in the
         IndexedCoverageCapability table. This provides O(1) lookup instead of
         spawning subprocess for every test execution.
-
         Args:
             workspace_root: Absolute path to the workspace root
             runner_pack_id: Runner pack ID (e.g. "python.pytest")
-
         Returns:
             Dict of tool_name -> is_available, empty dict if not indexed
         """
@@ -2500,7 +2202,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
             if capability:
                 return capability.get_tools()
             return {}
-
     async def map_repo(
         self,
         include: list[IncludeOption] | None = None,
@@ -2511,9 +2212,7 @@ is_main_worktree=self._is_main_worktree(_wt2),
         respect_gitignore: bool = True,
     ) -> MapRepoResult:
         """Build repository mental model from indexed data.
-
         Queries the existing index - does NOT scan filesystem.
-
         Args:
             include: Sections to include. Defaults to structure, languages, entry_points.
                 Options: structure, languages, entry_points, dependencies, test_layout, public_api
@@ -2522,7 +2221,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
             include_globs: Glob patterns to include (e.g., ['src/**', 'lib/**'])
             exclude_globs: Glob patterns to exclude (e.g., ['**/output/**'])
             respect_gitignore: Honor .gitignore patterns (default True)
-
         Returns:
             MapRepoResult with requested sections populated.
         """
@@ -2537,19 +2235,15 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 exclude_globs=exclude_globs,
                 respect_gitignore=respect_gitignore,
             )
-
     async def verify_integrity(self) -> IntegrityReport:
         """Verify index integrity (FK violations, missing files, Tantivy sync).
-
         Returns:
             IntegrityReport with passed=True if healthy, issues list if not.
         """
         checker = IntegrityChecker(self.db, self.repo_root, self._lexical)
         return checker.verify()
-
     async def recover(self) -> None:
         """Wipe and prepare for full reindex.
-
         Per SPEC.md §5.8: On CPL index corruption, wipe and reindex.
         After calling this, call initialize() to rebuild.
         """
@@ -2580,36 +2274,28 @@ is_main_worktree=self._is_main_worktree(_wt2),
         # Dispose DB engine to release file handles
         if hasattr(self, "db") and self.db is not None:
             self.db.engine.dispose()
-
     async def _resolve_context_runtimes(self) -> int:
         """Resolve and persist runtimes for all valid contexts.
-
         Called during initialization after contexts are persisted.
         Uses RuntimeResolver to detect Python venvs, Node installations, etc.
         Results are persisted to ContextRuntime table.
-
         Returns:
             Count of runtimes resolved
         """
         logger = structlog.get_logger(__name__)
         runtimes_resolved = 0
-
         from coderecon.testing.runtime import ContextRuntime, RuntimeResolver
-
         # Create resolver once
         resolver = RuntimeResolver(self.repo_root)
-
         with self.db.session() as session:
             # Get all valid contexts
             stmt = select(Context).where(
                 Context.probe_status == ProbeStatus.VALID.value,
             )
             contexts = list(session.exec(stmt).all())
-
             for context in contexts:
                 if context.id is None:
                     continue
-
                 # Check if runtime already exists (idempotent init)
                 existing = session.exec(
                     select(ContextRuntime).where(ContextRuntime.context_id == context.id)
@@ -2617,7 +2303,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 if existing is not None:
                     runtimes_resolved += 1
                     continue
-
                 # Resolve runtime for this context
                 try:
                     result = resolver.resolve_for_context(
@@ -2625,11 +2310,9 @@ is_main_worktree=self._is_main_worktree(_wt2),
                         language_family=context.language_family,
                         root_path=context.root_path or "",
                     )
-
                     # Persist the runtime
                     session.add(result.runtime)
                     runtimes_resolved += 1
-
                     # Log any warnings
                     for warning in result.warnings:
                         logger.warning(
@@ -2638,7 +2321,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
                             context_name=context.name,
                             warning=warning,
                         )
-
                     logger.debug(
                         "context_runtime_resolved",
                         context_id=context.id,
@@ -2647,7 +2329,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
                         method=result.method,
                         python_exe=result.runtime.python_executable,
                     )
-
                 except (OSError, RuntimeError, ValueError) as e:
                     logger.warning(
                         "runtime_resolution_failed",
@@ -2655,48 +2336,36 @@ is_main_worktree=self._is_main_worktree(_wt2),
                         error=str(e),
                         exc_info=True,
                     )
-
             session.commit()
-
         return runtimes_resolved
-
     async def _discover_test_targets(self) -> int:
         """Discover and persist test targets for all workspaces.
-
         Uses runner packs to find test files. Called during init() after
         contexts are persisted. Returns count of targets discovered.
         """
-
         targets_discovered = 0
         discovered_at = time.time()
-
         from coderecon.testing.runner_pack import runner_registry
-
         with self.db.session() as session:
             existing_ids = set(session.exec(select(TestTarget.target_id)).all())
-
             # Get all valid contexts
             stmt = select(Context).where(
                 Context.probe_status == ProbeStatus.VALID.value,
             )
             contexts = list(session.exec(stmt).all())
-
             # Group by workspace root to avoid duplicate discovery
             roots_to_contexts: dict[Path, list[Context]] = {}
             for ctx in contexts:
                 ws_root = self.repo_root / ctx.root_path if ctx.root_path else self.repo_root
                 roots_to_contexts.setdefault(ws_root, []).append(ctx)
-
             # Detect and discover for each workspace
             for ws_root, ws_contexts in roots_to_contexts.items():
                 # Find applicable runner packs
                 detected_packs = runner_registry.detect_all(ws_root)
                 if not detected_packs:
                     continue
-
                 # Use primary context for this workspace
                 primary_ctx = ws_contexts[0]
-
                 for pack_class, _confidence in detected_packs:
                     pack = pack_class()
                     try:
@@ -2704,13 +2373,11 @@ is_main_worktree=self._is_main_worktree(_wt2),
                     except (OSError, RuntimeError, ValueError):
                         logger.debug("test_pack_discover_failed", exc_info=True)
                         continue
-
                     for target in targets:
                         # Skip if already exists (idempotent init)
                         if target.target_id in existing_ids:
                             targets_discovered += 1
                             continue
-
                         test_target = TestTarget(
                             context_id=primary_ctx.id,
                             target_id=target.target_id,
@@ -2727,35 +2394,26 @@ is_main_worktree=self._is_main_worktree(_wt2),
                         session.add(test_target)
                         existing_ids.add(target.target_id)
                         targets_discovered += 1
-
             session.commit()
-
         return targets_discovered
-
     async def _discover_lint_tools(self) -> int:
         """Discover and persist lint tools for all workspaces.
-
         Uses lint tool registry to find configured tools. Called during init()
         after contexts are persisted. Returns count of tools discovered.
         """
         tools_discovered = 0
         discovered_at = time.time()
-
         from coderecon.lint.tools import registry as lint_registry
-
         with self.db.session() as session:
             # Get existing tool_ids for idempotent init
             existing_ids = set(session.exec(select(IndexedLintTool.tool_id)).all())
-
             # Detect configured tools for the repo (returns (tool, config_file) tuples)
             detected_pairs = lint_registry.detect(self.repo_root)
-
             for tool, config_file in detected_pairs:
                 # Skip if already exists (idempotent init)
                 if tool.tool_id in existing_ids:
                     tools_discovered += 1
                     continue
-
                 indexed_tool = IndexedLintTool(
                     tool_id=tool.tool_id,
                     name=tool.name,
@@ -2769,23 +2427,17 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 session.add(indexed_tool)
                 existing_ids.add(tool.tool_id)
                 tools_discovered += 1
-
             session.commit()
-
         return tools_discovered
-
     async def _discover_coverage_capabilities(self) -> int:
         """Discover and persist coverage capabilities for all workspaces.
-
         For each (workspace, runner_pack) pair detected during test target discovery,
         detect available coverage tools and store them. Called during init() after
         test targets are discovered.
-
         Returns count of capabilities discovered.
         """
         capabilities_discovered = 0
         discovered_at = time.time()
-
         with self.db.session() as session:
             # Get existing (workspace_root, runner_pack_id) pairs for idempotent init
             existing_pairs = set(
@@ -2796,32 +2448,27 @@ is_main_worktree=self._is_main_worktree(_wt2),
                     )
                 ).all()
             )
-
             # Get distinct (workspace_root, runner_pack_id) pairs from test targets
             stmt = select(
                 TestTarget.workspace_root,
                 TestTarget.runner_pack_id,
             ).distinct()
             pairs = list(session.exec(stmt).all())
-
             for workspace_root, runner_pack_id in pairs:
                 # Skip if already exists (idempotent init)
                 if (workspace_root, runner_pack_id) in existing_pairs:
                     capabilities_discovered += 1
                     continue
-
                 # Lazy import: coderecon.testing.ops transitively imports
                 # coderecon.index.__init__ which imports coderecon.index.ops,
                 # creating a circular import if placed at module level.
                 from coderecon.testing.ops import detect_coverage_tools
-
                 # Detect coverage tools for this pair
                 tools = detect_coverage_tools(
                     Path(workspace_root),
                     runner_pack_id,
                     exec_ctx=None,  # Use index runtime if needed later
                 )
-
                 capability = IndexedCoverageCapability(
                     workspace_root=workspace_root,
                     runner_pack_id=runner_pack_id,
@@ -2831,14 +2478,10 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 session.add(capability)
                 existing_pairs.add((workspace_root, runner_pack_id))
                 capabilities_discovered += 1
-
             session.commit()
-
         return capabilities_discovered
-
     async def _rediscover_test_targets(self) -> int:
         """Clear and re-discover all test targets.
-
         Called during incremental reindex to pick up new test files.
         TODO: Make incremental - only process changed paths.
         """
@@ -2847,13 +2490,10 @@ is_main_worktree=self._is_main_worktree(_wt2),
             session.exec(select(TestTarget)).all()  # Load for delete
             session.execute(delete(TestTarget))
             session.commit()
-
         # Re-run discovery
         return await self._discover_test_targets()
-
     async def _rediscover_lint_tools(self) -> int:
         """Clear and re-discover all lint tools.
-
         Called during incremental reindex to pick up new tool configs.
         TODO: Make incremental - only process changed paths.
         """
@@ -2861,10 +2501,8 @@ is_main_worktree=self._is_main_worktree(_wt2),
         with self.db.session() as session:
             session.execute(delete(IndexedLintTool))
             session.commit()
-
         # Re-run discovery
         return await self._discover_lint_tools()
-
     async def _update_test_targets_incremental(
         self,
         new_paths: list[Path],
@@ -2872,15 +2510,12 @@ is_main_worktree=self._is_main_worktree(_wt2),
         removed_paths: list[Path],
     ) -> int:
         """Incrementally update test targets for changed files.
-
         Only processes files matching test patterns (test_*.py, *_test.py, etc.).
         Does NOT walk the entire filesystem.
-
         Args:
             new_paths: Newly added files
             existing_paths: Modified existing files
             removed_paths: Deleted files
-
         Returns:
             Count of test targets added/updated
         """
@@ -2888,15 +2523,11 @@ is_main_worktree=self._is_main_worktree(_wt2),
         new_test_files = [p for p in new_paths if is_test_file(p)]
         modified_test_files = [p for p in existing_paths if is_test_file(p)]
         removed_test_files = [p for p in removed_paths if is_test_file(p)]
-
         if not new_test_files and not modified_test_files and not removed_test_files:
             return 0
-
         targets_changed = 0
         discovered_at = time.time()
-
         from coderecon.testing.runner_pack import runner_registry
-
         with self.db.session() as session:
             # Remove targets for deleted test files
             if removed_test_files:
@@ -2915,7 +2546,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
                         {"prefix": f"{rel_path}::%"},
                     )
                     targets_changed += 1
-
             # For new/modified test files, detect runner and create target
             files_to_process = new_test_files + modified_test_files
             if files_to_process:
@@ -2927,26 +2557,20 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 if not contexts:
                     session.commit()
                     return targets_changed
-
                 primary_ctx = contexts[0]
-
                 # Detect applicable runner packs once
                 detected_packs = runner_registry.detect_all(self.repo_root)
-
                 for path in files_to_process:
                     rel_path = str(path)
                     full_path = self.repo_root / path
-
                     if not full_path.exists():
                         continue
-
                     # Delete existing target for this path (if modified)
                     if path in modified_test_files:
                         session.execute(delete(TestTarget).where(col(TestTarget.path) == rel_path))
                         session.execute(
                             delete(TestTarget).where(col(TestTarget.selector) == rel_path)
                         )
-
                     # Find matching runner pack
                     for pack_class, _confidence in detected_packs:
                         pack = pack_class()
@@ -2979,51 +2603,38 @@ is_main_worktree=self._is_main_worktree(_wt2),
                             session.add(target)
                             targets_changed += 1
                             break
-
             session.commit()
-
         return targets_changed
-
     async def _update_lint_tools_incremental(self, changed_paths: list[Path]) -> int:
         """Incrementally update lint tools if config files changed.
-
         Only re-detects tools when their config files are modified.
         Does NOT walk the entire filesystem.
-
         Args:
             changed_paths: All changed file paths
-
         Returns:
             Count of tools updated
         """
         # Get all known config files from registered tools
         from coderecon.lint.tools import registry as lint_registry
-
         config_filenames: set[str] = set()
         for tool in lint_registry.all():
             for config_spec in tool.config_files:
                 # Handle section-aware specs like "pyproject.toml:tool.ruff"
                 filename = config_spec.split(":")[0] if ":" in config_spec else config_spec
                 config_filenames.add(filename)
-
         # Check if any changed path is a config file
         changed_configs = [p for p in changed_paths if p.name in config_filenames]
-
         if not changed_configs:
             return 0
-
         # Config file changed - re-detect all tools (config may affect multiple)
         # This is still efficient because we only do this when configs change
         tools_updated = 0
         discovered_at = time.time()
-
         with self.db.session() as session:
             # Clear existing tools
             session.execute(delete(IndexedLintTool))
-
             # Re-detect
             detected_pairs = lint_registry.detect(self.repo_root)
-
             for tool, config_file in detected_pairs:
                 indexed_tool = IndexedLintTool(
                     tool_id=tool.tool_id,
@@ -3037,34 +2648,27 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 )
                 session.add(indexed_tool)
                 tools_updated += 1
-
             session.commit()
-
         return tools_updated
-
     async def _index_all_files(
         self,
         on_progress: Callable[[int, int, dict[str, int], str], None],
     ) -> tuple[int, list[str], dict[str, int]]:
         """Index all files in valid contexts (unified single-pass).
-
         Single-pass architecture:
         - Each file is read and tree-sitter parsed ONCE by the structural extractor
         - ExtractionResult carries content_text and symbol_names for Tantivy
         - Tantivy uses batched stage_file() + commit_staged() (1 commit, not N)
         - Structural extraction runs in parallel via ProcessPoolExecutor
-
         Args:
             on_progress: Callback(indexed_count, total_count, files_by_ext, phase)
                          called for progress updates.
                          phase is one of: "indexing", "resolving_refs", "resolving_types"
-
         Returns:
             Tuple of (count of files indexed, list of indexed file paths, files by extension).
         """
         if self._lexical is None or self._parser is None or self._structural is None:
             return 0, [], {}
-
         with self._tantivy_write_lock:
             # Get all valid contexts, separating root fallback from others
             with self.db.session() as session:
@@ -3072,57 +2676,45 @@ is_main_worktree=self._is_main_worktree(_wt2),
                     Context.probe_status == ProbeStatus.VALID.value,
                 )
                 all_contexts = list(session.exec(stmt).all())
-
             # Separate root fallback (tier=3) from specific contexts
             specific_contexts = [c for c in all_contexts if c.tier != 3]
             root_context = next((c for c in all_contexts if c.tier == 3), None)
-
             # Walk filesystem ONCE - applies PRUNABLE_DIRS and reconignore
             all_files = self._walk_all_files()
-
             files_to_index: list[tuple[Path, str, int, str | None]] = []
             # (full_path, rel_str, ctx_id, language_family)
             claimed_paths: set[str] = set()
-
             # First pass: match files to specific contexts (tier 1/2/ambient)
             for context in specific_contexts:
                 context_root = self.repo_root / context.root_path
                 if not context_root.exists():
                     continue
-
                 include_globs = context.get_include_globs()
                 exclude_globs = context.get_exclude_globs()
                 context_id = context.id or 0
-
                 for file_path in self._filter_files_for_context(
                     all_files, context_root, include_globs, exclude_globs
                 ):
                     rel_path = file_path.relative_to(self.repo_root)
                     rel_str = str(rel_path)
-
                     if rel_str in claimed_paths:
                         continue
                     claimed_paths.add(rel_str)
                     files_to_index.append((file_path, rel_str, context_id, context.language_family))
-
             # Second pass: assign unclaimed files to root fallback context
             if root_context is not None:
                 root_context_id = root_context.id or 0
                 exclude_globs = root_context.get_exclude_globs()
-
                 for file_path in self._filter_unclaimed_files(all_files, exclude_globs):
                     rel_path = file_path.relative_to(self.repo_root)
                     rel_str = str(rel_path)
-
                     if rel_str in claimed_paths:
                         continue
-
                     # Detect language from extension (may be None for unknown types)
                     # Lexical index indexes ALL text files; language is optional
                     lang_value = detect_language_family(file_path)
                     claimed_paths.add(rel_str)
                     files_to_index.append((file_path, rel_str, root_context_id, lang_value))
-
             # === Unified single-pass indexing ===
             # Each file is read and tree-sitter parsed ONCE by the structural
             # extractor. ExtractionResult carries content_text for Tantivy and
@@ -3136,24 +2728,19 @@ is_main_worktree=self._is_main_worktree(_wt2),
             # capped at 16 to prevent runaway on high-core-count servers.
             # CODERECON_INDEX_WORKERS overrides for batch/CI scenarios.
             workers = int(os.environ.get("CODERECON_INDEX_WORKERS", 0)) or min(os.cpu_count() or 4, 16)
-
             if self._structural is not None:
                 batch_size = 50
                 _extract_start = time.time()
-
                 for batch_start in range(0, total, batch_size):
                     batch_end = min(batch_start + batch_size, total)
                     batch = files_to_index[batch_start:batch_end]
-
                     # Group batch by context_id
                     batch_by_context: dict[int, list[str]] = {}
                     for _full_path, rel_str, ctx_id, _lang in batch:
                         batch_by_context.setdefault(ctx_id, []).append(rel_str)
-
                     for ctx_id, paths in batch_by_context.items():
                         # Extract facts (parallel for speed)
                         extractions = self._structural.extract_files(paths, ctx_id, workers=workers)
-
                         # Stage each file into Tantivy using extraction results
                         for extraction in extractions:
                             # content_text is None only for unreadable/nonexistent files.
@@ -3162,7 +2749,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
                                 count += 1
                                 on_progress(count, total, files_by_ext, "indexing")
                                 continue
-
                             self._lexical.stage_file(
                                 extraction.file_path,
                                 extraction.content_text,
@@ -3170,24 +2756,19 @@ is_main_worktree=self._is_main_worktree(_wt2),
                                 symbols=extraction.symbol_names,
                                 worktree=self._freshness_worktree or "main",
                             )
-
                             # Release file content now — index_files() only
                             # needs structural facts, not the raw text.
                             extraction.content_text = None
                             extraction.symbol_names = []
-
                             count += 1
                             indexed_paths.append(extraction.file_path)
-
                             # Track by file extension
                             ext = os.path.splitext(extraction.file_path)[1].lower()
                             if not ext:
                                 ext = os.path.basename(extraction.file_path).lower()
                             files_by_ext[ext] = files_by_ext.get(ext, 0) + 1
-
                             # Report per-file progress
                             on_progress(count, total, files_by_ext, "indexing")
-
                         # Persist structural facts (re-uses pre-computed extractions)
                         self._structural.index_files(
                             paths, ctx_id,
@@ -3199,75 +2780,58 @@ is_main_worktree=self._is_main_worktree(_wt2),
                             ),
                             _extractions=extractions,
                         )
-
                     # Commit Tantivy after each batch so the staging buffer
                     # (which holds file contents) doesn't grow unbounded.
                     # Tantivy merges segments internally during search.
                     if self._lexical.has_staged_changes():
                         self._lexical.commit_staged()
-
                 # Re-resolve any import paths that couldn't resolve during
                 # batched indexing (e.g. batch 1 imports targeting batch 2 files).
                 _extract_elapsed = time.time() - _extract_start
                 log.info("index.stage.extract_complete",
                          extra={"files": count, "elapsed_sec": round(_extract_elapsed, 1),
                          "workers": workers})
-
                 _resolve_start = time.time()
                 self._structural.resolve_all_imports()
-
                 # Create synthetic import edges from config files (TOML,
                 # YAML, Makefile, etc.) to source files they reference.
                 from coderecon.index._internal.indexing.config_refs import (
                     resolve_config_file_refs,
                 )
-
                 resolve_config_file_refs(self.db, self.repo_root)
-
                 # Pass 1.5: DB-backed cross-file resolution (all languages)
                 on_progress(0, 1, files_by_ext, "resolving_cross_file")
                 run_pass_1_5(self.db, None)
-
                 # Pass 2: Resolve cross-file references
                 def pass2_progress(processed: int, total: int) -> None:
                     on_progress(processed, total, files_by_ext, "resolving_refs")
-
                 on_progress(0, 1, files_by_ext, "resolving_refs")
                 resolve_references(self.db, on_progress=pass2_progress)
-
                 # Pass 3: Resolve type-traced accesses
                 def pass3_progress(processed: int, total: int) -> None:
                     on_progress(processed, total, files_by_ext, "resolving_types")
-
                 on_progress(0, 1, files_by_ext, "resolving_types")
                 resolve_type_traced(self.db, on_progress=pass3_progress)
                 _resolve_elapsed = time.time() - _resolve_start
                 log.info("index.stage.resolve_complete",
                          extra={"elapsed_sec": round(_resolve_elapsed, 1)})
-
                 # Sweep orphaned edge rows after resolution
                 self._sweep_orphaned_edges()
-
                 # Materialize ExportSurface/ExportThunk/AnchorGroup tables
                 materialize_all(self.db)
-
                 # SPLADE sparse vector encoding (after all resolution passes
                 # so callees/type-refs are available for scaffold building).
                 # Runs outside tantivy_write_lock since it only writes to SQLite.
                 self._index_splade_vectors(on_progress, files_by_ext)
-
                 # Pass 4: Semantic resolution — resolve remaining unresolved
                 # refs, member accesses, and shapes via SPLADE+CE.
                 self._semantic_resolve(on_progress, files_by_ext)
-
                 # Pass 5: Semantic neighbors — compute pairwise SPLADE
                 # dot products between all defs.
                 self._compute_semantic_neighbors(on_progress, files_by_ext)
-
                 # Pass 6: Doc chunk linking — encode non-code file chunks
                 # and link to code definitions.
                 self._index_doc_chunks(on_progress, files_by_ext)
-
         return count, indexed_paths, files_by_ext
     def _index_splade_vectors(
         self,
@@ -3276,11 +2840,9 @@ is_main_worktree=self._is_main_worktree(_wt2),
     ) -> None:
         """Compute SPLADE vectors for all defs (full index)."""
         from coderecon.index._internal.indexing.splade import index_splade_vectors
-
         on_progress(0, 1, files_by_ext, "encoding_splade")
         def _splade_progress(encoded: int, total: int) -> None:
             on_progress(encoded, total, files_by_ext, "encoding_splade")
-
         stored = index_splade_vectors(self.db, progress_cb=_splade_progress)
         log.info("index.splade.complete", extra={"stored": stored})
     def _reindex_splade_vectors(self, file_ids: list[int]) -> None:
@@ -3288,19 +2850,16 @@ is_main_worktree=self._is_main_worktree(_wt2),
         if not file_ids:
             return
         from coderecon.index._internal.indexing.splade import index_splade_vectors
-
         stored = index_splade_vectors(self.db, file_ids=file_ids)
         log.debug("reindex.splade.complete", extra={"stored": stored, "file_ids": len(file_ids)})
     def _reindex_semantic_passes(self, changed_file_ids: list[int]) -> None:
         """Run Passes 5-7 after incremental SPLADE re-encode.
-
         All passes are scoped to *changed_file_ids* so that incremental
         reindexing only resolves edges belonging to the files that actually
         changed, rather than rescanning the entire repo.
         """
         if not changed_file_ids:
             return
-
         from coderecon.index._internal.indexing.doc_chunks import (
             index_doc_chunk_vectors,
             link_doc_chunks_to_defs,
@@ -3313,7 +2872,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
             resolve_unresolved_refs,
             resolve_unresolved_shapes,
         )
-
         # Pass 5: Semantic resolution — resolve edges in changed files.
         try:
             refs = resolve_unresolved_refs(self.db, file_ids=changed_file_ids)
@@ -3323,7 +2881,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
                       extra={"refs": refs, "accesses": accesses, "shapes": shapes})
         except (ImportError, OSError, RuntimeError, ValueError):  # semantic resolution is best-effort
             log.warning("reindex.semantic_resolve.failed", exc_info=True)
-
         # Pass 6: Semantic neighbors — recompute for changed defs.
         try:
             edges = compute_semantic_neighbors(
@@ -3332,7 +2889,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
             log.debug("reindex.semantic_neighbors.complete", extra={"edges": edges})
         except (ImportError, OSError, RuntimeError, ValueError):  # semantic neighbors is best-effort
             log.warning("reindex.semantic_neighbors.failed", exc_info=True)
-
         # Pass 7: Doc chunk linking — re-link doc chunks that may
         # reference changed defs (scope to changed doc files if any).
         try:
@@ -3369,18 +2925,13 @@ is_main_worktree=self._is_main_worktree(_wt2),
             resolve_unresolved_refs,
             resolve_unresolved_shapes,
         )
-
         on_progress(0, 3, files_by_ext, "semantic_resolve")
-
         refs = resolve_unresolved_refs(self.db)
         on_progress(1, 3, files_by_ext, "semantic_resolve")
-
         accesses = resolve_unresolved_accesses(self.db)
         on_progress(2, 3, files_by_ext, "semantic_resolve")
-
         shapes = resolve_unresolved_shapes(self.db)
         on_progress(3, 3, files_by_ext, "semantic_resolve")
-
         log.info("index.semantic_resolve.complete",
                  extra={"refs": refs, "accesses": accesses, "shapes": shapes})
     def _compute_semantic_neighbors(
@@ -3392,7 +2943,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
         from coderecon.index._internal.indexing.semantic_neighbors import (
             compute_semantic_neighbors,
         )
-
         on_progress(0, 1, files_by_ext, "semantic_neighbors")
         edges = compute_semantic_neighbors(self.db)
         on_progress(1, 1, files_by_ext, "semantic_neighbors")
@@ -3407,7 +2957,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
             index_doc_chunk_vectors,
             link_doc_chunks_to_defs,
         )
-
         on_progress(0, 2, files_by_ext, "doc_chunk_linking")
         chunks = index_doc_chunk_vectors(self.db)
         on_progress(1, 2, files_by_ext, "doc_chunk_linking")
@@ -3416,7 +2965,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
         log.info("index.doc_chunks.complete", extra={"chunks": chunks, "edges": edges})
     def batch_get_defs(self, def_uids: list[str]) -> dict[str, DefFact]:
         """Get DefFacts by UID, using an in-memory cache.
-
         On first call, loads ALL DefFacts from the database into memory
         (~25 MB for the largest repos). Subsequent calls return from
         cache with zero DB overhead.
@@ -3437,7 +2985,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
         return {uid: self._def_cache[uid] for uid in def_uids if uid in self._def_cache}
     def _clear_all_structural_facts(self) -> None:
         """Clear all structural facts from the database.
-
         Used before full reindex to avoid duplicate key violations.
         """
         with self.db.session() as session:
@@ -3453,13 +3000,11 @@ is_main_worktree=self._is_main_worktree(_wt2),
         """Extract symbol names from a file."""
         if self._parser is None:
             return []
-
         try:
             content = file_path.read_bytes()
             result = self._parser.parse(file_path, content)
             if result is None:
                 return []
-
             symbols = self._parser.extract_symbols(result)
             return [s.name for s in symbols]
         except (OSError, UnicodeDecodeError, ValueError):
@@ -3474,14 +3019,12 @@ is_main_worktree=self._is_main_worktree(_wt2),
             return ""
     def _walk_all_files(self) -> list[str]:
         """Walk filesystem once, return all indexable file paths (relative to repo root).
-
         Uses a streaming IgnoreChecker that loads .reconignore/.gitignore patterns
         on-the-fly as directories are entered, avoiding a separate pre-walk.
         Applies PRUNABLE_DIRS pruning and .reconignore filtering.
         Does NOT use git - indexes any file on disk that isn't in .reconignore.
         """
         checker = IgnoreChecker.empty(self.repo_root)
-
         # Eagerly load root-level ignore files BEFORE os.walk so patterns
         # are available regardless of directory traversal order.
         # .recon/.reconignore is a legacy root-level location (global scope).
@@ -3492,13 +3035,11 @@ is_main_worktree=self._is_main_worktree(_wt2),
         ):
             if root_ignore.exists():
                 checker.load_ignore_file(root_ignore, "")
-
         all_files: list[str] = []
         for dirpath, dirnames, filenames in os.walk(self.repo_root):
             dirpath_p = Path(dirpath)
             rel_dir = str(dirpath_p.relative_to(self.repo_root)).replace("\\", "/")
             prefix = "" if rel_dir == "." else rel_dir
-
             # Prune dirs in-place to skip expensive subtrees.
             # Two checks: (1) bare name against hardcoded/default sets,
             # (2) full relative path against .reconignore/.gitignore patterns.
@@ -3511,26 +3052,21 @@ is_main_worktree=self._is_main_worktree(_wt2),
                     continue
                 pruned.append(d)
             dirnames[:] = pruned
-
             # Load nested ignore files (skip root — already loaded above)
             if prefix:
                 for ignore_name in (IgnoreChecker.CPLIGNORE_NAME, ".gitignore"):
                     ignore_path = dirpath_p / ignore_name
                     if ignore_path.exists():
                         checker.load_ignore_file(ignore_path, prefix)
-
             for filename in filenames:
                 full_path = dirpath_p / filename
                 rel_str = str(full_path.relative_to(self.repo_root)).replace("\\", "/")
-
                 # Skip .recon dir but NOT .reconignore files (they need to be indexed)
                 if rel_str.startswith(".recon/") and filename != ".reconignore":
                     continue
-
                 # Use IgnoreChecker for pattern matching
                 if not checker.is_excluded_rel(rel_str):
                     all_files.append(rel_str)
-
         return all_files
     def _filter_files_for_context(
         self,
@@ -3547,12 +3083,10 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 context_prefix = ""
         except ValueError:
             context_prefix = ""
-
         # Pre-compile glob matchers once for the entire loop (avoids
         # per-file regex compilation — the key optimisation for startup).
         exclude_rx = _compile_glob_set(exclude_globs)
         include_rx = _compile_glob_set(include_globs)
-
         files: list[Path] = []
         for rel_str_repo in all_files:
             # Filter to files under context root
@@ -3562,15 +3096,12 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 rel_str = rel_str_repo[len(context_prefix) + 1 :]
             else:
                 rel_str = rel_str_repo
-
             # Check exclude globs (single regex for all patterns)
             if exclude_rx is not None and exclude_rx.search(rel_str):
                 continue
-
             # Check include globs (empty = include all)
             if include_rx is not None and not include_rx.search(rel_str):
                 continue
-
             full_path = self.repo_root / rel_str_repo
             try:
                 if full_path.is_file():
@@ -3578,7 +3109,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
             except OSError:
                 # Permission denied or path too long - skip file
                 log.debug("file_access_error", path=rel_str)
-
         return files
     def _filter_unclaimed_files(
         self,
@@ -3588,16 +3118,13 @@ is_main_worktree=self._is_main_worktree(_wt2),
         """Filter pre-walked files for root fallback context."""
         # Pre-compile exclude matcher once for the entire loop.
         exclude_rx = _compile_glob_set(exclude_globs)
-
         files: list[Path] = []
         for rel_str in all_files:
             if exclude_rx is not None and exclude_rx.search(rel_str):
                 continue
-
             full_path = self.repo_root / rel_str
             if full_path.is_file():
                 files.append(full_path)
-
         return files
 
 

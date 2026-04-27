@@ -94,7 +94,6 @@ class GitOps:
     def path(self) -> Path:
         """Repository root path."""
         return self._access.path
-
     # Read Operations
     def status(self) -> dict[str, int]:
         """Get status flags by path. Use STATUS_* constants to interpret."""
@@ -125,13 +124,11 @@ class GitOps:
         return DiffInfo.from_diff_text(result.diff_text, result.numstat, include_patch=include_patch)
     def files_changed_vs(self, base_ref: str) -> list[str]:
         """Return repo-relative paths that differ between *base_ref* and HEAD.
-
         Uses ``git diff --name-only base_ref...HEAD`` (three-dot form, which
         finds the merge-base automatically).  Returns an empty list if the
         command fails or there are no differences.
         """
         import subprocess
-
         try:
             result = subprocess.run(
                 ["git", "-C", str(self._access.path), "diff", "--name-only",
@@ -186,7 +183,6 @@ class GitOps:
             start_sha = self._access.resolve_ref_oid(ref)
         except RefNotFoundError as e:
             raise RefNotFoundError(ref) from e
-
         # Build git log command
         cmd = ["log", f"--max-count={limit}", "--format=%H%n%T%n%P%n%an%n%ae%n%at%n%cn%n%ce%n%ct%n%B%x00"]
         if since:
@@ -197,7 +193,6 @@ class GitOps:
         if paths:
             cmd.append("--")
             cmd.extend(paths)
-
         result = self._access.git.run(*cmd)
         commits_data = self._access._parse_log_output(result.stdout)
         return [CommitInfo.from_git(c) for c in commits_data]
@@ -250,21 +245,17 @@ class GitOps:
         return self._access.current_branch_name()
     def default_branch(self) -> str:
         """Resolve the repo's default branch name.
-
         Checks ``HEAD`` of the main worktree first (works for non-bare
         clones).  Falls back to ``origin/HEAD`` symbolic ref, then to
         common names (``main``, ``master``).  Returns ``"main"`` as a
         last resort.
         """
         import subprocess
-
         repo = str(self._access.path)
-
         # 1. In the main worktree HEAD is usually the default branch.
         branch = self._access.current_branch_name()
         if branch:
             return branch
-
         # 2. origin/HEAD → origin/<default>
         try:
             result = subprocess.run(
@@ -276,7 +267,6 @@ class GitOps:
                 return ref.rsplit("/", 1)[-1]
         except (OSError, subprocess.SubprocessError):  # noqa: BLE001
             log.debug("symbolic_ref_failed", exc_info=True)
-
         # 3. Probe common branch names
         for candidate in ("main", "master"):
             try:
@@ -289,13 +279,11 @@ class GitOps:
             except (OSError, subprocess.SubprocessError):  # noqa: BLE001
                 log.debug("branch_probe_failed", candidate=candidate, exc_info=True)
                 continue  # try next candidate branch name
-
         return "main"
     def tracked_files(self) -> list[str]:
         """List all files tracked in the git index."""
         result = self._access.git.run("ls-files")
         return [line for line in result.stdout.strip().splitlines() if line]
-
     # Write Operations
     def stage(self, paths: Sequence[str | Path]) -> None:
         """Stage files."""
@@ -325,7 +313,6 @@ class GitOps:
             normalized = (self._access.normalize_path(p) for p in paths)
             self._access.best_effort_index_remove(normalized)
             return
-
         head_tree_sha = self._access.must_head_tree()
         for p in paths:
             self._access.index_reset_entry(self._access.normalize_path(p), head_tree_sha)
@@ -378,7 +365,6 @@ class GitOps:
         """Delete branch."""
         require_branch_exists(self._access, name)
         require_not_current_branch(self._access, name)
-
         branch_sha = self._access.resolve_ref_oid(f"refs/heads/{name}")
         if not force and not self._access.descendant_of(self._head_sha(), branch_sha):
             raise UnmergedBranchError(name)
@@ -388,7 +374,6 @@ class GitOps:
         require_branch_exists(self._access, old_name)
         if self._access.has_local_branch(new_name):
             raise BranchExistsError(new_name)
-
         self._access.git.run("branch", "-m", old_name, new_name)
         branch_data = self._access.must_local_branch(new_name)
         return BranchInfo.from_git(branch_data)
@@ -405,10 +390,8 @@ class GitOps:
         """Merge ref. Returns MergeResult with success, commit_sha, conflict_paths."""
         their_sha = self._access.resolve_ref_oid(ref)
         analysis = self._access.merge_analysis(their_sha)
-
         if analysis & MERGE_UP_TO_DATE:
             return MergeResult(True, None)
-
         if analysis & MERGE_FASTFORWARD:
             current = self._access.current_branch_name()
             self._access.checkout_detached(their_sha)
@@ -416,7 +399,6 @@ class GitOps:
                 self._access.set_branch_target(current, their_sha)
                 self._access.set_head(f"refs/heads/{current}")
             return MergeResult(True, their_sha)
-
         # Non-fastforward merge
         head_sha = self._head_sha()
         with self._flows.stateful_op():
@@ -424,7 +406,6 @@ class GitOps:
             conflicts = self._flows.check_conflicts()
             if conflicts.has_conflicts:
                 return MergeResult(False, None, conflicts.conflict_paths)
-
             sha = self._flows.write_tree_and_commit(f"Merge {ref}", [head_sha, their_sha])
             return MergeResult(True, sha)
     def abort_merge(self) -> None:
@@ -444,26 +425,22 @@ class GitOps:
         """Cherry-pick a commit."""
         commit = self._access.resolve_commit(ref)
         head_sha = self._head_sha()
-
         with self._flows.stateful_op():
             self._access.cherrypick(commit.sha)
             conflicts = self._flows.check_conflicts()
             if conflicts.has_conflicts:
                 return OperationResult(False, conflicts.conflict_paths)
-
             self._flows.write_tree_and_commit(commit.message, [head_sha], author=commit.author)
             return OperationResult(True)
     def revert(self, ref: str) -> OperationResult:
         """Revert a commit."""
         commit = self._access.resolve_commit(ref)
         head_sha = self._head_sha()
-
         with self._flows.stateful_op():
             self._access.revert_commit(commit.sha)
             conflicts = self._flows.check_conflicts()
             if conflicts.has_conflicts:
                 return OperationResult(False, conflicts.conflict_paths)
-
             message = f'Revert "{first_line(commit.message)}"'
             self._flows.write_tree_and_commit(message, [head_sha])
             return OperationResult(True)
@@ -538,18 +515,14 @@ class GitOps:
     ) -> PullResult:
         """Fetch from remote and merge into current branch."""
         self.fetch(remote)
-
         current = require_current_branch(self._access, "pull")
         merge_branch = branch or current
         remote_ref = f"{remote}/{merge_branch}"
-
         if not self._access.has_reference(f"refs/remotes/{remote_ref}"):
             raise RefNotFoundError(remote_ref)
-
         analysis = self.merge_analysis(remote_ref)
         if analysis.up_to_date:
             return PullResult(success=True, commit_sha=None, up_to_date=True)
-
         result = self.merge(remote_ref)
         return PullResult(
             success=result.success,
@@ -557,12 +530,10 @@ class GitOps:
             up_to_date=False,
             conflict_paths=result.conflict_paths,
         )
-
     # Worktree Operations
     def worktrees(self) -> list[WorktreeInfo]:
         """List all worktrees including main working directory."""
         result: list[WorktreeInfo] = []
-
         # Parse git worktree list --porcelain for complete info
         wt_output = self._access.git.run("worktree", "list", "--porcelain")
         entries: list[dict[str, str]] = []
@@ -585,7 +556,6 @@ class GitOps:
                 current["detached"] = "true"
         if current:
             entries.append(current)
-
         for i, entry in enumerate(entries):
             is_main = i == 0
             wt_path = entry.get("path", "")
@@ -593,16 +563,13 @@ class GitOps:
             branch_ref = entry.get("branch", "")
             is_detached = "detached" in entry
             is_bare = "bare" in entry
-
             if branch_ref:
                 head_ref_name = branch_ref.removeprefix("refs/heads/")
             elif is_detached:
                 head_ref_name = "HEAD"
             else:
                 head_ref_name = ""
-
             name = "main" if is_main else Path(wt_path).name
-
             # Check lock status
             is_locked = False
             lock_reason = None
@@ -611,9 +578,7 @@ class GitOps:
                 if lock_file.exists():
                     is_locked = True
                     lock_reason = lock_file.read_text().strip() or None
-
             is_prunable = not is_main and wt_path and not Path(wt_path).exists()
-
             result.append(
                 WorktreeInfo(
                     name=name,
@@ -627,7 +592,6 @@ class GitOps:
                     is_prunable=is_prunable,
                 )
             )
-
         return result
     def worktree_add(self, path: Path, ref: str, checkout: bool = True) -> GitOps:  # noqa: ARG002
         """Add worktree at path for ref. Returns GitOps for new worktree."""
@@ -635,12 +599,10 @@ class GitOps:
             raise BranchNotFoundError(ref)
         if path.exists():
             raise WorktreeError(f"Path already exists: {path}")
-
         name = path.name
         existing_names = self._access.list_worktrees()
         if name in existing_names:
             raise WorktreeExistsError(name)
-
         for wt_name in existing_names:
             try:
                 wt_path = self._access.worktree_path(wt_name)
@@ -648,7 +610,6 @@ class GitOps:
                     raise WorktreeError(f"Path already in use by worktree '{wt_name}'")
             except GitError:
                 log.debug("worktree_path_check_failed", worktree=wt_name, exc_info=True)
-
         self._access.add_worktree(name, str(path), ref)
         return GitOps(path)
     def worktree_open(self, name: str) -> GitOps:
@@ -661,11 +622,9 @@ class GitOps:
         """Remove worktree."""
         if name not in self._access.list_worktrees():
             raise WorktreeNotFoundError(name)
-
         lock_file = self._access.worktree_gitdir(name) / "locked"
         if lock_file.exists() and not force:
             raise WorktreeLockedError(name)
-
         try:
             self._access.remove_worktree(name, force)
         except (OSError, subprocess.SubprocessError) as e:
@@ -674,15 +633,12 @@ class GitOps:
         """Lock worktree to prevent pruning."""
         if name not in self._access.list_worktrees():
             raise WorktreeNotFoundError(name)
-
         gitdir = self._access.worktree_gitdir(name)
         if not gitdir.exists():
             raise WorktreeError(f"Invalid worktree gitdir (missing): {gitdir}")
-
         lock_file = gitdir / "locked"
         if lock_file.exists():
             raise WorktreeLockedError(name)
-
         try:
             atomic_write_text(lock_file, reason or "")
         except OSError as e:
@@ -691,7 +647,6 @@ class GitOps:
         """Unlock worktree."""
         if name not in self._access.list_worktrees():
             raise WorktreeNotFoundError(name)
-
         lock_file = self._access.worktree_gitdir(name) / "locked"
         if lock_file.exists():
             lock_file.unlink()
@@ -711,7 +666,6 @@ class GitOps:
         """Get info about this worktree, or None if main working directory."""
         if not self.is_worktree():
             return None
-
         ref = self._access.head_ref
         return WorktreeInfo(
             name=self._access.path.name,
@@ -724,7 +678,6 @@ class GitOps:
             lock_reason=None,
             is_prunable=False,
         )
-
     # Submodule Operations
     def submodules(self) -> list[SubmoduleInfo]:
         """List all submodules with status."""
@@ -762,7 +715,6 @@ class GitOps:
             return "uninitialized"
         if not (sm_path / ".git").exists():
             return "uninitialized"
-
         try:
             # Check status using git -C
             result = subprocess.run(
@@ -771,7 +723,6 @@ class GitOps:
             )
             if result.stdout.strip():
                 return "dirty"
-
             # Check if at recorded commit
             head_result = subprocess.run(
                 ["git", "-C", str(sm_path), "rev-parse", "HEAD"],
@@ -781,7 +732,6 @@ class GitOps:
             recorded_sha = sm.get("head_id")
             if recorded_sha and actual_sha != recorded_sha:
                 return "outdated"
-
             return "clean"
         except (subprocess.SubprocessError, OSError):
             return "missing"
@@ -791,7 +741,6 @@ class GitOps:
             sm = self._access.lookup_submodule_by_path(path)
         except GitError:
             raise SubmoduleNotFoundError(path) from None
-
         status = self._determine_submodule_status(sm)
         info = SubmoduleInfo(
             name=sm["name"],
@@ -801,13 +750,11 @@ class GitOps:
             head_sha=sm.get("head_id"),
             status=status,
         )
-
         sm_path = self._access.path / path
         workdir_dirty = False
         index_dirty = False
         untracked_count = 0
         actual_sha = None
-
         if sm_path.exists():
             try:
                 head_result = subprocess.run(
@@ -816,7 +763,6 @@ class GitOps:
                 )
                 if head_result.returncode == 0:
                     actual_sha = head_result.stdout.strip()
-
                 status_result = subprocess.run(
                     ["git", "-C", str(sm_path), "status", "--porcelain=v1"],
                     capture_output=True, text=True, timeout=10,
@@ -833,7 +779,6 @@ class GitOps:
                         untracked_count += 1
             except (subprocess.SubprocessError, OSError):
                 log.debug("submodule_status_check_failed", exc_info=True)
-
         return SubmoduleStatus(
             info=info,
             workdir_dirty=workdir_dirty,
@@ -845,7 +790,6 @@ class GitOps:
     def submodule_init(self, paths: Sequence[str] | None = None) -> list[str]:
         """Initialize submodules."""
         initialized = []
-
         if paths is None:
             for name in self._access.listall_submodules():
                 try:
@@ -864,7 +808,6 @@ class GitOps:
                     initialized.append(path)
                 except GitError:
                     log.debug("submodule_init_failed", path=path, exc_info=True)
-
         return initialized
     def submodule_update(
         self,
@@ -881,7 +824,6 @@ class GitOps:
         if paths:
             cmd.append("--")
             cmd.extend(paths)
-
         try:
             result = subprocess.run(
                 cmd,
@@ -890,7 +832,6 @@ class GitOps:
                 text=True,
                 timeout=300,
             )
-
             if result.returncode == 0:
                 updated = []
                 for line in result.stdout.splitlines():
@@ -921,7 +862,6 @@ class GitOps:
         if paths:
             cmd.append("--")
             cmd.extend(paths)
-
         try:
             subprocess.run(
                 cmd,
@@ -940,7 +880,6 @@ class GitOps:
         if branch:
             cmd.extend(["-b", branch])
         cmd.extend([url, path])
-
         result = subprocess.run(
             cmd,
             cwd=str(self._access.path),
@@ -948,10 +887,8 @@ class GitOps:
             text=True,
             timeout=300,
         )
-
         if result.returncode != 0:
             raise SubmoduleError(f"Failed to add submodule: {result.stderr.strip()}")
-
         sm = self._access.lookup_submodule_by_path(path)
         return SubmoduleInfo(
             name=sm["name"],
@@ -967,7 +904,6 @@ class GitOps:
         if force:
             cmd.append("--force")
         cmd.append(path)
-
         result = subprocess.run(
             cmd,
             cwd=str(self._access.path),
@@ -975,19 +911,15 @@ class GitOps:
             text=True,
             timeout=60,
         )
-
         if result.returncode != 0:
             raise SubmoduleError(f"Failed to deinit submodule: {result.stderr.strip()}")
     def submodule_remove(self, path: str) -> None:
         """Fully remove submodule."""
         import shutil
-
         name = self._access.submodule_name_for_path(path)
         if name is None:
             raise SubmoduleNotFoundError(path)
-
         self.submodule_deinit(path, force=True)
-
         result = subprocess.run(
             ["git", "config", "--file", ".gitmodules", "--remove-section", f"submodule.{name}"],
             cwd=str(self._access.path),
@@ -999,11 +931,9 @@ class GitOps:
             raise SubmoduleError(
                 f"Failed to remove submodule from .gitmodules: {result.stderr.strip()}"
             )
-
         gitmodules_path = self._access.path / ".gitmodules"
         if gitmodules_path.exists():
             self._access.index.add(".gitmodules")
-
         result = subprocess.run(
             ["git", "config", "--remove-section", f"submodule.{name}"],
             cwd=str(self._access.path),
@@ -1015,18 +945,14 @@ class GitOps:
             raise SubmoduleError(
                 f"Failed to remove submodule from .git/config: {result.stderr.strip()}"
             )
-
         # Remove from index
         self._access.git.run_raw("rm", "--cached", "--ignore-unmatch", "--", path)
-
         sm_path = self._access.path / path
         if sm_path.exists():
             shutil.rmtree(sm_path)
-
         modules_path = self._access.git_dir / "modules" / name
         if modules_path.exists():
             shutil.rmtree(modules_path)
-
     # Rebase Operations
     def rebase_plan(self, upstream: str, onto: str | None = None) -> RebasePlan:
         """Generate default rebase plan."""

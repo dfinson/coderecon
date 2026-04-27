@@ -301,7 +301,6 @@ class TestIsTestFile:
         """Works with nested paths."""
         assert is_test_file("tests/test_foo.py") is True
         assert is_test_file(Path("src/tests/test_bar.py")) is True
-
     # -- JavaScript/TypeScript test patterns --
     def test_js_test_pattern(self) -> None:
         """Matches *.test.js and *.test.ts patterns."""
@@ -315,7 +314,6 @@ class TestIsTestFile:
         """Non-test JS files are not matched."""
         assert is_test_file("app.js") is False
         assert is_test_file("utils.ts") is False
-
     # -- Go test patterns --
     def test_go_test_suffix(self) -> None:
         """Matches *_test.go pattern."""
@@ -325,7 +323,6 @@ class TestIsTestFile:
         """Non-test Go files are not matched."""
         assert is_test_file("handler.go") is False
         assert is_test_file("main.go") is False
-
     # -- Java/Kotlin test patterns --
     def test_java_test_patterns(self) -> None:
         """Matches Java test patterns."""
@@ -335,7 +332,6 @@ class TestIsTestFile:
         """Matches Kotlin test patterns."""
         assert is_test_file("MyClassTest.kt") is True
         assert is_test_file("TestMyClass.kt") is True
-
     # -- Other languages --
     def test_ruby_test_patterns(self) -> None:
         """Matches Ruby spec/test patterns."""
@@ -351,7 +347,6 @@ class TestIsTestFile:
     def test_dart_test_patterns(self) -> None:
         """Matches Dart test patterns."""
         assert is_test_file("widget_test.dart") is True
-
     # -- Edge cases --
     def test_non_test_files(self) -> None:
         """Various non-test files are not matched."""
@@ -387,7 +382,6 @@ class TestIsTestFile:
         assert is_test_file("MySpec.scala") is True  # Scala
         assert is_test_file("widget_test.dart") is True  # Dart
         assert is_test_file("UserTest.php") is True  # PHP
-
     # -- Cross-platform path handling --
     # Note: The is_test_file() function normalizes paths to POSIX separators
     # before matching directory-style patterns (patterns containing "/").
@@ -409,7 +403,6 @@ class TestIsTestFile:
         assert is_test_file("project/src/module/tests/test_feature.py") is True
         assert is_test_file("apps/backend/spec/models/user_spec.rb") is True
         assert is_test_file(Path("a") / "b" / "c" / "d" / "test_deep.py") is True
-
     # -- Directory-convention test patterns (mocha, maven, etc.) --
     def test_js_test_directory_convention(self) -> None:
         """JS files in test/ directories are matched (mocha convention)."""
@@ -498,7 +491,6 @@ class TestFindTestPairs:
     def test_python_already_test(self) -> None:
         """Test files should return empty."""
         assert find_test_pairs("tests/foo/test_bar.py") == []
-
     # ── JavaScript / TypeScript ──
     def test_js_colocated(self) -> None:
         result = find_test_pairs("src/components/Button.tsx")
@@ -510,7 +502,6 @@ class TestFindTestPairs:
     def test_js_mirror_tests(self) -> None:
         result = find_test_pairs("src/utils/helpers.ts")
         assert "tests/utils/helpers.test.ts" in result
-
     # ── Go ──
     def test_go_same_dir(self) -> None:
         result = find_test_pairs("pkg/server/handler.go")
@@ -519,7 +510,6 @@ class TestFindTestPairs:
         """Go convention produces exactly one candidate."""
         result = find_test_pairs("pkg/server/handler.go")
         assert len(result) == 1
-
     # ── Ruby ──
     def test_ruby_spec(self) -> None:
         result = find_test_pairs("lib/models/user.rb")
@@ -527,7 +517,6 @@ class TestFindTestPairs:
     def test_ruby_spec_mirror(self) -> None:
         result = find_test_pairs("lib/models/user.rb")
         assert any("spec/" in p and p.endswith("_spec.rb") for p in result)
-
     # ── Rust ──
     def test_rust_tests_dir(self) -> None:
         result = find_test_pairs("src/parser.rs")
@@ -535,7 +524,6 @@ class TestFindTestPairs:
     def test_rust_same_dir(self) -> None:
         result = find_test_pairs("src/parser.rs")
         assert "src/test_parser.rs" in result
-
     # ── Java ──
     def test_java_maven(self) -> None:
         result = find_test_pairs("src/main/java/com/example/Service.java")
@@ -543,23 +531,19 @@ class TestFindTestPairs:
     def test_java_same_dir(self) -> None:
         result = find_test_pairs("src/main/java/com/example/Service.java")
         assert "src/main/java/com/example/ServiceTest.java" in result
-
     # ── C# ──
     def test_csharp(self) -> None:
         result = find_test_pairs("src/Services/UserService.cs")
         assert "src/Services/UserServiceTests.cs" in result
         assert "src/Services/UserServiceTest.cs" in result
-
     # ── PHP ──
     def test_php_mirror(self) -> None:
         result = find_test_pairs("src/Controllers/HomeController.php")
         assert any("Test.php" in p for p in result)
-
     # ── Elixir ──
     def test_elixir(self) -> None:
         result = find_test_pairs("lib/my_app/accounts.ex")
         assert "test/my_app/accounts_test.exs" in result
-
     # ── Edge cases ──
     def test_unknown_extension(self) -> None:
         """Unknown extension should return empty."""

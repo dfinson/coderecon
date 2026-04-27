@@ -24,7 +24,6 @@ from coderecon.config.constants import MS_PER_SEC
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
-
     from coderecon.index import Database
     from coderecon.mcp.context import AppContext
 
@@ -58,7 +57,6 @@ def _read_signature(repo_root: Path, path: str, start_line: int, end_line: int) 
         span = lines[start:end]
         if not span:
             return None
-
         # Take signature line(s) — up to first line not ending in continuation
         sig_lines = [span[0]]
         for ln in span[1:]:
@@ -80,7 +78,6 @@ def _read_signature(repo_root: Path, path: str, start_line: int, end_line: int) 
                 sig_lines.append(ln)
             else:
                 break
-
         return "\n".join(sig_lines[:10])  # cap at 10 lines for safety
     except OSError:
         log.debug("read_signature_failed", exc_info=True)
@@ -116,14 +113,12 @@ def _build_query_metrics(diagnostics: dict, candidates: list, seeds: list | None
         pin_paths = set(pins)
         pin_hits = len(pin_paths & {c.get("path") for c in candidates})
         metrics["pin_hit_rate"] = round(pin_hits / len(pins), 2) if pins else 0
-
     return metrics
 
 def _build_hints(metrics: dict, gate_label: str) -> list[str]:
     """Generate actionable hints from query metrics."""
     hints: list[str] = []
     cov = metrics.get("retriever_coverage", {})
-
     if cov.get("lexical", 0) == 0:
         hints.append(
             "Lexical retriever returned 0 hits — your query has no literal code strings. "
@@ -139,21 +134,18 @@ def _build_hints(metrics: dict, gate_label: str) -> list[str]:
             "No seeds or graph hits. Consider calling recon_map first to discover "
             "key symbols, then pass them as seeds."
         )
-
     drop = metrics.get("score_drop_at")
     if drop and drop <= 5:
         hints.append(
             f"Sharp score drop at position {drop} — top {drop} results are strongly "
             f"relevant, the rest is speculative."
         )
-
     seed_rate = metrics.get("seed_hit_rate")
     if seed_rate is not None and seed_rate < 0.5:
         hints.append(
             f"Only {int(seed_rate * 100)}% of seeds resolved — some seed names may not "
             f"exist in this repo. Check symbol names against recon_map."
         )
-
     return hints
 
 def _models_available() -> bool:
@@ -172,22 +164,18 @@ async def recon_pipeline(
     pins: list[str] | None = None,
 ) -> dict[str, Any]:
     """Run the full recon pipeline: retrieve → rank → cut → snippets.
-
     If LightGBM models are present: gate → file_ranker → ranker → cutoff.
     Otherwise: RRF fusion → file prune → elbow cutoff (model-free).
     """
     from coderecon.mcp.tools.recon.raw_signals import raw_signals_pipeline
-
     t0 = time.monotonic()
     repo_root = app_ctx.coordinator.repo_root
-
     # 1. Get raw signals (includes CE scoring + RRF fusion)
     raw = await raw_signals_pipeline(app_ctx, task, seeds=seeds, pins=pins)
     candidates = raw.get("candidates", [])
     query_features = raw.get("query_features", {})
     repo_features = raw.get("repo_features", {})
     diagnostics = raw.get("diagnostics", {})
-
     if _models_available():
         return _pipeline_model(
             candidates, query_features, repo_features, diagnostics,
@@ -206,15 +194,12 @@ def _fetch_scaffolds(
 ) -> dict[str, str]:
     """Fetch stored scaffold texts for candidates from SpladeVec table."""
     from coderecon.index.models import SpladeVec
-
     def_uids = [c["def_uid"] for c in candidates if c.get("def_uid")]
     if not def_uids:
         return {}
-
     try:
         with db.session() as session:
             from sqlmodel import col, select
-
             rows = list(session.exec(
                 select(SpladeVec.def_uid, SpladeVec.scaffold_text)
                 .where(col(SpladeVec.def_uid).in_(def_uids))
@@ -245,22 +230,18 @@ def _score_cross_encoder_tiny(
     db: Database,
 ) -> list[dict[str, Any]]:
     """Run TinyBERT cross-encoder on ALL candidates before file pruning.
-
     Attaches ce_score_tiny to each candidate.  Also computes per-file
     aggregates (max/mean) so the file ranker can use CE signal.
     """
     if not candidates:
         return candidates
-
     try:
         from coderecon.ranking.cross_encoder import get_tiny_scorer
     except ImportError:  # optional dependency
         log.debug("cross_encoder_tiny.unavailable", exc_info=True)
         return candidates
-
     scaffolds = _fetch_scaffolds(candidates, db)
     documents = _build_ce_documents(candidates, scaffolds)
-
     try:
         scorer = get_tiny_scorer()
         scores = scorer.score_pairs(task, documents)
@@ -269,21 +250,18 @@ def _score_cross_encoder_tiny(
     except (ValueError, RuntimeError):  # scoring is best-effort
         log.warning("cross_encoder_tiny.scoring_failed", exc_info=True)
         return candidates
-
     # Compute per-file aggregates for file ranker
     from collections import defaultdict
     file_scores: dict[str, list[float]] = defaultdict(list)
     for c in candidates:
         if "ce_score_tiny" in c:
             file_scores[c.get("path", "")].append(c["ce_score_tiny"])
-
     for c in candidates:
         path = c.get("path", "")
         fs = file_scores.get(path)
         if fs:
             c["ce_tiny_file_max"] = max(fs)
             c["ce_tiny_file_mean"] = sum(fs) / len(fs)
-
     return candidates
 
 def _score_cross_encoder(
@@ -292,23 +270,19 @@ def _score_cross_encoder(
     db: Database,
 ) -> list[dict[str, Any]]:
     """Run cross-encoder on filtered candidates and attach ce_score.
-
     Reads pre-built scaffold text from the SpladeVec table (persisted
     at index time).  scaffold_text is guaranteed to be populated by the
     consistency backfill system — no on-the-fly rebuilding.
     """
     if not candidates:
         return candidates
-
     try:
         from coderecon.ranking.cross_encoder import get_scorer
     except ImportError:  # optional dependency
         log.debug("cross_encoder.unavailable", exc_info=True)
         return candidates
-
     scaffolds = _fetch_scaffolds(candidates, db)
     documents = _build_ce_documents(candidates, scaffolds)
-
     try:
         scorer = get_scorer()
         scores = scorer.score_pairs(task, documents)
@@ -316,7 +290,6 @@ def _score_cross_encoder(
             c["ce_score"] = float(s)
     except (ValueError, RuntimeError):  # scoring is best-effort
         log.warning("cross_encoder.scoring_failed", exc_info=True)
-
     return candidates
 
 def _pipeline_model(
@@ -344,12 +317,10 @@ def _pipeline_model(
     from coderecon.ranking.gate import load_gate
     from coderecon.ranking.models import GateLabel
     from coderecon.ranking.ranker import load_ranker
-
     # Gate
     gate = load_gate()
     gate_features = extract_gate_features(candidates, query_features, repo_features)
     gate_label = gate.classify(gate_features)
-
     if gate_label != GateLabel.OK:
         elapsed = round((time.monotonic() - t0) * MS_PER_SEC)
         metrics = {
@@ -371,9 +342,7 @@ def _pipeline_model(
             "metrics": metrics,
             "hints": hints,
         }
-
     # CE scoring already done in raw_signals_pipeline; proceed to file ranking
-
     # File Ranking (Stage 1) — prune to top files
     file_ranker = load_file_ranker()
     file_features, file_to_candidates = extract_file_ranker_features(
@@ -389,16 +358,13 @@ def _pipeline_model(
         if c.get("symbol_source") in ("pin", "agent_seed"):
             top_file_paths.add(c.get("path", ""))
     filtered_candidates = [c for c in candidates if c.get("path", "") in top_file_paths]
-
     # Cross-encoder scoring (adds ce_score to each candidate)
     filtered_candidates = _score_cross_encoder(filtered_candidates, task, db)
-
     # Def Ranking (Stage 2)
     ranker = load_ranker()
     ranker_features = extract_ranker_features(filtered_candidates, query_features)
     scores = ranker.score(ranker_features)
     scored = sorted(zip(filtered_candidates, scores), key=lambda x: -x[1])
-
     # Cutoff
     cutoff = load_cutoff()
     ranked_for_cutoff = [{**c, "ranker_score": s} for c, s in scored]
@@ -406,7 +372,6 @@ def _pipeline_model(
         ranked_for_cutoff, query_features, repo_features,
     )
     predicted_n = cutoff.predict(cutoff_features)
-
     # Build output
     return _build_output(
         scored, predicted_n,
@@ -429,21 +394,16 @@ def _pipeline_heuristic(
     """Heuristic path: RRF fusion → file prune → elbow cutoff."""
     from coderecon.ranking.elbow import elbow_cut
     from coderecon.ranking.rrf import rrf_file_prune
-
     # Candidates already have rrf_score from shared layer; just prune + cut
     fused = sorted(candidates, key=lambda c: -c.get("rrf_score", 0.0))
-
     # File-level prune
     pinned_paths = set(pins) if pins else set()
     pruned = rrf_file_prune(fused, pinned_paths=pinned_paths)
-
     # Elbow cutoff on RRF scores
     rrf_scores = [c["rrf_score"] for c in pruned]
     predicted_n = elbow_cut(rrf_scores)
-
     # Build (candidate, score) pairs for output builder
     scored = [(c, c["rrf_score"]) for c in pruned]
-
     return _build_output(
         scored, predicted_n,
         candidates=candidates, diagnostics=diagnostics,
@@ -468,7 +428,6 @@ def _build_output(
     """Build the final output dict shared by both pipeline paths."""
     top_n = scored[:predicted_n]
     full_snippet_count = max(1, predicted_n // 2)
-
     result_candidates = []
     for idx, (c, s) in enumerate(top_n):
         loc = f"{c['kind']} {c['name']} {c['path']}:{c['start_line']}-{c['end_line']}"
@@ -476,16 +435,13 @@ def _build_output(
             "loc": loc,
             "score": round(s, 4),
         }
-
         if idx < full_snippet_count:
             snippet = _read_snippet(repo_root, c["path"], c["start_line"], c["end_line"])
             entry["snippet"] = snippet or ""
         else:
             sig = _read_signature(repo_root, c["path"], c["start_line"], c["end_line"])
             entry["sig"] = sig or ""
-
         result_candidates.append(entry)
-
     elapsed = round((time.monotonic() - t0) * MS_PER_SEC)
     metrics: dict[str, Any] = {
         "scored": len(candidates),
@@ -497,12 +453,10 @@ def _build_output(
     }
     if extra_metrics:
         metrics.update(extra_metrics)
-
     hints = _build_hints(
         _build_query_metrics(diagnostics, result_candidates, seeds, pins),
         gate_label,
     )[:3]
-
     return {
         "gate": gate_label,
         "results": result_candidates,
@@ -522,12 +476,10 @@ async def recon_map_core(app_ctx: "AppContext") -> dict[str, Any]:
             limit=100,
         )
         from coderecon.mcp.tools.index import _build_overview, _map_repo_sections_to_text
-
         repo_map = {
             "overview": _build_overview(map_result),
             **_map_repo_sections_to_text(map_result),
         }
-
         try:
             from coderecon.index._internal.analysis.code_graph import (
                 build_def_graph,
@@ -535,7 +487,6 @@ async def recon_map_core(app_ctx: "AppContext") -> dict[str, Any]:
                 compute_file_pagerank,
                 compute_pagerank,
             )
-
             engine = app_ctx.coordinator.db.engine
             fg = build_file_graph(engine)
             if fg.number_of_nodes() > 0:
@@ -544,7 +495,6 @@ async def recon_map_core(app_ctx: "AppContext") -> dict[str, Any]:
                     {"path": path, "score": round(score, 6)}
                     for path, score in top_files
                 ]
-
             dg = build_def_graph(engine)
             if dg.number_of_nodes() > 0:
                 top_defs = compute_pagerank(dg, top_k=10)
@@ -560,13 +510,10 @@ async def recon_map_core(app_ctx: "AppContext") -> dict[str, Any]:
                 ]
         except (ImportError, OSError, ValueError):  # pagerank is optional
             log.debug("recon_map.pagerank_skipped", exc_info=True)
-
     except (ImportError, OSError, ValueError, AttributeError):
         log.warning("recon_map.failed", exc_info=True)
         repo_map = {"error": "Failed to build repo map"}
-
     from coderecon.mcp.delivery import wrap_response
-
     return wrap_response(repo_map, resource_kind="repo_map")
 
 def register_tools(mcp: "FastMCP", app_ctx: "AppContext", *, dev_mode: bool = False) -> None:
@@ -574,7 +521,6 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext", *, dev_mode: bool = Fa
     # Register raw signals endpoint only in dev mode (ranking training)
     if dev_mode:
         from coderecon.mcp.tools.recon.raw_signals import register_raw_signals_tool
-
         register_raw_signals_tool(mcp, app_ctx)
     @mcp.tool(
         annotations={
@@ -608,33 +554,27 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext", *, dev_mode: bool = Fa
         ),
     ) -> dict[str, Any]:
         """Task-aware context retrieval — returns ranked semantic spans with code.
-
         Pipeline: retrieve → gate → rank → cutoff → snippet extraction.
-
         Top half of results include full code snippets. Bottom half
         include signature + docstring only. Includes query metrics
         and actionable hints for improving retrieval.
         """
         recon_id = uuid.uuid4().hex[:12]
-
         result = await recon_pipeline(
             app_ctx, task,
             seeds=seeds or None,
             pins=pins or None,
         )
-
         gate = result["gate"]
         results = result["results"]
         metrics = result.get("metrics", {})
         hints = result.get("hints", [])
-
         response: dict[str, Any] = {
             "recon_id": recon_id,
             "gate": gate,
             "results": results,
             "metrics": metrics,
         }
-
         if gate == "OK" and results:
             # Extract unique file paths from loc strings
             paths = []
@@ -665,9 +605,7 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext", *, dev_mode: bool = Fa
             if hints:
                 hint += " " + hints[0]
             response["hint"] = hint
-
         from coderecon.mcp.delivery import wrap_response
-
         return wrap_response(
             response,
             resource_kind="recon_result",

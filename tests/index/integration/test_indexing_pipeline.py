@@ -39,7 +39,6 @@ def test_db(tmp_path: Path) -> Generator[Database, None, None]:
     db = Database(tmp_path / "test.db")
     db.create_all()
     create_additional_indexes(db.engine)
-
     # Create a context (required for foreign key constraints)
     with db.session() as session:
         ctx = Context(
@@ -51,7 +50,6 @@ def test_db(tmp_path: Path) -> Generator[Database, None, None]:
         session.commit()
         session.add(Worktree(id=1, name="main", root_path=str(tmp_path), is_main=True))
         session.commit()
-
     yield db
 
 class TestFullIndexingPipeline:
@@ -86,21 +84,17 @@ if __name__ == "__main__":
         # Index the file
         indexer = StructuralIndexer(test_db, tmp_path)
         result = indexer.index_files([rel(main_py, tmp_path)], context_id=1, worktree_id=1)
-
         # Verify indexing succeeded
         assert result.files_processed == 1
         assert result.errors == []
         assert result.defs_extracted > 0
         assert result.refs_extracted > 0
-
         # Verify definitions were extracted
         with test_db.session() as session:
             facts = FactQueries(session)
-
             # Should have function definitions
             defs = facts.list_defs_by_name(unit_id=1, name="greet", limit=10)
             assert len(defs) >= 1
-
             # Should have class definition
             class_defs = facts.list_defs_by_name(unit_id=1, name="Greeter", limit=10)
             assert len(class_defs) >= 1
@@ -113,11 +107,9 @@ if __name__ == "__main__":
         # Create project structure
         pkg_dir = tmp_path / "mypackage"
         pkg_dir.mkdir()
-
         # __init__.py
         init_py = pkg_dir / "__init__.py"
         init_py.write_text('"""My package."""\n\nfrom mypackage.core import Calculator\n')
-
         # core.py
         core_py = pkg_dir / "core.py"
         core_py.write_text('''"""Core module."""
@@ -151,16 +143,13 @@ if __name__ == "__main__":
             context_id=1,
             worktree_id=1,
         )
-
         assert result.files_processed == 3
         assert result.errors == []
-
         # Verify cross-file facts
         with test_db.session() as session:
             # Should have Calculator definition
             calc_defs = session.exec(select(DefFact).where(DefFact.name == "Calculator")).all()
             assert len(calc_defs) >= 1
-
             # Should have import facts
             imports = session.exec(select(ImportFact)).all()
             assert len(imports) >= 1
@@ -177,15 +166,12 @@ if __name__ == "__main__":
 """)
 
         indexer = StructuralIndexer(test_db, tmp_path)
-
         # Initial index
         result1 = indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
         assert result1.defs_extracted >= 1
-
         with test_db.session() as session:
             defs1 = session.exec(select(DefFact).where(DefFact.name == "original_func")).all()
             assert len(defs1) >= 1
-
         # Modify file
         test_py.write_text("""def modified_func():
     pass
@@ -196,7 +182,6 @@ def new_func():
         # Re-index
         result2 = indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
         assert result2.defs_extracted >= 2
-
         with test_db.session() as session:
             # Should have new function
             new_defs = session.exec(select(DefFact).where(DefFact.name == "new_func")).all()
@@ -215,15 +200,12 @@ def new_func():
             def nested():
                 y = 2
                 return y
-
             return nested()
 """)
 
         indexer = StructuralIndexer(test_db, tmp_path)
         result = indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
-
         assert result.scopes_extracted >= 3  # class, class, method, nested
-
         with test_db.session() as session:
             scopes = session.exec(select(ScopeFact)).all()
             assert len(scopes) >= 3
@@ -246,7 +228,6 @@ class MyClass:
 
         indexer = StructuralIndexer(test_db, tmp_path)
         result = indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
-
         assert result.refs_extracted >= 1
 
 class TestLexicalIndex:
@@ -258,11 +239,9 @@ class TestLexicalIndex:
     ) -> None:
         """Test indexing files and searching."""
         lexical_index = LexicalIndex(tmp_path / "tantivy")
-
         # Create test files
         src_dir = tmp_path / "src"
         src_dir.mkdir()
-
         file1 = src_dir / "module_a.py"
         file1.write_text('''"""Module A with unique_identifier_abc."""
 def unique_identifier_abc():
@@ -294,7 +273,6 @@ def another_function():
             session.commit()
             file1_id = f1.id
             file2_id = f2.id
-
         # Index in Tantivy (using add_file API)
         lexical_index.add_file(
             file_path=rel(file1, tmp_path),
@@ -309,7 +287,6 @@ def another_function():
             file_id=file2_id or 0,
         )
         lexical_index.reload()  # Reload to see newly added documents
-
         # Search for unique content
         search_results = lexical_index.search("unique_identifier_abc", limit=10)
         assert len(search_results.results) >= 1
@@ -323,7 +300,6 @@ def another_function():
         lexical_index = LexicalIndex(tmp_path / "tantivy")
         file_path = tmp_path / "dynamic.py"
         file_path.write_text("def old_function(): pass")
-
         with test_db.session() as session:
             f = File(
                 path="dynamic.py",
@@ -334,7 +310,6 @@ def another_function():
             session.add(f)
             session.commit()
             file_id = f.id
-
         # Initial index
         lexical_index.add_file(
             file_path="dynamic.py",
@@ -343,11 +318,9 @@ def another_function():
             file_id=file_id or 0,
         )
         lexical_index.reload()  # Reload to see newly added documents
-
         # Verify old content searchable
         results = lexical_index.search("old_function", limit=10)
         assert len(results.results) >= 1
-
         # Remove and re-index with new content
         lexical_index.remove_file("dynamic.py")
         lexical_index.add_file(
@@ -357,11 +330,9 @@ def another_function():
             file_id=file_id or 0,
         )
         lexical_index.reload()  # Reload to see changes
-
         # Old content should not be found
         old_results = lexical_index.search("old_function", limit=10)
         assert len(old_results.results) == 0
-
         # New content should be found
         new_results = lexical_index.search("new_function", limit=10)
         assert len(new_results.results) >= 1
@@ -377,15 +348,12 @@ class TestFactQueries:
         # Create file with many definitions
         test_py = tmp_path / "many_defs.py"
         test_py.write_text("\n".join([f"def func_{i}(): pass" for i in range(20)]))
-
         indexer = StructuralIndexer(test_db, tmp_path)
         indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
-
         with test_db.session() as session:
             facts = FactQueries(session)
             all_defs = facts.list_defs_in_file(file_id=1, limit=1000)
             limited_defs = facts.list_defs_in_file(file_id=1, limit=5)
-
             assert len(limited_defs) <= 5
             assert len(all_defs) >= 20
     def test_get_def_by_uid(
@@ -396,15 +364,12 @@ class TestFactQueries:
         """Test retrieving definition by UID."""
         test_py = tmp_path / "test.py"
         test_py.write_text("def my_function(): pass")
-
         indexer = StructuralIndexer(test_db, tmp_path)
         indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
-
         with test_db.session() as session:
             facts = FactQueries(session)
             defs = facts.list_defs_by_name(unit_id=1, name="my_function", limit=1)
             assert len(defs) >= 1
-
             # Get by UID
             def_fact = facts.get_def(defs[0].def_uid)
             assert def_fact is not None
@@ -431,7 +396,6 @@ def decorated_function():
 
         indexer = StructuralIndexer(test_db, tmp_path)
         result = indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
-
         assert result.defs_extracted >= 3  # decorator, wrapper, decorated
     def test_async_functions(
         self,
@@ -453,9 +417,7 @@ async def main():
 
         indexer = StructuralIndexer(test_db, tmp_path)
         result = indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
-
         assert result.defs_extracted >= 2
-
         with test_db.session() as session:
             facts = FactQueries(session)
             async_defs = facts.list_defs_by_name(unit_id=1, name="fetch_data", limit=10)
@@ -485,14 +447,11 @@ class Point:
 
         indexer = StructuralIndexer(test_db, tmp_path)
         indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
-
         with test_db.session() as session:
             facts = FactQueries(session)
-
             # Should find dataclass definitions
             person = facts.list_defs_by_name(unit_id=1, name="Person", limit=1)
             assert len(person) >= 1
-
             point = facts.list_defs_by_name(unit_id=1, name="Point", limit=1)
             assert len(point) >= 1
     def test_type_hints_and_generics(
@@ -525,7 +484,6 @@ def process(
 
         indexer = StructuralIndexer(test_db, tmp_path)
         result = indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
-
         assert result.defs_extracted >= 2
     def test_context_managers(
         self,
@@ -557,14 +515,11 @@ class FileManager:
 
         indexer = StructuralIndexer(test_db, tmp_path)
         indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
-
         with test_db.session() as session:
             facts = FactQueries(session)
-
             # Should find context manager
             cm = facts.list_defs_by_name(unit_id=1, name="managed_resource", limit=1)
             assert len(cm) >= 1
-
             # Should find class-based context manager
             fm = facts.list_defs_by_name(unit_id=1, name="FileManager", limit=1)
             assert len(fm) >= 1
@@ -595,5 +550,4 @@ if __name__ == "__main__":
 
         indexer = StructuralIndexer(test_db, tmp_path)
         result = indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
-
         assert result.defs_extracted >= 1  # At least the function

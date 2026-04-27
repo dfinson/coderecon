@@ -113,18 +113,14 @@ def detect_coverage_tools(
     exec_ctx: RuntimeExecutionContext | None = None,
 ) -> dict[str, bool]:
     """Detect available coverage tools for a runner pack.
-
     Returns a dict of tool_name -> is_available.
-
     Results are cached per (workspace_root, runner_pack_id) to avoid
     spawning subprocess for every test target.
     """
     cache_key = (workspace_root, runner_pack_id)
     if cache_key in _coverage_tools_cache:
         return _coverage_tools_cache[cache_key]
-
     tools: dict[str, bool] = {}
-
     if runner_pack_id == "python.pytest":
         # Check if pytest-cov is installed
         # Use RuntimeExecutionContext if available, otherwise fallback to venv detection
@@ -132,10 +128,8 @@ def detect_coverage_tools(
             python_exe = exec_ctx.runtime.python_executable
         else:
             python_exe = get_python_executable(workspace_root)
-
         try:
             import subprocess
-
             result = subprocess.run(
                 [python_exe, "-c", "import pytest_cov"],
                 capture_output=True,
@@ -152,30 +146,24 @@ def detect_coverage_tools(
         except subprocess.SubprocessError:
             # Other subprocess errors
             tools["pytest-cov"] = False
-
     elif runner_pack_id in ("js.jest", "js.vitest"):
         # Jest and Vitest have built-in coverage
         tools["built-in"] = True
-
     elif runner_pack_id == "go.gotest":
         # Go has built-in coverage
         tools["built-in"] = True
-
     elif runner_pack_id in ("rust.nextest", "rust.cargotest"):
         # Check for cargo-llvm-cov
         tools["cargo-llvm-cov"] = shutil.which("cargo-llvm-cov") is not None
-
     elif runner_pack_id == "ruby.rspec":
         # Check for simplecov in Gemfile
         gemfile = workspace_root / "Gemfile"
         if gemfile.exists():
             tools["simplecov"] = "simplecov" in gemfile.read_text()
-
     elif runner_pack_id == "php.phpunit":
         # Check for xdebug or pcov
         tools["xdebug"] = shutil.which("php") is not None  # Simplified check
         tools["pcov"] = False  # Would need PHP extension check
-
     # Cache the result
     _coverage_tools_cache[cache_key] = tools
     return tools
@@ -208,7 +196,6 @@ class DetectedWorkspace:
     confidence: float
 def _is_prunable_path(rel_path: Path) -> bool:
     """Check if relative path contains any prunable directory components.
-
     Note: 'packages' is in PRUNABLE_DIRS for .NET, but is also a common JS
     monorepo pattern. We only consider a path prunable if it has nested
     prunable dirs or is clearly not a project directory.
@@ -224,12 +211,10 @@ def _is_prunable_path(rel_path: Path) -> bool:
 
 def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
     """Detect all workspaces and their runners in a repo.
-
     Supports monorepos by finding nested workspace roots.
     Respects PRUNABLE_DIRS to avoid scanning .venv, node_modules, etc.
     """
     workspaces: list[DetectedWorkspace] = []
-
     # First check repo root
     for pack_class, confidence in runner_registry.detect_all(repo_root):
         workspaces.append(
@@ -239,10 +224,8 @@ def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
                 confidence=confidence,
             )
         )
-
     # Collect workspace directories from various monorepo tools
     workspace_dirs: set[Path] = set()
-
     # Check for yarn/npm workspaces in package.json
     root_pkg = repo_root / "package.json"
     if root_pkg.exists():
@@ -265,13 +248,11 @@ def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
                         workspace_dirs.add(ws_path)
         except (OSError, json.JSONDecodeError, KeyError):
             log.debug("npm_workspace_parse_failed", exc_info=True)
-
     # Check for pnpm workspaces
     pnpm_ws = repo_root / "pnpm-workspace.yaml"
     if pnpm_ws.exists():
         try:
             import yaml
-
             data = yaml.safe_load(pnpm_ws.read_text()) or {}
             for pattern in data.get("packages", []):
                 for ws_path in repo_root.glob(pattern):
@@ -283,7 +264,6 @@ def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
                         workspace_dirs.add(ws_path)
         except (OSError, yaml.YAMLError, KeyError):
             log.debug("pnpm_workspace_parse_failed", exc_info=True)
-
     # Check for Nx workspaces
     nx_json = repo_root / "nx.json"
     if nx_json.exists():
@@ -299,7 +279,6 @@ def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
                     )
                 ):
                     workspace_dirs.add(project_dir)
-
     # Check for Turborepo
     turbo_json = repo_root / "turbo.json"
     if turbo_json.exists():
@@ -313,7 +292,6 @@ def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
                     and (project_dir / "package.json").exists()
                 ):
                     workspace_dirs.add(project_dir)
-
     # Check for Lerna
     lerna_json = repo_root / "lerna.json"
     if lerna_json.exists():
@@ -329,7 +307,6 @@ def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
                         workspace_dirs.add(ws_path)
         except (OSError, json.JSONDecodeError, KeyError):
             log.debug("lerna_workspace_parse_failed", exc_info=True)
-
     # Check for Rush
     rush_json = repo_root / "rush.json"
     if rush_json.exists():
@@ -343,12 +320,10 @@ def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
                         workspace_dirs.add(ws_path)
         except (OSError, json.JSONDecodeError, KeyError):
             log.debug("rush_workspace_parse_failed", exc_info=True)
-
     # Legacy: Check for packages/* pattern (fallback)
     for pkg_json in repo_root.glob("packages/*/package.json"):
         if not _is_prunable_path(pkg_json.parent.relative_to(repo_root)):
             workspace_dirs.add(pkg_json.parent)
-
     # Detect runners in each workspace
     # Note: workspace_dirs comes from intentional workspace detection (package.json workspaces,
     # monorepo configs, etc.) so we don't re-filter them. The prunable path check was already
@@ -362,14 +337,12 @@ def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
                     confidence=confidence,
                 )
             )
-
     # Deduplicate by (root, pack_id), keeping highest confidence
     seen: dict[tuple[Path, str], DetectedWorkspace] = {}
     for ws in workspaces:
         key = (ws.root, ws.pack.pack_id)
         if key not in seen or ws.confidence > seen[key].confidence:
             seen[key] = ws
-
     return list(seen.values())
 
 
@@ -378,7 +351,6 @@ def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
 
 def _os_script_path(unix_path: str) -> str:
     """Convert Unix script path to OS-appropriate form.
-
     On Windows, converts ./script to script (relies on .bat/.cmd lookup).
     On Unix, returns the path unchanged.
     """
@@ -412,7 +384,6 @@ def _classify_result_error(
 
 class TestOps:
     """Test discovery and execution operations.
-
     Uses runner packs for detection-driven execution.
     Leverages the index for context-aware workspace detection.
     """
@@ -431,30 +402,23 @@ class TestOps:
         self._artifacts_base = repo_root / ".recon" / "artifacts" / "tests"
         self._memory_reserve_mb = memory_reserve_mb
         self._subprocess_memory_limit_mb = subprocess_memory_limit_mb
-
     async def discover(
         self,
         paths: list[str] | None = None,
     ) -> TestResult:
         """Discover test targets in the repository.
-
         Index-first approach: Always queries the index. The index waits for
         freshness internally (via coordinator.wait_for_freshness). No filesystem
         fallback - if index isn't ready, we block until it is.
-
         Args:
             paths: Optional list of path prefixes to filter targets
-
         Returns:
             TestResult with discovered targets
         """
         from typing import cast
-
         from coderecon.testing.models import TargetKind
-
         # Query index - coordinator.get_test_targets waits for freshness internally
         indexed_targets = await self._coordinator.get_test_targets()
-
         all_targets = [
             TestTarget(
                 target_id=t.target_id,
@@ -468,7 +432,6 @@ class TestOps:
             )
             for t in indexed_targets
         ]
-
         # Filter by paths if specified
         if paths:
             all_targets = [
@@ -476,28 +439,22 @@ class TestOps:
                 for t in all_targets
                 if any(t.selector.startswith(p) or p.startswith(t.selector) for p in paths)
             ]
-
         # Generate agentic hint if no targets found
         agentic_hint = None
         if not all_targets:
             agentic_hint = await self._generate_agentic_hint()
-
         return TestResult(action="discover", targets=all_targets, agentic_hint=agentic_hint)
-
     async def _discover_from_filesystem(
         self,
         paths: list[str] | None = None,
     ) -> TestResult:
         """Fallback filesystem-based discovery."""
         all_targets: list[TestTarget] = []
-
         # Use index contexts to find workspaces (leverages already-indexed data)
         workspaces = await self._detect_workspaces_from_index()
-
         # If index doesn't have contexts yet, fall back to filesystem detection
         if not workspaces:
             workspaces = detect_workspaces(self._repo_root)
-
         for ws in workspaces:
             try:
                 targets = await ws.pack.discover(ws.root)
@@ -512,7 +469,6 @@ class TestOps:
             except (OSError, RuntimeError, ValueError):
                 log.debug("pack_discovery_failed", exc_info=True)
                 continue  # skip unavailable test pack
-
         # Deduplicate targets
         seen: set[str] = set()
         unique_targets: list[TestTarget] = []
@@ -520,41 +476,32 @@ class TestOps:
             if t.target_id not in seen:
                 seen.add(t.target_id)
                 unique_targets.append(t)
-
         # If no targets found, provide agentic fallback
         agentic_hint = None
         if not unique_targets:
             agentic_hint = await self._generate_agentic_hint()
-
         return TestResult(action="discover", targets=unique_targets, agentic_hint=agentic_hint)
-
     async def _detect_workspaces_from_index(self) -> list[DetectedWorkspace]:
         """Detect workspaces using index contexts.
-
         The index already knows about project contexts (Python packages,
         JS projects, Go modules, etc.) - leverage that instead of re-scanning.
         """
         workspaces: list[DetectedWorkspace] = []
-
         try:
             contexts = await self._coordinator.get_contexts()
         except (OSError, RuntimeError, ValueError):
             # Index not ready, return empty to trigger filesystem fallback
             log.debug("index_context_lookup_failed", exc_info=True)
             return []
-
         # Group contexts by root path to find workspaces
         roots_seen: set[str] = set()
-
         for ctx in contexts:
             root_path = ctx.root_path or ""
             if root_path in roots_seen:
                 continue
             roots_seen.add(root_path)
-
             # Resolve workspace path
             ws_root = self._repo_root / root_path if root_path else self._repo_root
-
             # Detect runners for this workspace
             for pack_class, confidence in runner_registry.detect_all(ws_root):
                 workspaces.append(
@@ -564,28 +511,21 @@ class TestOps:
                         confidence=confidence,
                     )
                 )
-
         # Deduplicate by (root, pack_id), keeping highest confidence
         seen: dict[tuple[Path, str], DetectedWorkspace] = {}
         for ws in workspaces:
             key = (ws.root, ws.pack.pack_id)
             if key not in seen or ws.confidence > seen[key].confidence:
                 seen[key] = ws
-
         return list(seen.values())
-
     async def _get_targets_by_id(self, target_ids: list[str]) -> list[TestTarget]:
         """Get test targets by ID from the index.
-
         Index-first: waits for index freshness, does not fallback.
         """
         from typing import cast
-
         from coderecon.testing.models import TargetKind
-
         # Query index - coordinator.get_test_targets waits for freshness internally
         indexed_targets = await self._coordinator.get_test_targets(target_ids=target_ids)
-
         return [
             TestTarget(
                 target_id=t.target_id,
@@ -599,23 +539,17 @@ class TestOps:
             )
             for t in indexed_targets
         ]
-
     async def _get_all_targets_from_index(self) -> list[TestTarget]:
         """Get ALL test targets from the index.
-
         Index-first approach: This always queries the index. If index is not ready,
         we wait for it (via coordinator.wait_for_freshness). No filesystem fallback.
-
         Returns:
             List of TestTarget objects from the index
         """
         from typing import cast
-
         from coderecon.testing.models import TargetKind
-
         # Query index - coordinator.get_test_targets calls wait_for_freshness internally
         indexed_targets = await self._coordinator.get_test_targets()
-
         return [
             TestTarget(
                 target_id=t.target_id,
@@ -629,11 +563,9 @@ class TestOps:
             )
             for t in indexed_targets
         ]
-
     async def _generate_agentic_hint(self) -> str:
         """Generate agentic hint for running tests when no targets detected."""
         hints: list[str] = []
-
         # Get languages from index
         try:
             file_stats = await self._coordinator.get_file_stats()
@@ -641,7 +573,6 @@ class TestOps:
         except (OSError, RuntimeError, ValueError):
             log.debug("file_stats_lookup_failed", exc_info=True)
             languages = set()
-
         if "python" in languages:
             hints.append("Python: Run `pytest` or `python -m pytest`")
         if "javascript" in languages:
@@ -662,17 +593,14 @@ class TestOps:
             hints.append(f"PHP: Run `phpunit` or `{phpunit}`")
         if "elixir" in languages:
             hints.append("Elixir: Run `mix test`")
-
         if not hints:
             hints.append(
                 "No test framework detected. Check for test files and install "
                 "appropriate test runner (pytest, jest, go test, cargo test, etc.)"
             )
-
         return "No test targets detected automatically. Manual test commands:\n\n" + "\n".join(
             f"  - {h}" for h in hints
         )
-
     async def run(
         self,
         targets: list[str] | None = None,
@@ -688,7 +616,6 @@ class TestOps:
         coverage_dir: str | None = None,
     ) -> TestResult:
         """Run tests using runner packs.
-
         Args:
             targets: Specific target IDs to run, or None for all
             target_filter: Substring to filter which TARGETS to run by path.
@@ -715,14 +642,11 @@ class TestOps:
                 "to run all tests, or specify at least one target. "
                 "Use verify to find available targets.",
             )
-
         run_id = str(uuid.uuid4())[:8]
         cancel_event = asyncio.Event()
-
         # Create artifact directory
         artifact_dir = self._artifacts_base / run_id
         artifact_dir.mkdir(parents=True, exist_ok=True)
-
         # Auto-derive coverage_dir when coverage enabled and not provided
         effective_coverage_dir: Path | None = None
         if coverage:
@@ -731,13 +655,11 @@ class TestOps:
             else:
                 effective_coverage_dir = artifact_dir / "coverage"
             effective_coverage_dir.mkdir(parents=True, exist_ok=True)
-
         progress = TestProgress(
             targets=TargetProgress(),
             cases=TestCaseProgress(),
         )
         failures: list[TestFailure] = []
-
         # Resolve targets - query index directly when IDs are provided
         agentic_hint_for_empty: str | None = None
         if targets:
@@ -746,7 +668,6 @@ class TestOps:
         else:
             # Get all targets from index
             resolved_targets = await self._get_all_targets_from_index()
-
         # Apply target_filter if provided - FAIL if no matches
         if target_filter and resolved_targets:
             before_count = len(resolved_targets)
@@ -766,7 +687,6 @@ class TestOps:
                     f"Use verify to see available target paths. "
                     f"To filter test NAMES within targets, use test_filter instead.",
                 )
-
         # Check if we have any targets to run
         if not resolved_targets:
             return TestResult(
@@ -780,9 +700,7 @@ class TestOps:
                 agentic_hint="No test targets found to run. "
                 + (agentic_hint_for_empty or "Use verify to check available targets."),
             )
-
         progress.targets.total = len(resolved_targets)
-
         # Create task for execution
         task = asyncio.create_task(
             self._execute_tests(
@@ -801,7 +719,6 @@ class TestOps:
                 coverage_dir=effective_coverage_dir,
             )
         )
-
         start_time = time.time()
         try:
             run_status = await task
@@ -816,7 +733,6 @@ class TestOps:
                 artifact_dir=str(artifact_dir),
             )
         return TestResult(action="run", run_status=run_status)
-
     async def _execute_tests(
         self,
         run_id: str,
@@ -837,7 +753,6 @@ class TestOps:
         start_time = time.time()
         diagnostics: list[ExecutionDiagnostic] = []
         coverage_artifacts: list[CoverageArtifact] = []
-
         # Auto-scope coverage: derive source_dirs from import graph
         source_dirs: list[str] | None = None
         if coverage and coverage_dir:
@@ -849,17 +764,13 @@ class TestOps:
             except (OSError, RuntimeError, ValueError, TypeError):  # noqa: BLE001
                 # Non-fatal: fall back to --cov=. if import graph fails
                 log.debug("testing.coverage_sources.failed", exc_info=True)
-
         # Memory budget + history
         budget = MemoryBudget(reserve_mb=self._memory_reserve_mb)
         history = MemoryHistory.for_repo(self._workspace_root)
-
         # Compute per-process ceiling: explicit config or dynamic
         ceiling = self._subprocess_memory_limit_mb or budget.ceiling_mb()
-
         # Create semaphore for parallelism
         sem = asyncio.Semaphore(parallelism)
-
         async def run_target(
             target: TestTarget,
         ) -> tuple[TestTarget, ParsedTestSuite | None, CoverageArtifact | None]:
@@ -886,16 +797,13 @@ class TestOps:
                         await asyncio.sleep(5)
                         continue
                     break
-
                 if cancel_event.is_set():
                     return (target, None, None)
-
                 # Use per-target ceiling from history if known and smaller
                 target_ceiling = ceiling
                 if history.oom_count(target.target_id) >= 2:
                     # Chronically OOM target — give it full ceiling, run solo-ish
                     target_ceiling = budget.ceiling_mb()
-
                 result, cov_artifact, peak_rss = await self._run_single_target(
                     target=target,
                     artifact_dir=artifact_dir,
@@ -907,16 +815,13 @@ class TestOps:
                     source_dirs=source_dirs,
                     subprocess_memory_limit_mb=target_ceiling,
                 )
-
                 # Classify and handle OOM
                 stderr_text = ""
                 exit_code = None
                 if result and result.execution:
                     stderr_text = result.execution.raw_stderr or ""
                     exit_code = result.execution.exit_code
-
                 is_oom = classify_oom(exit_code, stderr_text, peak_rss, target_ceiling)
-
                 if is_oom:
                     history.record_oom(target.target_id, peak_rss)
                     log.warning(
@@ -958,12 +863,9 @@ class TestOps:
                     # Normal completion — record RSS for future scheduling
                     if peak_rss > 0:
                         history.record(target.target_id, peak_rss)
-
                 return (target, result, cov_artifact)
-
         # Run ALL targets concurrently (semaphore limits parallelism)
         all_tasks = [asyncio.create_task(run_target(t)) for t in targets]
-
         # Properly drain all coroutines from as_completed to avoid "coroutine never awaited"
         for coro in asyncio.as_completed(all_tasks):
             if cancel_event.is_set() or (fail_fast and progress.cases.failed > 0):
@@ -976,14 +878,12 @@ class TestOps:
                     await coro  # Await current one
                 # Continue to drain remaining
                 continue
-
             try:
                 target, result, cov_artifact = await coro
             except asyncio.CancelledError:
                 # Task was cancelled, skip processing
                 structlog.get_logger().debug("test_task_cancelled", exc_info=True)
                 continue
-
             if cov_artifact:
                 coverage_artifacts.append(cov_artifact)
             if result:
@@ -993,10 +893,8 @@ class TestOps:
                 progress.cases.skipped += result.skipped
                 progress.cases.errors += result.errors
                 progress.cases.total += result.total
-
                 if result.failed > 0 or result.errors > 0:
                     progress.targets.failed += 1
-
                 # Collect execution-level diagnostics (non-test errors)
                 if result.error_type != "none":
                     # Truncate raw_stderr to ~2000 chars to avoid bloat
@@ -1007,7 +905,6 @@ class TestOps:
                             truncated_stderr = stderr_text[:_STDERR_TRUNCATION_CHARS] + "\n... (truncated)"
                         else:
                             truncated_stderr = stderr_text
-
                     diagnostics.append(
                         ExecutionDiagnostic(
                             target_id=target.target_id,
@@ -1023,7 +920,6 @@ class TestOps:
                             parsed_test_count=result.parsed_test_count,
                         )
                     )
-
                 for test in result.tests:
                     if test.status in ("failed", "error"):
                         failures.append(
@@ -1037,18 +933,15 @@ class TestOps:
                                 duration_seconds=test.duration_seconds,
                             )
                         )
-
         duration = time.time() - start_time
         status: Literal["running", "completed", "cancelled", "failed"] = (
             "cancelled" if cancel_event.is_set() else "completed"
         )
-
         # Convert coverage artifacts to serializable dicts
         coverage_dicts = [
             {"format": c.format, "path": str(c.path), "pack_id": c.pack_id}
             for c in coverage_artifacts
         ]
-
         final_status = TestRunStatus(
             run_id=run_id,
             status=status,
@@ -1060,33 +953,25 @@ class TestOps:
             coverage=coverage_dicts,
             target_selectors=[t.selector for t in targets],
         )
-
         # Persist result to artifacts for later retrieval
         self._persist_result(artifact_dir, final_status)
-
         return final_status
-
     async def _get_execution_context(
         self,
         target: TestTarget,
     ) -> RuntimeExecutionContext | None:
         """Get pre-indexed execution context for a test target.
-
         Index-first approach: Runtime is captured at discovery time and stored
         in ContextRuntime table. This provides O(1) lookup instead of re-detecting
         venvs/runtimes for every test execution.
-
         Falls back to PATH-based resolution only if index lookup fails.
-
         Returns None if resolution fails, allowing graceful fallback to
         PATH-based execution.
         """
         try:
             workspace_root = Path(target.workspace_root)
-
             # Query indexed runtime (captured at discovery time)
             indexed_runtime = await self._coordinator.get_context_runtime(str(workspace_root))
-
             if indexed_runtime:
                 # Build execution context from indexed runtime
                 exec_ctx = ExecutionContextBuilder.build(
@@ -1094,15 +979,12 @@ class TestOps:
                     runtime=indexed_runtime,
                 )
                 return exec_ctx
-
             # Index lookup failed - fall back to PATH-based execution
             # This should rarely happen if indexing is working correctly
             return None
-
         except (OSError, RuntimeError, ValueError):
             log.debug("runtime_resolution_failed", exc_info=True)
             return None
-
     async def _run_single_target(
         self,
         target: TestTarget,
@@ -1116,10 +998,8 @@ class TestOps:
         subprocess_memory_limit_mb: int | None = None,
     ) -> tuple[ParsedTestSuite, CoverageArtifact | None, int]:
         """Run a single test target using its runner pack.
-
         Uses SafeExecutionContext to protect against misconfigurations in
         target repositories (coverage DB corruption, hanging tests, etc.).
-
         Args:
             target: Test target to run
             artifact_dir: Directory for output files
@@ -1130,7 +1010,6 @@ class TestOps:
             coverage_dir: Directory for coverage artifacts (required when coverage=True)
             source_dirs: Optional source directories for targeted coverage scoping.
             subprocess_memory_limit_mb: Per-subprocess memory ceiling for env injection.
-
         Returns:
             Tuple of (test results, coverage artifact if collected, peak RSS in MB)
         """
@@ -1149,16 +1028,12 @@ class TestOps:
                 None,
                 0,
             )
-
         pack = pack_class()
-
         # Get pre-indexed execution context (runtime captured at discovery time)
         exec_ctx = await self._get_execution_context(target)
-
         # Create output file path
         safe_name = target.target_id.replace("/", "_").replace(":", "_")
         output_path = artifact_dir / f"{safe_name}.xml"
-
         # Build command with execution context (uses correct Python/Node/etc. if available)
         cmd = pack.build_command(
             target,
@@ -1167,7 +1042,6 @@ class TestOps:
             tags=tags,
             exec_ctx=exec_ctx,
         )
-
         if not cmd:
             return (
                 ParsedTestSuite(
@@ -1182,7 +1056,6 @@ class TestOps:
                 None,
                 0,
             )
-
         # Handle coverage - use pre-indexed capability instead of detecting at runtime
         cov_artifact: CoverageArtifact | None = None
         emitter = get_emitter(target.runner_pack_id) if coverage else None
@@ -1199,7 +1072,6 @@ class TestOps:
             )
             capability = emitter.capability(runtime)
             coverage_available = capability == CoverageCapability.AVAILABLE
-
         # Create safe execution context to protect against repo misconfigurations
         # strip_coverage_flags=True removes existing coverage flags from the command
         # BEFORE we add our own (so project configs don't interfere)
@@ -1212,10 +1084,8 @@ class TestOps:
                 subprocess_memory_limit_mb=subprocess_memory_limit_mb,
             )
         )
-
         # Sanitize command FIRST (removes dangerous flags including existing coverage flags)
         cmd = safe_ctx.sanitize_command(cmd, target.runner_pack_id)
-
         # NOW add our coverage flags after sanitization
         if coverage_available and emitter and coverage_dir:
             cmd = emitter.modify_command(cmd, coverage_dir, source_dirs=source_dirs)
@@ -1225,16 +1095,13 @@ class TestOps:
                 pack_id=target.runner_pack_id,
                 invocation_id=target.target_id,
             )
-
         # Prepare safe environment (overrides project configs to prevent corruption)
         safe_env = safe_ctx.prepare_environment(target.runner_pack_id)
-
         # Merge execution context environment overrides (from runtime resolution)
         # This includes venv PATH adjustments and any tool-specific env vars
         if exec_ctx:
             runtime_env = exec_ctx.build_env()
             safe_env.update(runtime_env)
-
         # Verify executable exists (use safe_env PATH which includes venv bin)
         executable = cmd[0]
         resolved_executable = shutil.which(executable, path=safe_env.get("PATH"))
@@ -1257,13 +1124,11 @@ class TestOps:
                 None,
                 0,
             )
-
         cwd = pack.get_cwd(target)
         stdout = ""
         stderr = ""
         exit_code: int | None = None
         peak_rss_mb = 0
-
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -1272,7 +1137,6 @@ class TestOps:
                 cwd=cwd,
                 env=safe_env,  # Use safe environment with defensive overrides
             )
-
             # Poll child RSS while waiting for completion
             async def _poll_rss() -> int:
                 peak = 0
@@ -1287,26 +1151,21 @@ class TestOps:
                 if rss > peak:
                     peak = rss
                 return peak
-
             rss_task = asyncio.create_task(_poll_rss())
-
             stdout_bytes, stderr_bytes = await asyncio.wait_for(
                 proc.communicate(), timeout=timeout_sec
             )
             stdout = stdout_bytes.decode(errors="replace")
             stderr = stderr_bytes.decode(errors="replace")
             exit_code = proc.returncode
-
             # Collect peak RSS (poll task should be done since process exited)
             peak_rss_mb = await rss_task
-
             # Write artifacts
             stdout_path = artifact_dir / f"{safe_name}.stdout.txt"
             atomic_write_text(stdout_path, stdout)
             if stderr:
                 stderr_path = artifact_dir / f"{safe_name}.stderr.txt"
                 atomic_write_text(stderr_path, stderr)
-
             # Create execution context
             execution = ExecutionContext(
                 command=cmd,
@@ -1315,13 +1174,11 @@ class TestOps:
                 raw_stdout=stdout,
                 raw_stderr=stderr if stderr else None,
             )
-
             # Parse output
             result = pack.parse_output(output_path, stdout)
             result.target_selector = target.selector
             result.workspace_root = target.workspace_root
             result.execution = execution
-
             # Set parsed_test_count as an observable fact
             # - int >= 0: Successfully parsed this many test cases
             # - None: Could not parse output
@@ -1329,11 +1186,8 @@ class TestOps:
                 result.parsed_test_count = len(result.tests)
             else:
                 result.parsed_test_count = None
-
             _classify_result_error(result, output_path, stdout, exit_code)
-
             return (result, cov_artifact, peak_rss_mb)
-
         except TimeoutError:
             safe_ctx.cleanup()
             return (
@@ -1377,7 +1231,6 @@ class TestOps:
         finally:
             # Always cleanup safe execution context
             safe_ctx.cleanup()
-
     async def _run_batch_targets(
         self,
         targets: list[TestTarget],
@@ -1388,16 +1241,13 @@ class TestOps:
         coverage_dir: Path | None = None,
     ) -> tuple[ParsedTestSuite, CoverageArtifact | None]:
         """Run multiple targets in a single subprocess invocation.
-
         All targets must share the same ``runner_pack_id`` and
         ``workspace_root``.  The runner pack's ``build_batch_command``
         method produces a single command that exercises every target.
-
         Returns (ParsedTestSuite, CoverageArtifact | None).
         """
         if not targets:
             return ParsedTestSuite(name="batch-empty", total=0), None
-
         first = targets[0]
         pack_class = runner_registry.get(first.runner_pack_id)
         if not pack_class:
@@ -1407,10 +1257,8 @@ class TestOps:
                 error_type="unknown",
                 error_detail=f"Runner pack not found: {first.runner_pack_id}",
             ), None
-
         pack = pack_class()
         exec_ctx = await self._get_execution_context(first)
-
         # Deterministic batch name for artifact files
         batch_name = "batch_" + "_".join(
             t.target_id.replace("/", "_").replace(":", "_") for t in targets[:5]
@@ -1418,7 +1266,6 @@ class TestOps:
         if len(targets) > 5:
             batch_name += f"_plus{len(targets) - 5}"
         output_path = artifact_dir / f"{batch_name}.xml"
-
         cmd = pack.build_batch_command(
             targets,
             output_path=output_path,
@@ -1434,7 +1281,6 @@ class TestOps:
                 error_type="unknown",
                 error_detail="Runner pack does not support batch execution",
             ), None
-
         # Coverage handling - always enabled when supported
         cov_artifact: CoverageArtifact | None = None
         emitter = get_emitter(first.runner_pack_id) if coverage_dir else None
@@ -1450,7 +1296,6 @@ class TestOps:
             )
             capability = emitter.capability(runtime)
             coverage_available = capability == CoverageCapability.AVAILABLE
-
         safe_ctx = SafeExecutionContext(
             SafeExecutionConfig(
                 artifact_dir=artifact_dir,
@@ -1460,7 +1305,6 @@ class TestOps:
             )
         )
         cmd = safe_ctx.sanitize_command(cmd, first.runner_pack_id)
-
         # Add coverage flags after sanitization
         if coverage_available and emitter and coverage_dir:
             cmd = emitter.modify_command(cmd, coverage_dir, source_dirs=None)
@@ -1470,13 +1314,10 @@ class TestOps:
                 pack_id=first.runner_pack_id,
                 invocation_id=f"batch_{len(targets)}",
             )
-
         safe_env = safe_ctx.prepare_environment(first.runner_pack_id)
-
         if exec_ctx:
             runtime_env = exec_ctx.build_env()
             safe_env.update(runtime_env)
-
         executable = cmd[0]
         resolved_executable = shutil.which(executable, path=safe_env.get("PATH"))
         if not resolved_executable:
@@ -1492,11 +1333,9 @@ class TestOps:
                 target_selector=selectors,
                 workspace_root=first.workspace_root,
             ), None
-
         cwd = pack.get_cwd(first)
         stdout = ""
         stderr = ""
-
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -1511,14 +1350,12 @@ class TestOps:
             stdout = stdout_bytes.decode(errors="replace")
             stderr = stderr_bytes.decode(errors="replace")
             exit_code = proc.returncode
-
             # Write artifacts
             stdout_path = artifact_dir / f"{batch_name}.stdout.txt"
             atomic_write_text(stdout_path, stdout)
             if stderr:
                 stderr_path = artifact_dir / f"{batch_name}.stderr.txt"
                 atomic_write_text(stderr_path, stderr)
-
             execution = ExecutionContext(
                 command=cmd,
                 working_directory=str(cwd),
@@ -1526,20 +1363,15 @@ class TestOps:
                 raw_stdout=stdout,
                 raw_stderr=stderr if stderr else None,
             )
-
             result = pack.parse_output(output_path, stdout)
             selectors = ", ".join(t.selector for t in targets)
             result.target_selector = selectors
             result.workspace_root = first.workspace_root
             result.execution = execution
-
             if result.tests is not None:
                 result.parsed_test_count = len(result.tests)
-
             _classify_result_error(result, output_path, stdout, exit_code)
-
             return result, cov_artifact
-
         except TimeoutError:
             safe_ctx.cleanup()
             selectors = ", ".join(t.selector for t in targets)
@@ -1631,7 +1463,6 @@ class TestOps:
         result_path = artifact_dir / "result.json"
         if not result_path.exists():
             return None
-
         try:
             data = json.loads(result_path.read_text())
             progress = None
@@ -1652,7 +1483,6 @@ class TestOps:
                         errors=p["cases"]["errors"],
                     ),
                 )
-
             failures = [
                 TestFailure(
                     name=f["name"],
@@ -1665,7 +1495,6 @@ class TestOps:
                 )
                 for f in data.get("failures", [])
             ]
-
             diagnostics = [
                 ExecutionDiagnostic(
                     target_id=d["target_id"],
@@ -1680,7 +1509,6 @@ class TestOps:
                 )
                 for d in data.get("diagnostics", [])
             ]
-
             return TestRunStatus(
                 run_id=data["run_id"],
                 status=data["status"],

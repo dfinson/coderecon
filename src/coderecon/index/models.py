@@ -23,14 +23,11 @@ from sqlmodel import Field, Relationship, SQLModel
 
 class LanguageFamily(StrEnum):
     """Canonical language name identifiers.
-
     All languages get lexical indexing (full-text search).
     Languages with grammar != None also get structural indexing (symbols, refs).
-
     NOTE: These values MUST match the 'name' strings in core/languages.py.
     Run validate_language_families() to check for mismatches.
     """
-
     JAVASCRIPT = "javascript"  # JS, TS, JSX, TSX, Vue, Svelte
     PYTHON = "python"
     GO = "go"
@@ -50,7 +47,6 @@ class LanguageFamily(StrEnum):
     C_CPP = "c_cpp"  # C and C++ unified (header files are ambiguous)
     OBJC = "objc"  # Objective-C, Objective-C++
     MATLAB = "matlab"  # MATLAB/Octave
-
     ELIXIR = "elixir"
     ERLANG = "erlang"
     HASKELL = "haskell"
@@ -58,7 +54,6 @@ class LanguageFamily(StrEnum):
     REASON = "reason"  # ReasonML
     CLOJURE = "clojure"
     ELM = "elm"
-
     SHELL = "shell"  # Bash, Zsh, Ksh (POSIX-compatible)
     FISH = "fish"  # Fish shell (separate - incompatible syntax)
     POWERSHELL = "powershell"
@@ -66,27 +61,22 @@ class LanguageFamily(StrEnum):
     PERL = "perl"
     R = "r"
     JULIA = "julia"
-
     ZIG = "zig"
     NIM = "nim"
     D = "d"
     ADA = "ada"
     FORTRAN = "fortran"
     PASCAL = "pascal"
-
     DART = "dart"
     GLEAM = "gleam"
     CRYSTAL = "crystal"
     VLANG = "vlang"  # V language
     ODIN = "odin"
-
     VERILOG = "verilog"  # Verilog, SystemVerilog
     VHDL = "vhdl"
-
     HTML = "html"
     XML = "xml"
     CSS = "css"  # CSS, SCSS, Less
-
     TERRAFORM = "terraform"
     HCL = "hcl"
     SQL = "sql"
@@ -100,13 +90,11 @@ class LanguageFamily(StrEnum):
     PROTOBUF = "protobuf"
     GRAPHQL = "graphql"
     NIX = "nix"
-
     MAKE = "make"
     CMAKE = "cmake"
     MESON = "meson"
     BAZEL = "bazel"  # Starlark
     JUST = "just"
-
     ASSEMBLY = "assembly"
     UNKNOWN = "unknown"  # Root fallback for files not claimed by any project
     @classmethod
@@ -319,7 +307,6 @@ class ResolutionMethod(StrEnum):
 class Worktree(SQLModel, table=True):
     """A worktree (or main checkout) tracked in this repo's index."""
     __tablename__ = "worktrees"
-
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(unique=True, index=True)
     root_path: str = Field(unique=True, index=True)
@@ -331,7 +318,6 @@ class File(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("worktree_id", "path", name="uq_files_wt_path"),
     )
-
     id: int | None = Field(default=None, primary_key=True)
     worktree_id: int = Field(
         sa_column=Column(
@@ -357,7 +343,6 @@ class File(SQLModel, table=True):
         "or files missing declarations.",
     )
     parse_status: str | None = None
-
     # Relationships
     defs: list["DefFact"] = Relationship(back_populates="file")
     refs: list["RefFact"] = Relationship(back_populates="file")
@@ -368,7 +353,6 @@ class File(SQLModel, table=True):
 class TestTarget(SQLModel, table=True):
     """Test target discovered during indexing."""
     __tablename__ = "test_targets"
-
     id: int | None = Field(default=None, primary_key=True)
     context_id: int = Field(
         sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
@@ -386,7 +370,6 @@ class TestTarget(SQLModel, table=True):
 class IndexedLintTool(SQLModel, table=True):
     """Lint tool discovered during indexing."""
     __tablename__ = "indexed_lint_tools"
-
     id: int | None = Field(default=None, primary_key=True)
     tool_id: str = Field(unique=True, index=True)  # "python.ruff", "js.eslint", etc.
     name: str
@@ -398,13 +381,10 @@ class IndexedLintTool(SQLModel, table=True):
     discovered_at: float | None = None
 class IndexedCoverageCapability(SQLModel, table=True):
     """Coverage capability discovered during indexing.
-
     Stores whether coverage tools are available for each (workspace, runner_pack) pair.
     Queried at execution time instead of re-detecting tools per invocation.
     """
-
     __tablename__ = "indexed_coverage_capabilities"
-
     id: int | None = Field(default=None, primary_key=True)
     workspace_root: str = Field(index=True)
     runner_pack_id: str = Field(index=True)  # "python.pytest", "js.jest", etc.
@@ -422,7 +402,6 @@ class IndexedCoverageCapability(SQLModel, table=True):
 class Context(SQLModel, table=True):
     """Indexing context (package, workspace, etc) - represents a build unit."""
     __tablename__ = "contexts"
-
     id: int | None = Field(default=None, primary_key=True)
     name: str | None = None
     language_family: str = Field(index=True)
@@ -433,7 +412,6 @@ class Context(SQLModel, table=True):
     exclude_spec: str | None = None
     config_hash: str | None = None
     refreshed_at: float | None = None
-
     # Relationships
     markers: list["ContextMarker"] = Relationship(back_populates="context")
     def get_include_globs(self) -> list[str]:
@@ -451,7 +429,6 @@ class Context(SQLModel, table=True):
 class ContextMarker(SQLModel, table=True):
     """Marker file that triggered context discovery."""
     __tablename__ = "context_markers"
-
     id: int | None = Field(default=None, primary_key=True)
     context_id: int = Field(
         sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
@@ -459,13 +436,11 @@ class ContextMarker(SQLModel, table=True):
     marker_path: str
     marker_tier: str
     detected_at: float | None = None
-
     # Relationships
     context: Context | None = Relationship(back_populates="markers")
 class DefFact(SQLModel, table=True):
     """Definition fact (function, class, method, variable). See SPEC.md §7.3.1."""
     __tablename__ = "def_facts"
-
     def_uid: str = Field(primary_key=True)  # Stable identity (see §7.4)
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
@@ -490,14 +465,12 @@ class DefFact(SQLModel, table=True):
     decorators_json: str | None = None  # JSON array of decorator/annotation strings
     docstring: str | None = None  # First paragraph of docstring text
     return_type: str | None = None  # Return type annotation text
-
     # Relationships
     file: File | None = Relationship(back_populates="defs")
     # Note: refs relationship removed - use FactQueries.list_refs_by_def_uid() instead
 class RefFact(SQLModel, table=True):
     """Reference fact (identifier occurrence). See SPEC.md §7.3.2."""
     __tablename__ = "ref_facts"
-
     ref_id: int | None = Field(default=None, primary_key=True)
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
@@ -521,7 +494,6 @@ class RefFact(SQLModel, table=True):
     target_def_uid: str | None = Field(
         default=None, index=True
     )  # Target def_uid (not FK, join manually)
-
     # Relationships
     file: File | None = Relationship(back_populates="refs")
     scope: "ScopeFact" = Relationship(back_populates="refs")
@@ -529,7 +501,6 @@ class RefFact(SQLModel, table=True):
 class ScopeFact(SQLModel, table=True):
     """Lexical scope fact. See SPEC.md §7.3.3."""
     __tablename__ = "scope_facts"
-
     scope_id: int | None = Field(default=None, primary_key=True)
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
@@ -545,7 +516,6 @@ class ScopeFact(SQLModel, table=True):
     start_col: int
     end_line: int
     end_col: int
-
     # Relationships
     file: File | None = Relationship(back_populates="scopes")
     refs: list[RefFact] = Relationship(back_populates="scope")
@@ -553,7 +523,6 @@ class ScopeFact(SQLModel, table=True):
 class LocalBindFact(SQLModel, table=True):
     """Same-file binding fact (index-time only, NO query-time inference). See SPEC.md §7.3.4."""
     __tablename__ = "local_bind_facts"
-
     bind_id: int | None = Field(default=None, primary_key=True)
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
@@ -569,7 +538,6 @@ class LocalBindFact(SQLModel, table=True):
     target_uid: str | None = None  # def_uid or import_uid or NULL
     certainty: str = Field(default=Certainty.CERTAIN.value)
     reason_code: str  # PARAM, LOCAL_ASSIGN, DEF_IN_SCOPE, IMPORT_ALIAS
-
     # Relationships (scope_id nullable, so relationship is optional)
     file: File | None = Relationship(back_populates="binds")
     scope: "ScopeFact" = Relationship(
@@ -578,7 +546,6 @@ class LocalBindFact(SQLModel, table=True):
 class ImportFact(SQLModel, table=True):
     """Import statement fact (syntactic only). See SPEC.md §7.3.5."""
     __tablename__ = "import_facts"
-
     import_uid: str = Field(primary_key=True)
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
@@ -606,26 +573,22 @@ class ImportFact(SQLModel, table=True):
     start_col: int | None = None  # 0-indexed start column
     end_line: int | None = None  # 1-indexed end line of import statement
     end_col: int | None = None  # 0-indexed end column
-
     # Relationships
     file: File | None = Relationship(back_populates="imports")
 class ExportSurface(SQLModel, table=True):
     """Materialized export surface per build unit. See SPEC.md §7.3.6."""
     __tablename__ = "export_surfaces"
-
     surface_id: int | None = Field(default=None, primary_key=True)
     unit_id: int = Field(
         sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), unique=True, index=True)
     )
     surface_hash: str | None = None  # Hash of all entries for invalidation
     epoch_id: int | None = None  # Epoch when surface was computed
-
     # Relationships
     entries: list["ExportEntry"] = Relationship(back_populates="surface")
 class ExportEntry(SQLModel, table=True):
     """Individual exported name within an ExportSurface. See SPEC.md §7.3.7."""
     __tablename__ = "export_entries"
-
     entry_id: int | None = Field(default=None, primary_key=True)
     surface_id: int = Field(
         sa_column=Column(Integer, ForeignKey("export_surfaces.surface_id", ondelete="CASCADE"), index=True)
@@ -634,13 +597,11 @@ class ExportEntry(SQLModel, table=True):
     def_uid: str | None = None  # Target definition (NULL if unresolved)
     certainty: str = Field(default=Certainty.CERTAIN.value)
     evidence_kind: str | None = None  # explicit_export, default_module, __all__literal, etc.
-
     # Relationships
     surface: ExportSurface | None = Relationship(back_populates="entries")
 class ExportThunk(SQLModel, table=True):
     """Re-export declaration (strictly constrained forms only). See SPEC.md §7.3.8."""
     __tablename__ = "export_thunks"
-
     thunk_id: int | None = Field(default=None, primary_key=True)
     source_unit: int = Field(
         sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
@@ -667,7 +628,6 @@ class ExportThunk(SQLModel, table=True):
 class AnchorGroup(SQLModel, table=True):
     """Bounded ambiguity bucket for refs. See SPEC.md §7.3.9."""
     __tablename__ = "anchor_groups"
-
     group_id: int | None = Field(default=None, primary_key=True)
     unit_id: int = Field(
         sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
@@ -685,7 +645,6 @@ class AnchorGroup(SQLModel, table=True):
 class DynamicAccessSite(SQLModel, table=True):
     """Telemetry for dynamic access patterns (reporting only). See SPEC.md §7.3.10."""
     __tablename__ = "dynamic_access_sites"
-
     site_id: int | None = Field(default=None, primary_key=True)
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
@@ -698,7 +657,6 @@ class DynamicAccessSite(SQLModel, table=True):
     pattern_type: str  # bracket_access, getattr, reflect, eval, etc.
     extracted_literals: str | None = None  # JSON array of literal strings (if any)
     has_non_literal_key: bool = Field(default=False)  # True if key is computed/dynamic
-
     # Relationships
     file: File | None = Relationship(back_populates="dynamic_sites")
     def get_extracted_literals(self) -> list[str]:
@@ -713,13 +671,10 @@ class DynamicAccessSite(SQLModel, table=True):
 
 class TypeAnnotationFact(SQLModel, table=True):
     """Type annotation extracted from source code.
-
     Captures explicit type annotations from any language that supports them.
     Used by Pass 3 (type-traced resolution) to resolve member accesses.
     """
-
     __tablename__ = "type_annotation_facts"
-
     annotation_id: int | None = Field(default=None, primary_key=True)
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
@@ -730,26 +685,21 @@ class TypeAnnotationFact(SQLModel, table=True):
     scope_id: int | None = Field(
         sa_column=Column(Integer, ForeignKey("scope_facts.scope_id", ondelete="CASCADE"), nullable=True, index=True)
     )
-
     # What's annotated
     target_kind: str  # AnnotationTargetKind value
     target_name: str = Field(index=True)  # Variable/param name
-
     # The annotation (as written and normalized)
     raw_annotation: str  # As written: "List[int]", "int[]", "[]int"
     canonical_type: str = Field(index=True)  # Normalized: "List<int>"
     base_type: str = Field(index=True)  # Just the base: "List", "int"
-
     # Type modifiers (language-agnostic flags)
     is_optional: bool = Field(default=False)  # None/null/nil allowed
     is_array: bool = Field(default=False)  # Collection type
     is_generic: bool = Field(default=False)  # Has type parameters
     is_reference: bool = Field(default=False)  # Pointer/ref type
     is_mutable: bool = Field(default=True)  # const/final/let vs var
-
     # Generic parameters (if applicable)
     type_args_json: str | None = None  # ["int"] for List<int>
-
     # Source info
     start_line: int
     start_col: int
@@ -761,12 +711,9 @@ class TypeAnnotationFact(SQLModel, table=True):
         return result
 class TypeMemberFact(SQLModel, table=True):
     """Member of a type definition (class field, struct field, interface method, etc.).
-
     Used to resolve attribute chains like `obj.field.method()`.
     """
-
     __tablename__ = "type_member_facts"
-
     member_id: int | None = Field(default=None, primary_key=True)
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
@@ -774,37 +721,29 @@ class TypeMemberFact(SQLModel, table=True):
     unit_id: int = Field(
         sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
     )
-
     # Parent type
     parent_def_uid: str = Field(index=True)  # DefFact.def_uid of class/struct/interface
     parent_type_name: str = Field(index=True)  # "AppContext", "MutationOps"
     parent_kind: str  # TypeParentKind value
-
     # Member info
     member_kind: str  # MemberKind value
     member_name: str = Field(index=True)
     member_def_uid: str | None = None  # DefFact.def_uid if method/property
-
     # Type info (for fields/properties)
     type_annotation: str | None = None  # "MutationOps", "str | None"
     canonical_type: str | None = Field(default=None, index=True)  # Normalized
     base_type: str | None = Field(default=None, index=True)  # Base type only
-
     # Visibility
     visibility: str | None = None  # "public", "private", "protected", "internal"
     is_static: bool = Field(default=False)
     is_abstract: bool = Field(default=False)
-
     start_line: int
     start_col: int
 class MemberAccessFact(SQLModel, table=True):
     """Member access chain extracted from source code.
-
     Captures `obj.field.method()` patterns for type-traced resolution.
     """
-
     __tablename__ = "member_access_facts"
-
     access_id: int | None = Field(default=None, primary_key=True)
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
@@ -815,42 +754,33 @@ class MemberAccessFact(SQLModel, table=True):
     scope_id: int | None = Field(
         sa_column=Column(Integer, ForeignKey("scope_facts.scope_id", ondelete="CASCADE"), nullable=True, index=True)
     )
-
     # Access pattern
     access_style: str  # AccessStyle value: dot, arrow, scope
-
     # The chain
     full_expression: str  # "ctx.mutation_ops.write_source"
     receiver_name: str = Field(index=True)  # Leftmost identifier: "ctx"
     member_chain: str  # Rest of chain: "mutation_ops.write_source"
     final_member: str = Field(index=True)  # Rightmost: "write_source"
     chain_depth: int  # Number of accesses: 2
-
     # Call info
     is_invocation: bool = Field(default=False)  # Ends with ()
     arg_count: int | None = None  # Number of arguments if call
-
     # Receiver type (from annotation in scope, if found)
     receiver_declared_type: str | None = Field(default=None, index=True)
-
     # Resolution results (filled by Pass 3)
     resolved_type_path: str | None = None  # "AppContext.MutationOps"
     final_target_def_uid: str | None = Field(default=None, index=True)
     resolution_method: str | None = None  # ResolutionMethod value
     resolution_confidence: float | None = None  # 0.0-1.0
-
     start_line: int
     start_col: int
     end_line: int
     end_col: int
 class InterfaceImplFact(SQLModel, table=True):
     """Interface/trait implementation relationship.
-
     Used for Go, Rust, TypeScript interface matching.
     """
-
     __tablename__ = "interface_impl_facts"
-
     impl_id: int | None = Field(default=None, primary_key=True)
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
@@ -858,29 +788,22 @@ class InterfaceImplFact(SQLModel, table=True):
     unit_id: int = Field(
         sa_column=Column(Integer, ForeignKey("contexts.id", ondelete="CASCADE"), index=True)
     )
-
     # The implementing type
     implementor_def_uid: str = Field(index=True)
     implementor_name: str = Field(index=True)
-
     # The interface/trait
     interface_name: str = Field(index=True)
     interface_def_uid: str | None = None  # If found in same codebase
-
     # How declared
     impl_style: str  # ImplStyle value: explicit, structural, inferred
-
     start_line: int
     start_col: int
 class ReceiverShapeFact(SQLModel, table=True):
     """Observed shape for duck-typing inference.
-
     Aggregates all member accesses on a receiver to infer its type.
     Used for dynamic languages without type annotations.
     """
-
     __tablename__ = "receiver_shape_facts"
-
     shape_id: int | None = Field(default=None, primary_key=True)
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
@@ -891,14 +814,11 @@ class ReceiverShapeFact(SQLModel, table=True):
     scope_id: int | None = Field(
         sa_column=Column(Integer, ForeignKey("scope_facts.scope_id", ondelete="CASCADE"), nullable=True, index=True)
     )
-
     receiver_name: str = Field(index=True)  # "ctx", "self", "obj"
     declared_type: str | None = Field(default=None, index=True)  # If annotated
-
     # Observed shape (all members accessed on this receiver in this scope)
     shape_hash: str = Field(index=True)  # Hash for fast comparison
     observed_members_json: str  # {"fields": ["x"], "methods": ["run"]}
-
     # Inference results (filled by Pass 5)
     matched_types_json: str | None = None  # [{"type": "Foo", "confidence": 0.9}]
     best_match_type: str | None = Field(default=None, index=True)
@@ -916,7 +836,6 @@ class ReceiverShapeFact(SQLModel, table=True):
 class RepoState(SQLModel, table=True):
     """Repository state tracking (singleton row, id=1)."""
     __tablename__ = "repo_state"
-
     id: int = Field(default=1, primary_key=True)
     last_seen_head: str | None = None
     last_seen_index_mtime: float | None = None
@@ -926,21 +845,17 @@ class RepoState(SQLModel, table=True):
 class Epoch(SQLModel, table=True):
     """Epoch record for incremental snapshot barriers. See SPEC.md §7.6."""
     __tablename__ = "epochs"
-
     epoch_id: int | None = Field(default=None, primary_key=True)
     published_at: float | None = None
     files_indexed: int = Field(default=0)
     commit_hash: str | None = None  # Git commit at epoch time (if available)
 class DefSnapshotRecord(SQLModel, table=True):
     """Point-in-time snapshot of a DefFact, captured when an epoch is published.
-
     Used by semantic diff to compare symbol state across epochs without
     needing the full Index data to still exist.  No FK to File — the
     snapshot must survive file deletions.
     """
-
     __tablename__ = "def_snapshot_record"
-
     id: int | None = Field(default=None, primary_key=True)
     epoch_id: int = Field(index=True)
     file_path: str = Field(index=True)
@@ -957,17 +872,13 @@ class DefSnapshotRecord(SQLModel, table=True):
 
 class TestCoverageFact(SQLModel, table=True):
     """Coverage link between a test and a definition.
-
     Populated by joining coverage reports (line hit counts) against
     DefFact line ranges.  Each row records "test T covers definition D
     at line_rate R".
-
     Coverage facts are written at initial full-suite ingestion and
     updated incrementally by the background test pipeline on file save.
     """
-
     __tablename__ = "test_coverage_facts"
-
     id: int | None = Field(default=None, primary_key=True)
     test_id: str = Field(index=True)  # e.g. "tests/test_auth.py::test_login_valid"
     target_def_uid: str = Field(
@@ -983,13 +894,10 @@ class TestCoverageFact(SQLModel, table=True):
     test_passed: bool | None = Field(default=None)  # True=pass, False=fail, None=unknown
 class LintStatusFact(SQLModel, table=True):
     """Persisted lint/type-check status for a file.
-
     Written by the background tier-1 pipeline on file save and at
     checkpoint time.  Diagnostic counts are aggregated per tool.
     """
-
     __tablename__ = "lint_status_facts"
-
     id: int | None = Field(default=None, primary_key=True)
     file_path: str = Field(index=True)
     tool_id: str = Field(index=True)  # "python.ruff", "js.eslint", etc.
@@ -1001,14 +909,11 @@ class LintStatusFact(SQLModel, table=True):
     epoch: int = Field(index=True)
 class EndpointFact(SQLModel, table=True):
     """HTTP/RPC endpoint declaration or call site.
-
     Server-side: extracted from route decorators (@app.route, @Get, etc.)
     Client-side: extracted from HTTP client calls (fetch, requests.get, etc.)
     Matching server↔client by url_pattern creates cross-language edges.
     """
-
     __tablename__ = "endpoint_facts"
-
     id: int | None = Field(default=None, primary_key=True)
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
@@ -1025,13 +930,10 @@ class EndpointFact(SQLModel, table=True):
     framework: str | None = None  # "flask", "fastapi", "express", "gin", etc.
 class DocCrossRef(SQLModel, table=True):
     """Cross-reference from a docstring/comment to a DefFact.
-
     Extracted by regex-parsing structured references like
     ``See also FooClass``, ``:func:`module.func```, or ``[BarClass](...)``.
     """
-
     __tablename__ = "doc_cross_refs"
-
     id: int | None = Field(default=None, primary_key=True)
     source_file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
@@ -1045,14 +947,11 @@ class DocCrossRef(SQLModel, table=True):
     confidence: str = Field(default="high")  # "high", "medium", "low"
 class SpladeVec(SQLModel, table=True):
     """SPLADE sparse vector for a DefFact.
-
     Stores the sparse term-weight vector produced by splade-mini for
     each definition's anglicised scaffold.  Used at query time for
     sparse dot-product retrieval (Harvester S).
     """
-
     __tablename__ = "splade_vecs"
-
     def_uid: str = Field(
         sa_column=Column(String, ForeignKey("def_facts.def_uid", ondelete="CASCADE"), primary_key=True)
     )
@@ -1062,15 +961,12 @@ class SpladeVec(SQLModel, table=True):
     vector_blob: bytes | None = Field(default=None)  # Packed (uint32,float32) pairs
 class SemanticNeighborFact(SQLModel, table=True):
     """Semantic neighbor edge between two definitions.
-
     Pre-computed at index time via SPLADE dot product between def
     scaffold vectors.  Captures "similar code" relationships invisible
     to AST analysis — e.g. two parsers in different modules, duplicate
     implementations, analogous API handlers.
     """
-
     __tablename__ = "semantic_neighbor_facts"
-
     id: int | None = Field(default=None, primary_key=True)
     source_def_uid: str = Field(
         sa_column=Column(String, ForeignKey("def_facts.def_uid", ondelete="CASCADE"), index=True)
@@ -1082,15 +978,12 @@ class SemanticNeighborFact(SQLModel, table=True):
     model_version: str = Field(index=True)
 class FileChunkVec(SQLModel, table=True):
     """SPLADE vector for a non-code file chunk.
-
     Non-code files (markdown, YAML, TOML, etc.) don't produce DefFacts
     but still contain semantically meaningful content.  Each structural
     chunk (heading section, config key-path, etc.) gets a SPLADE vector
     for dot-product linking against code definitions.
     """
-
     __tablename__ = "file_chunk_vecs"
-
     id: int | None = Field(default=None, primary_key=True)
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)
@@ -1103,14 +996,11 @@ class FileChunkVec(SQLModel, table=True):
     model_version: str = Field(index=True)
 class DocCodeEdgeFact(SQLModel, table=True):
     """Semantic edge from a non-code file chunk to a code definition.
-
     Created at index time by dot-product between FileChunkVec and
     SpladeVec vectors.  Represents a semantic "relates to" connection
     between documentation/config content and code.
     """
-
     __tablename__ = "doc_code_edge_facts"
-
     id: int | None = Field(default=None, primary_key=True)
     file_id: int = Field(
         sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), index=True)

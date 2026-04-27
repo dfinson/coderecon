@@ -467,11 +467,9 @@ GENERIC_TYPE_SAMPLES: list[tuple[TypeExtractionConfig, str, str]] = [
 def make_tree(code: str, language: str) -> Any:
     """Parse code into a tree-sitter tree."""
     from coderecon.index._internal.parsing.treesitter import TreeSitterParser
-
     parser = TreeSitterParser()
     # Create a simple mock path to get language detection
     from pathlib import Path
-
     # Map language to appropriate extension
     ext_map = {
         "python": "py",
@@ -544,9 +542,7 @@ class TestTypeAnnotationExtraction:
             tree = make_tree(code, grammar)
         except ValueError:
             pytest.skip(f"Grammar not available: {grammar}")
-
         annotations = extractor.extract_type_annotations(tree.tree, f"test.{grammar}", scopes=[])
-
         # Find annotation matching expected name
         matching = [
             a
@@ -576,9 +572,7 @@ class TestTypeAnnotationExtraction:
             tree = make_tree(code, grammar)
         except ValueError:
             pytest.skip(f"Grammar not available: {grammar}")
-
         annotations = extractor.extract_type_annotations(tree.tree, f"test.{grammar}", scopes=[])
-
         # Look for return annotations
         return_anns = [a for a in annotations if a.target_kind == "return"]
         matching = [
@@ -607,9 +601,7 @@ class TestTypeAnnotationExtraction:
             tree = make_tree(code, grammar)
         except ValueError:
             pytest.skip(f"Grammar not available: {grammar}")
-
         annotations = extractor.extract_type_annotations(tree.tree, f"test.{grammar}", scopes=[])
-
         optional_anns = [a for a in annotations if a.is_optional]
         assert len(optional_anns) >= 1, (
             f"Expected at least one optional annotation. "
@@ -632,9 +624,7 @@ class TestTypeAnnotationExtraction:
             tree = make_tree(code, grammar)
         except ValueError:
             pytest.skip(f"Grammar not available: {grammar}")
-
         annotations = extractor.extract_type_annotations(tree.tree, f"test.{grammar}", scopes=[])
-
         array_anns = [a for a in annotations if a.is_array]
         assert len(array_anns) >= 1, (
             f"Expected at least one array annotation. "
@@ -657,9 +647,7 @@ class TestTypeAnnotationExtraction:
             tree = make_tree(code, grammar)
         except ValueError:
             pytest.skip(f"Grammar not available: {grammar}")
-
         annotations = extractor.extract_type_annotations(tree.tree, f"test.{grammar}", scopes=[])
-
         generic_anns = [a for a in annotations if a.is_generic]
         assert len(generic_anns) >= 1, (
             f"Expected at least one generic annotation. "
@@ -693,16 +681,13 @@ class TestTypeMemberExtraction:
             tree = make_tree(code, grammar)
         except ValueError:
             pytest.skip(f"Grammar not available: {grammar}")
-
         defs = [{"name": parent_name, "kind": "class", "def_uid": parent_name, "start_line": 1}]
         members = extractor.extract_type_members(tree.tree, f"test.{grammar}", defs)
-
         matching = [m for m in members if m.member_name == expected_member]
         assert len(matching) >= 1, (
             f"Expected member '{expected_member}' in {parent_name}. "
             f"Got: {[m.member_name for m in members]}"
         )
-
         # Verify member kind if specified
         if member_kind:
             assert any(m.member_kind == member_kind for m in matching), (
@@ -735,11 +720,9 @@ class TestMemberAccessExtraction:
             tree = make_tree(code, grammar)
         except ValueError:
             pytest.skip(f"Grammar not available: {grammar}")
-
         accesses = extractor.extract_member_accesses(
             tree.tree, f"test.{grammar}", scopes=[], type_annotations=[]
         )
-
         matching = [
             a
             for a in accesses
@@ -776,13 +759,11 @@ class TestInterfaceImplExtraction:
             tree = make_tree(code, grammar)
         except ValueError:
             pytest.skip(f"Grammar not available: {grammar}")
-
         defs = [
             {"name": interface, "kind": "interface", "def_uid": interface, "start_line": 1},
             {"name": implementor, "kind": "class", "def_uid": implementor, "start_line": 2},
         ]
         impls = extractor.extract_interface_impls(tree.tree, f"test.{grammar}", defs)
-
         matching = [
             i for i in impls if i.implementor_name == implementor and interface in i.interface_name
         ]
@@ -947,9 +928,7 @@ class TestOutputFormatConsistency:
             tree = make_tree(code, grammar)
         except ValueError:
             pytest.skip(f"Grammar not available: {grammar}")
-
         annotations = extractor.extract_type_annotations(tree.tree, f"test.{grammar}", scopes=[])
-
         for ann in annotations:
             assert isinstance(ann, TypeAnnotationData)
             assert ann.target_kind in ("parameter", "return", "variable", "field")
@@ -984,10 +963,8 @@ class TestOutputFormatConsistency:
             tree = make_tree(code, grammar)
         except ValueError:
             pytest.skip(f"Grammar not available: {grammar}")
-
         defs = [{"name": parent, "kind": "class", "def_uid": f"uid_{parent}", "start_line": 1}]
         members = extractor.extract_type_members(tree.tree, f"test.{grammar}", defs)
-
         for member in members:
             assert isinstance(member, TypeMemberData)
             assert member.parent_def_uid
@@ -1016,11 +993,9 @@ class TestOutputFormatConsistency:
             tree = make_tree(code, grammar)
         except ValueError:
             pytest.skip(f"Grammar not available: {grammar}")
-
         accesses = extractor.extract_member_accesses(
             tree.tree, f"test.{grammar}", scopes=[], type_annotations=[]
         )
-
         for access in accesses:
             assert isinstance(access, MemberAccessData)
             assert access.access_style in ("dot", "arrow", "scope")
@@ -1055,7 +1030,6 @@ class TestOutputFormatConsistency:
             tree = make_tree(code, grammar)
         except ValueError:
             pytest.skip(f"Grammar not available: {grammar}")
-
         defs = [
             {
                 "name": iface_name,
@@ -1066,7 +1040,6 @@ class TestOutputFormatConsistency:
             {"name": impl_name, "kind": "class", "def_uid": f"uid_{impl_name}", "start_line": 2},
         ]
         impls = extractor.extract_interface_impls(tree.tree, f"test.{grammar}", defs)
-
         for impl in impls:
             assert isinstance(impl, InterfaceImplData)
             assert impl.implementor_def_uid
@@ -1100,14 +1073,12 @@ class TestEdgeCases:
             tree = make_tree("", grammar)
         except ValueError:
             pytest.skip(f"Grammar not available: {grammar}")
-
         annotations = extractor.extract_type_annotations(tree.tree, f"empty.{grammar}", scopes=[])
         members = extractor.extract_type_members(tree.tree, f"empty.{grammar}", defs=[])
         accesses = extractor.extract_member_accesses(
             tree.tree, f"empty.{grammar}", scopes=[], type_annotations=[]
         )
         impls = extractor.extract_interface_impls(tree.tree, f"empty.{grammar}", defs=[])
-
         assert annotations == []
         assert members == []
         assert accesses == []
@@ -1134,7 +1105,6 @@ class TestEdgeCases:
             tree = make_tree(code, grammar)
         except ValueError:
             pytest.skip(f"Grammar not available: {grammar}")
-
         # Should not raise
         annotations = extractor.extract_type_annotations(tree.tree, f"bad.{grammar}", scopes=[])
         assert isinstance(annotations, list)
@@ -1143,10 +1113,8 @@ class TestEdgeCases:
         extractor = make_extractor(PYTHON_CONFIG)
         code = "def process(data: dict[str, list[tuple[int, str]]]) -> None: pass"
         tree = make_tree(code, "python")
-
         annotations = extractor.extract_type_annotations(tree.tree, "test.py", scopes=[])
         param_anns = [a for a in annotations if a.target_kind == "parameter"]
-
         assert len(param_anns) >= 1
         assert any(a.is_generic for a in param_anns)
     def test_multiline_type_annotation_python(self) -> None:
@@ -1166,7 +1134,6 @@ def long_sig(
 """
         tree = make_tree(code, "python")
         annotations = extractor.extract_type_annotations(tree.tree, "test.py", scopes=[])
-
         param_anns = [a for a in annotations if a.target_kind == "parameter"]
         assert len(param_anns) >= 2
     def test_no_type_annotation_query(self) -> None:
@@ -1177,7 +1144,6 @@ def long_sig(
         )
         extractor = make_extractor(config, "python")
         tree = make_tree("def f(x: int): pass", "python")
-
         annotations = extractor.extract_type_annotations(tree.tree, "test.py", scopes=[])
         assert annotations == []
     def test_no_member_query(self) -> None:
@@ -1188,7 +1154,6 @@ def long_sig(
         )
         extractor = make_extractor(config, "python")
         tree = make_tree("class C:\n    def m(self): pass", "python")
-
         members = extractor.extract_type_members(
             tree.tree,
             "test.py",
@@ -1203,7 +1168,6 @@ def long_sig(
         )
         extractor = make_extractor(config, "python")
         tree = make_tree("class C: pass", "python")
-
         impls = extractor.extract_interface_impls(
             tree.tree,
             "test.py",
@@ -1214,7 +1178,6 @@ def long_sig(
         """Members without matching parent def are skipped."""
         extractor = make_extractor(PYTHON_CONFIG)
         tree = make_tree("class Unknown:\n    def method(self): pass", "python")
-
         # Pass empty defs - no parent to match
         members = extractor.extract_type_members(tree.tree, "test.py", defs=[])
         assert members == []
@@ -1223,13 +1186,11 @@ def long_sig(
         extractor = make_extractor(PYTHON_CONFIG)
         code = "def outer():\n    def inner(x: int): pass"
         tree = make_tree(code, "python")
-
         scopes = [
             {"scope_id": 1, "start_line": 1, "start_col": 0, "end_line": 2, "end_col": 100},
             {"scope_id": 2, "start_line": 2, "start_col": 4, "end_line": 2, "end_col": 100},
         ]
         annotations = extractor.extract_type_annotations(tree.tree, "test.py", scopes=scopes)
-
         # The parameter annotation should have a scope_id
         param_anns = [a for a in annotations if a.target_kind == "parameter"]
         if param_anns:
@@ -1297,11 +1258,9 @@ class TestUtilityMethods:
         """Test member def_uid computation is stable."""
         extractor = make_extractor(PYTHON_CONFIG)
         parent = {"def_uid": "parent_uid_123"}
-
         uid1 = extractor._compute_member_def_uid(parent, "method_name", "method")
         uid2 = extractor._compute_member_def_uid(parent, "method_name", "method")
         uid3 = extractor._compute_member_def_uid(parent, "other_method", "method")
-
         assert uid1 == uid2  # Same inputs = same output
         assert uid1 != uid3  # Different method = different uid
         assert len(uid1) == 16  # SHA256 truncated to 16 chars
@@ -1318,16 +1277,13 @@ class TestLanguageSpecificBehavior:
         extractor = make_extractor(PYTHON_CONFIG)
         code = "class C:\n    def _private(self): pass\n    def public(self): pass"
         tree = make_tree(code, "python")
-
         members = extractor.extract_type_members(
             tree.tree,
             "test.py",
             defs=[{"name": "C", "kind": "class", "def_uid": "C", "start_line": 1}],
         )
-
         private_member = next((m for m in members if m.member_name == "_private"), None)
         public_member = next((m for m in members if m.member_name == "public"), None)
-
         if private_member:
             assert private_member.visibility == "private"
         if public_member:
@@ -1337,26 +1293,21 @@ class TestLanguageSpecificBehavior:
         extractor = make_extractor(RUST_CONFIG)
         code = "fn f(x: &str, y: &mut i32) {}"
         tree = make_tree(code, "rust")
-
         annotations = extractor.extract_type_annotations(tree.tree, "test.rs", scopes=[])
         ref_anns = [a for a in annotations if a.is_reference]
-
         assert len(ref_anns) >= 1
     def test_go_pointer_types(self) -> None:
         """Go pointer types are detected as references."""
         extractor = make_extractor(GO_CONFIG)
         code = "package main\nfunc f(x *int) {}"
         tree = make_tree(code, "go")
-
         annotations = extractor.extract_type_annotations(tree.tree, "test.go", scopes=[])
         ref_anns = [a for a in annotations if a.is_reference]
-
         assert len(ref_anns) >= 1
     def test_ruby_no_type_annotations(self) -> None:
         """Ruby has no native type annotations."""
         extractor = make_extractor(RUBY_CONFIG)
         assert not extractor.supports_type_annotations
-
         code = "class C\n  def method(x)\n  end\nend"
         try:
             tree = make_tree(code, "ruby")
@@ -1378,30 +1329,24 @@ class TestGrammarLoading:
             language_family="unknown",
         )
         extractor = QueryBasedExtractor(config, "nonexistent_grammar_xyz")
-
         with pytest.raises(ValueError, match="Unknown grammar|Grammar not installed"):
             extractor._get_language()
     def test_grammar_cached(self) -> None:
         """Grammar is loaded once and cached."""
         extractor = make_extractor(PYTHON_CONFIG)
-
         lang1 = extractor._get_language()
         lang2 = extractor._get_language()
-
         assert lang1 is lang2  # Same object
     def test_query_cached(self) -> None:
         """Queries are compiled once and cached."""
         extractor = make_extractor(PYTHON_CONFIG)
         query_str = "(identifier) @name"
-
         query1 = extractor._get_query(query_str)
         query2 = extractor._get_query(query_str)
-
         assert query1 is query2  # Same object
     def test_invalid_query_returns_none(self) -> None:
         """Invalid query string returns None."""
         extractor = make_extractor(PYTHON_CONFIG)
-
         result = extractor._get_query("(invalid_node_type_xyz) @name")
         # Depending on tree-sitter behavior, this might return None or raise
         # We're testing that it doesn't crash the extractor
@@ -1409,9 +1354,7 @@ class TestGrammarLoading:
     def test_empty_query_returns_none(self) -> None:
         """Empty query string returns None."""
         extractor = make_extractor(PYTHON_CONFIG)
-
         result = extractor._get_query("")
         assert result is None
-
         result = extractor._get_query("   ")
         assert result is None
