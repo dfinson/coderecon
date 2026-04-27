@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import re
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 from typing import Literal
 
 import structlog

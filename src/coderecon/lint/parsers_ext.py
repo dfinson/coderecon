@@ -196,7 +196,7 @@ def parse_cargo_audit(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
 
 def parse_checkstyle(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse checkstyle XML output."""
-    import xml.etree.ElementTree as ET
+    import defusedxml.ElementTree as ET
     diagnostics: list[Diagnostic] = []
     try:
         root = ET.fromstring(stdout)

@@ -37,7 +37,7 @@ vc = visit count, sl = start line, el = end line, sc = start column, ec = end co
 """
 
 import contextlib
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 from pathlib import Path
 
 import structlog
