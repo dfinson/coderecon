@@ -11,6 +11,8 @@ from typing import Any
 
 import structlog
 
+from coderecon.ranking import _load_lgb_model
+
 log = structlog.get_logger(__name__)
 
 _DEFAULT_N = 20
@@ -19,14 +21,7 @@ class Cutoff:
     """LightGBM regressor that predicts the optimal cutoff N."""
 
     def __init__(self, model_path: Path) -> None:
-        self._model = None
-        if model_path.exists():
-            import lightgbm as lgb
-
-            self._model = lgb.Booster(model_file=str(model_path))
-            log.info("ranking.cutoff.loaded", path=str(model_path))
-        else:
-            log.warning("ranking.cutoff.no_model", path=str(model_path))
+        self._model = _load_lgb_model(model_path, "cutoff")
 
     @property
     def is_available(self) -> bool:

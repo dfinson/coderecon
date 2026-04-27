@@ -12,6 +12,7 @@ from typing import Any
 
 import structlog
 
+from coderecon.ranking import _load_lgb_model
 from coderecon.ranking.models import GateLabel
 
 log = structlog.get_logger(__name__)
@@ -22,14 +23,7 @@ class Gate:
     """LightGBM multiclass classifier for query gating."""
 
     def __init__(self, model_path: Path) -> None:
-        self._model = None
-        if model_path.exists():
-            import lightgbm as lgb
-
-            self._model = lgb.Booster(model_file=str(model_path))
-            log.info("ranking.gate.loaded", path=str(model_path))
-        else:
-            log.warning("ranking.gate.no_model", path=str(model_path))
+        self._model = _load_lgb_model(model_path, "gate")
 
     @property
     def is_available(self) -> bool:
