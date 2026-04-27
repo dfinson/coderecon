@@ -17,19 +17,17 @@ from __future__ import annotations
 
 import hashlib
 import importlib
-import re
 
 import structlog
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import tree_sitter
 
 from coderecon.index._internal.parsing.packs import (
     PACKS,
     LanguagePack,
-    SymbolQueryConfig,
     get_pack,
     get_pack_for_ext,
     get_pack_for_filename,
@@ -43,27 +41,17 @@ from coderecon.index._internal.parsing.treesitter_models import (
     SyntacticImport,
     SyntacticScope,
     SyntacticSymbol,
-    _import_uid,
 )
 from coderecon.index._internal.parsing.treesitter_lang import (
     _declared_module_csharp,
-    _declared_module_go_node,
-    _declared_module_java_node,
-    _declared_module_kotlin_node,
     _declared_module_ocaml,
     _declared_module_ruby,
-    _declared_module_scala_node,
     _extract_declared_module_via_query,
     extract_csharp_namespace_types as _extract_csharp_namespace_types,
 )
 from coderecon.index._internal.parsing.treesitter_imports import (
     _extract_dynamic_via_query,
     _extract_imports_declarative,
-    _process_js_dynamic_node,
-    _process_js_import_node,
-    _process_python_dynamic_node,
-    _process_python_import_node,
-    _qualified_name_text,
 )
 from coderecon.index._internal.parsing.treesitter_symbols import (
     _extract_generic_symbols,
@@ -74,9 +62,6 @@ from coderecon.index._internal.parsing.treesitter_symbols import (
 LANGUAGE_MAP: dict[str, str] = {key: pack.grammar_name for key, pack in PACKS.items()}
 
 log = structlog.get_logger(__name__)
-
-if TYPE_CHECKING:
-    from coderecon.index._internal.parsing.packs import ImportQueryConfig
 
 @dataclass
 class TreeSitterParser:

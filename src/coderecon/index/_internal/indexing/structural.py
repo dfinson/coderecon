@@ -2,37 +2,32 @@
 
 from __future__ import annotations
 
-import json
 import os
 import structlog
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from coderecon.index._internal.db import Database
     from coderecon.index._internal.db.database import BulkWriter
 
 from coderecon.config.constants import MS_PER_SEC
-from coderecon.core.languages import detect_language_family
-from coderecon.index._internal.parsing.service import tree_sitter_service
 from coderecon.index._internal.indexing.structural_helpers import (
     BatchResult, ExtractionResult, _apply_worktree_uid_remap, _compute_def_uid,
-    _has_grammar_for_family,
 )
 from coderecon.index._internal.indexing.structural_extract import (
-    _extract_file, _extract_type_aware_facts, _find_containing_scope,
-    _compute_lexical_path,
+    _extract_file, _find_containing_scope,
 )
 from coderecon.index._internal.indexing.structural_resolve import (
     _augment_declared_modules, _resolve_import_paths, _resolve_xref_target,
     resolve_all_imports as _resolve_all_imports_impl,
 )
 from coderecon.index.models import (
-    BindReasonCode, BindTargetKind, Certainty, DefFact, DocCrossRef, DynamicAccessSite,
+    DefFact, DocCrossRef, DynamicAccessSite,
     EndpointFact, File, ImportFact, InterfaceImplFact, LocalBindFact,
-    MemberAccessFact, ReceiverShapeFact, RefFact, RefTier, Role, ScopeFact,
+    MemberAccessFact, ReceiverShapeFact, RefFact, ScopeFact,
     TypeAnnotationFact, TypeMemberFact,
 )
 

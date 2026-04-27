@@ -7,14 +7,13 @@ import json
 import time
 import structlog
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import tree_sitter
 
 from coderecon.config.constants import MS_PER_SEC
 from coderecon.core.languages import detect_language_family
-from coderecon.index._internal.parsing import SyntacticScope, SyntacticSymbol
 from coderecon.index._internal.parsing.service import tree_sitter_service
 from coderecon.index._internal.indexing.structural_helpers import (
     ExtractionResult,
@@ -27,13 +26,10 @@ from coderecon.index._internal.indexing.structural_helpers import (
     _find_containing_scope,
     _has_grammar_for_family,
     _MAX_FILE_BYTES,
-    _SCOPE_SORT_LINE_WEIGHT,
 )
 from coderecon.index.models import (
-    BindReasonCode, BindTargetKind, Certainty, DefFact, DocCrossRef, DynamicAccessSite, EndpointFact,
-    ImportFact, InterfaceImplFact, LocalBindFact, MemberAccessFact,
-    ReceiverShapeFact, RefFact, RefTier, Role, ScopeFact,
-    TypeAnnotationFact, TypeMemberFact,
+    BindReasonCode, BindTargetKind, Certainty,
+    RefTier, Role,
 )
 
 log = structlog.get_logger(__name__)

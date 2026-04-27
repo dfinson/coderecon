@@ -21,13 +21,10 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 from sqlalchemy import Column, ForeignKey, Integer
 from sqlmodel import Field, SQLModel
-
-if TYPE_CHECKING:
-    from coderecon.index.models import Context
 
 # Database Model: ContextRuntime
 
