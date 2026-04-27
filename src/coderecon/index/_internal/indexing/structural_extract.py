@@ -121,89 +121,9 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                 "end_col": scope.end_col,
             }
             result.scopes.append(scope_dict)
-        # Build def_uid -> scope mapping for binding resolution
-        def_uid_by_name: dict[str, str] = {}  # name -> def_uid (latest in file)
-        def_scope_by_name: dict[str, int] = {}  # name -> local_scope_id containing def
-        # Scope-aware lookup: (scope_id, name) -> def_uid
-        _def_by_scope_name: dict[tuple[int, str], str] = {}
-        # Scope parent chain for walking up
-        _scope_parent: dict[int, int] = {0: -1}  # 0 = file scope, -1 = sentinel
-        for scope in scopes:
-            parent = scope.parent_scope_id if scope.parent_scope_id is not None else 0
-            if scope.scope_id == 0:
-                # Never overwrite the file-scope sentinel
-                continue
-            _scope_parent[scope.scope_id] = parent
-        # Track disambiguator for symbols with same (lexical_path, sig_hash)
-        disambiguator_counts: dict[tuple[str, str | None], int] = {}
-        # Convert symbols to DefFact dicts
-        for sym in symbols:
-            sig_hash = (
-                hashlib.sha256((sym.signature or "").encode()).hexdigest()[:8]
-                if sym.signature
-                else None
-            )
-            lexical_path = _compute_lexical_path(sym, symbols)
-            # Compute disambiguator for same-signature siblings
-            key = (lexical_path, sig_hash)
-            disambiguator = disambiguator_counts.get(key, 0)
-            disambiguator_counts[key] = disambiguator + 1
-            def_uid = _compute_def_uid(
-                unit_id, file_path, sym.kind, lexical_path, sig_hash, disambiguator
-            )
-            # Find containing scope
-            containing_scope = _find_containing_scope(scopes, sym.line, sym.column)
-            lp = _compute_lexical_path(sym, symbols)
-            def_dict = {
-                "def_uid": def_uid,
-                "unit_id": unit_id,
-                "kind": sym.kind,
-                "name": sym.name,
-                "qualified_name": lp if "." in lp else None,
-                "lexical_path": lp,
-                "namespace": _type_to_ns.get(sym.name),
-                "start_line": sym.line,
-                "start_col": sym.column,
-                "end_line": sym.end_line,
-                "end_col": sym.end_column,
-                "signature_hash": sig_hash,
-                "display_name": sym.signature,
-                "signature_text": sym.signature_text,
-                "decorators_json": (json.dumps(sym.decorators) if sym.decorators else None),
-                "docstring": sym.docstring,
-                "return_type": sym.return_type,
-            }
-            result.defs.append(def_dict)
-            # Track for binding resolution
-            def_uid_by_name[sym.name] = def_uid
-            def_scope_by_name[sym.name] = containing_scope
-            _def_by_scope_name[(containing_scope, sym.name)] = def_uid
-            # Create a definition RefFact (definition sites are PROVEN refs to themselves)
-            ref_dict = {
-                "unit_id": unit_id,
-                "token_text": sym.name,
-                "start_line": sym.line,
-                "start_col": sym.column,
-                "end_line": sym.end_line,
-                "end_col": sym.end_column,
-                "role": Role.DEFINITION.value,
-                "ref_tier": RefTier.PROVEN.value,
-                "certainty": Certainty.CERTAIN.value,
-                "target_def_uid": def_uid,
-                "local_scope_id": containing_scope,
-            }
-            result.refs.append(ref_dict)
-            # Create LocalBindFact for the definition binding
-            bind_dict = {
-                "unit_id": unit_id,
-                "name": sym.name,
-                "target_kind": BindTargetKind.DEF.value,
-                "target_uid": def_uid,
-                "certainty": Certainty.CERTAIN.value,
-                "reason_code": BindReasonCode.DEF_IN_SCOPE.value,
-                "local_scope_id": containing_scope,
-            }
-            result.binds.append(bind_dict)
+        def_uid_by_name, def_scope_by_name, _def_by_scope_name, _scope_parent = _process_symbols(
+            symbols, scopes, result, unit_id, file_path, _type_to_ns,
+        )
         # Extract string literals per def for LIT_HINTS (SPEC §16.5)
         string_types = frozenset[str]()
         if parse_result.ts_language is not None:
@@ -237,115 +157,11 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                 parse_result.language,
                 result.defs,
             )
-        # Convert imports to ImportFact dicts and create bindings
-        import_uid_by_alias: dict[str, str] = {}  # alias/name -> import_uid
-        for imp in imports:
-            import_dict = {
-                "import_uid": imp.import_uid,
-                "unit_id": unit_id,
-                "scope_id": None,  # scope_id is nullable FK - will be set later if scopes are tracked
-                "imported_name": imp.imported_name,
-                "alias": imp.alias,
-                "source_literal": imp.source_literal,
-                "import_kind": imp.import_kind,
-                "certainty": Certainty.CERTAIN.value,
-                "start_line": imp.start_line,
-                "start_col": imp.start_col,
-                "end_line": imp.end_line,
-                "end_col": imp.end_col,
-                # Also kept for deduplication (aliased)
-                "_start_line": imp.start_line,
-                "_start_col": imp.start_col,
-            }
-            result.imports.append(import_dict)
-            # Track for binding resolution
-            local_name = imp.alias or imp.imported_name
-            import_uid_by_alias[local_name] = imp.import_uid
-            # Create LocalBindFact for import binding
-            bind_dict = {
-                "unit_id": unit_id,
-                "name": local_name,
-                "target_kind": BindTargetKind.IMPORT.value,
-                "target_uid": imp.import_uid,
-                "certainty": Certainty.CERTAIN.value,
-                "reason_code": BindReasonCode.IMPORT_ALIAS.value,
-                "local_scope_id": imp.scope_id or 0,
-            }
-            result.binds.append(bind_dict)
-            # Create RefFact for the import statement
-            ref_dict = {
-                "unit_id": unit_id,
-                "token_text": imp.imported_name,
-                "start_line": imp.start_line,
-                "start_col": imp.start_col,
-                "end_line": imp.end_line,
-                "end_col": imp.end_col,
-                "role": Role.IMPORT.value,
-                "ref_tier": RefTier.UNKNOWN.value,  # Cross-file resolution needed
-                "certainty": Certainty.CERTAIN.value,
-                "target_def_uid": None,
-                "local_scope_id": imp.scope_id or 0,
-            }
-            result.refs.append(ref_dict)
-        # Extract identifier occurrences for reference RefFacts
-        occurrences = parser.extract_identifier_occurrences(parse_result)
-        for occ in occurrences:
-            # Skip if this is already a definition site
-            is_def_site = any(
-                d["name"] == occ.name
-                and d["start_line"] == occ.line
-                and d["start_col"] == occ.column
-                for d in result.defs
-            )
-            if is_def_site:
-                continue
-            # Skip if this is an import site
-            is_import_site = any(
-                i["imported_name"] == occ.name and i["_start_line"] == occ.line
-                for i in result.imports
-            )
-            if is_import_site:
-                continue
-            containing_scope = _find_containing_scope(scopes, occ.line, occ.column)
-            # Determine ref_tier and target based on local bindings
-            ref_tier = RefTier.UNKNOWN.value
-            target_def_uid = None
-            certainty = Certainty.UNCERTAIN.value
-            # Scope-aware same-file resolution: walk from innermost scope outward
-            _resolved_scope_def = False
-            _walk_scope = containing_scope
-            while _walk_scope >= 0:
-                _scope_key = (_walk_scope, occ.name)
-                if _scope_key in _def_by_scope_name:
-                    ref_tier = RefTier.PROVEN.value
-                    target_def_uid = _def_by_scope_name[_scope_key]
-                    certainty = Certainty.CERTAIN.value
-                    _resolved_scope_def = True
-                    break
-                _walk_scope = _scope_parent.get(_walk_scope, -1)
-            # Fallback to flat dict for defs not in any scope (e.g. module-level)
-            if not _resolved_scope_def and occ.name in def_uid_by_name:
-                ref_tier = RefTier.PROVEN.value
-                target_def_uid = def_uid_by_name[occ.name]
-                certainty = Certainty.CERTAIN.value
-            # Check if name is an import alias
-            elif not _resolved_scope_def and occ.name in import_uid_by_alias:
-                ref_tier = RefTier.STRONG.value  # Cross-file with explicit trace
-                certainty = Certainty.CERTAIN.value
-            ref_dict = {
-                "unit_id": unit_id,
-                "token_text": occ.name,
-                "start_line": occ.line,
-                "start_col": occ.column,
-                "end_line": occ.end_line,
-                "end_col": occ.end_column,
-                "role": Role.REFERENCE.value,
-                "ref_tier": ref_tier,
-                "certainty": certainty,
-                "target_def_uid": target_def_uid,
-                "local_scope_id": containing_scope,
-            }
-            result.refs.append(ref_dict)
+        import_uid_by_alias = _process_imports(imports, result, unit_id)
+        _process_identifier_refs(
+            parser, parse_result, scopes, result, unit_id,
+            def_uid_by_name, _def_by_scope_name, _scope_parent, import_uid_by_alias,
+        )
         # Convert dynamic accesses to DynamicAccessSite dicts
         for dyn in dynamics:
             dyn_dict = {
@@ -473,4 +289,214 @@ def _extract_type_aware_facts(
     except (RuntimeError, TypeError, ValueError):
         # Don't fail extraction for type-aware facts — they're supplementary
         log.debug("type_aware_facts_failed", exc_info=True)
+
+
+def _process_symbols(
+    symbols: list,
+    scopes: list,
+    result: ExtractionResult,
+    unit_id: int,
+    file_path: str,
+    type_to_ns: dict[str, str],
+) -> tuple[dict[str, str], dict[str, int], dict[tuple[int, str], str], dict[int, int]]:
+    """Convert parsed symbols to DefFact/RefFact/LocalBindFact dicts.
+
+    Returns (def_uid_by_name, def_scope_by_name, def_by_scope_name, scope_parent).
+    """
+    def_uid_by_name: dict[str, str] = {}
+    def_scope_by_name: dict[str, int] = {}
+    _def_by_scope_name: dict[tuple[int, str], str] = {}
+    _scope_parent: dict[int, int] = {0: -1}
+    for scope in scopes:
+        parent = scope.parent_scope_id if scope.parent_scope_id is not None else 0
+        if scope.scope_id == 0:
+            continue
+        _scope_parent[scope.scope_id] = parent
+    disambiguator_counts: dict[tuple[str, str | None], int] = {}
+    for sym in symbols:
+        sig_hash = (
+            hashlib.sha256((sym.signature or "").encode()).hexdigest()[:8]
+            if sym.signature
+            else None
+        )
+        lexical_path = _compute_lexical_path(sym, symbols)
+        key = (lexical_path, sig_hash)
+        disambiguator = disambiguator_counts.get(key, 0)
+        disambiguator_counts[key] = disambiguator + 1
+        def_uid = _compute_def_uid(
+            unit_id, file_path, sym.kind, lexical_path, sig_hash, disambiguator
+        )
+        containing_scope = _find_containing_scope(scopes, sym.line, sym.column)
+        lp = _compute_lexical_path(sym, symbols)
+        def_dict = {
+            "def_uid": def_uid,
+            "unit_id": unit_id,
+            "kind": sym.kind,
+            "name": sym.name,
+            "qualified_name": lp if "." in lp else None,
+            "lexical_path": lp,
+            "namespace": type_to_ns.get(sym.name),
+            "start_line": sym.line,
+            "start_col": sym.column,
+            "end_line": sym.end_line,
+            "end_col": sym.end_column,
+            "signature_hash": sig_hash,
+            "display_name": sym.signature,
+            "signature_text": sym.signature_text,
+            "decorators_json": (json.dumps(sym.decorators) if sym.decorators else None),
+            "docstring": sym.docstring,
+            "return_type": sym.return_type,
+        }
+        result.defs.append(def_dict)
+        def_uid_by_name[sym.name] = def_uid
+        def_scope_by_name[sym.name] = containing_scope
+        _def_by_scope_name[(containing_scope, sym.name)] = def_uid
+        ref_dict = {
+            "unit_id": unit_id,
+            "token_text": sym.name,
+            "start_line": sym.line,
+            "start_col": sym.column,
+            "end_line": sym.end_line,
+            "end_col": sym.end_column,
+            "role": Role.DEFINITION.value,
+            "ref_tier": RefTier.PROVEN.value,
+            "certainty": Certainty.CERTAIN.value,
+            "target_def_uid": def_uid,
+            "local_scope_id": containing_scope,
+        }
+        result.refs.append(ref_dict)
+        bind_dict = {
+            "unit_id": unit_id,
+            "name": sym.name,
+            "target_kind": BindTargetKind.DEF.value,
+            "target_uid": def_uid,
+            "certainty": Certainty.CERTAIN.value,
+            "reason_code": BindReasonCode.DEF_IN_SCOPE.value,
+            "local_scope_id": containing_scope,
+        }
+        result.binds.append(bind_dict)
+    return def_uid_by_name, def_scope_by_name, _def_by_scope_name, _scope_parent
+
+
+def _process_imports(
+    imports: list,
+    result: ExtractionResult,
+    unit_id: int,
+) -> dict[str, str]:
+    """Convert parsed imports to ImportFact/LocalBindFact/RefFact dicts.
+
+    Returns import_uid_by_alias mapping.
+    """
+    import_uid_by_alias: dict[str, str] = {}
+    for imp in imports:
+        import_dict = {
+            "import_uid": imp.import_uid,
+            "unit_id": unit_id,
+            "scope_id": None,
+            "imported_name": imp.imported_name,
+            "alias": imp.alias,
+            "source_literal": imp.source_literal,
+            "import_kind": imp.import_kind,
+            "certainty": Certainty.CERTAIN.value,
+            "start_line": imp.start_line,
+            "start_col": imp.start_col,
+            "end_line": imp.end_line,
+            "end_col": imp.end_col,
+            "_start_line": imp.start_line,
+            "_start_col": imp.start_col,
+        }
+        result.imports.append(import_dict)
+        local_name = imp.alias or imp.imported_name
+        import_uid_by_alias[local_name] = imp.import_uid
+        bind_dict = {
+            "unit_id": unit_id,
+            "name": local_name,
+            "target_kind": BindTargetKind.IMPORT.value,
+            "target_uid": imp.import_uid,
+            "certainty": Certainty.CERTAIN.value,
+            "reason_code": BindReasonCode.IMPORT_ALIAS.value,
+            "local_scope_id": imp.scope_id or 0,
+        }
+        result.binds.append(bind_dict)
+        ref_dict = {
+            "unit_id": unit_id,
+            "token_text": imp.imported_name,
+            "start_line": imp.start_line,
+            "start_col": imp.start_col,
+            "end_line": imp.end_line,
+            "end_col": imp.end_col,
+            "role": Role.IMPORT.value,
+            "ref_tier": RefTier.UNKNOWN.value,
+            "certainty": Certainty.CERTAIN.value,
+            "target_def_uid": None,
+            "local_scope_id": imp.scope_id or 0,
+        }
+        result.refs.append(ref_dict)
+    return import_uid_by_alias
+
+
+def _process_identifier_refs(
+    parser: object,
+    parse_result: object,
+    scopes: list,
+    result: ExtractionResult,
+    unit_id: int,
+    def_uid_by_name: dict[str, str],
+    def_by_scope_name: dict[tuple[int, str], str],
+    scope_parent: dict[int, int],
+    import_uid_by_alias: dict[str, str],
+) -> None:
+    """Extract identifier occurrences and build reference RefFacts."""
+    occurrences = parser.extract_identifier_occurrences(parse_result)  # type: ignore[attr-defined]
+    for occ in occurrences:
+        is_def_site = any(
+            d["name"] == occ.name
+            and d["start_line"] == occ.line
+            and d["start_col"] == occ.column
+            for d in result.defs
+        )
+        if is_def_site:
+            continue
+        is_import_site = any(
+            i["imported_name"] == occ.name and i["_start_line"] == occ.line
+            for i in result.imports
+        )
+        if is_import_site:
+            continue
+        containing_scope = _find_containing_scope(scopes, occ.line, occ.column)
+        ref_tier = RefTier.UNKNOWN.value
+        target_def_uid = None
+        certainty = Certainty.UNCERTAIN.value
+        _resolved_scope_def = False
+        _walk_scope = containing_scope
+        while _walk_scope >= 0:
+            _scope_key = (_walk_scope, occ.name)
+            if _scope_key in def_by_scope_name:
+                ref_tier = RefTier.PROVEN.value
+                target_def_uid = def_by_scope_name[_scope_key]
+                certainty = Certainty.CERTAIN.value
+                _resolved_scope_def = True
+                break
+            _walk_scope = scope_parent.get(_walk_scope, -1)
+        if not _resolved_scope_def and occ.name in def_uid_by_name:
+            ref_tier = RefTier.PROVEN.value
+            target_def_uid = def_uid_by_name[occ.name]
+            certainty = Certainty.CERTAIN.value
+        elif not _resolved_scope_def and occ.name in import_uid_by_alias:
+            ref_tier = RefTier.STRONG.value
+            certainty = Certainty.CERTAIN.value
+        ref_dict = {
+            "unit_id": unit_id,
+            "token_text": occ.name,
+            "start_line": occ.line,
+            "start_col": occ.column,
+            "end_line": occ.end_line,
+            "end_col": occ.end_column,
+            "role": Role.REFERENCE.value,
+            "ref_tier": ref_tier,
+            "certainty": certainty,
+            "target_def_uid": target_def_uid,
+            "local_scope_id": containing_scope,
+        }
+        result.refs.append(ref_dict)
 

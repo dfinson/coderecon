@@ -158,7 +158,6 @@ class StructuralIndexer:
                 if extraction.error:
                     result.errors.append(f"{extraction.file_path}: {extraction.error}")
                     continue
-                # Track files skipped due to no grammar (not errors)
                 if extraction.skipped_no_grammar:
                     result.files_skipped_no_grammar += 1
                     continue
@@ -166,159 +165,7 @@ class StructuralIndexer:
                 if file_id is None:
                     result.errors.append(f"{extraction.file_path}: File ID not found")
                     continue
-                # Delete existing facts for this file (idempotent re-indexing)
-                for fact_model in _FILE_FACT_TABLES:
-                    writer.delete_where(fact_model, "file_id = :fid", {"fid": file_id})
-                # DocCrossRef uses source_file_id, not file_id
-                writer.delete_where(DocCrossRef, "source_file_id = :fid", {"fid": file_id})
-                # Build local_scope_id -> db_scope_id mapping.
-                # Scopes are extracted in dependency order (parent before child),
-                # so parent_scope_id is always resolvable from the map.
-                scope_id_map: dict[int, int] = {}  # local_scope_id -> db scope_id
-                from sqlalchemy import text as _sa_text
-                for scope_dict in extraction.scopes:
-                    local_id = scope_dict.pop("local_scope_id")
-                    parent_local_id = scope_dict.pop("parent_local_scope_id")
-                    scope_dict["file_id"] = file_id
-                    scope_dict["parent_scope_id"] = (
-                        scope_id_map[parent_local_id]
-                        if parent_local_id is not None and parent_local_id in scope_id_map
-                        else None
-                    )
-                    writer.insert_many(ScopeFact, [scope_dict])
-                    row = writer.conn.execute(_sa_text("SELECT last_insert_rowid()")).fetchone()
-                    if row is not None:
-                        scope_id_map[local_id] = row[0]
-                    result.scopes_extracted += 1
-                # Insert DefFacts
-                for def_dict in extraction.defs:
-                    def_dict["file_id"] = file_id
-                    writer.insert_many(DefFact, [def_dict])
-                    result.defs_extracted += 1
-                # Insert RefFacts — resolve local_scope_id to DB scope_id
-                for ref_dict in extraction.refs:
-                    ref_dict["file_id"] = file_id
-                    local_sid = ref_dict.pop("local_scope_id", None)
-                    ref_dict["scope_id"] = (
-                        scope_id_map.get(local_sid) if local_sid else None
-                    )
-                    writer.insert_many(RefFact, [ref_dict])
-                    result.refs_extracted += 1
-                # Insert ImportFacts (deduplicate by import_uid to guard
-                # against extractors producing duplicates on the same line)
-                seen_import_uids: set[str] = set()
-                for import_dict in extraction.imports:
-                    uid = import_dict.get("import_uid")
-                    # Only deduplicate when we have a non-empty string UID.
-                    # Imports without a usable UID should all be inserted, rather than
-                    # being collapsed together under a shared empty-string key.
-                    if isinstance(uid, str) and uid:
-                        if uid in seen_import_uids:
-                            continue
-                        seen_import_uids.add(uid)
-                    import_dict["file_id"] = file_id
-                    # Remove internal tracking fields not in DB schema
-                    import_dict.pop("_start_line", None)
-                    import_dict.pop("_start_col", None)
-                    writer.insert_many(ImportFact, [import_dict])
-                    result.imports_extracted += 1
-                # Insert LocalBindFacts — resolve local_scope_id to DB scope_id
-                for bind_dict in extraction.binds:
-                    bind_dict["file_id"] = file_id
-                    local_sid = bind_dict.pop("local_scope_id", None)
-                    bind_dict["scope_id"] = (
-                        scope_id_map.get(local_sid) if local_sid else None
-                    )
-                    writer.insert_many(LocalBindFact, [bind_dict])
-                    result.binds_extracted += 1
-                # Insert DynamicAccessSites
-                for dyn_dict in extraction.dynamic_sites:
-                    dyn_dict["file_id"] = file_id
-                    writer.insert_many(DynamicAccessSite, [dyn_dict])
-                    result.dynamic_sites_extracted += 1
-                # Insert TypeAnnotationFacts (Tier 2)
-                for ann_dict in extraction.type_annotations:
-                    ann_dict["file_id"] = file_id
-                    writer.insert_many(TypeAnnotationFact, [ann_dict])
-                    result.type_annotations_extracted += 1
-                # Insert TypeMemberFacts (Tier 2)
-                for mem_dict in extraction.type_members:
-                    mem_dict["file_id"] = file_id
-                    writer.insert_many(TypeMemberFact, [mem_dict])
-                    result.type_members_extracted += 1
-                # Insert MemberAccessFacts (Tier 2)
-                for acc_dict in extraction.member_accesses:
-                    acc_dict["file_id"] = file_id
-                    writer.insert_many(MemberAccessFact, [acc_dict])
-                    result.member_accesses_extracted += 1
-                # Insert InterfaceImplFacts (Tier 2)
-                for impl_dict in extraction.interface_impls:
-                    impl_dict["file_id"] = file_id
-                    writer.insert_many(InterfaceImplFact, [impl_dict])
-                    result.interface_impls_extracted += 1
-                # Insert ReceiverShapeFacts (Tier 2) - computed during resolution, not extraction
-                for shape_dict in extraction.receiver_shapes:
-                    shape_dict["file_id"] = file_id
-                    writer.insert_many(ReceiverShapeFact, [shape_dict])
-                    result.receiver_shapes_extracted += 1
-                # Detect and insert EndpointFacts
-                if extraction.content_text and extraction.language:
-                    from coderecon.index._internal.analysis.endpoint_detection import (
-                        detect_endpoints_in_source,
-                    )
-                    endpoints = detect_endpoints_in_source(
-                        extraction.content_text, extraction.language
-                    )
-                    if endpoints:
-                        # Build line→def_uid map for handler resolution
-                        func_defs = [
-                            d for d in extraction.defs
-                            if d.get("kind") in ("function", "method")
-                        ]
-                        for ep in endpoints:
-                            handler_uid = None
-                            for d in func_defs:
-                                if d["start_line"] <= ep.line <= d["end_line"]:
-                                    handler_uid = d["def_uid"]
-                            writer.insert_many(EndpointFact, [{
-                                "file_id": file_id,
-                                "kind": ep.kind,
-                                "http_method": ep.http_method,
-                                "url_pattern": ep.url_pattern,
-                                "handler_def_uid": handler_uid,
-                                "start_line": ep.line,
-                                "end_line": ep.line,
-                                "framework": ep.framework,
-                            }])
-                # Extract and insert DocCrossRefs from docstrings
-                if extraction.defs:
-                    from coderecon.index._internal.analysis.docstring_xref import (
-                        extract_cross_refs,
-                    )
-                    for def_dict in extraction.defs:
-                        docstring = def_dict.get("docstring")
-                        if not docstring:
-                            continue
-                        raw_refs = extract_cross_refs(
-                            docstring, start_line=def_dict["start_line"]
-                        )
-                        if not raw_refs:
-                            continue
-                        # Resolve targets against already-persisted defs
-                        # (cross-batch refs resolve on subsequent reindex)
-                        for ref in raw_refs:
-                            target_uid = self._resolve_xref_target(
-                                writer, ref.target_name
-                            )
-                            if target_uid:
-                                writer.insert_many(DocCrossRef, [{
-                                    "source_file_id": file_id,
-                                    "source_def_uid": def_dict.get("def_uid"),
-                                    "source_line": ref.source_line,
-                                    "raw_text": ref.raw_text,
-                                    "target_def_uid": target_uid,
-                                    "confidence": ref.confidence,
-                                }])
+                _persist_single_extraction(writer, extraction, file_id, result, self)
         result.duration_ms = int((time.monotonic() - start) * MS_PER_SEC)
         return result
     def _augment_declared_modules(self, extractions: list[ExtractionResult]) -> None:
@@ -430,3 +277,141 @@ def index_context(
     """Convenience function to index all files in a context."""
     indexer = StructuralIndexer(db, repo_path)
     return indexer.index_files(file_paths, context_id, workers=workers, worktree_id=worktree_id)
+
+
+def _persist_single_extraction(
+    writer: Any,
+    extraction: ExtractionResult,
+    file_id: int,
+    result: BatchResult,
+    indexer: StructuralIndexer,
+) -> None:
+    """Persist all facts from a single extraction into the database."""
+    # Delete existing facts for idempotent re-indexing
+    for fact_model in _FILE_FACT_TABLES:
+        writer.delete_where(fact_model, "file_id = :fid", {"fid": file_id})
+    writer.delete_where(DocCrossRef, "source_file_id = :fid", {"fid": file_id})
+    # Build local_scope_id -> db_scope_id mapping
+    scope_id_map: dict[int, int] = {}
+    from sqlalchemy import text as _sa_text
+    for scope_dict in extraction.scopes:
+        local_id = scope_dict.pop("local_scope_id")
+        parent_local_id = scope_dict.pop("parent_local_scope_id")
+        scope_dict["file_id"] = file_id
+        scope_dict["parent_scope_id"] = (
+            scope_id_map[parent_local_id]
+            if parent_local_id is not None and parent_local_id in scope_id_map
+            else None
+        )
+        writer.insert_many(ScopeFact, [scope_dict])
+        row = writer.conn.execute(_sa_text("SELECT last_insert_rowid()")).fetchone()
+        if row is not None:
+            scope_id_map[local_id] = row[0]
+        result.scopes_extracted += 1
+    for def_dict in extraction.defs:
+        def_dict["file_id"] = file_id
+        writer.insert_many(DefFact, [def_dict])
+        result.defs_extracted += 1
+    for ref_dict in extraction.refs:
+        ref_dict["file_id"] = file_id
+        local_sid = ref_dict.pop("local_scope_id", None)
+        ref_dict["scope_id"] = scope_id_map.get(local_sid) if local_sid else None
+        writer.insert_many(RefFact, [ref_dict])
+        result.refs_extracted += 1
+    seen_import_uids: set[str] = set()
+    for import_dict in extraction.imports:
+        uid = import_dict.get("import_uid")
+        if isinstance(uid, str) and uid:
+            if uid in seen_import_uids:
+                continue
+            seen_import_uids.add(uid)
+        import_dict["file_id"] = file_id
+        import_dict.pop("_start_line", None)
+        import_dict.pop("_start_col", None)
+        writer.insert_many(ImportFact, [import_dict])
+        result.imports_extracted += 1
+    for bind_dict in extraction.binds:
+        bind_dict["file_id"] = file_id
+        local_sid = bind_dict.pop("local_scope_id", None)
+        bind_dict["scope_id"] = scope_id_map.get(local_sid) if local_sid else None
+        writer.insert_many(LocalBindFact, [bind_dict])
+        result.binds_extracted += 1
+    for dyn_dict in extraction.dynamic_sites:
+        dyn_dict["file_id"] = file_id
+        writer.insert_many(DynamicAccessSite, [dyn_dict])
+        result.dynamic_sites_extracted += 1
+    for ann_dict in extraction.type_annotations:
+        ann_dict["file_id"] = file_id
+        writer.insert_many(TypeAnnotationFact, [ann_dict])
+        result.type_annotations_extracted += 1
+    for mem_dict in extraction.type_members:
+        mem_dict["file_id"] = file_id
+        writer.insert_many(TypeMemberFact, [mem_dict])
+        result.type_members_extracted += 1
+    for acc_dict in extraction.member_accesses:
+        acc_dict["file_id"] = file_id
+        writer.insert_many(MemberAccessFact, [acc_dict])
+        result.member_accesses_extracted += 1
+    for impl_dict in extraction.interface_impls:
+        impl_dict["file_id"] = file_id
+        writer.insert_many(InterfaceImplFact, [impl_dict])
+        result.interface_impls_extracted += 1
+    for shape_dict in extraction.receiver_shapes:
+        shape_dict["file_id"] = file_id
+        writer.insert_many(ReceiverShapeFact, [shape_dict])
+        result.receiver_shapes_extracted += 1
+    # Detect and insert EndpointFacts
+    if extraction.content_text and extraction.language:
+        from coderecon.index._internal.analysis.endpoint_detection import (
+            detect_endpoints_in_source,
+        )
+        endpoints = detect_endpoints_in_source(
+            extraction.content_text, extraction.language
+        )
+        if endpoints:
+            func_defs = [
+                d for d in extraction.defs
+                if d.get("kind") in ("function", "method")
+            ]
+            for ep in endpoints:
+                handler_uid = None
+                for d in func_defs:
+                    if d["start_line"] <= ep.line <= d["end_line"]:
+                        handler_uid = d["def_uid"]
+                writer.insert_many(EndpointFact, [{
+                    "file_id": file_id,
+                    "kind": ep.kind,
+                    "http_method": ep.http_method,
+                    "url_pattern": ep.url_pattern,
+                    "handler_def_uid": handler_uid,
+                    "start_line": ep.line,
+                    "end_line": ep.line,
+                    "framework": ep.framework,
+                }])
+    # Extract and insert DocCrossRefs from docstrings
+    if extraction.defs:
+        from coderecon.index._internal.analysis.docstring_xref import (
+            extract_cross_refs,
+        )
+        for def_dict in extraction.defs:
+            docstring = def_dict.get("docstring")
+            if not docstring:
+                continue
+            raw_refs = extract_cross_refs(
+                docstring, start_line=def_dict["start_line"]
+            )
+            if not raw_refs:
+                continue
+            for ref in raw_refs:
+                target_uid = indexer._resolve_xref_target(
+                    writer, ref.target_name
+                )
+                if target_uid:
+                    writer.insert_many(DocCrossRef, [{
+                        "source_file_id": file_id,
+                        "source_def_uid": def_dict.get("def_uid"),
+                        "source_line": ref.source_line,
+                        "raw_text": ref.raw_text,
+                        "target_def_uid": target_uid,
+                        "confidence": ref.confidence,
+                    }])

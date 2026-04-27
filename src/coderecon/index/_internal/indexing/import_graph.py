@@ -56,6 +56,45 @@ class ImportGraph:
         self._module_index = build_module_index(self._file_paths)
         self._test_file_paths = [fp for fp in self._file_paths if is_test_file(fp)]
         self._test_file_set = set(self._test_file_paths)
+
+    def _trace_resolved_paths(
+        self, changed_files: list[str],
+    ) -> tuple[list[tuple[str, str | None]], dict[str, int], set[str]]:
+        """BFS walk of resolved_path edges to find test files transitively.
+
+        Returns (matched_rows, test_hop_distance, resolved_path_tests).
+        """
+        _MAX_HOPS = 5
+        frontier: set[str] = set(changed_files)
+        visited: set[str] = set(frontier)
+        all_rp_rows: list[tuple[str, str | None]] = []
+        test_hop_distance: dict[str, int] = {}
+        for hop in range(_MAX_HOPS):
+            if not frontier:
+                break
+            rp_stmt = (
+                select(File.path, ImportFact.source_literal)
+                .join(ImportFact, ImportFact.file_id == File.id)  # type: ignore[arg-type]
+                .where(col(ImportFact.resolved_path).in_(list(frontier)))
+            )
+            rp_rows = list(self._session.exec(rp_stmt).all())
+            if not rp_rows:
+                break
+            next_frontier: set[str] = set()
+            for importer_path, src_literal in rp_rows:
+                if importer_path in self._test_file_paths:
+                    all_rp_rows.append((importer_path, src_literal))
+                    if importer_path not in test_hop_distance:
+                        test_hop_distance[importer_path] = hop
+                elif importer_path not in visited:
+                    next_frontier.add(importer_path)
+            visited.update(next_frontier)
+            frontier = next_frontier
+        resolved_path_tests: set[str] = set()
+        for test_path, _sl in all_rp_rows:
+            resolved_path_tests.add(test_path)
+        return all_rp_rows, test_hop_distance, resolved_path_tests
+
     # 1. affected_tests: changed files → test files
     def affected_tests(self, changed_files: list[str]) -> ImportGraphResult:
         """Find test files affected by changed files.
@@ -186,192 +225,20 @@ class ImportGraph:
             .where(ImportFact.source_literal == None)  # noqa: E711
         )
         null_in_tests = len(set(self._session.exec(null_stmt).all()))
-        # Step 3b: Transitive resolved_path-based matching.
-        # Walk the import graph outward from changed files. A test file
-        # that imports a barrel (re-export) file which in turn imports the
-        # changed file should still be matched.  We do BFS up to a
-        # reasonable depth to avoid runaway traversal.
-        #
-        # Track hop distance: hop 0 = direct import of changed file,
-        # hop 1+ = transitive through barrel/re-export chains.
-        _MAX_HOPS = 5
-        frontier: set[str] = set(changed_files)
-        visited: set[str] = set(frontier)
-        all_rp_rows: list[tuple[str, str | None]] = []
-        # Map test_file -> earliest hop at which it was discovered
-        test_hop_distance: dict[str, int] = {}
-        for hop in range(_MAX_HOPS):
-            if not frontier:
-                break
-            rp_stmt = (
-                select(File.path, ImportFact.source_literal)
-                .join(ImportFact, ImportFact.file_id == File.id)  # type: ignore[arg-type]
-                .where(col(ImportFact.resolved_path).in_(list(frontier)))
-            )
-            rp_rows = list(self._session.exec(rp_stmt).all())
-            if not rp_rows:
-                break
-            next_frontier: set[str] = set()
-            for importer_path, src_literal in rp_rows:
-                if importer_path in self._test_file_paths:
-                    # This is a test file — record the match
-                    all_rp_rows.append((importer_path, src_literal))
-                    # Record earliest hop distance
-                    if importer_path not in test_hop_distance:
-                        test_hop_distance[importer_path] = hop
-                elif importer_path not in visited:
-                    # Non-test file that imports something in our frontier —
-                    # it might be a barrel/re-export, so keep tracing
-                    next_frontier.add(importer_path)
-                    # Also record it as a potential source_literal match
-                    # (needed for non-test importers that get traced through)
-            visited.update(next_frontier)
-            frontier = next_frontier
-        # Track test files matched via resolved_path — these are deterministic
-        # file-path matches and should always be high confidence.
-        resolved_path_tests: set[str] = set()
+        all_rp_rows, test_hop_distance, resolved_path_tests = (
+            self._trace_resolved_paths(changed_files)
+        )
         if all_rp_rows:
-            for test_path, _sl in all_rp_rows:
-                resolved_path_tests.add(test_path)
             matched_rows.extend(all_rp_rows)
-        # Step 3c: Same-directory affinity for Go.
-        # Go test files (*_test.go) in the same directory as a changed .go
-        # file are part of the same package — they compile together and test
-        # the source without explicit imports.  The import graph has no edge
-        # linking them, so we match by directory proximity.
-        go_changed = [f for f in changed_files if f.endswith(".go") and not is_test_file(f)]
-        if go_changed and self._test_file_paths:
-            go_test_by_dir: dict[str, list[str]] = {}
-            for tp in self._test_file_paths:
-                if tp.endswith(".go"):
-                    d = tp.rsplit("/", 1)[0] if "/" in tp else "."
-                    go_test_by_dir.setdefault(d, []).append(tp)
-            already_matched = {row[0] for row in matched_rows}
-            for cf in go_changed:
-                d = cf.rsplit("/", 1)[0] if "/" in cf else "."
-                mod = declared_map.get(cf) or path_to_module(cf) or cf
-                for tp in go_test_by_dir.get(d, []):
-                    if tp not in already_matched:
-                        matched_rows.append((tp, mod))
-                        resolved_path_tests.add(tp)  # high confidence
-                        already_matched.add(tp)
-        # Step 3d: Swift module affinity.
-        # Swift uses module-level imports ("import Algorithms").  The module
-        # name corresponds to the directory under Sources/ in SwiftPM layout.
-        # If a changed .swift source file is under Sources/<Module>/, any test
-        # file that imports that module name is affected.
-        swift_changed = [f for f in changed_files if f.endswith(".swift") and not is_test_file(f)]
-        if swift_changed and self._test_file_paths:
-            # Extract module names from changed file paths
-            swift_modules: set[str] = set()
-            for cf in swift_changed:
-                # SwiftPM layout: Sources/<ModuleName>/...
-                parts = cf.split("/")
-                if len(parts) >= 3 and parts[0].lower() == "sources":
-                    swift_modules.add(parts[1])
-            if swift_modules:
-                # Find test files that import any of these modules
-                swift_test_stmt = (
-                    select(File.path, ImportFact.source_literal)
-                    .join(ImportFact, ImportFact.file_id == File.id)  # type: ignore[arg-type]
-                    .where(col(File.path).in_(self._test_file_paths))
-                    .where(col(ImportFact.source_literal).in_(list(swift_modules)))
-                )
-                swift_rows = list(self._session.exec(swift_test_stmt).all())
-                already_matched = {row[0] for row in matched_rows}
-                for test_path, src_literal in swift_rows:
-                    if test_path not in already_matched:
-                        matched_rows.append((test_path, src_literal))
-                        resolved_path_tests.add(test_path)  # high confidence
-                        already_matched.add(test_path)
-        # Step 4: Group matches by test file
-        matches_by_file: dict[str, list[str]] = {}
-        for file_path, source_literal in matched_rows:
-            if source_literal is not None:
-                matches_by_file.setdefault(file_path, []).append(source_literal)
-        # Step 5: Build results with confidence
-        matches: list[ImpactMatch] = []
-        for test_path, src_mods in sorted(matches_by_file.items()):
-            # High confidence: exact module match, child module match
-            #   (imports something FROM the changed module), resolved_path
-            #   match, or Go same-directory.
-            # Low confidence: only parent prefix match — test imports a
-            #   parent package that may or may not include the changed code.
-            unique_mods = sorted(set(src_mods))
-            is_direct = (
-                any(m in search_modules for m in unique_mods) or test_path in resolved_path_tests
-            )
-            is_child = not is_direct and any(
-                any(m.startswith(prefix) for prefix in like_prefixes) for m in unique_mods
-            )
-            confidence: Literal["high", "low"] = "high" if is_direct or is_child else "low"
-            if is_direct:
-                reason = f"directly imports {', '.join(unique_mods)}"
-            elif is_child:
-                reason = f"imports child of changed module: {', '.join(unique_mods)}"
-            else:
-                reason = f"imports parent module {', '.join(unique_mods)}"
-            # Hop distance: module-name matches (Step 3) are hop 0 (direct).
-            # resolved_path matches use the BFS hop distance from Step 3b.
-            # If a test was found by both paths, use the earliest (lowest hop).
-            hop = test_hop_distance.get(test_path, 0)
-            matches.append(
-                ImpactMatch(
-                    test_file=test_path,
-                    source_modules=unique_mods,
-                    confidence=confidence,
-                    reason=reason,
-                    hop=hop,
-                )
-            )
-        # Step 5b: Include directly-changed test files that weren't already
-        # found through import tracing.  A changed test file is the strongest
-        # possible signal — it *is* the affected test.
-        already_matched = {m.test_file for m in matches}
-        for tf in direct_test_files:
-            if tf not in already_matched:
-                matches.append(
-                    ImpactMatch(
-                        test_file=tf,
-                        source_modules=[],
-                        confidence="high",
-                        reason="test file directly changed",
-                        hop=0,
-                    )
-                )
-        # Confidence: resolved_path covers ALL changed files regardless of
-        # whether they have a declared_module or Python path_to_module mapping.
-        # So module-name "unresolved" files are still searchable via
-        # resolved_path — the only true gap is null source_literals in tests.
-        # Ratio is based on source files only (test files don't need module
-        # resolution — they are matched directly by Step 5b).
-        resolved_ratio = (
-            (len(changed_modules) / len(source_changed_files)) if source_changed_files else 1.0
+        _match_language_affinity(
+            changed_files, declared_map, matched_rows, resolved_path_tests,
+            self._test_file_paths, self._session,
         )
-        # Tier is "complete" when all match paths are covered; resolved_path
-        # query covers files that have no module name, so they're not truly
-        # unresolved for matching purposes.
-        tier: Literal["complete", "partial"] = "complete" if null_in_tests == 0 else "partial"
-        reason_parts: list[str] = []
-        if unresolved:
-            reason_parts.append(
-                f"{len(unresolved)} files have no module name (still matched via resolved_path)"
-            )
-        if null_in_tests:
-            reason_parts.append(f"{null_in_tests} test imports have no source_literal")
-        reasoning = (
-            "; ".join(reason_parts) if reason_parts else "all files resolved, all imports traced"
-        )
-        return ImportGraphResult(
-            matches=matches,
-            confidence=ImpactConfidence(
-                tier=tier,
-                resolved_ratio=resolved_ratio,
-                unresolved_files=unresolved,
-                null_source_count=null_in_tests,
-                reasoning=reasoning,
-            ),
-            changed_modules=sorted(search_modules),
+        return _build_impact_results(
+            matched_rows, search_modules, like_prefixes,
+            test_hop_distance, resolved_path_tests,
+            direct_test_files, changed_modules, source_changed_files,
+            unresolved, null_in_tests,
         )
     # 2. imported_sources: test files → source modules (for --cov scoping)
     def imported_sources(self, test_files: list[str]) -> CoverageSourceResult:
@@ -471,3 +338,133 @@ class ImportGraph:
                 display_module = short if short else mod
                 gaps.append(CoverageGap(module=display_module, file_path=file_path))
         return gaps
+
+
+def _build_impact_results(
+    matched_rows: list[tuple[str, str | None]],
+    search_modules: set[str],
+    like_prefixes: list[str],
+    test_hop_distance: dict[str, int],
+    resolved_path_tests: set[str],
+    direct_test_files: list[str],
+    changed_modules: list[str],
+    source_changed_files: list[str],
+    unresolved: list[str],
+    null_in_tests: int,
+) -> ImportGraphResult:
+    """Build ImportGraphResult from raw matched_rows and metadata."""
+    matches_by_file: dict[str, list[str]] = {}
+    for file_path, source_literal in matched_rows:
+        if source_literal is not None:
+            matches_by_file.setdefault(file_path, []).append(source_literal)
+    matches: list[ImpactMatch] = []
+    for test_path, src_mods in sorted(matches_by_file.items()):
+        unique_mods = sorted(set(src_mods))
+        is_direct = (
+            any(m in search_modules for m in unique_mods) or test_path in resolved_path_tests
+        )
+        is_child = not is_direct and any(
+            any(m.startswith(prefix) for prefix in like_prefixes) for m in unique_mods
+        )
+        confidence: Literal["high", "low"] = "high" if is_direct or is_child else "low"
+        if is_direct:
+            reason = f"directly imports {', '.join(unique_mods)}"
+        elif is_child:
+            reason = f"imports child of changed module: {', '.join(unique_mods)}"
+        else:
+            reason = f"imports parent module {', '.join(unique_mods)}"
+        hop = test_hop_distance.get(test_path, 0)
+        matches.append(
+            ImpactMatch(
+                test_file=test_path,
+                source_modules=unique_mods,
+                confidence=confidence,
+                reason=reason,
+                hop=hop,
+            )
+        )
+    already_matched = {m.test_file for m in matches}
+    for tf in direct_test_files:
+        if tf not in already_matched:
+            matches.append(
+                ImpactMatch(
+                    test_file=tf,
+                    source_modules=[],
+                    confidence="high",
+                    reason="test file directly changed",
+                    hop=0,
+                )
+            )
+    resolved_ratio = (
+        (len(changed_modules) / len(source_changed_files)) if source_changed_files else 1.0
+    )
+    tier: Literal["complete", "partial"] = "complete" if null_in_tests == 0 else "partial"
+    reason_parts: list[str] = []
+    if unresolved:
+        reason_parts.append(
+            f"{len(unresolved)} files have no module name (still matched via resolved_path)"
+        )
+    if null_in_tests:
+        reason_parts.append(f"{null_in_tests} test imports have no source_literal")
+    reasoning = (
+        "; ".join(reason_parts) if reason_parts else "all files resolved, all imports traced"
+    )
+    return ImportGraphResult(
+        matches=matches,
+        confidence=ImpactConfidence(
+            tier=tier,
+            resolved_ratio=resolved_ratio,
+            unresolved_files=unresolved,
+            null_source_count=null_in_tests,
+            reasoning=reasoning,
+        ),
+        changed_modules=sorted(search_modules),
+    )
+
+
+def _match_language_affinity(
+    changed_files: list[str],
+    declared_map: dict[str, str],
+    matched_rows: list[tuple[str, str | None]],
+    resolved_path_tests: set[str],
+    test_file_paths: list[str],
+    session: object,
+) -> None:
+    """Add Go same-directory and Swift module affinity matches (in place)."""
+    go_changed = [f for f in changed_files if f.endswith(".go") and not is_test_file(f)]
+    if go_changed and test_file_paths:
+        go_test_by_dir: dict[str, list[str]] = {}
+        for tp in test_file_paths:
+            if tp.endswith(".go"):
+                d = tp.rsplit("/", 1)[0] if "/" in tp else "."
+                go_test_by_dir.setdefault(d, []).append(tp)
+        already_matched = {row[0] for row in matched_rows}
+        for cf in go_changed:
+            d = cf.rsplit("/", 1)[0] if "/" in cf else "."
+            mod = declared_map.get(cf) or path_to_module(cf) or cf
+            for tp in go_test_by_dir.get(d, []):
+                if tp not in already_matched:
+                    matched_rows.append((tp, mod))
+                    resolved_path_tests.add(tp)
+                    already_matched.add(tp)
+    swift_changed = [f for f in changed_files if f.endswith(".swift") and not is_test_file(f)]
+    if swift_changed and test_file_paths:
+        swift_modules: set[str] = set()
+        for cf in swift_changed:
+            parts = cf.split("/")
+            if len(parts) >= 3 and parts[0].lower() == "sources":
+                swift_modules.add(parts[1])
+        if swift_modules:
+            swift_test_stmt = (
+                select(File.path, ImportFact.source_literal)
+                .join(ImportFact, ImportFact.file_id == File.id)  # type: ignore[arg-type]
+                .where(col(File.path).in_(test_file_paths))
+                .where(col(ImportFact.source_literal).in_(list(swift_modules)))
+            )
+            swift_rows = list(session.exec(swift_test_stmt).all())  # type: ignore[attr-defined]
+            already_matched = {row[0] for row in matched_rows}
+            for test_path, src_literal in swift_rows:
+                if test_path not in already_matched:
+                    matched_rows.append((test_path, src_literal))
+                    resolved_path_tests.add(test_path)
+                    already_matched.add(test_path)

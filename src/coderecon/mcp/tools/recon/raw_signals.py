@@ -136,15 +136,32 @@ async def raw_signals_pipeline(
             if cand.declared_module:
                 seed_modules.append(cand.declared_module)
 
-    # Build candidate list
+    candidates_out = _build_candidate_features(merged, seed_paths, seed_modules)
+
+    # Cross-encoder scoring (TinyBERT) — needed for training features
+    coordinator = app_ctx.coordinator
+    from coderecon.mcp.tools.recon.pipeline_scoring import _score_cross_encoder_tiny
+    candidates_out = _score_cross_encoder_tiny(candidates_out, query, coordinator.db)
+
+    # RRF fusion — attaches rrf_score to each candidate
+    from coderecon.ranking.rrf import rrf_fuse
+    candidates_out = rrf_fuse(candidates_out)
+
+    return _build_pipeline_output(
+        app_ctx, query, parsed, merged, candidates_out, t0,
+    )
+
+def _build_candidate_features(
+    merged: dict[str, HarvestCandidate],
+    seed_paths: list[str],
+    seed_modules: list[str],
+) -> list[dict[str, Any]]:
+    """Build per-candidate feature dicts from merged harvest candidates."""
     candidates_out: list[dict[str, Any]] = []
-    for _uid, cand in merged.items():
+    for uid, cand in merged.items():
         if cand.def_fact is None:
             continue
-
         d = cand.def_fact
-
-        # Count retrievers that found this def
         retriever_hits = sum([
             cand.from_term_match,
             cand.from_graph,
@@ -153,41 +170,28 @@ async def raw_signals_pipeline(
             cand.import_direction is not None,
             cand.splade_score > 0,
         ])
-
-        # Path tokenization
         path_parts = cand.file_path.rsplit("/", 1)
         parent_dir = path_parts[0] if len(path_parts) > 1 else ""
         path_depth = cand.file_path.count("/")
-
-        # Nesting depth from lexical_path
         nesting_depth = d.lexical_path.count(".") if d.lexical_path else 0
-
-        # Path distance to nearest seed (shared prefix depth)
         seed_path_distance = _min_path_distance(cand.file_path, seed_paths)
-
-        # Package distance to nearest seed module
         same_package, package_distance = _min_package_distance(
             cand.declared_module, seed_modules
         )
-
         candidates_out.append({
-            # Identity
             "def_uid": uid,
             "path": cand.file_path,
             "kind": d.kind,
             "name": d.name,
             "lexical_path": d.lexical_path,
             "qualified_name": d.qualified_name,
-            # Span
             "start_line": d.start_line,
             "end_line": d.end_line,
             "object_size_lines": d.end_line - d.start_line + 1,
-            # Path features
             "file_ext": "." + cand.file_path.rsplit(".", 1)[-1] if "." in cand.file_path else "",
             "language_family": cand.language_family,
             "parent_dir": parent_dir,
             "path_depth": path_depth,
-            # Structural metadata from index
             "has_docstring": d.docstring is not None and len(d.docstring) > 0,
             "docstring": d.docstring or "",
             "has_decorators": d.decorators_json is not None and d.decorators_json != "[]",
@@ -202,52 +206,49 @@ async def raw_signals_pipeline(
             "is_endpoint": cand.is_endpoint,
             "test_coverage_count": cand.test_coverage_count,
             "artifact_kind": cand.artifact_kind,
-            # Structural link signals
             "shares_file_with_seed": cand.shares_file_with_seed,
             "is_callee_of_top": cand.is_callee_of_top,
             "is_imported_by_top": cand.is_imported_by_top,
-            # Term match signal (raw counts)
             "term_match_count": cand.term_match_count if cand.from_term_match else None,
             "term_total_matches": cand.term_total_matches if cand.from_term_match else None,
             "lex_hit_count": cand.lex_hit_count,
             "bm25_file_score": cand.bm25_file_score,
-            # Graph signal (categorical)
             "graph_edge_type": cand.graph_edge_type,
             "graph_seed_rank": cand.graph_seed_rank,
             "graph_caller_max_tier": cand.graph_caller_max_tier,
-            # Symbol/explicit signal (categorical)
             "symbol_source": cand.symbol_source,
-            # Import signal (categorical)
             "import_direction": cand.import_direction,
-            # SPLADE sparse retrieval score
             "splade_score": cand.splade_score,
-            # Coverage expansion signal
             "from_coverage": cand.from_coverage,
-            # Harvester source flags
             "from_term_match": cand.from_term_match,
             "from_explicit": cand.from_explicit,
             "from_graph": cand.from_graph,
             "matched_terms_count": len(cand.matched_terms),
-            # Retriever agreement
             "retriever_hits": retriever_hits,
-            # Locality signals
             "seed_path_distance": seed_path_distance,
             "same_package": same_package,
             "package_distance": package_distance,
         })
+    return candidates_out
 
-    # Cross-encoder scoring (TinyBERT) — needed for training features
+
+def _build_pipeline_output(
+    app_ctx: AppContext,
+    query: str,
+    parsed: Any,
+    merged: dict[str, HarvestCandidate],
+    candidates_out: list[dict[str, Any]],
+    t0: float,
+) -> dict[str, Any]:
+    """Build final pipeline output with query features, repo features, diagnostics."""
     coordinator = app_ctx.coordinator
     from coderecon.mcp.tools.recon.pipeline_scoring import _score_cross_encoder_tiny
     candidates_out = _score_cross_encoder_tiny(candidates_out, query, coordinator.db)
 
-    # RRF fusion — attaches rrf_score to each candidate
     from coderecon.ranking.rrf import rrf_fuse
     candidates_out = rrf_fuse(candidates_out)
 
     elapsed_ms = round((time.monotonic() - t0) * MS_PER_SEC)
-
-    # Query features
     query_features = {
         "query_len": len(query),
         "has_identifier": bool(parsed.explicit_symbols),
@@ -258,30 +259,20 @@ async def raw_signals_pipeline(
         "has_numbers": any(c.isdigit() for c in query),
         "has_quoted_strings": '"' in query or "'" in query,
         "term_count": len(parsed.primary_terms) + len(parsed.secondary_terms),
-        # Task intent signals
         "intent": parsed.intent,
         "is_stacktrace_driven": parsed.is_stacktrace_driven,
         "is_test_driven": parsed.is_test_driven,
     }
-
-    # Repo features
-    coordinator = app_ctx.coordinator
     repo_features: dict[str, Any] = {}
     try:
         with coordinator.db.session() as session:
             from sqlmodel import func, select
-
             from coderecon.index.models import DefFact, File
-
             def_count = session.exec(select(func.count()).select_from(DefFact)).one()
             file_count = session.exec(select(func.count()).select_from(File)).one()
-            repo_features = {
-                "object_count": def_count,
-                "file_count": file_count,
-            }
+            repo_features = {"object_count": def_count, "file_count": file_count}
     except (OSError, RuntimeError, ValueError):  # noqa: BLE001
         repo_features = {"object_count": 0, "file_count": 0}
-
     return {
         "query_features": query_features,
         "repo_features": repo_features,
@@ -297,6 +288,7 @@ async def raw_signals_pipeline(
             "coverage_hits": sum(1 for c in merged.values() if c.from_coverage),
         },
     }
+
 
 def register_raw_signals_tool(mcp: FastMCP, app_ctx: AppContext) -> None:
     """Register the recon_raw_signals tool with FastMCP server."""

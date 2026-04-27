@@ -199,30 +199,13 @@ async def _run_tiered_tests(
                 coverage=coverage,
                 coverage_dir=coverage_dir,
             )
-        # Run batched targets
         import asyncio
-        import uuid
         hop_batch_results: list[tuple[Any, Any]] = []
         if batch_groups:
-            # coverage_dir is passed through to batch execution
             cov_dir_path = Path(coverage_dir) if coverage_dir else None
-            async def run_batch(
-                group: list[Any], cov_path: Path | None = cov_dir_path
-            ) -> tuple[Any, Any]:
-                artifact_dir = (
-                    app_ctx.repo_root / ".recon" / "artifacts" / "tests" / uuid.uuid4().hex[:8]
-                )
-                artifact_dir.mkdir(parents=True, exist_ok=True)
-                return await app_ctx.test_ops._run_batch_targets(
-                    targets=group,
-                    artifact_dir=artifact_dir,
-                    test_filter=test_filter,
-                    tags=None,
-                    timeout_sec=300,
-                    coverage_dir=cov_path,
-                )
-            batch_tasks = [asyncio.create_task(run_batch(g)) for g in batch_groups]
-            hop_batch_results = await asyncio.gather(*batch_tasks)
+            hop_batch_results = await _run_batch_groups(
+                batch_groups, app_ctx, test_filter, cov_dir_path,
+            )
             # Separate results and coverage artifacts
             for result, cov_artifact in hop_batch_results:
                 all_batch_results.append(result)
@@ -245,35 +228,12 @@ async def _run_tiered_tests(
                 tier_total += rs.progress.cases.total
             tier_duration += rs.duration_seconds
             all_test_results.append(solo_result)
-            # Collect failure details from solo result
-            if rs.failures:
-                for f in rs.failures:
-                    loc = f"{f.path}:{f.line}" if f.line else f.path
-                    all_failure_lines.append(f"{loc} {f.name}: {f.message}")
-                    if f.traceback:
-                        tb_lines = [ln for ln in f.traceback.strip().splitlines() if ln.strip()][:3]
-                        all_failure_lines.extend(f"  {ln.strip()}" for ln in tb_lines)
         for br in hop_batch_parsed:
             tier_passed += br.passed
             tier_failed += br.failed
             tier_total += br.total
             tier_duration += br.duration_seconds
-            # Collect failure details from batch results
-            if br.tests:
-                for tc in br.tests:
-                    if tc.status in ("failed", "error"):
-                        loc = (
-                            f"{tc.file_path}:{tc.line_number}"
-                            if tc.file_path and tc.line_number
-                            else tc.file_path or tc.classname or "unknown"
-                        )
-                        msg = tc.message or "no message"
-                        all_failure_lines.append(f"{loc} {tc.name}: {msg}")
-                        if tc.traceback:
-                            tb_lines = [
-                                ln for ln in tc.traceback.strip().splitlines() if ln.strip()
-                            ][:3]
-                            all_failure_lines.extend(f"  {ln.strip()}" for ln in tb_lines)
+        _collect_tier_failures(solo_result, hop_batch_parsed, all_failure_lines)
         total_passed += tier_passed
         total_failed += tier_failed
         tier_entry: dict[str, Any] = {
@@ -299,10 +259,92 @@ async def _run_tiered_tests(
                 f"Failures in {tier_label} — skipped transitive tiers: {skipped_info}"
             )
             break
-    # Build combined serialized result
+    return _build_tiered_result(
+        all_test_results, all_batch_results, all_batch_coverage,
+        all_failure_lines, tier_log, executable_hops, skipped_hops,
+        hop_targets, total_passed, total_failed, final_status,
+        stopped_at_hop, coverage_filter_paths,
+    )
+
+# Core Pipeline (transport-agnostic)
+
+async def _run_batch_groups(
+    batch_groups: list[list[Any]],
+    app_ctx: "AppContext",
+    test_filter: str | None,
+    cov_dir_path: Path | None,
+) -> list[tuple[Any, Any]]:
+    """Run batch groups concurrently and return (result, coverage) pairs."""
+    import asyncio
+    import uuid
+    async def run_one(group: list[Any]) -> tuple[Any, Any]:
+        artifact_dir = (
+            app_ctx.repo_root / ".recon" / "artifacts" / "tests" / uuid.uuid4().hex[:8]
+        )
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        return await app_ctx.test_ops._run_batch_targets(
+            targets=group,
+            artifact_dir=artifact_dir,
+            test_filter=test_filter,
+            tags=None,
+            timeout_sec=300,
+            coverage_dir=cov_dir_path,
+        )
+    tasks = [asyncio.create_task(run_one(g)) for g in batch_groups]
+    return list(await asyncio.gather(*tasks))
+
+
+def _collect_tier_failures(
+    solo_result: Any | None,
+    batch_results: list[Any],
+    failure_lines: list[str],
+) -> None:
+    """Collect failure detail lines from solo and batch results (in place)."""
+    if solo_result and solo_result.run_status:
+        rs = solo_result.run_status
+        if rs.failures:
+            for f in rs.failures:
+                loc = f"{f.path}:{f.line}" if f.line else f.path
+                failure_lines.append(f"{loc} {f.name}: {f.message}")
+                if f.traceback:
+                    tb_lines = [ln for ln in f.traceback.strip().splitlines() if ln.strip()][:3]
+                    failure_lines.extend(f"  {ln.strip()}" for ln in tb_lines)
+    for br in batch_results:
+        if br.tests:
+            for tc in br.tests:
+                if tc.status in ("failed", "error"):
+                    loc = (
+                        f"{tc.file_path}:{tc.line_number}"
+                        if tc.file_path and tc.line_number
+                        else tc.file_path or tc.classname or "unknown"
+                    )
+                    msg = tc.message or "no message"
+                    failure_lines.append(f"{loc} {tc.name}: {msg}")
+                    if tc.traceback:
+                        tb_lines = [
+                            ln for ln in tc.traceback.strip().splitlines() if ln.strip()
+                        ][:3]
+                        failure_lines.extend(f"  {ln.strip()}" for ln in tb_lines)
+
+
+def _build_tiered_result(
+    all_test_results: list[Any],
+    all_batch_results: list[Any],
+    all_batch_coverage: list[Any],
+    all_failure_lines: list[str],
+    tier_log: list[dict[str, Any]],
+    executable_hops: list[int],
+    skipped_hops: list[int],
+    hop_targets: dict[int, list[Any]],
+    total_passed: int,
+    total_failed: int,
+    final_status: str,
+    stopped_at_hop: int | None,
+    coverage_filter_paths: set[str] | None,
+) -> dict[str, Any]:
+    """Build the combined tiered test result dict."""
     combined: dict[str, Any] = {}
     if all_test_results and all_test_results[0].run_status:
-        # Merge batch coverage artifacts into the solo result's coverage
         if all_batch_coverage:
             existing_cov = all_test_results[0].run_status.coverage or []
             for cov in all_batch_coverage:
@@ -314,20 +356,17 @@ async def _run_tiered_tests(
             all_test_results[0],
             coverage_filter_paths=coverage_filter_paths,
         )
-        # Overlay batch results into flat counters
         for br in all_batch_results:
             combined["passed"] = combined.get("passed", 0) + br.passed
             combined["failed"] = combined.get("failed", 0) + br.failed
             combined["skipped"] = combined.get("skipped", 0) + br.skipped
     elif all_batch_results:
-        # Only batched targets, no solo - build coverage from batch artifacts
         combined = {
             "status": "completed",
             "passed": sum(br.passed for br in all_batch_results),
             "failed": sum(br.failed for br in all_batch_results),
             "skipped": sum(br.skipped for br in all_batch_results),
         }
-        # Add coverage from batch runs
         if all_batch_coverage:
             batch_cov_dicts = [
                 {"format": c.format, "path": str(c.path), "pack_id": c.pack_id}
@@ -340,10 +379,8 @@ async def _run_tiered_tests(
             combined["coverage"] = inline_cov
             if cov_hint:
                 combined["coverage_hint"] = cov_hint
-    # Overlay accumulated failure details from ALL hops and batch results
     if all_failure_lines:
         combined["failures"] = "\n".join(all_failure_lines)
-    # Compact tier execution as text string
     tier_parts: list[str] = []
     for entry in tier_log:
         label = entry["label"]
@@ -353,10 +390,8 @@ async def _run_tiered_tests(
         dur = entry["duration_seconds"]
         tier_parts.append(f"{label}: {t_count}t {p}p/{f}f {dur}s")
         if entry.get("stopped_reason"):
-            # Append skip info
-            tier_parts.append("→ STOPPED")
+            tier_parts.append("\u2192 STOPPED")
     combined["tiers"] = " | ".join(tier_parts)
-    # Log skipped hops due to hop limit
     if skipped_hops and stopped_at_hop is None:
         skipped_targets = sum(len(hop_targets[h]) for h in skipped_hops)
         skipped_info = ", ".join(f"hop {h} ({len(hop_targets[h])} targets)" for h in skipped_hops)
@@ -371,10 +406,9 @@ async def _run_tiered_tests(
                 "failed": 0,
                 "total": 0,
                 "duration_seconds": 0.0,
-                "stopped_reason": f"max_test_hops={max_test_hops} \u2014 skipped: {skipped_info}",
+                "stopped_reason": f"Skipped: {skipped_info}",
             }
         )
-    # Build transparent summary
     tier_log_idx = next(
         (i for i, t in enumerate(tier_log) if t["hop"] == stopped_at_hop),
         None,
@@ -394,7 +428,6 @@ async def _run_tiered_tests(
             + (f", {total_failed} failed" if total_failed > 0 else "")
             + f" ({total_duration:.1f}s{hop_note}{skip_note})"
         )
-    # Collect failed test IDs for coverage ingestion
     _failed_test_ids: set[str] = set()
     for _tr in all_test_results:
         if _tr.run_status and _tr.run_status.failures:
@@ -411,7 +444,6 @@ async def _run_tiered_tests(
         "failed_test_ids": _failed_test_ids or None,
     }
 
-# Core Pipeline (transport-agnostic)
 
 class _NullProgress:
     """No-op progress sink for callers that don't need progress."""

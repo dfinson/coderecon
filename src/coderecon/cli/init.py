@@ -119,21 +119,41 @@ def initialize_repo(
         )
     else:
         index_dir = coderecon_dir
-    # Write user config
+    _write_init_files(
+        repo_root, coderecon_dir, config_path, final_port, reindex,
+        mcp_targets, console,
+    )
+    _run_discovery_phase(repo_root)
+    # else: no GPU, say nothing — CPU is the default
+    return _run_indexing_phase(
+        repo_root, index_dir, config_path, console, show_recon_up_hint,
+    )
+
+def _write_init_files(
+    repo_root: Path,
+    coderecon_dir: Path,
+    config_path: Path,
+    final_port: int,
+    reindex: bool,
+    mcp_targets: list[str] | None,
+    console: object,
+) -> None:
+    """Write config, reconignore, gitignore, IDE and agent integration files."""
     write_user_config(config_path, UserConfig(port=final_port))
-    # Write runtime state (index_path) - auto-generated, not user-editable
     state_path = coderecon_dir / "state.yaml"
+    # Determine index_dir from runtime state
+    index_dir = coderecon_dir
+    if _is_cross_filesystem(repo_root):
+        index_dir = _get_xdg_index_dir(repo_root)
     write_runtime_state(state_path, RuntimeState(index_path=str(index_dir)))
     reconignore_path = coderecon_dir / ".reconignore"
     if not reconignore_path.exists() or reindex:
         atomic_write_text(reconignore_path, get_reconignore_template())
-    # Merge repo-root .reconignore if it exists — user patterns survive reindex
     root_reconignore = repo_root / ".reconignore"
     if root_reconignore.exists():
         generated = reconignore_path.read_text()
         root_lines = root_reconignore.read_text().strip()
         if root_lines:
-            # Collect patterns not already in the generated template
             existing = set(generated.splitlines())
             new_patterns = [
                 ln for ln in root_lines.splitlines()
@@ -143,7 +163,6 @@ def initialize_repo(
                 merged = generated.rstrip() + "\n\n# From repo-root .reconignore\n"
                 merged += "\n".join(new_patterns) + "\n"
                 atomic_write_text(reconignore_path, merged)
-    # Create .gitignore to exclude artifacts from version control per SPEC.md §7.7
     gitignore_path = coderecon_dir / ".gitignore"
     if not gitignore_path.exists() or reindex:
         atomic_write_text(
@@ -154,43 +173,38 @@ def initialize_repo(
             "!config.yaml\n"
             "# state.yaml is auto-generated, do not commit\n",
         )
-    # === IDE & Agent Integration ===
     from coderecon.cli.mcp_writers import resolve_targets, write_mcp_configs
     server_name = _get_mcp_server_name(repo_root)
     resolved = resolve_targets(mcp_targets or ["auto"], repo_root)
     written_configs = write_mcp_configs(repo_root, final_port, server_name, resolved)
     for cfg in written_configs:
         status(f"Updated {cfg} with CodeRecon server", style="info")
-    # Derive tool prefix from server_name: VS Code creates tools as mcp_{server_name}_{tool}
-    # server_name is already normalized (lowercase, underscores)
     tool_prefix = f"mcp_{server_name}"
-    # Inject CodeRecon instructions into agent instruction files
     modified_agent_files = _inject_agent_instructions(repo_root, tool_prefix, resolved)
     if modified_agent_files:
         for f in modified_agent_files:
             status(f"Updated {f} with CodeRecon instructions", style="info")
-    # === Discovery Phase ===
+
+
+def _run_discovery_phase(repo_root: Path) -> None:
+    """Scan languages, install grammars, and probe GPU."""
     from coderecon.index._internal.grammars import (
         get_needed_grammars,
         install_grammars,
         scan_repo_languages,
     )
     with phase_box("Discovery", width=60) as phase:
-        # Step 1: Scan languages
         task_id = phase.add_progress("Scanning", total=100)
         languages = scan_repo_languages(repo_root)
         phase.advance(task_id, 100)
-        # Use .value to get string name, not enum repr
         lang_names = ", ".join(sorted(lang.value for lang in languages)) if languages else "none"
         phase.complete(f"{len(languages)} languages: {lang_names}")
-        # Step 2: Install grammars if needed
         needed = get_needed_grammars(languages)
         if needed:
             task_id = phase.add_progress("Installing grammars", total=len(needed))
             grammar_result = install_grammars(needed, quiet=True, status_fn=None)
             phase.advance(task_id, len(needed))
             if grammar_result.installed_packages:
-                # Log which grammars were installed
                 installed_langs = [
                     pkg.replace("tree-sitter-", "").replace("tree_sitter_", "")
                     for pkg in grammar_result.installed_packages
@@ -198,7 +212,6 @@ def initialize_repo(
                 phase.complete(f"Installed: {', '.join(installed_langs)}")
             else:
                 phase.complete("Grammars ready")
-    # === GPU Detection ===
     from coderecon.core.gpu import probe_gpu
     gpu_result = probe_gpu()
     if gpu_result.has_onnx_gpu:
@@ -209,8 +222,16 @@ def initialize_repo(
         status(f"GPU detected ({gpu_result.provider_name}) but ONNX GPU provider not installed", style="info")
         if hint:
             status(f"  Enable GPU: {hint}", style="info")
-    # else: no GPU, say nothing — CPU is the default
-    # === Lexical Indexing Phase ===
+
+
+def _run_indexing_phase(
+    repo_root: Path,
+    index_dir: Path,
+    config_path: Path,
+    console: object,
+    show_recon_up_hint: bool,
+) -> bool:
+    """Run indexing, resolution, SPLADE encoding, and coverage collection."""
     from coderecon.index.ops import IndexCoordinatorEngine
     db_path = index_dir / "index.db"
     tantivy_path = index_dir / "tantivy"
@@ -220,13 +241,11 @@ def initialize_repo(
         db_path=db_path,
         tantivy_path=tantivy_path,
     )
-    # Shared state for phase transitions
     indexing_state: dict[str, object] = {
         "indexing_done": False,
         "files_indexed": 0,
         "files_by_ext": {},
     }
-    # Track resolution phase box and task IDs
     resolution_phase: PhaseBox | None = None
     refs_task_id: TaskID | None = None
     types_task_id: TaskID | None = None
@@ -236,7 +255,6 @@ def initialize_repo(
     try:
         import time
         start_time = time.time()
-        # Phase box 1: Indexing (unified file processing)
         indexing_phase = phase_box("Indexing", width=60)
         indexing_phase.__enter__()
         indexing_task_id = indexing_phase.add_progress("Indexing files", total=100)
@@ -247,22 +265,18 @@ def initialize_repo(
             nonlocal refs_task_id, types_task_id, indexing_elapsed
             nonlocal splade_phase, splade_task_id
             if progress_phase == "indexing":
-                # Update indexing phase box
                 pct = int(indexed / total * 100) if total > 0 else 0
                 indexing_phase._progress.update(indexing_task_id, completed=pct)  # type: ignore[union-attr]
                 indexing_phase._update()
                 if files_by_ext:
                     table = _make_init_extension_table(files_by_ext)
                     indexing_phase.set_live_table(table)
-                # Store latest state
                 indexing_state["files_indexed"] = indexed
                 indexing_state["files_by_ext"] = files_by_ext
             elif progress_phase in ("resolving_cross_file", "resolving_refs", "resolving_types"):
-                # First resolution callback — close indexing box, open resolution box
                 if not indexing_state["indexing_done"]:
                     indexing_state["indexing_done"] = True
                     indexing_elapsed = time.time() - start_time
-                    # Finalize indexing box
                     indexing_phase.set_live_table(None)
                     files = indexing_state["files_indexed"]
                     indexing_phase.complete(f"{files} files ({indexing_elapsed:.1f}s)")
@@ -272,7 +286,6 @@ def initialize_repo(
                         indexing_phase.add_table(ext_table)
                     indexing_phase.__exit__(None, None, None)
                 if resolution_phase is None:
-                    # Open resolution phase box
                     resolution_phase = phase_box("Resolution", width=60)
                     resolution_phase.__enter__()
                 if progress_phase == "resolving_refs":
@@ -291,7 +304,6 @@ def initialize_repo(
                     resolution_phase._progress.update(types_task_id, completed=pct)  # type: ignore[union-attr]
                     resolution_phase._update()
             elif progress_phase == "encoding_splade":
-                # Close resolution phase if still open
                 if resolution_phase is not None:
                     total_elapsed = time.time() - start_time
                     resolution_elapsed = total_elapsed - indexing_elapsed
@@ -310,7 +322,6 @@ def initialize_repo(
             result = loop.run_until_complete(coord.initialize(on_index_progress=on_index_progress))
         finally:
             loop.close()
-        # Handle case where there were no resolution phases (shouldn't happen normally)
         if not indexing_state["indexing_done"]:
             indexing_elapsed = time.time() - start_time
             indexing_phase.set_live_table(None)
@@ -320,13 +331,11 @@ def initialize_repo(
                 ext_table = _make_init_extension_table(result.files_by_ext)
                 indexing_phase.add_table(ext_table)
             indexing_phase.__exit__(None, None, None)
-        # Close resolution phase box if it was opened
         if resolution_phase is not None:
             total_elapsed = time.time() - start_time
             resolution_elapsed = total_elapsed - indexing_elapsed
             resolution_phase.complete(f"Done ({resolution_elapsed:.1f}s)")
             resolution_phase.__exit__(None, None, None)
-        # Close SPLADE phase box if it was opened
         if splade_phase is not None:
             splade_phase.complete("Done")
             splade_phase.__exit__(None, None, None)
@@ -334,8 +343,6 @@ def initialize_repo(
             for err in result.errors:
                 status(f"Error: {err}", style="error")
             return False
-        # Step 11: Collect initial test coverage (best-effort)
-        # Load testing config for memory-aware execution
         from coderecon.config.loader import load_config as _load_config
         _cfg = _load_config(repo_root)
         cov_loop = asyncio.new_event_loop()
@@ -353,14 +360,14 @@ def initialize_repo(
             status(f"Coverage: {cov_facts} test→def links ingested", style="success")
     finally:
         coord.close()
-    # Final config confirmation
-    console.print()
+    console.print()  # type: ignore[attr-defined]
     rel_config_path = config_path.relative_to(repo_root)
     status(f"Config created at {rel_config_path}", style="success")
     if show_recon_up_hint:
-        console.print()
+        console.print()  # type: ignore[attr-defined]
         status("Ready. Run 'recon up' to start the server.", style="none")
     return True
+
 
 def _make_init_extension_table(files_by_ext: dict[str, int]) -> Table:
     """Create extension breakdown table for init output."""
