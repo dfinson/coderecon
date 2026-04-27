@@ -159,27 +159,17 @@ class TestOps:
         return list(seen.values())
     async def _get_targets_by_id(self, target_ids: list[str]) -> list[TestTarget]:
         """Get test targets by ID from the index."""
+        return await self._get_targets_from_index(target_ids=target_ids)
+    async def _get_all_targets_from_index(self) -> list[TestTarget]:
+        """Get ALL test targets from the index."""
+        return await self._get_targets_from_index()
+    async def _get_targets_from_index(
+        self, *, target_ids: list[str] | None = None,
+    ) -> list[TestTarget]:
+        """Get test targets from the index, optionally filtered by IDs."""
         from typing import cast
         from coderecon.testing.models import TargetKind
         indexed_targets = await self._coordinator.get_test_targets(target_ids=target_ids)
-        return [
-            TestTarget(
-                target_id=t.target_id,
-                selector=t.selector,
-                kind=cast(TargetKind, t.kind),
-                language=t.language,
-                runner_pack_id=t.runner_pack_id,
-                workspace_root=t.workspace_root,
-                estimated_cost=1.0,
-                test_count=t.test_count,
-            )
-            for t in indexed_targets
-        ]
-    async def _get_all_targets_from_index(self) -> list[TestTarget]:
-        """Get ALL test targets from the index."""
-        from typing import cast
-        from coderecon.testing.models import TargetKind
-        indexed_targets = await self._coordinator.get_test_targets()
         return [
             TestTarget(
                 target_id=t.target_id,

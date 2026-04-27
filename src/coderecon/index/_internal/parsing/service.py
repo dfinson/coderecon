@@ -110,9 +110,9 @@ class TreeSitterService:
         """
         pack = get_pack(result.language)
         if pack is not None and pack.scope_types:
-            return _extract_scopes_generic(result.root_node, pack.scope_types)
+            return _extract_scopes(result.root_node, pack.scope_types)
         # Fallback for unknown languages: pattern-match node types
-        return _extract_scopes_by_pattern(result.root_node, _GENERIC_SCOPE_PATTERNS)
+        return _extract_scopes(result.root_node, _GENERIC_SCOPE_PATTERNS, substring_match=True)
 
     # Import extraction -- delegates to TreeSitterParser methods
 
@@ -140,16 +140,19 @@ class TreeSitterService:
 
 # Generic scope walker -- replaces 3 near-identical methods (~170 lines)
 
-def _extract_scopes_generic(
+def _extract_scopes(
     root: tree_sitter.Node,
     scope_types: dict[str, str],
+    *,
+    substring_match: bool = False,
 ) -> list[SyntacticScope]:
     """Walk tree and emit scopes driven by a ``scope_types`` dict.
 
     Args:
         root: Tree-sitter root node.
-        scope_types: Mapping from ``node.type`` -> scope kind string
-                     (e.g. ``{"class_definition": "class", ...}``).
+        scope_types: Mapping from node type (or substring) to scope kind.
+        substring_match: If True, match ``scope_types`` keys as substrings
+            of ``node.type`` instead of exact matches.
 
     Returns:
         Flat list of ``SyntacticScope`` with file scope at index 0.
@@ -170,67 +173,18 @@ def _extract_scopes_generic(
         )
     )
 
-    def walk(node: tree_sitter.Node, parent_scope_id: int) -> None:
-        nonlocal scope_counter
-
-        kind = scope_types.get(node.type)
-        if kind is not None:
-            scope_counter += 1
-            scopes.append(
-                SyntacticScope(
-                    scope_id=scope_counter,
-                    parent_scope_id=parent_scope_id,
-                    kind=kind,
-                    start_line=node.start_point[0] + 1,
-                    start_col=node.start_point[1],
-                    end_line=node.end_point[0] + 1,
-                    end_col=node.end_point[1],
-                )
-            )
-            for child in node.children:
-                walk(child, scope_counter)
-        else:
-            for child in node.children:
-                walk(child, parent_scope_id)
-
-    for child in root.children:
-        walk(child, 0)
-
-    return scopes
-
-def _extract_scopes_by_pattern(
-    root: tree_sitter.Node,
-    patterns: dict[str, str],
-) -> list[SyntacticScope]:
-    """Fallback scope extractor: matches ``node.type`` substrings.
-
-    Used for languages without explicit packs. Mirrors the old
-    ``_extract_generic_scopes`` behaviour.
-    """
-    scopes: list[SyntacticScope] = []
-    scope_counter = 0
-
-    scopes.append(
-        SyntacticScope(
-            scope_id=scope_counter,
-            parent_scope_id=None,
-            kind="file",
-            start_line=root.start_point[0] + 1,
-            start_col=root.start_point[1],
-            end_line=root.end_point[0] + 1,
-            end_col=root.end_point[1],
-        )
-    )
+    def _match_kind(node_type: str) -> str | None:
+        if substring_match:
+            for pattern, scope_kind in scope_types.items():
+                if pattern in node_type:
+                    return scope_kind
+            return None
+        return scope_types.get(node_type)
 
     def walk(node: tree_sitter.Node, parent_scope_id: int) -> None:
         nonlocal scope_counter
 
-        kind: str | None = None
-        for pattern, scope_kind in patterns.items():
-            if pattern in node.type:
-                kind = scope_kind
-                break
-
+        kind = _match_kind(node.type)
         if kind is not None:
             scope_counter += 1
             scopes.append(

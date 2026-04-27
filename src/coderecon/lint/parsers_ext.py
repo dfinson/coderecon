@@ -72,8 +72,8 @@ def parse_golangci_lint(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG00
         return ParseResult.error(f"golangci-lint JSON parse error: {e}")
     return ParseResult.ok(diagnostics)
 
-def parse_gofmt(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
-    """Parse gofmt -l output (list of files needing formatting)."""
+def _parse_fmt_list(stdout: str, source: str) -> ParseResult:
+    """Parse output from formatters that list files needing formatting (one per line)."""
     diagnostics: list[Diagnostic] = []
     for line in stdout.strip().split("\n"):
         line = line.strip()
@@ -84,10 +84,14 @@ def parse_gofmt(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
                     line=1,
                     severity=Severity.WARNING,
                     message="File needs formatting",
-                    source="gofmt",
+                    source=source,
                 )
             )
     return ParseResult.ok(diagnostics)
+
+def parse_gofmt(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
+    """Parse gofmt -l output (list of files needing formatting)."""
+    return _parse_fmt_list(stdout, "gofmt")
 
 def parse_ruff_format(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse ruff format output.
@@ -366,20 +370,7 @@ def parse_shellcheck(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
 
 def parse_shfmt(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse shfmt -l output."""
-    diagnostics: list[Diagnostic] = []
-    for line in stdout.strip().split("\n"):
-        line = line.strip()
-        if line:
-            diagnostics.append(
-                Diagnostic(
-                    path=line,
-                    line=1,
-                    severity=Severity.WARNING,
-                    message="File needs formatting",
-                    source="shfmt",
-                )
-            )
-    return ParseResult.ok(diagnostics)
+    return _parse_fmt_list(stdout, "shfmt")
 
 # Misc Parsers
 

@@ -241,13 +241,12 @@ class TreeSitterParser:
             _GENERIC_SCOPE_PATTERNS,
         )
         from coderecon.index._internal.parsing.service import (
-            _extract_scopes_by_pattern,
-            _extract_scopes_generic,
+            _extract_scopes,
         )
         pack = get_pack(result.language)
         if pack is not None and pack.scope_types:
-            return _extract_scopes_generic(result.root_node, pack.scope_types)
-        return _extract_scopes_by_pattern(result.root_node, _GENERIC_SCOPE_PATTERNS)
+            return _extract_scopes(result.root_node, pack.scope_types)
+        return _extract_scopes(result.root_node, _GENERIC_SCOPE_PATTERNS, substring_match=True)
     def extract_imports(self, result: ParseResult, file_path: str) -> list[SyntacticImport]:
         """Extract import statements from a parse result.
         Uses declarative ImportQueryConfig from the language pack.
