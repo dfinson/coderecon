@@ -20,8 +20,8 @@ from coderecon.index._internal.discovery import (
 from coderecon.index._internal.discovery.authority_parsers import (
     is_inside,
     matches_any_glob,
-    relative_to,
 )
+from coderecon.index._internal.discovery.membership import relative_to
 from coderecon.index.models import CandidateContext, LanguageFamily, ProbeStatus
 
 def make_candidate(

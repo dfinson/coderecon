@@ -27,8 +27,8 @@ from coderecon.index._internal.discovery.authority_parsers import (
     get_sln_projects,
     is_inside,
     matches_any_glob,
-    relative_to,
 )
+from coderecon.index._internal.discovery.membership import relative_to
 from coderecon.index.models import CandidateContext, LanguageFamily, ProbeStatus
 
 log = structlog.get_logger(__name__)

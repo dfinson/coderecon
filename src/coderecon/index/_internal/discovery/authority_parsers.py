@@ -24,16 +24,6 @@ from coderecon.index._internal.discovery.membership import is_inside  # noqa: F4
 
 log = structlog.get_logger(__name__)
 
-def relative_to(path: str, root: str) -> str:
-    """Get path relative to root."""
-    if root == "":
-        return path
-    if path == root:
-        return ""
-    if path.startswith(root + "/"):
-        return path[len(root) + 1 :]
-    return path
-
 def matches_any_glob(path: str, globs: list[str]) -> bool:
     """Check if path matches any of the globs."""
     for glob in globs:
