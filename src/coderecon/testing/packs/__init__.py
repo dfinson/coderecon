@@ -33,4 +33,6 @@ def _is_prunable_path(
 
 # Import tiers to register packs
 from coderecon.testing.packs import tier1 as _tier1  # noqa: F401, E402
+from coderecon.testing.packs import tier1_compiled as _tier1c  # noqa: F401, E402
+from coderecon.testing.packs import tier1_other as _tier1o  # noqa: F401, E402
 from coderecon.testing.packs import tier2 as _tier2  # noqa: F401, E402
