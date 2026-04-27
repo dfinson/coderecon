@@ -8,6 +8,7 @@ from pathlib import Path
 
 import structlog
 
+from coderecon.core.languages import EXTENSION_TO_NAME
 from coderecon.index._internal.ignore import IgnoreChecker
 
 log = structlog.get_logger(__name__)
@@ -60,22 +61,13 @@ def is_cross_filesystem(path: Path) -> bool:
 
 def summarize_changes_by_type(paths: list[Path]) -> str:
     """Summarize file changes by extension/type with grammatical correctness."""
-    ext_names: dict[str, str] = {
-        ".py": "Python", ".pyi": "Python stub", ".js": "JavaScript",
-        ".ts": "TypeScript", ".jsx": "JSX", ".tsx": "TSX",
-        ".json": "JSON", ".yaml": "YAML", ".yml": "YAML",
-        ".toml": "TOML", ".md": "Markdown", ".rs": "Rust",
-        ".go": "Go", ".java": "Java", ".kt": "Kotlin",
-        ".rb": "Ruby", ".css": "CSS", ".html": "HTML",
-        ".sql": "SQL", ".sh": "shell",
-    }
     ext_counts: Counter[str] = Counter()
     for p in paths:
         ext = p.suffix.lower()
         ext_counts[ext] += 1
     parts: list[str] = []
     for ext, count in ext_counts.most_common(3):
-        name = ext_names.get(ext, ext.lstrip(".").upper() if ext else "other")
+        name = EXTENSION_TO_NAME.get(ext, ext.lstrip(".").upper() if ext else "other")
         word = "file" if count == 1 else "files"
         parts.append(f"{count} {name} {word}")
     shown_count = sum(ext_counts[ext] for ext, _ in ext_counts.most_common(3))

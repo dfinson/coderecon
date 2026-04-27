@@ -201,14 +201,14 @@ class TestSummarizeChangesByType:
         """Single Python file uses singular form."""
         paths = [Path("src/main.py")]
         summary = _summarize_changes_by_type(paths)
-        assert "1 Python file" in summary
-        assert "files" not in summary.replace("1 Python file", "")
+        assert "1 python file" in summary
+        assert "files" not in summary.replace("1 python file", "")
 
     def test_multiple_python_files(self) -> None:
         """Multiple Python files use plural form."""
         paths = [Path("a.py"), Path("b.py"), Path("c.py")]
         summary = _summarize_changes_by_type(paths)
-        assert "3 Python files" in summary
+        assert "3 python files" in summary
 
     def test_mixed_file_types(self) -> None:
         """Mixed types are summarized with counts."""
@@ -219,9 +219,9 @@ class TestSummarizeChangesByType:
             Path("style.css"),
         ]
         summary = _summarize_changes_by_type(paths)
-        assert "2 Python files" in summary
-        assert "1 JSON file" in summary
-        assert "1 CSS file" in summary
+        assert "2 python files" in summary
+        assert "1 json file" in summary
+        assert "1 css file" in summary
 
     def test_unknown_extension(self) -> None:
         """Unknown extensions use uppercase extension name."""

@@ -368,20 +368,20 @@ class TestSummarizeChangesByType:
         from coderecon.daemon.watcher import _summarize_changes_by_type
         paths = [Path("test.py")]
         result = _summarize_changes_by_type(paths)
-        assert result == "1 Python file"
+        assert result == "1 python file"
     def test_multiple_python_files(self) -> None:
         """Multiple Python files use plural form."""
         from coderecon.daemon.watcher import _summarize_changes_by_type
         paths = [Path("a.py"), Path("b.py"), Path("c.py")]
         result = _summarize_changes_by_type(paths)
-        assert result == "3 Python files"
+        assert result == "3 python files"
     def test_mixed_file_types(self) -> None:
         """Mixed file types are summarized separately."""
         from coderecon.daemon.watcher import _summarize_changes_by_type
         paths = [Path("a.py"), Path("b.py"), Path("c.json")]
         result = _summarize_changes_by_type(paths)
-        assert "2 Python files" in result
-        assert "1 JSON file" in result
+        assert "2 python files" in result
+        assert "1 json file" in result
     def test_top_three_types_shown(self) -> None:
         """Only top 3 file types are shown with 'others' for remainder."""
         from coderecon.daemon.watcher import _summarize_changes_by_type
@@ -415,9 +415,9 @@ class TestSummarizeChangesByType:
         paths = [Path("a.yaml"), Path("b.yml")]
         result = _summarize_changes_by_type(paths)
         # Both should be YAML (shown separately since they have different extensions)
-        assert "YAML" in result
+        assert "yaml" in result
         # Total should be 2 files mentioned
-        assert "1 YAML file" in result
+        assert "1 yaml file" in result
     def test_empty_list(self) -> None:
         """Empty list returns empty string."""
         from coderecon.daemon.watcher import _summarize_changes_by_type
