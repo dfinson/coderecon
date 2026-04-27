@@ -35,7 +35,6 @@ from coderecon.index.models import (
 if TYPE_CHECKING:
     from coderecon.index._internal.db import Database
 
-
 @dataclass
 class TypeTracedStats:
     """Statistics from type-traced resolution."""
@@ -45,7 +44,6 @@ class TypeTracedStats:
     accesses_partial: int = 0  # Resolved partway through chain
     accesses_unresolved: int = 0
     refs_upgraded: int = 0  # RefFacts upgraded to PROVEN
-
 
 class TypeTracedResolver:
     """Resolves member accesses by following type annotation chains.
@@ -97,7 +95,7 @@ class TypeTracedResolver:
             rows = session.execute(
                 text(
                     "SELECT access_id, receiver_name, receiver_declared_type, "
-                    "scope_id, member_chain, file_id, start_line "
+                    "scope_id, member_chain, file_id, start_line, start_col "
                     "FROM member_access_facts "
                     "WHERE final_target_def_uid IS NULL "
                     "LIMIT :lim"
@@ -118,7 +116,7 @@ class TypeTracedResolver:
         ref_upgrades: list[dict] = []
 
         for i, row in enumerate(rows):
-            access_id, receiver_name, receiver_declared_type, scope_id, member_chain, file_id, start_line = row
+            access_id, receiver_name, receiver_declared_type, scope_id, member_chain, file_id, start_line, start_col = row
             result = self._resolve_access_inmem(
                 receiver_name, receiver_declared_type, scope_id, member_chain
             )
@@ -140,6 +138,7 @@ class TypeTracedResolver:
                 ref_upgrades.append({
                     "file_id": file_id,
                     "start_line": start_line,
+                    "start_col": start_col,
                     "token": chain_parts[-1],
                     "def_uid": final_def_uid,
                 })
@@ -171,13 +170,14 @@ class TypeTracedResolver:
                                 "UPDATE ref_facts "
                                 "SET target_def_uid = :def_uid, ref_tier = :tier "
                                 "WHERE file_id = :file_id AND start_line = :start_line "
-                                "AND token_text = :token"
+                                "AND start_col = :start_col AND token_text = :token"
                             ),
                             {
                                 "def_uid": r["def_uid"],
                                 "tier": RefTier.PROVEN.value,
                                 "file_id": r["file_id"],
                                 "start_line": r["start_line"],
+                                "start_col": r["start_col"],
                                 "token": r["token"],
                             },
                         )
@@ -313,6 +313,7 @@ class TypeTracedResolver:
             stmt = select(RefFact).where(
                 RefFact.file_id == access.file_id,
                 RefFact.start_line == access.start_line,
+                RefFact.start_col == access.start_col,
                 RefFact.token_text == access.member_chain.split(".")[-1],
             )
             ref = session.exec(stmt).first()  # type: ignore[attr-defined]
@@ -348,7 +349,6 @@ class TypeTracedResolver:
         for member in members:
             key = (member.parent_type_name, member.member_name)
             self._member_map[key] = member
-
 
 def resolve_type_traced(
     db: Database,

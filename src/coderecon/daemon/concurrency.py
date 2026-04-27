@@ -19,7 +19,6 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-
 class FreshnessGate:
     """Per-worktree freshness tracking for a shared index.
 
@@ -94,7 +93,6 @@ class FreshnessGate:
             self._events[worktree] = evt
         return evt
 
-
 class MutationRouter:
     """Serializes mutations per worktree.  Provides reindex backpressure.
 
@@ -152,7 +150,7 @@ class MutationRouter:
         async def _reindex() -> None:
             async with self._reindex_semaphore:
                 try:
-                    await self._coordinator.reindex_incremental(paths)
+                    await self._coordinator.reindex_incremental(paths, worktree=worktree)
                 finally:
                     self._gate.mark_fresh(worktree)
 

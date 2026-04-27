@@ -13,7 +13,6 @@ from coderecon.index._internal.db.integrity import (
     IntegrityReport,
 )
 
-
 class TestIntegrityIssue:
     """Tests for IntegrityIssue dataclass."""
 
@@ -48,7 +47,6 @@ class TestIntegrityIssue:
         )
         assert issue.table is None
 
-
 class TestIntegrityReport:
     """Tests for IntegrityReport dataclass."""
 
@@ -82,7 +80,6 @@ class TestIntegrityReport:
             report.add_issue(IntegrityIssue(category=f"cat_{i}", table=None, message=f"msg_{i}"))
         assert len(report.issues) == 3
         assert report.passed is False
-
 
 class TestIntegrityChecker:
     """Tests for IntegrityChecker."""
@@ -184,7 +181,7 @@ class TestIntegrityChecker:
         mock_db = MagicMock()
         mock_session = MagicMock()
         mock_result = MagicMock()
-        mock_result.__iter__ = lambda _self: iter([("missing.py",), ("also_missing.py",)])
+        mock_result.fetchall = lambda: [("missing.py", None), ("also_missing.py", None)]
         mock_session.execute.return_value = mock_result
 
         mock_db.session.return_value.__enter__ = MagicMock(return_value=mock_session)
@@ -212,7 +209,7 @@ class TestIntegrityChecker:
             test_file.write_text("# exists")
 
             mock_result = MagicMock()
-            mock_result.__iter__ = lambda _self: iter([("exists.py",)])
+            mock_result.fetchall = lambda: [("exists.py", None)]
             mock_session.execute.return_value = mock_result
 
             mock_db.session.return_value.__enter__ = MagicMock(return_value=mock_session)
@@ -280,7 +277,6 @@ class TestIntegrityChecker:
 
         assert report.passed is True
         assert len(report.issues) == 0
-
 
 class TestIndexRecovery:
     """Tests for IndexRecovery."""

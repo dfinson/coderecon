@@ -234,3 +234,4 @@ infra/tfplan
 # Model package build artifacts (wheels built from model-packages/)
 model-packages/*/dist/
 model-packages/*/models/
+.desloppify/

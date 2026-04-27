@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from coderecon.index._internal.db.database import Database
     from coderecon.index._internal.indexing.lexical import LexicalIndex
 
-
 @dataclass
 class IntegrityIssue:
     """A single integrity issue detected."""
@@ -32,7 +31,6 @@ class IntegrityIssue:
     table: str | None
     message: str
     count: int = 1
-
 
 @dataclass
 class IntegrityReport:
@@ -49,7 +47,6 @@ class IntegrityReport:
         """Add an issue and mark as failed."""
         self.issues.append(issue)
         self.passed = False
-
 
 class IntegrityChecker:
     """Verifies index consistency between SQLite, Tantivy, and filesystem.
@@ -163,16 +160,33 @@ class IntegrityChecker:
                 )
 
     def _check_files_exist(self, report: IntegrityReport) -> None:
-        """Check that files in DB exist on disk."""
+        """Check that files in DB exist on disk.
+
+        Uses per-worktree root_path so non-main worktree files are
+        resolved against their correct checkout directory.
+        """
         missing_count = 0
 
         with self._db.session() as session:
-            result = session.execute(text("SELECT path FROM files"))
-            paths = [row[0] for row in result]
-            report.files_checked = len(paths)
+            # LEFT JOIN to get worktree root_path when available
+            result = session.execute(
+                text(
+                    "SELECT f.path, w.root_path "
+                    "FROM files f "
+                    "LEFT JOIN worktrees w ON f.worktree_id = w.id"
+                )
+            )
+            rows = result.fetchall()
+            report.files_checked = len(rows)
 
-            for path in paths:
-                full_path = self._repo_root / path
+            for row in rows:
+                path = row[0]
+                root_path = row[1] if len(row) > 1 else None
+                if root_path and Path(root_path).is_absolute():
+                    base = Path(root_path)
+                else:
+                    base = self._repo_root
+                full_path = base / path
                 if not full_path.exists():
                     missing_count += 1
 
@@ -212,7 +226,6 @@ class IntegrityChecker:
                 )
             )
 
-
 class IndexRecovery:
     """Recovery operations for corrupt index state.
 
@@ -249,7 +262,6 @@ class IndexRecovery:
 
         if self._tantivy_path.exists():
             shutil.rmtree(self._tantivy_path)
-
 
 __all__ = [
     "IntegrityChecker",

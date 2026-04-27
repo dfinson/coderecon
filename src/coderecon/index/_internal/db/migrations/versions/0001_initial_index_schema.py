@@ -11,8 +11,8 @@ so pre-Alembic databases get stamped without error.
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0001"
@@ -38,14 +38,11 @@ COMPOSITE_INDEXES: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_doc_cross_refs_target ON doc_cross_refs(target_def_uid)",
 ]
 
-
 def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
     existing = set(inspector.get_table_names())
-
     # ── Tier 0: Anchor tables ──────────────────────────────────────
-
     if "worktrees" not in existing:
         op.create_table(
             "worktrees",
@@ -55,7 +52,6 @@ def upgrade() -> None:
             sa.Column("branch", sa.String, nullable=True),
             sa.Column("is_main", sa.Boolean, nullable=False, server_default="0"),
         )
-
     if "files" not in existing:
         op.create_table(
             "files",
@@ -71,10 +67,10 @@ def upgrade() -> None:
             sa.Column("line_count", sa.Integer, nullable=True),
             sa.Column("indexed_at", sa.Float, nullable=True),
             sa.Column("last_indexed_epoch", sa.Integer, nullable=True, index=True),
+            sa.Column("parse_status", sa.String, nullable=True),
             sa.Column("declared_module", sa.String, nullable=True, index=True),
             sa.UniqueConstraint("worktree_id", "path", name="uq_files_wt_path"),
         )
-
     if "contexts" not in existing:
         op.create_table(
             "contexts",
@@ -89,7 +85,6 @@ def upgrade() -> None:
             sa.Column("config_hash", sa.String, nullable=True),
             sa.Column("refreshed_at", sa.Float, nullable=True),
         )
-
     if "epochs" not in existing:
         op.create_table(
             "epochs",
@@ -98,7 +93,6 @@ def upgrade() -> None:
             sa.Column("files_indexed", sa.Integer, nullable=False, server_default="0"),
             sa.Column("commit_hash", sa.String, nullable=True),
         )
-
     if "repo_state" not in existing:
         op.create_table(
             "repo_state",
@@ -109,9 +103,7 @@ def upgrade() -> None:
             sa.Column("current_epoch_id", sa.Integer, nullable=True),
             sa.Column("reconignore_hash", sa.String, nullable=True),
         )
-
     # ── Tier 1: Structural fact tables ─────────────────────────────
-
     if "context_markers" not in existing:
         op.create_table(
             "context_markers",
@@ -125,7 +117,6 @@ def upgrade() -> None:
             sa.Column("marker_tier", sa.String, nullable=False),
             sa.Column("detected_at", sa.Float, nullable=True),
         )
-
     if "test_targets" not in existing:
         op.create_table(
             "test_targets",
@@ -146,7 +137,6 @@ def upgrade() -> None:
             sa.Column("path", sa.String, nullable=True),
             sa.Column("discovered_at", sa.Float, nullable=True),
         )
-
     if "indexed_lint_tools" not in existing:
         op.create_table(
             "indexed_lint_tools",
@@ -160,7 +150,6 @@ def upgrade() -> None:
             sa.Column("config_file", sa.String, nullable=True),
             sa.Column("discovered_at", sa.Float, nullable=True),
         )
-
     if "indexed_coverage_capabilities" not in existing:
         op.create_table(
             "indexed_coverage_capabilities",
@@ -170,7 +159,6 @@ def upgrade() -> None:
             sa.Column("tools_json", sa.String, nullable=False),
             sa.Column("discovered_at", sa.Float, nullable=True),
         )
-
     if "scope_facts" not in existing:
         op.create_table(
             "scope_facts",
@@ -196,7 +184,6 @@ def upgrade() -> None:
             sa.Column("end_line", sa.Integer, nullable=False),
             sa.Column("end_col", sa.Integer, nullable=False),
         )
-
     if "def_facts" not in existing:
         op.create_table(
             "def_facts",
@@ -227,7 +214,6 @@ def upgrade() -> None:
             sa.Column("docstring", sa.String, nullable=True),
             sa.Column("return_type", sa.String, nullable=True),
         )
-
     if "ref_facts" not in existing:
         op.create_table(
             "ref_facts",
@@ -257,7 +243,6 @@ def upgrade() -> None:
             sa.Column("certainty", sa.String, nullable=False, server_default="certain"),
             sa.Column("target_def_uid", sa.String, nullable=True, index=True),
         )
-
     if "local_bind_facts" not in existing:
         op.create_table(
             "local_bind_facts",
@@ -283,7 +268,6 @@ def upgrade() -> None:
             sa.Column("certainty", sa.String, nullable=False, server_default="certain"),
             sa.Column("reason_code", sa.String, nullable=False),
         )
-
     if "import_facts" not in existing:
         op.create_table(
             "import_facts",
@@ -314,7 +298,6 @@ def upgrade() -> None:
             sa.Column("end_line", sa.Integer, nullable=True),
             sa.Column("end_col", sa.Integer, nullable=True),
         )
-
     if "export_surfaces" not in existing:
         op.create_table(
             "export_surfaces",
@@ -327,7 +310,6 @@ def upgrade() -> None:
             sa.Column("surface_hash", sa.String, nullable=True),
             sa.Column("epoch_id", sa.Integer, nullable=True),
         )
-
     if "export_entries" not in existing:
         op.create_table(
             "export_entries",
@@ -342,7 +324,6 @@ def upgrade() -> None:
             sa.Column("certainty", sa.String, nullable=False, server_default="certain"),
             sa.Column("evidence_kind", sa.String, nullable=True),
         )
-
     if "export_thunks" not in existing:
         op.create_table(
             "export_thunks",
@@ -362,7 +343,6 @@ def upgrade() -> None:
             sa.Column("alias_map", sa.String, nullable=True),
             sa.Column("evidence_kind", sa.String, nullable=True),
         )
-
     if "anchor_groups" not in existing:
         op.create_table(
             "anchor_groups",
@@ -377,7 +357,6 @@ def upgrade() -> None:
             sa.Column("total_count", sa.Integer, nullable=False, server_default="0"),
             sa.Column("exemplar_ids", sa.String, nullable=True),
         )
-
     if "dynamic_access_sites" not in existing:
         op.create_table(
             "dynamic_access_sites",
@@ -398,9 +377,7 @@ def upgrade() -> None:
             sa.Column("extracted_literals", sa.String, nullable=True),
             sa.Column("has_non_literal_key", sa.Boolean, nullable=False, server_default="0"),
         )
-
     # ── Tier 2: Type-aware fact tables ─────────────────────────────
-
     if "type_annotation_facts" not in existing:
         op.create_table(
             "type_annotation_facts",
@@ -434,7 +411,6 @@ def upgrade() -> None:
             sa.Column("start_line", sa.Integer, nullable=False),
             sa.Column("start_col", sa.Integer, nullable=False),
         )
-
     if "type_member_facts" not in existing:
         op.create_table(
             "type_member_facts",
@@ -464,7 +440,6 @@ def upgrade() -> None:
             sa.Column("start_line", sa.Integer, nullable=False),
             sa.Column("start_col", sa.Integer, nullable=False),
         )
-
     if "member_access_facts" not in existing:
         op.create_table(
             "member_access_facts",
@@ -502,7 +477,6 @@ def upgrade() -> None:
             sa.Column("end_line", sa.Integer, nullable=False),
             sa.Column("end_col", sa.Integer, nullable=False),
         )
-
     if "interface_impl_facts" not in existing:
         op.create_table(
             "interface_impl_facts",
@@ -525,7 +499,6 @@ def upgrade() -> None:
             sa.Column("start_line", sa.Integer, nullable=False),
             sa.Column("start_col", sa.Integer, nullable=False),
         )
-
     if "receiver_shape_facts" not in existing:
         op.create_table(
             "receiver_shape_facts",
@@ -553,9 +526,7 @@ def upgrade() -> None:
             sa.Column("best_match_type", sa.String, nullable=True, index=True),
             sa.Column("match_confidence", sa.Float, nullable=True),
         )
-
     # ── Tier 3: Behavioral fact tables ─────────────────────────────
-
     if "test_coverage_facts" not in existing:
         op.create_table(
             "test_coverage_facts",
@@ -574,8 +545,8 @@ def upgrade() -> None:
             sa.Column("epoch", sa.Integer, nullable=False, index=True),
             sa.Column("stale", sa.Boolean, nullable=False, server_default="0"),
             sa.Column("test_passed", sa.Boolean, nullable=True),
+            sa.UniqueConstraint("test_id", "target_def_uid", name="uq_test_coverage_test_target"),
         )
-
     if "lint_status_facts" not in existing:
         op.create_table(
             "lint_status_facts",
@@ -588,8 +559,8 @@ def upgrade() -> None:
             sa.Column("info_count", sa.Integer, nullable=False, server_default="0"),
             sa.Column("clean", sa.Boolean, nullable=False, server_default="1"),
             sa.Column("epoch", sa.Integer, nullable=False, index=True),
+            sa.UniqueConstraint("file_path", "tool_id", name="uq_lint_status_file_tool"),
         )
-
     if "endpoint_facts" not in existing:
         op.create_table(
             "endpoint_facts",
@@ -611,7 +582,6 @@ def upgrade() -> None:
             sa.Column("end_line", sa.Integer, nullable=True),
             sa.Column("framework", sa.String, nullable=True),
         )
-
     if "doc_cross_refs" not in existing:
         op.create_table(
             "doc_cross_refs",
@@ -631,7 +601,6 @@ def upgrade() -> None:
             ),
             sa.Column("confidence", sa.String, nullable=False, server_default="high"),
         )
-
     if "splade_vecs" not in existing:
         op.create_table(
             "splade_vecs",
@@ -645,7 +614,6 @@ def upgrade() -> None:
             sa.Column("scaffold_text", sa.String, nullable=True),
             sa.Column("vector_blob", sa.LargeBinary, nullable=True),
         )
-
     if "semantic_neighbor_facts" not in existing:
         op.create_table(
             "semantic_neighbor_facts",
@@ -662,8 +630,8 @@ def upgrade() -> None:
             ),
             sa.Column("score", sa.Float, nullable=False),
             sa.Column("model_version", sa.String, nullable=False, index=True),
+            sa.UniqueConstraint("source_def_uid", "neighbor_def_uid", "model_version", name="uq_semantic_neighbor_pair_model"),
         )
-
     if "file_chunk_vecs" not in existing:
         op.create_table(
             "file_chunk_vecs",
@@ -680,7 +648,6 @@ def upgrade() -> None:
             sa.Column("vector_json", sa.String, nullable=False),
             sa.Column("model_version", sa.String, nullable=False, index=True),
         )
-
     if "doc_code_edge_facts" not in existing:
         op.create_table(
             "doc_code_edge_facts",
@@ -695,9 +662,7 @@ def upgrade() -> None:
             sa.Column("score", sa.Float, nullable=False),
             sa.Column("model_version", sa.String, nullable=False, index=True),
         )
-
     # ── Epoch / snapshot tables ────────────────────────────────────
-
     if "def_snapshot_record" not in existing:
         op.create_table(
             "def_snapshot_record",
@@ -712,9 +677,7 @@ def upgrade() -> None:
             sa.Column("start_line", sa.Integer, nullable=True),
             sa.Column("end_line", sa.Integer, nullable=True),
         )
-
     # ── Runtime tables ─────────────────────────────────────────────
-
     if "context_runtimes" not in existing:
         op.create_table(
             "context_runtimes",
@@ -749,13 +712,10 @@ def upgrade() -> None:
             sa.Column("resolved_at", sa.Float, nullable=True),
             sa.Column("resolution_method", sa.String, nullable=True),
         )
-
     # ── Composite indexes ──────────────────────────────────────────
-
     conn = op.get_bind()
     for sql in COMPOSITE_INDEXES:
         conn.execute(sa.text(sql))
-
 
 def downgrade() -> None:
     # Drop in reverse dependency order.
