@@ -6,7 +6,6 @@ import re
 from dataclasses import asdict
 from typing import Any
 
-from coderecon.git.models import _DELTA_CHAR_MAP
 from coderecon.index._internal.diff.models import (
     SemanticDiffResult,
     StructuralChange,

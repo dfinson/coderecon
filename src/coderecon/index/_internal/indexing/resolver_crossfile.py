@@ -15,7 +15,6 @@ from sqlmodel import col, select
 
 from coderecon.index.models import (
     Certainty,
-    DefFact,
     File,
     ImportFact,
     RefTier,

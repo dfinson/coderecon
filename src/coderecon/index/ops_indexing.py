@@ -18,7 +18,6 @@ from sqlmodel import col, select
 from coderecon.core.languages import detect_language_family
 from coderecon.index._internal.ignore import IgnoreChecker
 from coderecon.index._internal.indexing import (
-    FactQueries,
     materialize_all,
     resolve_references,
     resolve_type_traced,

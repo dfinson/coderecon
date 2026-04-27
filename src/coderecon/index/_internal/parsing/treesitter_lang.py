@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import structlog
 from typing import Any
 
@@ -10,7 +9,7 @@ import tree_sitter
 from tree_sitter import Query as _TSQuery
 from tree_sitter import QueryCursor as _TSQueryCursor
 
-from coderecon.index._internal.parsing.packs import LanguagePack, get_pack
+from coderecon.index._internal.parsing.packs import LanguagePack
 from coderecon.index._internal.parsing.treesitter_imports import _qualified_name_text
 from coderecon.index._internal.parsing.treesitter_models import _CSHARP_PREPROC_WRAPPERS
 

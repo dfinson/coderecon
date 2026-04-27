@@ -19,7 +19,6 @@ from __future__ import annotations
 
 from coderecon.index._internal.parsing.packs_base import (
     LanguagePack,
-    _GENERIC_SCOPE_PATTERNS,
 )
 from coderecon.index._internal.parsing.packs_functional import (
     ELIXIR_PACK,

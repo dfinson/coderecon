@@ -10,7 +10,7 @@ import tree_sitter
 from tree_sitter import Query as _TSQuery
 from tree_sitter import QueryCursor as _TSQueryCursor
 
-from coderecon.index._internal.parsing.packs import get_pack, SymbolQueryConfig
+from coderecon.index._internal.parsing.packs import SymbolQueryConfig
 from coderecon.index._internal.parsing.treesitter_models import SyntacticSymbol
 
 log = structlog.get_logger(__name__)

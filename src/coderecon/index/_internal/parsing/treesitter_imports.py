@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import structlog
 from typing import TYPE_CHECKING, Any
 
@@ -13,7 +12,7 @@ from tree_sitter import QueryCursor as _TSQueryCursor
 if TYPE_CHECKING:
     from coderecon.index._internal.parsing.packs import ImportQueryConfig
 
-from coderecon.index._internal.parsing.packs import LanguagePack, get_pack
+from coderecon.index._internal.parsing.packs import LanguagePack
 from coderecon.index._internal.parsing.treesitter_models import (
     DynamicAccess, SyntacticImport, _import_uid,
 )

@@ -5,7 +5,6 @@ Also contains the resolution pass registry and ``run_pass_1_5`` orchestrator.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
@@ -14,7 +13,6 @@ from sqlmodel import col, select
 
 from coderecon.index.models import (
     Certainty,
-    DefFact,
     File,
     ImportFact,
     RefTier,

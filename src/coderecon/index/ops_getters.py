@@ -31,8 +31,6 @@ from coderecon.index.models import (
     RefFact,
     TestTarget,
 )
-from coderecon.index.ops_glob import _matches_filter_paths
-from coderecon.index.ops_types import SearchMode, SearchResponse, SearchResult
 from coderecon.tools.map_repo import IncludeOption, MapRepoResult, RepoMapper
 
 if TYPE_CHECKING:

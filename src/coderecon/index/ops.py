@@ -57,11 +57,6 @@ from coderecon.index import (
 
 # Re-export data classes and glob helpers for backward compatibility
 from coderecon.index.ops_glob import (
-    _compile_glob_pattern,
-    _compile_glob_set,
-    _compile_glob_set_cached,
-    _glob_to_regex,
-    _matches_filter_paths,
     _matches_glob,
 )
 from coderecon.index.ops_types import (
@@ -73,17 +68,7 @@ from coderecon.index.ops_types import (
 )
 
 if TYPE_CHECKING:
-    from coderecon.index._internal.db import IntegrityReport
-    from coderecon.index._internal.indexing.import_graph import (
-        CoverageGap,
-        CoverageSourceResult,
-        ImportGraphResult,
-    )
-    from coderecon.index.models import FileState, ImportFact, IndexedLintTool, RefFact, TestTarget
-    from coderecon.testing.runtime import ContextRuntime
-
     from coderecon.daemon.concurrency import FreshnessGate
-    from coderecon.tools.map_repo import IncludeOption, MapRepoResult
 
 
 class IndexCoordinatorEngine:

@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import structlog
-from sqlmodel import select
 
 from coderecon.index._internal.db import (
     EpochManager,
