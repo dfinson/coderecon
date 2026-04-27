@@ -14,7 +14,7 @@ from coderecon.index._internal.diff.models import (
     SemanticDiffResult,
     StructuralChange,
 )
-from coderecon.mcp.tools.diff import (
+from coderecon.mcp.tools.diff_formatting import (
     _build_agentic_hint,
     _classify_domains,
     _detect_cross_domain_edges,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from coderecon.lint import parsers
+from coderecon.lint import parsers_ext as parsers
 from coderecon.lint.models import ToolCategory
 from coderecon.lint.tools import LintTool, registry
 

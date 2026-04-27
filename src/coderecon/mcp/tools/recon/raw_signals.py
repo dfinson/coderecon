@@ -16,9 +16,9 @@ import structlog
 from fastmcp import Context
 from pydantic import Field
 
+from coderecon.mcp.tools.recon.graph_harvester import _harvest_graph
 from coderecon.mcp.tools.recon.harvesters import (
     _harvest_explicit,
-    _harvest_graph,
     _harvest_imports,
     _harvest_splade,
     _harvest_term_match,

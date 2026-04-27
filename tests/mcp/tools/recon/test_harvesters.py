@@ -1,9 +1,9 @@
 """Tests for coderecon.mcp.tools.recon.harvesters."""
 
+from coderecon.mcp.tools.recon.graph_harvester import _harvest_graph
 from coderecon.mcp.tools.recon.harvesters import (
     _harvest_term_match,
     _harvest_explicit,
-    _harvest_graph,
     _harvest_imports,
     _harvest_splade,
 )

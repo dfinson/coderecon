@@ -1368,9 +1368,9 @@ async def checkpoint_pipeline(
                     f"Committed {sha[:7]}",
                 )
                 try:
-                    from coderecon.mcp.tools.diff import (
+                    from coderecon.mcp.tools.diff import _run_git_diff
+                    from coderecon.mcp.tools.diff_formatting import (
                         _result_to_dict,
-                        _run_git_diff,
                     )
                     diff_result = _run_git_diff(
                         app_ctx, base="HEAD~1", target="HEAD", paths=None
