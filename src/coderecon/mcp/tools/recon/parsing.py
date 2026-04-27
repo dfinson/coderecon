@@ -28,7 +28,7 @@ _PATH_REGEX = re.compile(
 
 # Regex for symbol-like identifiers (PascalCase or snake_case, 3+ chars)
 _SYMBOL_REGEX = re.compile(
-    r"\b([A-Z][a-zA-Z0-9]{2,}(?:[A-Z][a-z]+)*"  # PascalCase
+    r"\b([A-Z][a-zA-Z0-9]{2,}"  # PascalCase
     r"|[a-z][a-z0-9]*(?:_[a-z0-9]+)+)"  # snake_case
     r"\b"
 )
