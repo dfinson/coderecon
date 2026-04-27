@@ -37,7 +37,6 @@ from coderecon.git.ops import GitOps
 # Parsing Tests
 # =============================================================================
 
-
 class TestExtractLocalBranchFromRemote:
     @pytest.mark.parametrize(
         ("remote_ref", "expected"),
@@ -50,7 +49,6 @@ class TestExtractLocalBranchFromRemote:
     )
     def test_extracts_branch_name(self, remote_ref: str, expected: str) -> None:
         assert extract_local_branch_from_remote(remote_ref) == expected
-
 
 class TestExtractTagName:
     @pytest.mark.parametrize(
@@ -65,7 +63,6 @@ class TestExtractTagName:
     def test_extracts_tag_name(self, refname: str, expected: str | None) -> None:
         assert extract_tag_name(refname) == expected
 
-
 class TestExtractBranchName:
     @pytest.mark.parametrize(
         ("refname", "expected"),
@@ -78,7 +75,6 @@ class TestExtractBranchName:
     )
     def test_extracts_branch_name(self, refname: str, expected: str | None) -> None:
         assert extract_branch_name(refname) == expected
-
 
 class TestFirstLine:
     @pytest.mark.parametrize(
@@ -93,7 +89,6 @@ class TestFirstLine:
     def test_returns_first_line(self, text: str, expected: str) -> None:
         assert first_line(text) == expected
 
-
 class TestMakeRefs:
     def test_make_tag_ref(self) -> None:
         assert make_tag_ref("v1.0") == "refs/tags/v1.0"
@@ -101,11 +96,9 @@ class TestMakeRefs:
     def test_make_branch_ref(self) -> None:
         assert make_branch_ref("main") == "refs/heads/main"
 
-
 # =============================================================================
 # Error Mapping Tests
 # =============================================================================
-
 
 class TestErrorMapper:
     def test_guard_passes_on_success(self) -> None:
@@ -127,18 +120,15 @@ class TestErrorMapper:
         with pytest.raises(RemoteError), ErrorMapper.guard("push", remote="origin"):
             raise GitError("connection refused")
 
-
 class TestGitOperationDecorator:
     def test_returns_context_manager(self) -> None:
         cm = git_operation("test")
         with cm:
             pass  # Should work
 
-
 # =============================================================================
 # Precondition Tests
 # =============================================================================
-
 
 class TestRequireNotUnborn:
     def test_raises_on_unborn(self, tmp_path: Path) -> None:
@@ -151,7 +141,6 @@ class TestRequireNotUnborn:
     def test_passes_with_commit(self, temp_repo: Path) -> None:
         ops = GitOps(temp_repo)
         require_not_unborn(ops._access, "merge")  # Should not raise
-
 
 class TestRequireCurrentBranch:
     def test_returns_branch_name(self, temp_repo: Path) -> None:
@@ -167,7 +156,6 @@ class TestRequireCurrentBranch:
         with pytest.raises(DetachedHeadError):
             require_current_branch(ops._access, "push")
 
-
 class TestRequireNotCurrentBranch:
     def test_passes_for_different_branch(self, temp_repo: Path) -> None:
         ops = GitOps(temp_repo)
@@ -179,7 +167,6 @@ class TestRequireNotCurrentBranch:
         with pytest.raises(GitError, match="Cannot delete current branch"):
             require_not_current_branch(ops._access, "main")
 
-
 class TestRequireBranchExists:
     def test_passes_for_existing_branch(self, temp_repo: Path) -> None:
         ops = GitOps(temp_repo)
@@ -189,7 +176,6 @@ class TestRequireBranchExists:
         ops = GitOps(temp_repo)
         with pytest.raises(BranchNotFoundError):
             require_branch_exists(ops._access, "nonexistent")
-
 
 class TestCheckNothingToCommit:
     def test_passes_when_allow_empty(self, temp_repo: Path) -> None:

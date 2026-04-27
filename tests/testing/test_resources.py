@@ -13,11 +13,9 @@ from coderecon.testing.resources import (
     classify_oom,
 )
 
-
 # =============================================================================
 # MemoryBudget
 # =============================================================================
-
 
 class TestMemoryBudget:
     """Tests for cross-platform MemoryBudget."""
@@ -70,11 +68,9 @@ class TestMemoryBudget:
             mock_ps.virtual_memory.return_value = self._mock_vmem(6000)
             assert budget.ceiling_mb() == 3952  # 6000 - 2048
 
-
 # =============================================================================
 # child_rss_mb
 # =============================================================================
-
 
 class TestChildRssMb:
     """Tests for child RSS measurement."""
@@ -97,11 +93,9 @@ class TestChildRssMb:
             mock_proc.side_effect = psutil.AccessDenied(pid=1)
             assert child_rss_mb(1) == 0
 
-
 # =============================================================================
 # classify_oom
 # =============================================================================
-
 
 class TestClassifyOom:
     """Tests for OOM classification heuristic."""
@@ -149,11 +143,9 @@ class TestClassifyOom:
         # ceiling=0 should not trigger RSS-based check
         assert classify_oom(1, "", 500, 0) is False
 
-
 # =============================================================================
 # MemoryHistory
 # =============================================================================
-
 
 class TestMemoryHistory:
     """Tests for persistent per-target RSS history."""

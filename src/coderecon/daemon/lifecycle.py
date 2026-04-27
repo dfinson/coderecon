@@ -27,7 +27,6 @@ log = structlog.get_logger(__name__)
 PID_FILE = "daemon.pid"
 PORT_FILE = "daemon.port"
 
-
 @dataclass
 class ServerController:
     """
@@ -110,7 +109,6 @@ class ServerController:
         """Get the shutdown event for external coordination."""
         return self._shutdown_event
 
-
 def write_pid_file(coderecon_dir: Path, port: int) -> None:
     """Write PID and port files for daemon discovery."""
     import os
@@ -123,7 +121,6 @@ def write_pid_file(coderecon_dir: Path, port: int) -> None:
 
     log.debug("pid_file_written", pid_path=str(pid_path), port=port)
 
-
 def remove_pid_file(coderecon_dir: Path) -> None:
     """Remove PID and port files on shutdown."""
     pid_path = coderecon_dir / PID_FILE
@@ -132,7 +129,6 @@ def remove_pid_file(coderecon_dir: Path) -> None:
     for path in (pid_path, port_path):
         with contextlib.suppress(FileNotFoundError):
             path.unlink()
-
 
 def read_server_info(coderecon_dir: Path) -> tuple[int, int] | None:
     """Read daemon PID and port from files. Returns (pid, port) or None."""
@@ -146,7 +142,6 @@ def read_server_info(coderecon_dir: Path) -> tuple[int, int] | None:
     except (FileNotFoundError, ValueError):
         log.debug("server_info_read_failed", exc_info=True)
         return None
-
 
 def is_server_running(coderecon_dir: Path) -> bool:
     """Check if daemon is running by verifying PID file and process."""
@@ -166,7 +161,6 @@ def is_server_running(coderecon_dir: Path) -> bool:
         # Process doesn't exist - clean up stale files
         remove_pid_file(coderecon_dir)
         return False
-
 
 async def run_server(
     repo_root: Path,
@@ -255,7 +249,6 @@ async def run_server(
     finally:
         await controller.stop()
         remove_pid_file(coderecon_dir)
-
 
 def stop_daemon(coderecon_dir: Path) -> bool:
     """Stop a running daemon by sending SIGTERM. Returns True if stopped."""

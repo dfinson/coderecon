@@ -26,7 +26,6 @@ from coderecon.index.models import (
 if TYPE_CHECKING:
     from coderecon.index._internal.db import Database
 
-
 class FileStateService:
     """Computes file state (Freshness × Certainty) for mutation gating.
 
@@ -148,7 +147,6 @@ class FileStateService:
         In Tier 0+1, we don't track dependency chains, so this is a no-op.
         """
         return None
-
 
 class MutationGateResult:
     """Result of mutation gate check."""

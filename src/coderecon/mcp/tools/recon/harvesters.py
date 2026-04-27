@@ -24,9 +24,7 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-
 # Harvester B: Term match (SQL LIKE)
-
 
 async def _harvest_term_match(
     app_ctx: AppContext,
@@ -126,9 +124,7 @@ async def _harvest_term_match(
     )
     return candidates
 
-
 # Harvester D: Explicit mentions (paths + symbols from task text)
-
 
 async def _harvest_explicit(
     app_ctx: AppContext,
@@ -253,7 +249,6 @@ async def _harvest_explicit(
     )
     return candidates
 
-
 from coderecon.mcp.tools.recon.merge import (  # noqa: E402
     _add_file_defs_as_candidates,
     _infer_test_paths,
@@ -261,7 +256,6 @@ from coderecon.mcp.tools.recon.merge import (  # noqa: E402
 )
 
 # Harvester F: Import-chain discovery (dependency + dependent tracing)
-
 
 async def _harvest_imports(
     app_ctx: AppContext,
@@ -436,9 +430,7 @@ async def _harvest_imports(
     )
     return candidates
 
-
 # Harvester S: SPLADE sparse retrieval
-
 
 async def _harvest_splade(
     app_ctx: AppContext,

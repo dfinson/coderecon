@@ -23,7 +23,6 @@ from coderecon.index._internal.discovery.authority_parsers import (
 )
 from coderecon.index.models import CandidateContext, LanguageFamily, ProbeStatus
 
-
 def make_candidate(
     root_path: str,
     tier: int,
@@ -38,7 +37,6 @@ def make_candidate(
         markers=markers or [],
         probe_status=ProbeStatus.PENDING,
     )
-
 
 class TestAuthorityResult:
     """Tests for AuthorityResult dataclass."""
@@ -56,7 +54,6 @@ class TestAuthorityResult:
         result = AuthorityResult(pending=[], detached=[])
         assert result.pending == []
         assert result.detached == []
-
 
 class TestTier1AuthorityFilter:
     """Tests for Tier1AuthorityFilter."""
@@ -169,7 +166,6 @@ class TestTier1AuthorityFilter:
         f = Tier1AuthorityFilter(Path("/test"))
         assert matches_any_glob("packages/a", ["./packages/a"]) is True
 
-
 class TestJavaScriptFiltering:
     """Tests for JavaScript workspace filtering."""
 
@@ -227,7 +223,6 @@ class TestJavaScriptFiltering:
 
             assert "packages/*" in globs
 
-
 class TestGoFiltering:
     """Tests for Go workspace filtering."""
 
@@ -257,7 +252,6 @@ class TestGoFiltering:
             modules = get_go_work_modules(root, t1)
 
             assert "./app" in modules
-
 
 class TestRustFiltering:
     """Tests for Rust workspace filtering."""
@@ -291,7 +285,6 @@ class TestRustFiltering:
             assert "a" in members
             assert "b" in members
 
-
 class TestJvmFiltering:
     """Tests for JVM workspace filtering (applies to Java/Kotlin/Scala/Groovy)."""
 
@@ -323,7 +316,6 @@ class TestJvmFiltering:
 
             assert "core" in modules
             assert "api" in modules
-
 
 class TestDotNetFiltering:
     """Tests for .NET solution filtering (applies to C#/F#/VB)."""
@@ -373,7 +365,6 @@ class TestDotNetFiltering:
             # Paths retain original format from .sln (backslashes)
             assert any("Core.csproj" in p for p in projects)
             assert any("Api.csproj" in p for p in projects)
-
 
 class TestCrossPlatformPathHandling:
     """Tests for cross-platform path compatibility.

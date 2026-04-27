@@ -24,7 +24,6 @@ from pydantic import ValidationError
 from coderecon.mcp.errors import MCPError, MCPErrorCode
 from coderecon.mcp.middleware import ToolMiddleware, _timestamp
 
-
 class TestTimestamp:
     """Tests for _timestamp helper."""
     def test_returns_hms_format(self):

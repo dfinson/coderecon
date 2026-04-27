@@ -6,7 +6,6 @@ from pathlib import Path
 
 import click
 
-
 def find_repo_root(start_path: Path | None = None) -> Path:
     """Find the git repository root from the given path.
 

@@ -39,7 +39,6 @@ LOGO = r"""
                      *++++++++++++++++++*
 """
 
-
 def _print_banner(host: str, port: int, *, animate: bool = True) -> None:
     ver = version("coderecon")
     console = get_console()
@@ -69,7 +68,6 @@ def _print_banner(host: str, port: int, *, animate: bool = True) -> None:
         highlight=False,
     )
     console.print()
-
 
 @click.command()
 @click.option(

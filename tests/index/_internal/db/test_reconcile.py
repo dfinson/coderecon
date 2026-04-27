@@ -16,7 +16,6 @@ from coderecon.index._internal.db.reconcile import (
 )
 from coderecon.index.models import Freshness
 
-
 class TestChangedFile:
     """Tests for ChangedFile dataclass."""
 
@@ -43,7 +42,6 @@ class TestChangedFile:
         )
         assert cf.old_hash is None
         assert cf.change_type == "added"
-
 
 class TestReconcileResult:
     """Tests for ReconcileResult dataclass."""
@@ -81,7 +79,6 @@ class TestReconcileResult:
         result = ReconcileResult(errors=["error1"])
         result.errors.append("error2")
         assert len(result.errors) == 2
-
 
 class TestReconciler:
     """Tests for Reconciler."""

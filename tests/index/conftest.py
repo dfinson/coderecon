@@ -12,13 +12,11 @@ import pytest
 if TYPE_CHECKING:
     from coderecon.index._internal.db import Database
 
-
 @pytest.fixture
 def temp_dir() -> Generator[Path, None, None]:
     """Create a temporary directory for tests."""
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         yield Path(tmpdir)
-
 
 @pytest.fixture
 def temp_db(temp_dir: Path) -> Generator[Database, None, None]:
@@ -37,7 +35,6 @@ def temp_db(temp_dir: Path) -> Generator[Database, None, None]:
         session.commit()
 
     yield db
-
 
 @pytest.fixture
 def temp_repo(temp_dir: Path) -> Generator[Path, None, None]:
@@ -59,7 +56,6 @@ def temp_repo(temp_dir: Path) -> Generator[Path, None, None]:
 
     yield repo_path
 
-
 @pytest.fixture
 def temp_repo_with_db(
     temp_repo: Path, temp_dir: Path
@@ -79,7 +75,6 @@ def temp_repo_with_db(
 
     yield temp_repo, db
 
-
 @pytest.fixture
 def sample_python_content() -> str:
     """Sample Python content for parsing tests."""
@@ -88,7 +83,6 @@ def sample_python_content() -> str:
 def hello(name: str) -> str:
     """Say hello."""
     return f"Hello, {name}!"
-
 
 class Greeter:
     """A greeter class."""
@@ -100,10 +94,8 @@ class Greeter:
         """Greet someone."""
         return f"{self.prefix}, {name}!"
 
-
 CONSTANT = 42
 '''
-
 
 @pytest.fixture
 def sample_javascript_content() -> str:
@@ -128,7 +120,6 @@ const CONSTANT = 42;
 
 export { hello, Greeter, CONSTANT };
 """
-
 
 @pytest.fixture
 def sample_go_content() -> str:

@@ -8,7 +8,6 @@ import pytest
 
 from coderecon.index._internal.db import Database, create_additional_indexes
 
-
 @pytest.fixture
 def cache_db(tmp_path: Path) -> Database:
     db = Database(tmp_path / "test.db")
@@ -33,7 +32,6 @@ def cache_db(tmp_path: Path) -> Database:
         conn.commit()
 
     return db
-
 
 class TestTryReadLintFacts:
     def test_all_files_cached_clean(self, cache_db: Database) -> None:
@@ -73,7 +71,6 @@ class TestTryReadLintFacts:
         assert result is not None
         assert result.clean
         assert result.files_checked == 0
-
 
 class TestTryReadTestFacts:
     def test_no_facts(self, cache_db: Database) -> None:

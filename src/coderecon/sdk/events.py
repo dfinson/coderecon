@@ -13,7 +13,6 @@ from coderecon.sdk.types import Event
 
 _log = logging.getLogger(__name__)
 
-
 class EventRouter:
     """Routes daemon events to callbacks and async queues."""
 

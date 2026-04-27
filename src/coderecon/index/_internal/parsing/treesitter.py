@@ -139,7 +139,6 @@ _CSHARP_PREPROC_WRAPPERS = frozenset(
     }
 )
 
-
 def _import_uid(file_path: str, name: str, line: int) -> str:
     """Compute stable import UID."""
     return hashlib.sha256(f"{file_path}:{line}:{name}".encode()).hexdigest()[:16]

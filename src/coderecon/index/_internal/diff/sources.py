@@ -20,12 +20,9 @@ from coderecon.index._internal.parsing.treesitter import SyntacticSymbol
 if TYPE_CHECKING:
     from sqlmodel import Session
 
-
 log = structlog.get_logger(__name__)
 
-
 # Source 1: Current index state
-
 
 def snapshots_from_index(session: Session, file_path: str) -> list[DefSnapshot]:
     """Read current DefFacts for a file from the index."""
@@ -52,9 +49,7 @@ def snapshots_from_index(session: Session, file_path: str) -> list[DefSnapshot]:
         for r in rows
     ]
 
-
 # Source 2: Published epoch snapshots
-
 
 def snapshots_from_epoch(session: Session, epoch_id: int, file_path: str) -> list[DefSnapshot]:
     """Read DefSnapshotRecords for a file at a given epoch.
@@ -105,9 +100,7 @@ def snapshots_from_epoch(session: Session, epoch_id: int, file_path: str) -> lis
         for r in rows
     ]
 
-
 # Source 3: Parse git blob on the fly
-
 
 def snapshots_from_blob(
     access: object,  # RepoAccess
@@ -171,7 +164,6 @@ def snapshots_from_blob(
         )
     return snapshots
 
-
 def _compute_lexical_path(sym: SyntacticSymbol, all_symbols: list[SyntacticSymbol]) -> str:
     """Compute the lexical path for a symbol (same logic as structural.py)."""
     if sym.parent_name:
@@ -187,7 +179,6 @@ def _compute_lexical_path(sym: SyntacticSymbol, all_symbols: list[SyntacticSymbo
             return f"{other.name}.{sym.name}"
 
     return sym.name
-
 
 def _compute_signature_hash(sym: SyntacticSymbol) -> str | None:
     """Compute a hash of the symbol's signature for change detection.

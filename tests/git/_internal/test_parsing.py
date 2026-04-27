@@ -20,7 +20,6 @@ from coderecon.git._internal.parsing import (
     make_tag_ref,
 )
 
-
 class TestExtractLocalBranchFromRemote:
     """Tests for extract_local_branch_from_remote function."""
 
@@ -43,7 +42,6 @@ class TestExtractLocalBranchFromRemote:
         """Returns input when no slash present."""
         assert extract_local_branch_from_remote("main") == "main"
 
-
 class TestExtractTagName:
     """Tests for extract_tag_name function."""
 
@@ -63,7 +61,6 @@ class TestExtractTagName:
         assert extract_tag_name("refs/tags/v1.0.0-rc1") == "v1.0.0-rc1"
         assert extract_tag_name("refs/tags/release/v1") == "release/v1"
 
-
 class TestExtractBranchName:
     """Tests for extract_branch_name function."""
 
@@ -82,7 +79,6 @@ class TestExtractBranchName:
         """Handles branch names with slashes."""
         assert extract_branch_name("refs/heads/feature/sub") == "feature/sub"
         assert extract_branch_name("refs/heads/user/feature/name") == "user/feature/name"
-
 
 class TestFirstLine:
     """Tests for first_line function."""
@@ -111,7 +107,6 @@ class TestFirstLine:
         """Handles text that is just a newline."""
         assert first_line("\n") == ""
 
-
 class TestMakeTagRef:
     """Tests for make_tag_ref function."""
 
@@ -124,7 +119,6 @@ class TestMakeTagRef:
         """Handles tag names with special characters."""
         assert make_tag_ref("v1.0.0-rc1") == "refs/tags/v1.0.0-rc1"
 
-
 class TestMakeBranchRef:
     """Tests for make_branch_ref function."""
 
@@ -136,7 +130,6 @@ class TestMakeBranchRef:
     def test_handles_nested_names(self) -> None:
         """Handles branch names with slashes."""
         assert make_branch_ref("feature/sub") == "refs/heads/feature/sub"
-
 
 class TestRoundTrip:
     """Tests for round-trip consistency."""

@@ -30,7 +30,6 @@ from coderecon.index.models import Context, DefFact, File, ImportFact, Worktree
 # Fixtures
 # ---------------------------------------------------------------------------
 
-
 @pytest.fixture
 def db(temp_dir: Path) -> Database:
     """Create a test database with schema."""
@@ -43,7 +42,6 @@ def db(temp_dir: Path) -> Database:
         session.commit()
     return db
 
-
 @pytest.fixture
 def repo_dir(temp_dir: Path) -> Path:
     """Create a mock repo directory with source and config files."""
@@ -51,11 +49,9 @@ def repo_dir(temp_dir: Path) -> Path:
     repo.mkdir()
     return repo
 
-
 # ---------------------------------------------------------------------------
 # Unit tests: _is_config_file
 # ---------------------------------------------------------------------------
-
 
 class TestIsConfigFile:
     def test_toml(self) -> None:
@@ -82,11 +78,9 @@ class TestIsConfigFile:
         assert _is_config_file("subdir/settings.toml")
         assert _is_config_file("deep/nested/config.yml")
 
-
 # ---------------------------------------------------------------------------
 # Unit tests: _extract_strings
 # ---------------------------------------------------------------------------
-
 
 class TestExtractStrings:
     def test_double_quoted(self) -> None:
@@ -130,11 +124,9 @@ class TestExtractStrings:
         result = _extract_strings(content)
         assert len(result) == 0
 
-
 # ---------------------------------------------------------------------------
 # Unit tests: _extract_makefile_tokens
 # ---------------------------------------------------------------------------
-
 
 class TestExtractMakefileTokens:
     def test_unquoted_path_with_slash(self) -> None:
@@ -189,11 +181,9 @@ class TestExtractMakefileTokens:
         values = [v for v, _ in result]
         assert ".env" in values or len([v for v in values if v == ".env"]) >= 0
 
-
 # ---------------------------------------------------------------------------
 # Unit tests: _try_resolve
 # ---------------------------------------------------------------------------
-
 
 class TestTryResolve:
     @pytest.fixture
@@ -251,11 +241,9 @@ class TestTryResolve:
         result = _try_resolve("tests/", path_set, dir_set)
         assert result == "tests/__init__.py"
 
-
 # ---------------------------------------------------------------------------
 # Integration tests: resolve_config_file_refs
 # ---------------------------------------------------------------------------
-
 
 class TestResolveConfigFileRefs:
     def _seed_repo(

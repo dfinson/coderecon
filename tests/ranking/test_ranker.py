@@ -6,7 +6,6 @@ from pathlib import Path
 
 from coderecon.ranking.ranker import Ranker, load_ranker
 
-
 class TestRanker:
     """Tests for Ranker class."""
 
@@ -26,7 +25,6 @@ class TestRanker:
         ranker = Ranker(model_path)
         result = ranker.score([])
         assert result == []
-
 
 class TestLoadRanker:
     """Tests for load_ranker factory."""

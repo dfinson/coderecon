@@ -18,7 +18,6 @@ from coderecon.testing.runtime import (
 
 pytestmark = pytest.mark.integration
 
-
 class TestRuntimeResolverIntegration:
     """Integration tests for RuntimeResolver."""
 
@@ -84,7 +83,6 @@ class TestRuntimeResolverIntegration:
         # Should detect Go
         assert runtime.go_executable is not None
 
-
 class TestExecutionContextBuilderIntegration:
     """Integration tests for ExecutionContextBuilder."""
 
@@ -126,7 +124,6 @@ class TestExecutionContextBuilderIntegration:
 
         # Should have PATH
         assert "PATH" in env
-
 
 class TestRuntimeVersionDetection:
     """Integration tests for runtime version detection."""

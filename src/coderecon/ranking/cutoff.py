@@ -15,7 +15,6 @@ log = structlog.get_logger(__name__)
 
 _DEFAULT_N = 20
 
-
 class Cutoff:
     """LightGBM regressor that predicts the optimal cutoff N."""
 
@@ -44,7 +43,6 @@ class Cutoff:
         X = np.array([[features.get(name, 0) for name in feature_names]])
         pred = self._model.predict(X)[0]
         return max(1, int(round(pred)))
-
 
 def load_cutoff(model_path: Path | None = None) -> Cutoff:
     """Load the cutoff model from package data or an explicit path."""

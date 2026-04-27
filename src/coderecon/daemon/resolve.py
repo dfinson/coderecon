@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from coderecon.daemon.global_app import GlobalDaemon, WorktreeSlot
 
-
 async def resolve_worktree(
     daemon: GlobalDaemon,
     repo_name: str,

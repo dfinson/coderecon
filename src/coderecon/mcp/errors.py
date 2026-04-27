@@ -12,7 +12,6 @@ from typing import Any
 
 from fastmcp.exceptions import ToolError
 
-
 class MCPErrorCode(StrEnum):
     """Machine-readable error codes for MCP tool failures."""
 
@@ -56,7 +55,6 @@ class MCPErrorCode(StrEnum):
     DUPLICATE_FULL_READ = "DUPLICATE_FULL_READ"
     RESOURCE_EVICTED = "RESOURCE_EVICTED"
 
-
 @dataclass
 class ErrorResponse:
     """Structured error response for MCP tools."""
@@ -76,7 +74,6 @@ class ErrorResponse:
             "path": self.path,
             "context": self.context,
         }
-
 
 class MCPError(ToolError):
     """Base exception for MCP tool errors with structured response.
@@ -112,9 +109,7 @@ class MCPError(ToolError):
             context=self.context,
         )
 
-
 # Specific Error Classes
-
 
 class InvalidRangeError(MCPError):
     """Raised when line range is invalid."""
@@ -130,7 +125,6 @@ class InvalidRangeError(MCPError):
             line_count=line_count,
         )
 
-
 class HashMismatchError(MCPError):
     """Raised when content hash doesn't match expected."""
 
@@ -144,7 +138,6 @@ class HashMismatchError(MCPError):
             actual_hash=actual,
         )
 
-
 class DryRunRequiredError(MCPError):
     """Raised when line_range mode is used without prior dry_run."""
 
@@ -155,7 +148,6 @@ class DryRunRequiredError(MCPError):
             remediation="Call with dry_run=True first to get content_hash, then call again with the hash.",
             path=path,
         )
-
 
 class DryRunExpiredError(MCPError):
     """Raised when dry_run_id is too old."""
@@ -169,7 +161,6 @@ class DryRunExpiredError(MCPError):
             age_seconds=age_seconds,
         )
 
-
 class BudgetExceededError(MCPError):
     """Raised when a scope budget is exceeded."""
 
@@ -181,7 +172,6 @@ class BudgetExceededError(MCPError):
             scope_id=scope_id,
             counter=counter,
         )
-
 
 class SpanOverlapError(MCPError):
     """Raised when span-based edits have overlapping ranges."""
@@ -195,7 +185,6 @@ class SpanOverlapError(MCPError):
             conflicts=conflicts,
         )
 
-
 class FileHashMismatchError(MCPError):
     """Raised when file SHA256 doesn't match expected for span edits."""
 
@@ -208,7 +197,6 @@ class FileHashMismatchError(MCPError):
             expected_file_sha256=expected,
             current_file_sha256=actual,
         )
-
 
 class ConfirmationRequiredError(MCPError):
     """Raised when a two-phase confirmation is required."""
@@ -226,7 +214,6 @@ class ConfirmationRequiredError(MCPError):
             confirmation_token=token,
             **safe_details,
         )
-
 
 class HookFailedError(MCPError):
     """Raised when a git hook fails."""
@@ -250,9 +237,7 @@ class HookFailedError(MCPError):
             modified_files=modified_files or [],
         )
 
-
 # Error Catalog for Introspection
-
 
 @dataclass
 class ErrorDocumentation:
@@ -263,7 +248,6 @@ class ErrorDocumentation:
     description: str
     causes: list[str]
     remediation: list[str]
-
 
 ERROR_CATALOG: dict[str, ErrorDocumentation] = {
     MCPErrorCode.HASH_MISMATCH.value: ErrorDocumentation(
@@ -437,7 +421,6 @@ ERROR_CATALOG: dict[str, ErrorDocumentation] = {
         ],
     ),
 }
-
 
 def get_error_documentation(code: str) -> ErrorDocumentation | None:
     """Get documentation for an error code."""

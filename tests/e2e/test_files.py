@@ -11,7 +11,6 @@ import pytest
 from tests.e2e.conftest import TOOL_TIMEOUTS
 from tests.e2e.expectations.schema import RepoExpectation
 
-
 @pytest.mark.e2e
 def test_list_files(
     coderecon_server: tuple[str, int],
@@ -64,7 +63,6 @@ def test_list_files(
             assert file_count <= files_section.indexed_max, (
                 f"Expected at most {files_section.indexed_max} files, got {file_count}"
             )
-
 
 @pytest.mark.e2e
 def test_read_files(

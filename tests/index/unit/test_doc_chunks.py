@@ -12,13 +12,11 @@ from coderecon.index._internal.indexing.doc_chunks import (
     chunk_file,
 )
 
-
 def _pad(text: str) -> str:
     """Pad text to exceed MIN_CHUNK_LENGTH so it isn't filtered out."""
     if len(text) < MIN_CHUNK_LENGTH:
         return text + " " * (MIN_CHUNK_LENGTH - len(text) + 1)
     return text
-
 
 class TestChunkMarkdown:
     """Markdown heading-based splitting."""
@@ -61,7 +59,6 @@ class TestChunkMarkdown:
         # Heading section starts at line 2
         assert chunks[1][2] == 2
 
-
 class TestChunkKeyvalue:
     """YAML/TOML key-based splitting."""
 
@@ -96,7 +93,6 @@ class TestChunkKeyvalue:
         # Either header or database should appear as a key
         assert any(k in ("header", "database") for k in keys)
 
-
 class TestChunkParagraphs:
     """Fallback paragraph splitting."""
 
@@ -121,7 +117,6 @@ class TestChunkParagraphs:
         text = "hi\n\nbye"
         chunks = _chunk_paragraphs(text)
         assert len(chunks) == 0
-
 
 class TestChunkFile:
     """Top-level chunk_file dispatcher."""

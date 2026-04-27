@@ -9,7 +9,6 @@ import pytest
 
 from coderecon.git import DiffInfo, GitOps, RefNotFoundError
 
-
 class TestDiffPlanner:
     """Tests for diff planning edge cases."""
 
@@ -54,7 +53,6 @@ class TestDiffPlanner:
         with pytest.raises(RefNotFoundError):
             ops.diff(base="HEAD")
 
-
 class TestCheckoutPlanner:
     """Tests for checkout planning edge cases."""
 
@@ -78,7 +76,6 @@ class TestCheckoutPlanner:
 
         assert ops.current_branch() == "feature"
 
-
 class TestRebasePlanner:
     """Tests for rebase planning edge cases."""
 
@@ -100,7 +97,6 @@ class TestRebasePlanner:
         plan = ops.rebase_plan("base")
 
         assert len(plan.steps) > 0
-
 
 class TestCommitRangeParsing:
     """Tests for commit range in diff."""

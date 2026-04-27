@@ -13,7 +13,6 @@ from coderecon.git import GitOps
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-
 def _run_git(cwd: Path, *args: str, input: str | None = None) -> subprocess.CompletedProcess[str]:
     """Run a git command in a directory."""
     return subprocess.run(
@@ -25,7 +24,6 @@ def _run_git(cwd: Path, *args: str, input: str | None = None) -> subprocess.Comp
         input=input,
     )
 
-
 def _init_repo(path: Path, branch: str = "main") -> Path:
     """Initialize a git repo with basic config."""
     path.mkdir(exist_ok=True)
@@ -33,7 +31,6 @@ def _init_repo(path: Path, branch: str = "main") -> Path:
     _run_git(path, "config", "user.name", "Test User")
     _run_git(path, "config", "user.email", "test@example.com")
     return path
-
 
 def _make_commit(path: Path, files: dict[str, str], message: str) -> str:
     """Create files and commit. Returns commit SHA."""
@@ -46,7 +43,6 @@ def _make_commit(path: Path, files: dict[str, str], message: str) -> str:
     sha_result = _run_git(path, "rev-parse", "HEAD")
     return sha_result.stdout.strip()
 
-
 @pytest.fixture
 def temp_repo(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a temporary git repository with initial commit. Returns repo path."""
@@ -55,7 +51,6 @@ def temp_repo(tmp_path: Path) -> Generator[Path, None, None]:
     _make_commit(repo_path, {"README.md": "# Test Repo\n"}, "Initial commit")
     yield repo_path
 
-
 @pytest.fixture
 def bare_repo(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a bare repository for remote testing."""
@@ -63,7 +58,6 @@ def bare_repo(tmp_path: Path) -> Generator[Path, None, None]:
     bare_path.mkdir()
     _run_git(bare_path, "init", "--bare")
     yield bare_path
-
 
 @pytest.fixture
 def repo_with_remote(
@@ -76,7 +70,6 @@ def repo_with_remote(
     # Ensure bare repo HEAD points to main so clones check out the right branch
     _run_git(bare_repo, "symbolic-ref", "HEAD", "refs/heads/main")
     return temp_repo
-
 
 @pytest.fixture
 def repo_with_remote_branch(
@@ -102,7 +95,6 @@ def repo_with_remote_branch(
 
     return temp_repo
 
-
 @pytest.fixture
 def repo_with_branches(temp_repo: Path) -> Path:
     """Repository with multiple branches."""
@@ -121,7 +113,6 @@ def repo_with_branches(temp_repo: Path) -> Path:
 
     return temp_repo
 
-
 @pytest.fixture
 def repo_with_uncommitted(temp_repo: Path) -> Path:
     """Repository with uncommitted changes."""
@@ -136,7 +127,6 @@ def repo_with_uncommitted(temp_repo: Path) -> Path:
     (temp_repo / "untracked.txt").write_text("untracked\n")
 
     return temp_repo
-
 
 @pytest.fixture
 def repo_with_conflict(
@@ -158,7 +148,6 @@ def repo_with_conflict(
 
     return temp_repo, "conflict-branch"
 
-
 @pytest.fixture
 def repo_with_history(temp_repo: Path) -> Path:
     """Repository with multiple commits."""
@@ -166,9 +155,7 @@ def repo_with_history(temp_repo: Path) -> Path:
         _make_commit(temp_repo, {f"file{i}.txt": f"content {i}\n"}, f"Commit {i}")
     return temp_repo
 
-
 # --- GitOps-returning fixtures ---
-
 
 @pytest.fixture
 def git_repo(tmp_path: Path) -> Generator[tuple[Path, GitOps], None, None]:
@@ -178,7 +165,6 @@ def git_repo(tmp_path: Path) -> Generator[tuple[Path, GitOps], None, None]:
     _make_commit(repo_path, {"README.md": "# Test\n"}, "Initial commit")
     yield repo_path, GitOps(repo_path)
 
-
 @pytest.fixture
 def git_repo_with_commit(git_repo: tuple[Path, GitOps]) -> tuple[Path, GitOps]:
     """GitOps repo with one additional commit beyond initial."""
@@ -187,7 +173,6 @@ def git_repo_with_commit(git_repo: tuple[Path, GitOps]) -> tuple[Path, GitOps]:
     ops.stage(["file.txt"])
     ops.commit("Add file")
     return repo_path, ops
-
 
 @pytest.fixture
 def git_repo_with_commits(git_repo: tuple[Path, GitOps]) -> tuple[Path, GitOps, list[str]]:
@@ -200,7 +185,6 @@ def git_repo_with_commits(git_repo: tuple[Path, GitOps]) -> tuple[Path, GitOps, 
         sha = ops.commit(f"Commit {i}")
         shas.append(sha)
     return repo_path, ops, shas
-
 
 @pytest.fixture
 def git_repo_with_branch(git_repo: tuple[Path, GitOps]) -> tuple[Path, GitOps, str]:
@@ -229,7 +213,6 @@ def git_repo_with_branch(git_repo: tuple[Path, GitOps]) -> tuple[Path, GitOps, s
     ops.checkout(default_branch)
 
     return repo_path, ops, default_head.target_sha
-
 
 @pytest.fixture
 def git_repo_pair(

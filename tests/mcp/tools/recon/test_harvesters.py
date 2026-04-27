@@ -14,7 +14,6 @@ from coderecon.mcp.tools.recon.models import (
     TaskIntent,
 )
 
-
 class TestHarvesterImports:
     """Verify all harvester functions are importable and are coroutines."""
 
@@ -42,7 +41,6 @@ class TestHarvesterImports:
         import asyncio
 
         assert asyncio.iscoroutinefunction(_harvest_splade)
-
 
 class TestHarvestCandidateIntegration:
     """Test HarvestCandidate used by harvesters."""

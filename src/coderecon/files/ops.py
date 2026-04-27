@@ -18,7 +18,6 @@ import structlog
 from coderecon.core.errors import PathTraversalError
 from coderecon.core.languages import EXTENSION_TO_NAME
 
-
 @dataclass
 class FileResult:
     """Result for a single file read."""
@@ -30,13 +29,11 @@ class FileResult:
     range: tuple[int, int] | None = None  # (start, end) if partial
     metadata: dict[str, int] | None = None
 
-
 @dataclass
 class ReadFilesResult:
     """Result of read_files operation."""
 
     files: list[FileResult]
-
 
 @dataclass
 class FileEntry:
@@ -48,7 +45,6 @@ class FileEntry:
     size: int | None = None
     modified_at: int | None = None
 
-
 @dataclass
 class ListFilesResult:
     """Result of list_files operation."""
@@ -57,7 +53,6 @@ class ListFilesResult:
     entries: list[FileEntry] = field(default_factory=list)
     total: int = 0
     truncated: bool = False
-
 
 def validate_path_in_repo(repo_root: Path, user_path: str) -> Path:
     """Validate that user_path is within repo_root, preventing traversal attacks.
@@ -82,7 +77,6 @@ def validate_path_in_repo(repo_root: Path, user_path: str) -> Path:
         )
 
     return full_path
-
 
 class FileOps:
     """File operations for path validation and file access."""
@@ -289,7 +283,6 @@ class FileOps:
             )
 
         return ReadFilesResult(files=results)
-
 
 def atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> None:
     """Write *content* to *path* atomically via temp-file + rename.

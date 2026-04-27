@@ -10,14 +10,12 @@ from coderecon.index._internal.parsing.packs import (
     get_pack,
 )
 
-
 # Convenience aliases — access type_config from each pack.
 # All supported languages are guaranteed to have type_config; assert to narrow.
 def _get_config(lang: str) -> TypeExtractionConfig:
     cfg = PACKS[lang].type_config
     assert cfg is not None, f"{lang} pack must have type_config"
     return cfg
-
 
 PYTHON_CONFIG = _get_config("python")
 TYPESCRIPT_CONFIG = _get_config("typescript")
@@ -35,7 +33,6 @@ ELIXIR_CONFIG = _get_config("elixir")
 HASKELL_CONFIG = _get_config("haskell")
 OCAML_CONFIG = _get_config("ocaml")
 ZIG_CONFIG = _get_config("zig")
-
 
 class TestPackTypeConfigs:
     """Tests for PACKS type config registry."""
@@ -69,7 +66,6 @@ class TestPackTypeConfigs:
         assert PACKS["c"].type_config is not PACKS["cpp"].type_config
         assert PACKS["c"].type_config is not None
         assert PACKS["c"].type_config.language_family == "c"
-
 
 class TestGetPackTypeConfig:
     """Tests for get_pack type config lookup."""
@@ -109,7 +105,6 @@ class TestGetPackTypeConfig:
         assert get_pack("unknown") is None
         assert get_pack("brainfuck") is None
 
-
 class TestPythonConfig:
     """Tests for PYTHON_CONFIG."""
 
@@ -145,7 +140,6 @@ class TestPythonConfig:
         """Python config has no interface support."""
         assert PYTHON_CONFIG.supports_interfaces is False
 
-
 class TestTypescriptConfig:
     """Tests for TYPESCRIPT_CONFIG."""
 
@@ -176,7 +170,6 @@ class TestTypescriptConfig:
         assert "[]" in TYPESCRIPT_CONFIG.array_patterns
         assert "Array<" in TYPESCRIPT_CONFIG.array_patterns
 
-
 class TestGoConfig:
     """Tests for GO_CONFIG."""
 
@@ -195,7 +188,6 @@ class TestGoConfig:
     def test_no_interface_impl_query(self) -> None:
         """Go config captures struct embedding as interface impl."""
         assert GO_CONFIG.interface_impl_query != ""
-
 
 class TestRustConfig:
     """Tests for RUST_CONFIG."""
@@ -218,7 +210,6 @@ class TestRustConfig:
         assert RUST_CONFIG.interface_impl_query
         assert "impl_item" in RUST_CONFIG.interface_impl_query
 
-
 class TestJavaConfig:
     """Tests for JAVA_CONFIG."""
 
@@ -233,7 +224,6 @@ class TestJavaConfig:
     def test_supports_interfaces(self) -> None:
         """Java config supports interfaces."""
         assert JAVA_CONFIG.supports_interfaces is True
-
 
 class TestRubyConfig:
     """Tests for RUBY_CONFIG."""
@@ -253,7 +243,6 @@ class TestRubyConfig:
     def test_empty_type_annotation_query(self) -> None:
         """Ruby config has empty type annotation query."""
         assert RUBY_CONFIG.type_annotation_query == ""
-
 
 class TestCppConfig:
     """Tests for CPP_CONFIG."""

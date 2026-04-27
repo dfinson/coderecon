@@ -55,7 +55,6 @@ except ImportError:
     log.debug("OpenTelemetry SDK not installed - telemetry will be disabled")
     _otel_available = False
 
-
 def _is_telemetry_enabled(config: TelemetryConfig | None) -> bool:
     """Check if telemetry should be enabled based on env vars and config.
 
@@ -70,7 +69,6 @@ def _is_telemetry_enabled(config: TelemetryConfig | None) -> bool:
     # Check config if provided
     return bool(config is not None and config.enabled)
 
-
 def _get_otlp_endpoint(config: TelemetryConfig | None) -> str | None:
     """Get OTLP endpoint from env var or config."""
     # Standard OTEL env var takes precedence
@@ -84,7 +82,6 @@ def _get_otlp_endpoint(config: TelemetryConfig | None) -> str | None:
 
     return None
 
-
 def _get_service_name(config: TelemetryConfig | None) -> str:
     """Get service name from env var or config."""
     # Standard OTEL env var takes precedence
@@ -97,7 +94,6 @@ def _get_service_name(config: TelemetryConfig | None) -> str:
         return config.service_name
 
     return "coderecon"
-
 
 def init_telemetry(config: TelemetryConfig | None = None) -> bool:
     """Initialize OpenTelemetry tracing and metrics.
@@ -184,7 +180,6 @@ def init_telemetry(config: TelemetryConfig | None = None) -> bool:
         log.error("telemetry_init_failed", error=str(e))
         return False
 
-
 def _get_version() -> str:
     """Get CodeRecon version for resource attributes."""
     try:
@@ -196,11 +191,9 @@ def _get_version() -> str:
     except (PackageNotFoundError, ImportError):
         return "unknown"
 
-
 def _is_insecure_endpoint(endpoint: str) -> bool:
     """Determine if endpoint should use insecure connection."""
     return endpoint.startswith("http://")
-
 
 def _instrument_sqlalchemy() -> None:
     """Auto-instrument SQLAlchemy if the instrumentation package is available."""
@@ -215,7 +208,6 @@ def _instrument_sqlalchemy() -> None:
         )
     except (RuntimeError, AttributeError) as e:
         log.warning("sqlalchemy_instrumentation_failed", error=str(e), exc_info=True)
-
 
 def shutdown_telemetry() -> None:
     """Shutdown telemetry providers and flush pending data.
@@ -248,7 +240,6 @@ def shutdown_telemetry() -> None:
     _meter_provider = None
     _initialized = False
 
-
 from coderecon.core._noop_telemetry import (
     NoOpMeter as _NoOpMeter,
     NoOpSpan as _NoOpSpan,
@@ -256,7 +247,6 @@ from coderecon.core._noop_telemetry import (
     noop_meter as _noop_meter,
     noop_tracer as _noop_tracer,
 )
-
 
 def get_tracer() -> _NoOpTracer:
     """Get the global tracer instance.
@@ -271,7 +261,6 @@ def get_tracer() -> _NoOpTracer:
         return _tracer  # type: ignore[return-value]  # real Tracer is duck-compatible
     return _noop_tracer
 
-
 def get_meter() -> _NoOpMeter:
     """Get the global meter instance.
 
@@ -284,7 +273,6 @@ def get_meter() -> _NoOpMeter:
     if _meter is not None:
         return _meter  # type: ignore[return-value]  # real Meter is duck-compatible
     return _noop_meter
-
 
 def traced(
     name: str | None = None,
@@ -366,7 +354,6 @@ def traced(
 
     return decorator
 
-
 def _set_error_status(span: Any) -> None:
     """Set span status to error."""
     if not _otel_available:
@@ -378,7 +365,6 @@ def _set_error_status(span: Any) -> None:
         span.set_status(otel_trace.Status(StatusCode.ERROR))
     except (ImportError, AttributeError, RuntimeError):
         log.debug("otel.set_error_status.failed", exc_info=True)
-
 
 @contextmanager
 def span_context(
@@ -421,7 +407,6 @@ def span_context(
                 _set_error_status(span)
             raise
 
-
 def is_telemetry_enabled() -> bool:
     """Check if telemetry is currently active.
 
@@ -429,7 +414,6 @@ def is_telemetry_enabled() -> bool:
         True if telemetry was successfully initialized and is active.
     """
     return _tracer is not None
-
 
 def is_otel_available() -> bool:
     """Check if OpenTelemetry SDK is installed.

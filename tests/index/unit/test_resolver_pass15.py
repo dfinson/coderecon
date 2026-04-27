@@ -39,7 +39,6 @@ from coderecon.index.models import (
 # Fixtures
 # ---------------------------------------------------------------------------
 
-
 @pytest.fixture
 def db(temp_dir: Path) -> Database:
     """Create a test database with schema."""
@@ -99,11 +98,9 @@ def seeded_db(db: Database) -> Database:
         session.commit()
     return db
 
-
 # ============================================================================
 # Design 2C: Schema Validation Tests
 # ============================================================================
-
 
 class TestSchemaValidation:
     """Verify SQL column references in Pass 1.5 resolvers match actual schema."""
@@ -222,7 +219,6 @@ class TestSchemaValidation:
 # Design 3A: Pagination Tests
 # ============================================================================
 
-
 class TestPaginatedReferences:
     """list_refs_by_def_uid and list_all_refs_by_def_uid pagination."""
     def test_default_limit_is_250(self, seeded_db: Database) -> None:
@@ -288,7 +284,6 @@ class TestPaginatedReferences:
 # ============================================================================
 # Design 4B: Star-Import Single-UPDATE Resolution Tests
 # ============================================================================
-
 
 class TestStarImportSingleUpdate:
     """Verify resolve_star_import_refs uses batch resolution correctly."""
@@ -502,11 +497,9 @@ b = beta()
         stats = resolve_star_import_refs(db, context_id)
         assert stats.refs_upgraded == 0
 
-
 # ============================================================================
 # Design 3A: Integration-level pagination tests
 # ============================================================================
-
 
 class TestPaginatedReferencesIntegration:
     """Integration tests verifying pagination with real indexed data."""
@@ -548,7 +541,6 @@ class TestPaginatedReferencesIntegration:
 # ============================================================================
 # Cross-Context Isolation Tests
 # ============================================================================
-
 
 class TestRootFallbackContextDefault:
     """Files without specific context mapping get root fallback context ID.

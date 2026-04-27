@@ -12,11 +12,9 @@ import pytest
 
 from coderecon.index._internal.parsing.treesitter import SyntacticSymbol, TreeSitterParser
 
-
 @pytest.fixture
 def parser() -> TreeSitterParser:
     return TreeSitterParser()
-
 
 def _parse(
     parser: TreeSitterParser, content: bytes, ext: str, tmp_path: Path
@@ -27,11 +25,9 @@ def _parse(
     result = parser.parse(f)
     return parser.extract_symbols(result)
 
-
 # ---------------------------------------------------------------------------
 # Markdown
 # ---------------------------------------------------------------------------
-
 
 class TestMarkdownExtraction:
     """Verify heading extraction from markdown sections."""
@@ -72,11 +68,9 @@ Another section
         # Subsection should be contained within Section One
         assert subsec.line >= sec1.line and subsec.end_line <= sec1.end_line
 
-
 # ---------------------------------------------------------------------------
 # TOML
 # ---------------------------------------------------------------------------
-
 
 class TestTomlExtraction:
     """Verify table and pair extraction from TOML."""
@@ -123,11 +117,9 @@ target-version = "py312"
         assert name_pair.line >= pkg_table.line
         assert name_pair.end_line <= pkg_table.end_line
 
-
 # ---------------------------------------------------------------------------
 # YAML
 # ---------------------------------------------------------------------------
-
 
 class TestYamlExtraction:
     """Verify key extraction from YAML."""
@@ -162,11 +154,9 @@ jobs:
         assert build.line >= jobs.line
         assert build.end_line <= jobs.end_line
 
-
 # ---------------------------------------------------------------------------
 # JSON
 # ---------------------------------------------------------------------------
-
 
 class TestJsonExtraction:
     """Verify pair extraction from JSON."""

@@ -6,7 +6,6 @@ from pathlib import Path
 
 from coderecon.index._internal.dedup import find_reusable_files
 
-
 class TestFindReusableFiles:
     def test_empty_input(self, tmp_path: Path) -> None:
         from coderecon.index._internal.db import Database

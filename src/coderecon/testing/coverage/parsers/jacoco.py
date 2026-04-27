@@ -41,7 +41,6 @@ from coderecon.testing.coverage.models import (
     FunctionCoverage,
 )
 
-
 class JacocoParser:
     """Parser for JaCoCo XML format with intelligent fallback."""
 

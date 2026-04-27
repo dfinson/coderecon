@@ -11,7 +11,6 @@ from coderecon.index._internal.indexing.materialize import (
     materialize_thunks,
 )
 
-
 @pytest.fixture()
 def mock_db():
     """Create a mock Database with a mock session context manager."""
@@ -21,14 +20,12 @@ def mock_db():
     db.session.return_value.__exit__ = MagicMock(return_value=False)
     return db, session
 
-
 def test_materialize_exports_no_defs(mock_db):
     """materialize_exports returns 0 when no def_facts exist."""
     db, session = mock_db
     session.execute.return_value.fetchall.return_value = []
     result = materialize_exports(db)
     assert result == 0
-
 
 def test_materialize_thunks_no_imports(mock_db):
     """materialize_thunks returns 0 when no re-export imports exist."""
@@ -38,14 +35,12 @@ def test_materialize_thunks_no_imports(mock_db):
     result = materialize_thunks(db)
     assert result == 0
 
-
 def test_materialize_anchor_groups_no_unresolved(mock_db):
     """materialize_anchor_groups returns 0 when no unresolved refs exist."""
     db, session = mock_db
     session.execute.return_value.fetchall.return_value = []
     result = materialize_anchor_groups(db)
     assert result == 0
-
 
 def test_materialize_all_calls_all_three():
     """materialize_all invokes exports, thunks, and anchor_groups."""
@@ -62,7 +57,6 @@ def test_materialize_all_calls_all_three():
     mock_exp.assert_called_once_with(db, context_ids=None)
     mock_thunks.assert_called_once_with(db, context_ids=None)
     mock_ag.assert_called_once_with(db, context_ids=None)
-
 
 def test_materialize_all_passes_context_ids():
     """materialize_all forwards context_ids to all sub-functions."""

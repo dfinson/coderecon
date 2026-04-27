@@ -25,9 +25,7 @@ from coderecon.git.errors import GitError
 if TYPE_CHECKING:
     from coderecon.daemon.global_app import GlobalDaemon
 
-
 # Route handlers — module-level functions taking (daemon, ..., request)
-
 
 async def _health(daemon: GlobalDaemon, request: Request) -> JSONResponse:
     _ = request
@@ -36,7 +34,6 @@ async def _health(daemon: GlobalDaemon, request: Request) -> JSONResponse:
         "active_repos": list(daemon._slots.keys()),
         "uptime_seconds": round(time.time() - daemon._start_time, 1),
     })
-
 
 async def _catalog_list(daemon: GlobalDaemon, request: Request) -> JSONResponse:
     """List all registered repos and their endpoints."""
@@ -66,7 +63,6 @@ async def _catalog_list(daemon: GlobalDaemon, request: Request) -> JSONResponse:
             ],
         })
     return JSONResponse({"repositories": entries})
-
 
 async def _catalog_register(
     daemon: GlobalDaemon, dev_mode: bool, request: Request,
@@ -108,7 +104,6 @@ async def _catalog_register(
         "mcp_endpoint": mcp_endpoint,
     }, status_code=201)
 
-
 async def _catalog_unregister(daemon: GlobalDaemon, request: Request) -> JSONResponse:
     """Unregister a repo via POST with {"path": "/abs/path/to/repo"}.
 
@@ -132,7 +127,6 @@ async def _catalog_unregister(daemon: GlobalDaemon, request: Request) -> JSONRes
 
     return JSONResponse({"removed": True, "deactivated": deactivated})
 
-
 async def _repo_health(daemon: GlobalDaemon, request: Request) -> JSONResponse:
     """Per-repo health check."""
     name = request.path_params["name"]
@@ -144,7 +138,6 @@ async def _repo_health(daemon: GlobalDaemon, request: Request) -> JSONResponse:
         "name": name,
         "worktrees": list(slot.worktrees.keys()),
     })
-
 
 async def _repo_status(daemon: GlobalDaemon, request: Request) -> JSONResponse:
     """Per-repo detailed status."""
@@ -169,7 +162,6 @@ async def _repo_status(daemon: GlobalDaemon, request: Request) -> JSONResponse:
         },
     })
 
-
 async def _repo_reindex(daemon: GlobalDaemon, request: Request) -> Response:
     """Per-repo reindex trigger."""
     name = request.path_params["name"]
@@ -179,7 +171,6 @@ async def _repo_reindex(daemon: GlobalDaemon, request: Request) -> Response:
     for wt_name, wt_slot in slot.worktrees.items():
         slot.indexer.queue_paths(wt_name, [wt_slot.repo_root])
     return Response(status_code=202)
-
 
 async def _repo_refresh_worktrees(
     daemon: GlobalDaemon, dev_mode: bool, request: Request,
@@ -191,9 +182,7 @@ async def _repo_refresh_worktrees(
     new_wts = await daemon.refresh_worktrees(name, dev_mode=dev_mode)
     return JSONResponse({"added_worktrees": new_wts})
 
-
 # App builder
-
 
 def build_global_app(daemon: GlobalDaemon, *, dev_mode: bool = False) -> Starlette:
     """Build the global Starlette application with all routes.
@@ -223,9 +212,7 @@ def build_global_app(daemon: GlobalDaemon, *, dev_mode: bool = False) -> Starlet
 
     return Starlette(routes=routes, lifespan=lifespan)
 
-
 # Dynamic MCP dispatcher
-
 
 async def _asgi_not_found(scope: Scope, receive: Receive, send: Send) -> None:  # noqa: ARG001
     await send({
@@ -238,7 +225,6 @@ async def _asgi_not_found(scope: Scope, receive: Receive, send: Send) -> None:  
         "body": b'{"error":"not found"}',
         "more_body": False,
     })
-
 
 class DynamicMcpRouter:
     """Starlette BaseRoute that dispatches /repos/{name}/worktrees/{wt}/mcp/... requests.

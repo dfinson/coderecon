@@ -24,7 +24,6 @@ from coderecon.index._internal.discovery.authority_parsers import (
 )
 from coderecon.index.models import CandidateContext, LanguageFamily, ProbeStatus
 
-
 def make_candidate(
     family: LanguageFamily,
     root_path: str,

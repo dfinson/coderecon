@@ -22,7 +22,6 @@ from coderecon.index.models import (
     Worktree,
 )
 
-
 @pytest.fixture
 def db(temp_dir: Path) -> Database:
     """Create a test database with schema."""
@@ -34,7 +33,6 @@ def db(temp_dir: Path) -> Database:
         session.commit()
     create_additional_indexes(db.engine)
     return db
-
 
 @pytest.fixture
 def seeded_db(db: Database) -> Database:
@@ -157,7 +155,6 @@ def seeded_db(db: Database) -> Database:
 
     return db
 
-
 class TestListCalleesInScope:
     """Tests for FactQueries.list_callees_in_scope."""
 
@@ -219,7 +216,6 @@ class TestListCalleesInScope:
             callees = fq.list_callees_in_scope(file_rec.id, 10, 20)
             uids = [c.def_uid for c in callees]
             assert len(uids) == len(set(uids)), "Callees should be deduplicated"
-
 
 class TestCountCallers:
     """Tests for FactQueries.count_callers."""

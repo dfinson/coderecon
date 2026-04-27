@@ -11,7 +11,6 @@ from coderecon.testing.coverage.models import (
     FunctionCoverage,
 )
 
-
 class TestFileCoverage:
     """Tests for FileCoverage properties."""
 
@@ -102,7 +101,6 @@ class TestFileCoverage:
     def test_function_rate_empty(self) -> None:
         fc = FileCoverage(path="a.py")
         assert fc.function_rate == 0.0
-
 
 class TestCoverageReport:
     """Tests for CoverageReport.summary."""

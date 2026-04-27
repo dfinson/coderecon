@@ -76,7 +76,6 @@ _READY_TIMEOUT_SEC = 30.0
 # Default timeout for awaiting a tool response
 _CALL_TIMEOUT_SEC = 300.0
 
-
 class CodeRecon:
     """CodeRecon SDK — spawns the global daemon and exposes tools as callables."""
 

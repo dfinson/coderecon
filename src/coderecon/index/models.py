@@ -17,9 +17,7 @@ from enum import StrEnum
 from sqlalchemy import Column, ForeignKey, Integer, String, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
-
 # ENUMS
-
 
 class LanguageFamily(StrEnum):
     """Canonical language name identifiers.
@@ -302,7 +300,6 @@ class ResolutionMethod(StrEnum):
     UNRESOLVED = "unresolved"  # Could not resolve
 
 # TIER 1 FACT TABLES (per SPEC.md §7.3)
-
 
 class Worktree(SQLModel, table=True):
     """A worktree (or main checkout) tracked in this repo's index."""
@@ -668,7 +665,6 @@ class DynamicAccessSite(SQLModel, table=True):
 
 # TIER 2 TYPE-AWARE FACT TABLES (Type-traced refactoring support)
 
-
 class TypeAnnotationFact(SQLModel, table=True):
     """Type annotation extracted from source code.
     Captures explicit type annotations from any language that supports them.
@@ -869,7 +865,6 @@ class DefSnapshotRecord(SQLModel, table=True):
 
 # TIER 3: BEHAVIORAL FACTS (coverage, lint — populated from tool execution)
 
-
 class TestCoverageFact(SQLModel, table=True):
     """Coverage link between a test and a definition.
     Populated by joining coverage reports (line hit counts) against
@@ -1011,7 +1006,6 @@ class DocCodeEdgeFact(SQLModel, table=True):
     model_version: str = Field(index=True)
 
 # NON-TABLE MODELS (Pydantic only, for data transfer)
-
 
 class FileState(SQLModel):
     """Computed file state (not persisted directly)."""

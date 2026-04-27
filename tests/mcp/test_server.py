@@ -14,7 +14,6 @@ import pytest
 
 from coderecon.mcp.server import create_mcp_server
 
-
 class TestCreateMcpServer:
     """Tests for create_mcp_server function."""
 
@@ -51,7 +50,6 @@ class TestCreateMcpServer:
         assert "recon" in tool_names
         assert "checkpoint" in tool_names
         assert "describe" in tool_names
-
 
 class TestPatchFastmcpDocket:
     """Tests for _patch_fastmcp_docket defensive logic."""
@@ -114,7 +112,6 @@ class TestPatchFastmcpDocket:
             # Restore
             if had_patched:
                 FastMCP._docket_patched = True  # type: ignore[attr-defined]
-
 
 class TestEnrichToolDescriptions:
     """Tests for _enrich_tool_descriptions helper."""

@@ -42,7 +42,6 @@ from coderecon.index.models import (
     Worktree,
 )
 
-
 @pytest.fixture
 def db(temp_dir: Path) -> Database:
     """Create a test database with schema."""
@@ -584,7 +583,6 @@ class TestBackwardsCompatibility:
 # ===================================================================
 # Tests for new signal gap query methods
 # ===================================================================
-
 
 class TestInterfaceImplQueries:
     """Tests for type hierarchy / InterfaceImplFact lookups."""

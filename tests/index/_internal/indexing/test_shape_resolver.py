@@ -20,7 +20,6 @@ from coderecon.index._internal.indexing.shape_resolver import (
     resolve_shape_inference,
 )
 
-
 class TestShapeInferenceStats:
     """Tests for ShapeInferenceStats dataclass."""
 
@@ -55,7 +54,6 @@ class TestShapeInferenceStats:
         stats.shapes_matched = 5
         assert stats.shapes_processed == 10
         assert stats.shapes_matched == 5
-
 
 class TestTypeMatch:
     """Tests for TypeMatch dataclass."""
@@ -92,7 +90,6 @@ class TestTypeMatch:
             unmatched_members=["b", "c", "d"],
         )
         assert match.confidence < 0.7  # Below threshold
-
 
 class TestShapeInferenceResolver:
     """Tests for ShapeInferenceResolver class."""
@@ -346,7 +343,6 @@ class TestShapeInferenceResolver:
         resolver._upgrade_ref(
             session, file_id=1, line=10, token="foo", target_def_uid="uid_foo", _confidence=0.8
         )
-
 
 class TestResolveShapeInference:
     """Tests for resolve_shape_inference() convenience function."""

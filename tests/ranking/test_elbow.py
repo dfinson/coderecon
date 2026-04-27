@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from coderecon.ranking.elbow import elbow_cut
 
-
 class TestElbowCut:
     """Tests for elbow_cut."""
 

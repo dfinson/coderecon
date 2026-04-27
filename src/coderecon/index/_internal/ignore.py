@@ -42,7 +42,6 @@ __all__ = [
     "matches_glob",
 ]
 
-
 class IgnoreChecker:
     """Checks if paths should be ignored based on tiered patterns.
 
@@ -325,12 +324,10 @@ class IgnoreChecker:
 
         return self._compiled.match_file(rel_path_posix)
 
-
 def matches_glob(rel_path: str, pattern: str) -> bool:
     """Check if a path matches a glob pattern (gitignore-spec compliant)."""
     spec = pathspec.PathSpec.from_lines("gitignore", [pattern])
     return spec.match_file(rel_path)
-
 
 def _iter_reconignore_files(root: Path) -> list[tuple[Path, str]]:
     """Find all .reconignore files with their relative prefix.
@@ -367,7 +364,6 @@ def _iter_reconignore_files(root: Path) -> list[tuple[Path, str]]:
 
     return results
 
-
 def discover_reconignore_files(root: Path) -> list[Path]:
     """Walk tree to find all .reconignore files.
 
@@ -375,7 +371,6 @@ def discover_reconignore_files(root: Path) -> list[Path]:
     only file discovery (not pattern matching) is needed.
     """
     return [path for path, _ in _iter_reconignore_files(root)]
-
 
 def compute_reconignore_hash(root: Path) -> str | None:
     """Compute combined hash of all .reconignore files without loading patterns.

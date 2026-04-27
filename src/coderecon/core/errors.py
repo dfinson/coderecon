@@ -10,7 +10,6 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any
 
-
 class InternalErrorCode(IntEnum):
     """Numeric error codes for MCP responses."""
 
@@ -23,7 +22,6 @@ class InternalErrorCode(IntEnum):
     # Internal (9xxx)
     INTERNAL_ERROR = 9001
     INTERNAL_TIMEOUT = 9002
-
 
 @dataclass(frozen=True, slots=True)
 class CodeReconError(Exception):
@@ -49,7 +47,6 @@ class CodeReconError(Exception):
 
     def __str__(self) -> str:
         return f"[{self.code.value}] {self.error_name}: {self.message}"
-
 
 class ConfigError(CodeReconError):
     """Configuration errors."""
@@ -86,14 +83,12 @@ class ConfigError(CodeReconError):
             details={"path": path},
         )
 
-
 class InternalError(CodeReconError):
     """Internal errors."""
 
     @classmethod
     def unexpected(cls, reason: str, **details: Any) -> "InternalError":
         return cls(InternalErrorCode.INTERNAL_ERROR, f"Internal error: {reason}", details=details)
-
 
 class PathTraversalError(Exception):
     """Raised when a user-supplied path escapes the repository root."""

@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-
 def is_inside(file_path: str, root_path: str) -> bool:
     """Segment-safe containment check."""
     if root_path == "":
@@ -30,7 +29,6 @@ def is_inside(file_path: str, root_path: str) -> bool:
     if file_path == root_path:
         return True
     return file_path.startswith(root_path + "/")
-
 
 def relative_to(path: str, root: str) -> str:
     """Get path relative to root."""
@@ -41,7 +39,6 @@ def relative_to(path: str, root: str) -> str:
     if path.startswith(root + "/"):
         return path[len(root) + 1 :]
     return path
-
 
 def matches_any_glob(path: str, globs: list[str]) -> bool:
     """Check if path matches any of the globs."""
@@ -55,7 +52,6 @@ def matches_any_glob(path: str, globs: list[str]) -> bool:
         if path == glob:
             return True
     return False
-
 
 def get_js_workspace_globs(repo_root: Path, t1: "CandidateContext") -> list[str]:
     """Extract workspace globs from JavaScript workspace config."""
@@ -85,7 +81,6 @@ def get_js_workspace_globs(repo_root: Path, t1: "CandidateContext") -> list[str]
             log.warning("workspace_config_parse_error", marker=marker, error=str(e))
     return globs
 
-
 def get_go_work_modules(repo_root: Path, t1: "CandidateContext") -> list[str]:
     """Extract modules from go.work."""
     modules: list[str] = []
@@ -110,7 +105,6 @@ def get_go_work_modules(repo_root: Path, t1: "CandidateContext") -> list[str]:
             except OSError:
                 log.debug("go_work_read_failed", marker=str(marker_path))
     return modules
-
 
 def get_cargo_workspace_members(repo_root: Path, t1: "CandidateContext") -> list[str]:
     """Extract members from Cargo.toml [workspace]."""
@@ -152,7 +146,6 @@ def get_cargo_workspace_members(repo_root: Path, t1: "CandidateContext") -> list
                 log.debug("cargo_toml_read_failed", path=str(marker_path), exc_info=True)
     return members
 
-
 def get_gradle_includes(repo_root: Path, t1: "CandidateContext") -> tuple[list[str], bool]:
     """Extract includes from settings.gradle."""
     includes: list[str] = []
@@ -172,7 +165,6 @@ def get_gradle_includes(repo_root: Path, t1: "CandidateContext") -> tuple[list[s
                 log.debug("gradle_settings_read_failed", path=str(marker_path), exc_info=True)
     return includes, is_strict
 
-
 def get_maven_modules(repo_root: Path, t1: "CandidateContext") -> list[str]:
     """Extract modules from Maven pom.xml."""
     modules: list[str] = []
@@ -191,7 +183,6 @@ def get_maven_modules(repo_root: Path, t1: "CandidateContext") -> list[str]:
             except OSError:
                 log.debug("pom_xml_read_failed", path=str(marker_path), exc_info=True)
     return modules
-
 
 def get_sln_projects(repo_root: Path, t1: "CandidateContext") -> list[str]:
     """Extract project paths from .sln solution file."""

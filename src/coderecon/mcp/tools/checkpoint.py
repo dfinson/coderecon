@@ -27,7 +27,6 @@ from fastmcp import Context
 
 log = structlog.get_logger(__name__)
 
-
 class ProgressSink(Protocol):
     """Minimal progress reporting interface for checkpoint_pipeline.
     Decouples from FastMCP's Context so the pipeline can be called from
@@ -38,7 +37,6 @@ class ProgressSink(Protocol):
     async def warning(self, message: str) -> None: ...
 
 # Test Debt Detection
-
 
 def _detect_test_debt(
     changed_files: list[str],
@@ -95,9 +93,7 @@ def _detect_test_debt(
         "hint": hint,
     }
 
-
 # Commit Helpers
-
 
 def _validate_commit_message(message: str) -> None:
     """Validate commit message is not empty or whitespace-only."""
@@ -196,9 +192,7 @@ def _summarize_commit(sha: str, message: str) -> str:
     truncated = truncate_at_word(first_line, 45)
     return f'{short_sha} "{truncated}"'
 
-
 # Target Matching
-
 
 def _normalize_selector(selector: str) -> str:
     """Normalize target selector for path matching.
@@ -236,9 +230,7 @@ def _target_matches_affected_files(
         return bool(affected_paths)
     return any(p == scope_rel or p.startswith(scope_rel + "/") for p in affected_paths)
 
-
 # Test Result Helpers
-
 
 def _summarize_run(result: "TestResult") -> str:
     """Generate compact summary for a test run."""
@@ -322,11 +314,9 @@ def _build_coverage_text(
     inline = build_tiered_coverage(merged, filter_paths=filter_paths)
     return inline, None
 
-
 # Failure-focused snippet extraction
 
 _SNIPPET_CONTEXT_LINES = 15  # lines of context above/below each failure point
-
 
 def _extract_traceback_locations(traceback: str | None) -> list[tuple[str, int]]:
     """Extract (file_path, line_number) pairs from a pytest traceback string.
@@ -462,9 +452,7 @@ def _serialize_test_result(
         output["agentic_hint"] = result.agentic_hint
     return output
 
-
 # Coverage Persistence
-
 
 def _ingest_checkpoint_coverage(
     app_ctx: "AppContext",
@@ -511,9 +499,7 @@ def _ingest_checkpoint_coverage(
     except (OSError, CoverageParseError, ImportError, RuntimeError, ValueError):
         log.debug("checkpoint.coverage_ingest_failed", exc_info=True)
 
-
 # Verify Summary
-
 
 def _summarize_verify(
     lint_status: str,
@@ -542,13 +528,11 @@ def _summarize_verify(
         parts.append(f"tests: {test_status}")
     return " | ".join(parts)
 
-
 # Tiered Test Execution
 
 # Targets with estimated_cost at or below this threshold are batched together
 # into a single subprocess call when they share the same runner + workspace.
 _BATCH_COST_THRESHOLD = 1.0
-
 
 def _assign_target_hops(
     targets: list[TestTarget],
@@ -623,7 +607,6 @@ def _partition_for_batching(
             # Single target — no point batching
             solo_targets.extend(low_cost)
     return batch_groups, solo_targets
-
 
 async def _run_tiered_tests(
     *,
@@ -911,9 +894,7 @@ async def _run_tiered_tests(
         "failed_test_ids": _failed_test_ids or None,
     }
 
-
 # Core Pipeline (transport-agnostic)
-
 
 class _NullProgress:
     """No-op progress sink for callers that don't need progress."""
@@ -929,7 +910,6 @@ class _NullProgress:
 
 _DEFAULT_MAX_TEST_HOPS = 0
 _COMMIT_MAX_TEST_HOPS = 2
-
 
 async def checkpoint_pipeline(
     app_ctx: "AppContext",
@@ -1415,9 +1395,7 @@ async def checkpoint_pipeline(
         resource_kind="checkpoint",
     )
 
-
 # Tool Registration
-
 
 def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
     """Register checkpoint tool with FastMCP server."""

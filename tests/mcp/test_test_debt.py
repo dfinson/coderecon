@@ -13,7 +13,6 @@ from pathlib import Path
 
 from coderecon.mcp.tools.checkpoint import _detect_test_debt
 
-
 class TestDetectTestDebt:
     """Tests for _detect_test_debt helper."""
 

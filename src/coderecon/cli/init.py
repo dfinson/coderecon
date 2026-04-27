@@ -42,9 +42,7 @@ from coderecon.cli.mcp_config import (  # noqa: E402
     sync_vscode_mcp_port,
 )
 
-
 # Filesystem Helpers
-
 
 def _is_cross_filesystem(path: Path) -> bool:
     """Detect if path is on a cross-filesystem mount (WSL /mnt/*, network drives, etc.)."""

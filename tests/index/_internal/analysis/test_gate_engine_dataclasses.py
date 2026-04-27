@@ -11,10 +11,8 @@ from coderecon.index._internal.analysis.gate_engine import (
     evaluate_gates,
 )
 
-
 def _rule(enabled: bool = True, level: str = "error", threshold: float = 80.0, message: str = "fail") -> SimpleNamespace:
     return SimpleNamespace(enabled=enabled, level=level, threshold=threshold, message=message)
-
 
 def _governance(**overrides: object) -> SimpleNamespace:
     defaults = {
@@ -28,9 +26,7 @@ def _governance(**overrides: object) -> SimpleNamespace:
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
 
-
 # ── Data class tests ──────────────────────────────────────────────
-
 
 class TestGateViolation:
     def test_construction(self) -> None:
@@ -38,7 +34,6 @@ class TestGateViolation:
         assert v.rule == "test"
         assert v.level == "error"
         assert v.details is None
-
 
 class TestGateResult:
     def test_empty_passes(self) -> None:
@@ -74,9 +69,7 @@ class TestGateResult:
         assert d["violations"][0]["details"] == {"k": 1}
         assert "details" not in d["violations"][1]
 
-
 # ── evaluate_gates tests ──────────────────────────────────────────
-
 
 class TestEvaluateGates:
     def test_all_disabled_passes(self) -> None:

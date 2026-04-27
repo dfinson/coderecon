@@ -14,11 +14,9 @@ log = structlog.get_logger(__name__)
 from coderecon.catalog.db import CatalogDB
 from coderecon.catalog.models import RepoEntry, WorktreeEntry
 
-
 def _repo_hash(git_dir: str) -> str:
     """Deterministic short hash for a git dir path (for storage dir names)."""
     return hashlib.sha256(git_dir.encode()).hexdigest()[:12]
-
 
 def _resolve_git_dir(repo_root: Path) -> str:
     """Resolve the canonical .git directory for a path.
@@ -63,7 +61,6 @@ def _resolve_git_dir(repo_root: Path) -> str:
     msg = f"Cannot resolve git directory for {repo_root}"
     raise ValueError(msg)
 
-
 def _detect_worktree_name(repo_root: Path, git_dir: str) -> tuple[str, bool]:
     """Detect worktree name and whether this is the main checkout.
 
@@ -87,7 +84,6 @@ def _detect_worktree_name(repo_root: Path, git_dir: str) -> tuple[str, bool]:
 
     return repo_root.name, True
 
-
 def _get_current_branch(repo_root: Path) -> str | None:
     """Get current branch name for a worktree."""
     try:
@@ -104,7 +100,6 @@ def _get_current_branch(repo_root: Path) -> str | None:
     except (subprocess.TimeoutExpired, FileNotFoundError):
         log.debug("git_branch_detect_failed", exc_info=True)
     return None
-
 
 class CatalogRegistry:
     """High-level operations on the repo/worktree catalog."""

@@ -62,7 +62,6 @@ _KNOWN_SOURCE_EXTENSIONS: frozenset[str] = frozenset(
     for ext in lang.extensions
 )
 
-
 def get_module_separator(language_family: str | None) -> str:
     """Return the module path separator for a language family.
 
@@ -78,7 +77,6 @@ def get_module_separator(language_family: str | None) -> str:
         return "/"
     # Python, Java, Kotlin, Scala, C#, Lua, and default
     return "."
-
 
 def path_to_module(path: str) -> str | None:
     """Convert a file path to a dotted module path.
@@ -121,7 +119,6 @@ def path_to_module(path: str) -> str | None:
 
     return module
 
-
 def module_to_candidate_paths(source_literal: str) -> list[str]:
     """Generate candidate module keys for a dotted import path.
 
@@ -142,7 +139,6 @@ def module_to_candidate_paths(source_literal: str) -> list[str]:
         f"src.{source_literal}",
     ]
 
-
 def resolve_module_to_path(
     source_literal: str,
     module_to_path_map: dict[str, str],
@@ -162,7 +158,6 @@ def resolve_module_to_path(
             return module_to_path_map[candidate]
     return None
 
-
 def build_module_index(file_paths: list[str]) -> dict[str, str]:
     """Build a mapping from module key → file path.
 
@@ -180,7 +175,6 @@ def build_module_index(file_paths: list[str]) -> dict[str, str]:
         if module_key:
             index[module_key] = fp
     return index
-
 
 def file_to_import_candidates(
     file_path: str,
@@ -237,7 +231,6 @@ def file_to_import_candidates(
 
     return candidates
 
-
 def file_to_import_sql_patterns(
     file_path: str,
     language_family: str | None = None,
@@ -277,7 +270,6 @@ def file_to_import_sql_patterns(
         prefix_patterns.append(f"{candidate}{sep}")
 
     return exact_matches, prefix_patterns
-
 
 def infer_target_declared_module(
     from_path: str,

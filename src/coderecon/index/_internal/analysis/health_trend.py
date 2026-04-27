@@ -18,7 +18,6 @@ log = structlog.get_logger(__name__)
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
-
 @dataclass(frozen=True, slots=True)
 class HealthSnapshot:
     """Point-in-time health metrics."""
@@ -32,7 +31,6 @@ class HealthSnapshot:
     clean_file_count: int
     total_files: int
     cycle_count: int
-
 
 @dataclass(slots=True)
 class HealthTrend:
@@ -89,7 +87,6 @@ class HealthTrend:
             else None,
             "history_length": len(self.snapshots),
         }
-
 
 def capture_snapshot(engine: Engine, epoch: int) -> HealthSnapshot:
     """Capture current health metrics as a snapshot.
@@ -154,13 +151,11 @@ def capture_snapshot(engine: Engine, epoch: int) -> HealthSnapshot:
         cycle_count=cycle_count,
     )
 
-
 # ── Snapshot persistence ──
 # We store snapshots in a simple JSON-lines file in .recon/ since they're
 # lightweight and don't need SQL queries.
 
 _SNAPSHOT_FILE = "health_snapshots.jsonl"
-
 
 def persist_snapshot(recon_dir: Path | str, snapshot: HealthSnapshot) -> None:
     """Append a snapshot to the JSONL file."""
@@ -184,7 +179,6 @@ def persist_snapshot(recon_dir: Path | str, snapshot: HealthSnapshot) -> None:
 
     with path.open("a") as f:
         f.write(json.dumps(record) + "\n")
-
 
 def load_trend(recon_dir: Path | str, max_snapshots: int = 20) -> HealthTrend:
     """Load recent health snapshots and compute trend."""

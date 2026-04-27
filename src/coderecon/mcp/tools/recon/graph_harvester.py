@@ -184,4 +184,3 @@ async def _harvest_graph(
     )
     return candidates
 
-

@@ -17,7 +17,6 @@ import structlog
 
 log = structlog.get_logger(__name__)
 
-
 @click.command("catalog")
 def catalog_command() -> None:
     """List all registered repositories."""
@@ -39,7 +38,6 @@ def catalog_command() -> None:
         click.echo(f"    storage:    {repo.storage_dir}")
         click.echo(f"    worktrees:  {', '.join(wt_names)}")
         click.echo()
-
 
 @click.command("register")
 @click.argument("path", required=False, type=click.Path(exists=True, path_type=Path))
@@ -112,7 +110,6 @@ def register_command(path: Path | None, reindex: bool, mcp_targets: tuple[str, .
     else:
         click.echo("  (daemon not running — start with 'recon up')")
 
-
 @click.command("unregister")
 @click.argument("path", required=False, type=click.Path(exists=True, path_type=Path))
 def unregister_command(path: Path | None) -> None:
@@ -155,7 +152,6 @@ def unregister_command(path: Path | None) -> None:
         click.echo(f"Unregistered: {repo_root}")
     else:
         click.echo(f"Not registered: {repo_root}")
-
 
 @click.command("register-worktree")
 @click.argument("path", required=False, type=click.Path(exists=True, path_type=Path))
@@ -218,7 +214,6 @@ def register_worktree_command(path: Path | None) -> None:
     else:
         click.echo("  (daemon not running — start with 'recon up')")
 
-
 @click.command("worktrees")
 @click.argument("name", required=False)
 def worktrees_command(name: str | None) -> None:
@@ -248,7 +243,6 @@ def worktrees_command(name: str | None) -> None:
         branch = f" [{wt.branch}]" if wt.branch else ""
         click.echo(f"  {wt.name}{main_marker}{branch}")
         click.echo(f"    {wt.root_path}")
-
 
 @click.command("global-status")
 def global_status_command() -> None:

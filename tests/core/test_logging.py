@@ -16,7 +16,6 @@ from coderecon.core.logging import (
     set_request_id,
 )
 
-
 class TestRequestIdCorrelation:
     """Request ID context variable tests."""
 
@@ -69,7 +68,6 @@ class TestRequestIdCorrelation:
 
         # Then
         assert result is None
-
 
 class TestLoggingConfiguration:
     """Logging configuration tests."""

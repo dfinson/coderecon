@@ -21,7 +21,6 @@ from coderecon.index._internal.parsing import TreeSitterParser
 from coderecon.index._internal.parsing.service import tree_sitter_service
 from coderecon.index.models import CandidateContext, LanguageFamily
 
-
 @dataclass
 class ProbeResult:
     """Result of context validation."""
@@ -31,7 +30,6 @@ class ProbeResult:
     files_sampled: int = 0
     files_passed: int = 0
     reason: str = ""
-
 
 @dataclass
 class ProbeConfig:
@@ -43,7 +41,6 @@ class ProbeConfig:
     min_success: int = 1
     # Minimum success ratio (if more than min_success files)
     min_ratio: float = 0.5
-
 
 class ContextProbe:
     """
@@ -253,14 +250,12 @@ class ContextProbe:
         validation = self.parser.validate_code_file(parse_result)
         return validation.is_valid
 
-
 @dataclass
 class BatchProbeResult:
     """Result of batch context validation."""
 
     valid: list[CandidateContext] = field(default_factory=list)
     invalid: list[ProbeResult] = field(default_factory=list)
-
 
 def validate_contexts(
     repo_path: Path | str,

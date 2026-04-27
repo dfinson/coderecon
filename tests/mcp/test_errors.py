@@ -17,7 +17,6 @@ from coderecon.mcp.errors import (
     get_error_documentation,
 )
 
-
 class TestMCPErrorCode:
     """Tests for MCPErrorCode enum."""
 
@@ -40,7 +39,6 @@ class TestMCPErrorCode:
     def test_range_code_exists(self) -> None:
         """Range-related error code is defined."""
         assert hasattr(MCPErrorCode, "INVALID_RANGE")
-
 
 class TestErrorResponse:
     """Tests for ErrorResponse dataclass."""
@@ -80,7 +78,6 @@ class TestErrorResponse:
         assert d["message"] == "Bad range"
         assert d["remediation"] == "Fix lines"
         assert d["context"] == {"start": 10, "end": 5}
-
 
 class TestMCPError:
     """Tests for MCPError base exception."""
@@ -132,7 +129,6 @@ class TestMCPError:
         assert resp.code == MCPErrorCode.PERMISSION_DENIED
         assert resp.message == "No access"
 
-
 class TestInvalidRangeError:
     """Tests for InvalidRangeError."""
 
@@ -146,7 +142,6 @@ class TestInvalidRangeError:
         err = InvalidRangeError("f.py", start=1, end=1000, line_count=100)
         assert err.remediation is not None
 
-
 class TestHashMismatchError:
     """Tests for HashMismatchError."""
 
@@ -159,7 +154,6 @@ class TestHashMismatchError:
         """Error includes path."""
         err = HashMismatchError("f.py", expected="aaa", actual="bbb")
         assert err.path == "f.py"
-
 
 class TestHookFailedError:
     """Tests for HookFailedError."""
@@ -175,7 +169,6 @@ class TestHookFailedError:
         assert err.context.get("hook_type") == "post-save"
         assert err.context.get("exit_code") == 2
 
-
 class TestDryRunRequiredError:
     """Tests for DryRunRequiredError."""
 
@@ -189,7 +182,6 @@ class TestDryRunRequiredError:
         err = DryRunRequiredError("src/main.py")
         assert "src/main.py" in err.message
 
-
 class TestDryRunExpiredError:
     """Tests for DryRunExpiredError."""
 
@@ -202,7 +194,6 @@ class TestDryRunExpiredError:
         """Message includes age in seconds."""
         err = DryRunExpiredError("dry_456", 90.0)
         assert "90" in err.message
-
 
 class TestErrorDocumentation:
     """Tests for error documentation catalog."""
@@ -229,7 +220,6 @@ class TestErrorDocumentation:
         assert MCPErrorCode.HOOK_FAILED.value in ERROR_CATALOG
         assert MCPErrorCode.HOOK_FAILED.value in ERROR_CATALOG
 
-
 class TestBudgetExceededError:
     """Tests for BudgetExceededError."""
 
@@ -245,7 +235,6 @@ class TestBudgetExceededError:
     def test_remediation_from_hint(self) -> None:
         err = BudgetExceededError("s", "c", "Do something else")
         assert err.remediation == "Do something else"
-
 
 class TestSpanOverlapError:
     """Tests for SpanOverlapError."""
@@ -263,7 +252,6 @@ class TestSpanOverlapError:
         err = SpanOverlapError("f.py", conflicts)
         assert err.context.get("conflicts") == conflicts
 
-
 class TestFileHashMismatchError:
     """Tests for FileHashMismatchError."""
 
@@ -279,7 +267,6 @@ class TestFileHashMismatchError:
         err = FileHashMismatchError("f.py", expected="abc", actual="def")
         assert err.context.get("expected_file_sha256") == "abc"
         assert err.context.get("current_file_sha256") == "def"
-
 
 class TestConfirmationRequiredError:
     """Tests for ConfirmationRequiredError."""

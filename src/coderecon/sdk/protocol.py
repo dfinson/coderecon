@@ -10,11 +10,9 @@ from typing import Any
 
 _REQUEST_ID_COUNTER = itertools.count(1)
 
-
 def next_request_id() -> str:
     """Generate a monotonically increasing request ID."""
     return f"r{next(_REQUEST_ID_COUNTER)}"
-
 
 def encode_request(
     method: str,
@@ -31,26 +29,21 @@ def encode_request(
         msg["session_id"] = session_id
     return json.dumps(msg, separators=(",", ":"), default=str).encode("utf-8") + b"\n"
 
-
 def decode_message(line: bytes) -> dict[str, Any]:
     """Decode a single NDJSON line from stdout."""
     return json.loads(line.decode("utf-8", errors="replace"))
-
 
 def is_event(msg: dict[str, Any]) -> bool:
     """True if the message is a daemon-initiated event (no ``id``)."""
     return "event" in msg and "id" not in msg
 
-
 def is_response(msg: dict[str, Any]) -> bool:
     """True if the message is a response to a request (has ``id``)."""
     return "id" in msg
 
-
 def generate_session_id() -> str:
     """Generate a session ID for auto-session management."""
     return f"sess_{secrets.token_hex(6)}"
-
 
 class PendingRequests:
     """Track in-flight requests and match responses by ``id``."""
@@ -85,7 +78,6 @@ class PendingRequests:
             if not fut.done():
                 fut.cancel()
         self._pending.clear()
-
 
 class CodeReconError(Exception):
     """Error returned by the daemon."""

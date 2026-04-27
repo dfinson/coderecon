@@ -8,7 +8,6 @@ import pytest
 
 from coderecon.git import GitOps, WorktreeError, WorktreeExistsError, WorktreeNotFoundError
 
-
 class TestWorktreesList:
     """Tests for worktrees() method."""
 
@@ -42,7 +41,6 @@ class TestWorktreesList:
         names = {wt.name for wt in worktrees}
         assert "main" in names
         assert "feature-wt" in names
-
 
 class TestWorktreeAdd:
     """Tests for worktree_add() method."""
@@ -94,7 +92,6 @@ class TestWorktreeAdd:
         with pytest.raises(WorktreeExistsError):
             ops.worktree_add(wt_path2, "another")
 
-
 class TestWorktreeOpen:
     """Tests for worktree_open() method."""
 
@@ -119,7 +116,6 @@ class TestWorktreeOpen:
 
         with pytest.raises(WorktreeNotFoundError):
             ops.worktree_open("nonexistent")
-
 
 class TestWorktreeRemove:
     """Tests for worktree_remove() method."""
@@ -148,7 +144,6 @@ class TestWorktreeRemove:
 
         with pytest.raises(WorktreeNotFoundError):
             ops.worktree_remove("nonexistent")
-
 
 class TestWorktreeLockUnlock:
     """Tests for worktree_lock() and worktree_unlock() methods."""
@@ -259,7 +254,6 @@ class TestWorktreeLockUnlock:
         wt = next(wt for wt in worktrees if wt.name == "feature-wt")
         assert wt.lock_reason == "Do not delete: in use by CI"
 
-
 class TestIsWorktree:
     """Tests for is_worktree() method."""
 
@@ -283,7 +277,6 @@ class TestIsWorktree:
         # Fallback detection via .git file check works regardless of pygit2 version
         assert wt_ops.is_worktree() is True
 
-
 class TestWorktreeInfo:
     """Tests for worktree_info() method."""
 
@@ -293,7 +286,6 @@ class TestWorktreeInfo:
         """Main repository should return None for worktree_info."""
         _, ops = git_repo_with_commit
         assert ops.worktree_info() is None
-
 
 class TestWorktreePrune:
     """Tests for worktree_prune() method."""
@@ -305,7 +297,6 @@ class TestWorktreePrune:
         _, ops = git_repo_with_commit
         pruned = ops.worktree_prune()
         assert pruned == []
-
 
 class TestWorktreeAddValidation:
     """Tests for worktree_add() validation edge cases."""
@@ -358,7 +349,6 @@ class TestWorktreeAddValidation:
         assert "wt3" in names
         assert len(worktrees) == 4
 
-
 class TestWorktreeUnlockEdgeCases:
     """Tests for worktree_unlock edge cases."""
 
@@ -389,7 +379,6 @@ class TestWorktreeUnlockEdgeCases:
         worktrees = ops.worktrees()
         wt = next(wt for wt in worktrees if wt.name == "feature-wt")
         assert wt.is_locked is False
-
 
 class TestWorktreeRemovePathResolution:
     """Tests for worktree_remove path handling (fixes #119)."""

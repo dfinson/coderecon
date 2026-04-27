@@ -16,7 +16,6 @@ from coderecon.testing.runner_pack import runner_registry
 
 pytestmark = pytest.mark.integration
 
-
 class TestWorkspaceDetectionIntegration:
     """Integration tests for workspace detection."""
 
@@ -38,7 +37,6 @@ class TestWorkspaceDetectionIntegration:
         # At least one workspace should be at repo root
         roots = {ws.root for ws in workspaces}
         assert integration_repo in roots
-
 
 class TestRunnerPackIntegration:
     """Integration tests for runner pack discovery."""
@@ -86,7 +84,6 @@ class TestRunnerPackIntegration:
         assert any("pytest" in c for c in cmd)
         assert "tests/test_main.py" in cmd
 
-
 class TestPythonRuntimeIntegration:
     """Integration tests for Python runtime detection."""
 
@@ -96,7 +93,6 @@ class TestPythonRuntimeIntegration:
 
         assert python_exe is not None
         assert "python" in python_exe.lower()
-
 
 class TestPytestExecutionIntegration:
     """Integration tests for actual pytest execution.

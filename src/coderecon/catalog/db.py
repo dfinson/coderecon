@@ -16,13 +16,11 @@ if TYPE_CHECKING:
     from sqlalchemy.engine.interfaces import DBAPIConnection
     from sqlalchemy.pool import ConnectionPoolEntry
 
-
 def _configure_catalog_pragmas(dbapi_conn: DBAPIConnection, _connection_record: ConnectionPoolEntry) -> None:
     """Configure SQLite pragmas for the catalog database."""
     cursor = dbapi_conn.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
-
 
 def _default_coderecon_home() -> Path:
     """Get the global CodeRecon home directory.
@@ -33,7 +31,6 @@ def _default_coderecon_home() -> Path:
     if env:
         return Path(env)
     return Path.home() / ".coderecon"
-
 
 def _run_migrations(engine: Engine) -> None:
     """Run Alembic migrations to bring the catalog DB up to date."""
@@ -49,7 +46,6 @@ def _run_migrations(engine: Engine) -> None:
     with engine.begin() as connection:
         cfg.attributes["connection"] = connection
         command.upgrade(cfg, "head")
-
 
 class CatalogDB:
     """Manages the global catalog SQLite database."""

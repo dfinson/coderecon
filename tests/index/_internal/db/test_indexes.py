@@ -10,7 +10,6 @@ from coderecon.index._internal.db.indexes import (
     drop_additional_indexes,
 )
 
-
 class TestAdditionalIndexes:
     """Tests for ADDITIONAL_INDEXES constant."""
 
@@ -63,7 +62,6 @@ class TestAdditionalIndexes:
                     break
         assert len(names) == len(set(names)), "Duplicate index names found"
 
-
 class TestCreateAdditionalIndexes:
     """Tests for create_additional_indexes function."""
 
@@ -92,7 +90,6 @@ class TestCreateAdditionalIndexes:
 
             # Should call text() for each SQL statement
             assert mock_text.call_count == len(ADDITIONAL_INDEXES)
-
 
 class TestDropAdditionalIndexes:
     """Tests for drop_additional_indexes function."""

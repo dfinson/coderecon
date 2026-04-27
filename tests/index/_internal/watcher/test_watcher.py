@@ -18,7 +18,6 @@ from coderecon.index._internal.watcher.watcher import (
     WatcherQueue,
 )
 
-
 class TestFileChangeKind:
     """Tests for FileChangeKind enum."""
 
@@ -27,7 +26,6 @@ class TestFileChangeKind:
         assert FileChangeKind.CREATED.value == "created"
         assert FileChangeKind.MODIFIED.value == "modified"
         assert FileChangeKind.DELETED.value == "deleted"
-
 
 class TestFileChangeEvent:
     """Tests for FileChangeEvent dataclass."""
@@ -51,7 +49,6 @@ class TestFileChangeEvent:
             timestamp=0.0,
         )
         assert event.relative_path == "src/module.py"
-
 
 class TestWatcherConfig:
     """Tests for WatcherConfig dataclass."""
@@ -84,7 +81,6 @@ class TestWatcherConfig:
         )
         assert "custom/**" in config.ignore_patterns
         assert "*.log" in config.ignore_patterns
-
 
 class TestFileWatcher:
     """Tests for FileWatcher."""
@@ -162,7 +158,6 @@ class TestFileWatcher:
             for path in mtimes:
                 assert ".git" not in str(path)
 
-
 class TestWatcherQueue:
     """Tests for WatcherQueue."""
 
@@ -229,7 +224,6 @@ class TestWatcherQueue:
         result = await queue.put(events)
         assert result is False
         assert queue.dropped_count == 1
-
 
 class TestBackgroundIndexer:
     """Tests for BackgroundIndexer."""

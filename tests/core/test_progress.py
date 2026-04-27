@@ -38,7 +38,6 @@ from coderecon.core.progress import (
     task,
 )
 
-
 class TestIsTty:
     """Tests for _is_tty function."""
 
@@ -56,7 +55,6 @@ class TestIsTty:
         finally:
             sys.stderr = original
 
-
 class TestStyles:
     """Tests for _STYLES constant."""
 
@@ -72,7 +70,6 @@ class TestStyles:
     def test_error_style(self) -> None:
         """Error style has X mark."""
         assert "✗" in _STYLES["error"]
-
 
 class TestStatus:
     """Tests for status function."""
@@ -106,7 +103,6 @@ class TestStatus:
             call_args = mock_console.print.call_args[0][0]
             # Padding appears before message, but timestamp comes first
             assert "    Indented" in call_args
-
 
 class TestProgress:
     """Tests for progress generator."""
@@ -153,7 +149,6 @@ class TestProgress:
         """Progress threshold is 100."""
         assert _PROGRESS_THRESHOLD == 100
 
-
 class TestTask:
     """Tests for task context manager."""
 
@@ -195,7 +190,6 @@ class TestTask:
         with pytest.raises(RuntimeError, match="original"), task("Error task"):
             raise RuntimeError("original")
 
-
 class TestPluralize:
     """Tests for pluralize function (Issue #4)."""
 
@@ -228,7 +222,6 @@ class TestPluralize:
         """Works with large numbers."""
         result = pluralize(1000000, "item")
         assert result == "1000000 items"
-
 
 class TestSpinner:
     """Tests for spinner context manager (Issue #5)."""
@@ -279,7 +272,6 @@ class TestSpinner:
             call_args = mock_console.print.call_args[0][0]
             assert call_args.startswith("    ")
 
-
 class TestSuppressConsoleLogs:
     """Tests for suppress_console_logs context manager (Issue #5)."""
 
@@ -313,7 +305,6 @@ class TestSuppressConsoleLogs:
             # After inner exits, flag is cleared (design choice)
         # After outer exits
         assert not is_console_suppressed()
-
 
 class TestConsoleSuppressingFilter:
     """Tests for ConsoleSuppressingFilter class (Issue #5)."""
@@ -356,7 +347,6 @@ class TestConsoleSuppressingFilter:
 
         logger.removeHandler(handler)
 
-
 class TestIsConsoleSuppressed:
     """Tests for is_console_suppressed function (Issue #5)."""
 
@@ -368,7 +358,6 @@ class TestIsConsoleSuppressed:
         """Returns True inside suppress_console_logs."""
         with suppress_console_logs():
             assert is_console_suppressed() is True
-
 
 class TestAnimateText:
     """Tests for animate_text function (Issue #3)."""
@@ -424,7 +413,6 @@ class TestAnimateText:
         ):
             animate_text("Line 1\nLine 2", delay=0)
             mock_sleep.assert_not_called()
-
 
 class TestGetConsole:
     """Tests for get_console function."""

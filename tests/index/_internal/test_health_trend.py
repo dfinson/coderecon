@@ -11,7 +11,6 @@ from coderecon.index._internal.analysis.health_trend import (
     persist_snapshot,
 )
 
-
 class TestHealthSnapshot:
     def test_snapshot_fields(self) -> None:
         s = HealthSnapshot(
@@ -27,7 +26,6 @@ class TestHealthSnapshot:
         )
         assert s.coverage_rate == 0.85
         assert s.cycle_count == 1
-
 
 class TestHealthTrend:
     def test_empty_trend(self) -> None:
@@ -73,7 +71,6 @@ class TestHealthTrend:
         assert d["history_length"] == 1
         assert d["latest"]["coverage_rate"] == 0.8
         assert d["latest"]["cycles"] == 1
-
 
 class TestPersistence:
     def test_round_trip(self, tmp_path: Path) -> None:

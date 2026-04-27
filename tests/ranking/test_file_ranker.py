@@ -6,7 +6,6 @@ from pathlib import Path
 
 from coderecon.ranking.file_ranker import FileRanker, load_file_ranker
 
-
 class TestFileRanker:
     """Tests for FileRanker class."""
 
@@ -26,7 +25,6 @@ class TestFileRanker:
         ranker = FileRanker(model_path)
         result = ranker.score([])
         assert result == []
-
 
 class TestLoadFileRanker:
     """Tests for load_file_ranker factory."""

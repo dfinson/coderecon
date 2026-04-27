@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-
 class ToolCategory(StrEnum):
     """Categories for grouping tools."""
 
@@ -17,7 +16,6 @@ class ToolCategory(StrEnum):
     REFACTOR = "refactor"
     SESSION = "session"
     INTROSPECTION = "introspection"
-
 
 @dataclass
 class BehaviorFlags:
@@ -27,7 +25,6 @@ class BehaviorFlags:
     has_side_effects: bool = True
     atomic: bool = False
     may_be_slow: bool = False
-
 
 @dataclass
 class ToolDocumentation:
@@ -84,9 +81,7 @@ class ToolDocumentation:
             "examples": self.examples,
         }
 
-
 # Tool Documentation Registry
-
 
 TOOL_DOCS: dict[str, ToolDocumentation] = {
     "recon": ToolDocumentation(
@@ -327,11 +322,9 @@ TOOL_DOCS: dict[str, ToolDocumentation] = {
     ),
 }
 
-
 def get_tool_documentation(name: str) -> ToolDocumentation | None:
     """Get documentation for a specific tool."""
     return TOOL_DOCS.get(name)
-
 
 def get_tools_by_category() -> dict[str, list[str]]:
     """Get tool names grouped by category."""
@@ -342,7 +335,6 @@ def get_tools_by_category() -> dict[str, list[str]]:
             by_category[category] = []
         by_category[category].append(name)
     return by_category
-
 
 def get_common_workflows() -> list[dict[str, Any]]:
     """Get common workflow patterns."""
@@ -368,7 +360,6 @@ def get_common_workflows() -> list[dict[str, Any]]:
             "tools": ["semantic_diff", "checkpoint"],
         },
     ]
-
 
 def build_tool_description(tool_name: str, base_description: str) -> str:
     """Build enriched tool description with inline examples.

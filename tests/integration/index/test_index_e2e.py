@@ -14,7 +14,6 @@ from coderecon.index.ops import IndexCoordinatorEngine
 
 pytestmark = pytest.mark.integration
 
-
 def _make_coordinator(repo_path: Path) -> IndexCoordinatorEngine:
     """Create an IndexCoordinatorEngine with proper paths."""
     coderecon_dir = repo_path / ".recon"
@@ -23,11 +22,9 @@ def _make_coordinator(repo_path: Path) -> IndexCoordinatorEngine:
     tantivy_path = coderecon_dir / "tantivy"
     return IndexCoordinatorEngine(repo_path, db_path, tantivy_path)
 
-
 def _noop_progress(indexed: int, total: int, by_ext: dict[str, int], phase: str = "") -> None:
     """No-op progress callback."""
     pass
-
 
 class TestIndexInitialization:
     """Integration tests for index initialization."""
@@ -56,7 +53,6 @@ class TestIndexInitialization:
         assert len(result1.errors) == 0
         assert len(result2.errors) == 0
 
-
 class TestIndexing:
     """Integration tests for indexing operations."""
 
@@ -80,7 +76,6 @@ class TestIndexing:
 
         # Should have found some definitions
         assert result is not None
-
 
 class TestSearch:
     """Integration tests for search operations."""
@@ -118,7 +113,6 @@ class TestSearch:
 
         # Lexical search should work
         assert result is not None
-
 
 class TestMapRepo:
     """Integration tests for map_repo operation."""

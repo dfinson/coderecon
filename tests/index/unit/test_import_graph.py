@@ -27,7 +27,6 @@ from coderecon.index.models import Context, File, ImportFact, Worktree
 # Fixtures
 # ---------------------------------------------------------------------------
 
-
 @pytest.fixture
 def db(temp_dir: Path) -> Database:
     """Create a test database with schema."""
@@ -39,7 +38,6 @@ def db(temp_dir: Path) -> Database:
         session.add(Worktree(id=1, name="main", root_path="/test", is_main=True))
         session.commit()
     return db
-
 
 def _seed_data(
     db: Database,
@@ -88,11 +86,9 @@ def _seed_data(
             session.add(imp)
         session.commit()
 
-
 # ---------------------------------------------------------------------------
 # affected_tests
 # ---------------------------------------------------------------------------
-
 
 class TestAffectedTests:
     """Tests for ImportGraph.affected_tests."""
@@ -184,7 +180,6 @@ class TestAffectedTests:
         assert result.confidence.tier == "complete"
         assert result.confidence.resolved_ratio == 1.0
 
-
 class TestAffectedTestsWithNulls:
     """Test confidence with NULL source_literal."""
 
@@ -209,11 +204,9 @@ class TestAffectedTestsWithNulls:
         assert result.confidence.tier == "partial"
         assert result.confidence.null_source_count > 0
 
-
 # ---------------------------------------------------------------------------
 # imported_sources
 # ---------------------------------------------------------------------------
-
 
 class TestImportedSources:
     """Tests for ImportGraph.imported_sources."""
@@ -259,11 +252,9 @@ class TestImportedSources:
         assert result.confidence == "complete"
         assert result.null_import_count == 0
 
-
 # ---------------------------------------------------------------------------
 # uncovered_modules
 # ---------------------------------------------------------------------------
-
 
 class TestUncoveredModules:
     """Tests for ImportGraph.uncovered_modules."""
@@ -307,11 +298,9 @@ class TestUncoveredModules:
             assert isinstance(g, CoverageGap)
             # file_path may or may not be resolved, but should be present for indexed files
 
-
 # ---------------------------------------------------------------------------
 # affected_tests — Go same-directory affinity
 # ---------------------------------------------------------------------------
-
 
 class TestAffectedTestsGoPackageAffinity:
     """Go test files in the same directory share a package and need no import."""
@@ -361,11 +350,9 @@ class TestAffectedTestsGoPackageAffinity:
         # No Go affinity match — only import-based matching applies
         assert len(result.matches) == 0
 
-
 # ---------------------------------------------------------------------------
 # affected_tests: direct test file changes
 # ---------------------------------------------------------------------------
-
 
 class TestAffectedTestsDirectTestFiles:
     """Test that changed test files appear directly in affected_tests results.

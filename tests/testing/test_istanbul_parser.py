@@ -10,11 +10,9 @@ import pytest
 from coderecon.testing.coverage.models import CoverageParseError
 from coderecon.testing.coverage.parsers.istanbul import IstanbulParser
 
-
 @pytest.fixture()
 def parser() -> IstanbulParser:
     return IstanbulParser()
-
 
 MINIMAL_ISTANBUL = {
     "/src/a.js": {
@@ -31,11 +29,9 @@ MINIMAL_ISTANBUL = {
     }
 }
 
-
 class TestFormatId:
     def test_returns_istanbul(self, parser: IstanbulParser) -> None:
         assert parser.format_id == "istanbul"
-
 
 class TestCanParse:
     def test_directory_with_coverage_final(self, parser: IstanbulParser, tmp_path: Path) -> None:
@@ -62,7 +58,6 @@ class TestCanParse:
 
     def test_nonexistent_path(self, parser: IstanbulParser, tmp_path: Path) -> None:
         assert parser.can_parse(tmp_path / "nope") is False
-
 
 class TestParse:
     def test_parse_minimal(self, parser: IstanbulParser, tmp_path: Path) -> None:

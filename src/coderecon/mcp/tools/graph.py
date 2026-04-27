@@ -21,9 +21,7 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-
 # Core Functions (transport-agnostic)
-
 
 def graph_cycles_core(
     app_ctx: "AppContext",
@@ -50,7 +48,6 @@ def graph_cycles_core(
         {"level": level, "cycles": cycles, "summary": summary},
         resource_kind="graph_cycles",
     )
-
 
 def graph_communities_core(
     app_ctx: "AppContext",
@@ -85,7 +82,6 @@ def graph_communities_core(
         {"level": level, "communities": formatted, "summary": summary},
         resource_kind="graph_communities",
     )
-
 
 def _sync_analysis_sections(engine: Engine) -> tuple[dict[str, Any], GraphAnalysisResult | None]:
     """Run sync graph analysis and return (sections, file_analysis).
@@ -172,7 +168,6 @@ def _sync_analysis_sections(engine: Engine) -> tuple[dict[str, Any], GraphAnalys
 
     return sections, file_analysis
 
-
 async def recon_understand_core(
     app_ctx: "AppContext",
 ) -> dict[str, Any]:
@@ -228,7 +223,6 @@ async def recon_understand_core(
         resource_kind="understand",
     )
 
-
 def graph_export_core(
     app_ctx: "AppContext",
     *,
@@ -255,9 +249,7 @@ def graph_export_core(
         resource_kind="graph_export",
     )
 
-
 # Tool Registration
-
 
 def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
     """Register graph analysis MCP tools."""

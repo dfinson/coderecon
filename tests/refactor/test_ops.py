@@ -22,7 +22,6 @@ from coderecon.refactor.ops import (
     _word_boundary_match,
 )
 
-
 class TestWordBoundaryMatch:
     """Test _word_boundary_match helper."""
     def test_exact_match(self) -> None:

@@ -18,7 +18,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 def rrf_fuse(candidates: list[dict[str, Any]], *, k: int = 60) -> list[dict[str, Any]]:
     """Score candidates via Reciprocal Rank Fusion across harvester lists.
 
@@ -36,7 +35,6 @@ def rrf_fuse(candidates: list[dict[str, Any]], *, k: int = 60) -> list[dict[str,
         c["rrf_score"] = scores[i]
 
     return sorted(candidates, key=lambda c: -c["rrf_score"])
-
 
 def rrf_file_prune(
     candidates: list[dict[str, Any]],
@@ -68,7 +66,6 @@ def rrf_file_prune(
 
     return [c for c in candidates if c.get("path", "") in kept]
 
-
 # Named rank lists (public) + internal wrapper
 
 #: Canonical list names in declaration order.
@@ -77,7 +74,6 @@ ALL_LIST_NAMES: list[str] = [
     "shares_file", "coverage", "retriever_agreement", "hub_score",
     "callee_of_seed", "imported_by_seed",
 ]
-
 
 def build_named_rank_lists(
     candidates: list[dict[str, Any]],
@@ -196,7 +192,6 @@ def build_named_rank_lists(
         named.append(("imported_by_seed", imported_by_seed))
 
     return named
-
 
 def _build_rank_lists(candidates: list[dict[str, Any]]) -> list[list[int]]:
     """Return up to 11 rank lists (each a list of candidate indices, best-first)."""

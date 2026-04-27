@@ -26,7 +26,6 @@ from coderecon.index._internal.parsing.packs import TypeExtractionConfig
 if TYPE_CHECKING:
     from tree_sitter import Language, Node, Query, Tree
 
-
 class QueryBasedExtractor(BaseTypeExtractor):
     """Type extractor driven by tree-sitter queries.
 

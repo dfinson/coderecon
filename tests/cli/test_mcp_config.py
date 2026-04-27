@@ -14,7 +14,6 @@ from coderecon.cli.mcp_config import (
 
 # ── _get_mcp_server_name ─────────────────────────────────────────────────────
 
-
 class TestGetMcpServerName:
     def test_simple_name(self, tmp_path: Path) -> None:
         repo = tmp_path / "myrepo"
@@ -36,9 +35,7 @@ class TestGetMcpServerName:
         repo.mkdir()
         assert _get_mcp_server_name(repo) == "coderecon-myrepo"
 
-
 # ── _ensure_vscode_mcp_config ────────────────────────────────────────────────
-
 
 class TestEnsureVscodeMcpConfig:
     """Ensures .vscode/mcp.json is created or updated correctly."""
@@ -164,9 +161,7 @@ class TestEnsureVscodeMcpConfig:
         assert "inputs" in mcp
         assert mcp["inputs"] == [{"id": "token", "type": "promptString"}]
 
-
 # ── sync_vscode_mcp_port ─────────────────────────────────────────────────────
-
 
 class TestSyncVscodeMcpPort:
     """Port sync for 'recon up'."""

@@ -11,7 +11,6 @@ from coderecon.index._internal.db import Database, IndexRecovery, IntegrityCheck
 from coderecon.index._internal.indexing import LexicalIndex
 from coderecon.index.models import Context, DefFact, File, RefFact, Worktree
 
-
 class TestIntegrityChecker:
     """Tests for IntegrityChecker."""
 
@@ -212,7 +211,6 @@ class TestIntegrityChecker:
         assert report.sqlite_file_count == 20
         assert report.tantivy_doc_count == 1
 
-
 class TestIndexRecovery:
     """Tests for IndexRecovery."""
 
@@ -269,7 +267,6 @@ class TestIndexRecovery:
         recovery.wipe_all()
 
         assert not tantivy_path.exists()
-
 
 class TestIntegrityReport:
     """Tests for IntegrityReport."""

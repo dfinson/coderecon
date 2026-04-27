@@ -20,14 +20,12 @@ from coderecon.config.constants import BYTES_PER_MB
 if TYPE_CHECKING:
     from coderecon.daemon.lifecycle import ServerController
 
-
 def _get_version() -> str:
     """Get package version from installed metadata."""
     try:
         return importlib.metadata.version("coderecon")
     except importlib.metadata.PackageNotFoundError:
         return "dev"
-
 
 def _get_db_stats(db_path: Path) -> dict[str, Any]:
     """Get SQLite database statistics."""
@@ -44,7 +42,6 @@ def _get_db_stats(db_path: Path) -> dict[str, Any]:
             stats["wal_size_bytes"] = wal_path.stat().st_size
     return stats
 
-
 def _get_runtime_info() -> dict[str, Any]:
     """Get Python runtime information."""
     return {
@@ -52,14 +49,12 @@ def _get_runtime_info() -> dict[str, Any]:
         "pid": os.getpid(),
     }
 
-
 def _get_ranking_info() -> dict[str, Any]:
     """Get ranking model version and training metadata."""
     from coderecon.ranking.version import load_manifest
 
     manifest = load_manifest()
     return manifest.to_dict()
-
 
 def create_routes(controller: ServerController) -> list[Route]:
     """Create HTTP routes bound to the daemon controller."""

@@ -11,7 +11,6 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-
 def _read_snippet(repo_root: Path, path: str, start_line: int, end_line: int) -> str | None:
     """Read lines from a file. Returns None if file doesn't exist or read fails."""
     full = repo_root / path

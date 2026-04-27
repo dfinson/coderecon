@@ -22,13 +22,11 @@ from coderecon.testing.models import (
 )
 from coderecon.testing.ops import TestOps
 
-
 def _make_progress() -> TestProgress:
     return TestProgress(
         targets=TargetProgress(),
         cases=TestCaseProgress(),
     )
-
 
 def _make_target(tid: str = "t1", pack_id: str = "python.pytest") -> TestTarget:
     return TestTarget(
@@ -41,7 +39,6 @@ def _make_target(tid: str = "t1", pack_id: str = "python.pytest") -> TestTarget:
         estimated_cost=1.0,
         test_count=1,
     )
-
 
 def _make_coordinator() -> MagicMock:
     coord = MagicMock()
@@ -56,7 +53,6 @@ def _make_coordinator() -> MagicMock:
         return_value=MagicMock(source_dirs=None)
     )
     return coord
-
 
 class TestTestOpsMemoryParams:
     """Test that TestOps accepts and stores memory parameters."""
@@ -75,7 +71,6 @@ class TestTestOpsMemoryParams:
         )
         assert ops._memory_reserve_mb == 2048
         assert ops._subprocess_memory_limit_mb == 4096
-
 
 class TestMemoryGateIntegration:
     """Integration tests for the memory gate inside _execute_tests."""
@@ -182,7 +177,6 @@ class TestMemoryGateIntegration:
             )
 
         assert captured_kwargs.get("subprocess_memory_limit_mb") == 2048
-
 
 class TestOOMRetry:
     """Tests for OOM detection and automatic retry."""
@@ -310,7 +304,6 @@ class TestOOMRetry:
         # Should have been called only once
         assert call_count == 1
 
-
 class TestHistoryRecording:
     """Tests for RSS history recording after execution."""
 
@@ -412,7 +405,6 @@ class TestHistoryRecording:
         history = MemoryHistory.for_repo(tmp_path)
         # Both original OOM and retry OOM should have been recorded
         assert history.oom_count("heavy") >= 1
-
 
 class TestSafeExecutionConfigCeiling:
     """Test that _run_single_target passes ceiling to SafeExecutionConfig."""

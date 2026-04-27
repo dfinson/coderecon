@@ -9,7 +9,6 @@ from sqlalchemy import text
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
-
 def persist_lint_status(
     engine: Engine,
     file_path: str,
@@ -62,7 +61,6 @@ def persist_lint_status(
             )
         conn.commit()
 
-
 def get_lint_summary(engine: Engine) -> dict[str, int | float]:
     """Aggregate lint status from LintStatusFact."""
     with engine.connect() as conn:
@@ -95,7 +93,6 @@ def get_lint_summary(engine: Engine) -> dict[str, int | float]:
             "clean_files": clean_files,
             "clean_rate": round(clean_files / files_checked, 3) if files_checked else 0.0,
         }
-
 
 def get_file_lint_status(
     engine: Engine, file_path: str

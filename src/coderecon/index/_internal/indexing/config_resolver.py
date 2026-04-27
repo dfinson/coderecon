@@ -49,9 +49,7 @@ log = structlog.get_logger(__name__)
 # Type alias for the file reader callable
 _ReadFileFn = Callable[[str], "str | None"]
 
-
 # Config file discovery cache (Go, Rust declared_module augmentation)
-
 
 class ConfigResolver:
     """Caches parsed config files for a repo and resolves module identities.
@@ -153,7 +151,6 @@ _JS_INDEX_NAMES = tuple(f"/index{ext}" for ext in _JS_EXTENSIONS)
 
 # C/C++ extensions to probe
 _C_EXTENSIONS = (".h", ".hpp", ".hxx", ".c", ".cpp", ".cxx", ".cc")
-
 
 class ImportPathResolver:
     """Resolves import source_literal values to repo-relative file paths.

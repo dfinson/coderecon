@@ -16,7 +16,6 @@ from coderecon.sdk.protocol import (
     is_response,
 )
 
-
 class TestEncoding:
     def test_encode_basic(self) -> None:
         line = encode_request("recon", {"task": "find auth"}, request_id="r1")
@@ -44,7 +43,6 @@ class TestEncoding:
         assert msg["id"] == "r1"
         assert msg["result"]["ok"] is True
 
-
 class TestDiscriminators:
     def test_is_event(self) -> None:
         assert is_event({"event": "daemon.ready", "data": {}}) is True
@@ -55,7 +53,6 @@ class TestDiscriminators:
         assert is_response({"id": "r1", "result": {}}) is True
         assert is_response({"event": "x", "data": {}}) is False
 
-
 class TestGenerateSessionId:
     def test_format(self) -> None:
         sid = generate_session_id()
@@ -65,7 +62,6 @@ class TestGenerateSessionId:
     def test_unique(self) -> None:
         ids = {generate_session_id() for _ in range(100)}
         assert len(ids) == 100
-
 
 class TestPendingRequests:
     @pytest.mark.asyncio
@@ -96,7 +92,6 @@ class TestPendingRequests:
         pending.cancel_all()
         assert fut1.cancelled()
         assert fut2.cancelled()
-
 
 class TestCodeReconError:
     def test_from_wire(self) -> None:

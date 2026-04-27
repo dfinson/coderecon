@@ -25,7 +25,6 @@ from coderecon.index.models import Context, File, ScopeFact, ScopeKind
 if TYPE_CHECKING:
     from coderecon.index._internal.db import Database
 
-
 class TestScopeRegion:
     """Tests for ScopeRegion dataclass."""
 
@@ -62,7 +61,6 @@ class TestScopeRegion:
             resolved=True,
         )
         assert region.kind == "class"
-
 
 class TestFindEnclosingScope:
     """Tests for find_enclosing_scope function."""
@@ -249,7 +247,6 @@ class TestFindEnclosingScope:
             assert scope is not None
             assert scope.kind == ScopeKind.LAMBDA.value
 
-
 class TestResolveScopeRegion:
     """Tests for resolve_scope_region function."""
 
@@ -374,7 +371,6 @@ class TestResolveScopeRegion:
             region, content = resolve_scope_region(session, temp_repo, file.id, line=5)
             assert region.resolved is False
             assert content == ""
-
 
 class TestResolveScopeRegionForPath:
     """Tests for resolve_scope_region_for_path function."""

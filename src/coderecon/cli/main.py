@@ -20,7 +20,6 @@ from coderecon.cli.status import status_command
 from coderecon.cli.up import up_command
 from coderecon.core.logging import configure_logging
 
-
 @click.group()
 @click.version_option(version="0.1.0", prog_name="recon")
 @click.option("-v", "--verbose", is_flag=True, help="Enable debug logging")
@@ -30,7 +29,6 @@ def cli(ctx: click.Context, verbose: bool) -> None:
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
     configure_logging(level="DEBUG" if verbose else "INFO")
-
 
 # Per-repo commands (existing)
 cli.add_command(init_command, name="init")
@@ -47,7 +45,6 @@ cli.add_command(register_command, name="register")
 cli.add_command(register_worktree_command, name="register-worktree")
 cli.add_command(unregister_command, name="unregister")
 cli.add_command(worktrees_command, name="worktrees")
-
 
 if __name__ == "__main__":
     cli()

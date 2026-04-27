@@ -16,15 +16,12 @@ from coderecon.core.languages import CONSTANT_KINDS, CONTAINER_KINDS, EXTENSION_
 if TYPE_CHECKING:
     from coderecon.mcp.context import AppContext
 
-
 def _compute_file_sha256(full_path: Path) -> str:
     """Compute SHA256 of entire file contents."""
     content = full_path.read_bytes()
     return hashlib.sha256(content).hexdigest()
 
-
 # Parameter Models (used by tests and other modules)
-
 
 class SpanTarget(BaseModel):
     """Span-based read target. Both start_line and end_line are required."""
@@ -43,7 +40,6 @@ class SpanTarget(BaseModel):
             )
         return self
 
-
 class StructuralTarget(BaseModel):
     """Structural-unit-based read target."""
 
@@ -55,9 +51,7 @@ class StructuralTarget(BaseModel):
         "function", description="Structural unit to retrieve"
     )
 
-
 # Summary Helpers
-
 
 def _summarize_read(files: list[dict[str, Any]], not_found: int = 0) -> str:
     """Generate summary for file read results."""
@@ -81,13 +75,11 @@ def _summarize_read(files: list[dict[str, Any]], not_found: int = 0) -> str:
     suffix = f", {not_found} not found" if not_found else ""
     return f"{pluralize(len(files), 'file')} ({path_list}), {total_lines} lines{suffix}"
 
-
 def _summarize_list(path: str, total: int, truncated: bool) -> str:
     """Generate summary for directory listing."""
     loc = path or "repo root"
     trunc = " (truncated)" if truncated else ""
     return f"{total} entries in {loc}{trunc}"
-
 
 def _build_scaffold(
     app_ctx: "AppContext",
@@ -179,7 +171,6 @@ def _build_scaffold(
     }
     return result
 
-
 def _build_symbol_tree(
     defs: list[Any],
     *,
@@ -249,7 +240,6 @@ def _build_symbol_tree(
 
     return lines
 
-
 def _build_unindexed_fallback(full_path: Path, rel_path: str) -> dict[str, Any]:
     """Fallback for files not in the structural index."""
     try:
@@ -269,7 +259,6 @@ def _build_unindexed_fallback(full_path: Path, rel_path: str) -> dict[str, Any]:
             "This file is not in the structural index. Read it via terminal (cat/head)."
         ),
     }
-
 
 def _build_lite_scaffold(
     app_ctx: "AppContext",

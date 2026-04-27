@@ -9,7 +9,6 @@ import time
 
 from sqlmodel import Field, SQLModel
 
-
 class RepoEntry(SQLModel, table=True):
     """A registered git repository."""
 
@@ -22,7 +21,6 @@ class RepoEntry(SQLModel, table=True):
     default_branch: str | None = None
     registered_at: float = Field(default_factory=time.time)
     last_indexed_at: float | None = None
-
 
 class WorktreeEntry(SQLModel, table=True):
     """A worktree (or main checkout) within a repository."""

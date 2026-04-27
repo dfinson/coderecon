@@ -50,7 +50,6 @@ log = structlog.get_logger(__name__)
 # Cache: None = not checked, True/False = result
 _gpu_active: bool | None = None
 
-
 def _ensure_cuda_lib_path() -> None:
     """Make cuDNN / cuBLAS findable for onnxruntime-gpu.
     On Linux, ``onnxruntime-gpu`` needs ``libcudnn.so.9`` at runtime.
@@ -151,7 +150,6 @@ def is_gpu_active() -> bool:
     """
     return _gpu_active is True
 
-
 # ── Constants ────────────────────────────────────────────────────
 
 MODEL_VERSION = "splade-mini-onnx-v1"
@@ -171,7 +169,6 @@ BATCH_SIZE = BATCH_SIZE_CPU
 _VRAM_BYTES_PER_SAMPLE_PER_TOKEN = 500_000  # 500 KB — measured from CUDA allocation at 55 samples × 340 tokens
 _VRAM_MODEL_OVERHEAD_BYTES = 2500 * BYTES_PER_MB  # 2.5 GB  (model + ORT runtime + arena fragmentation)
 _VRAM_UTILIZATION = 0.90  # use at most 90% of total VRAM
-
 
 def _query_gpu_vram_bytes() -> int | None:
     """Query total GPU VRAM in bytes via nvidia-smi.
@@ -214,7 +211,6 @@ from coderecon_models_splade import TOKENIZER_PATH as _TOKENIZER_PATH
 
 _CAMEL_SPLIT = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z][a-z]|\d|\b)|[0-9]+")
 
-
 def word_split(name: str) -> list[str]:
     """Split camelCase/snake_case into lowercase words."""
     words: list[str] = []
@@ -252,7 +248,6 @@ def _compact_sig(name: str, sig: str) -> str:
             return f"{words}{compact}"
     return words
 
-
 _CODE_KINDS = frozenset(
     {
         "function",
@@ -269,9 +264,7 @@ _CODE_KINDS = frozenset(
     }
 )
 
-
 # ── Scaffold builder ─────────────────────────────────────────────
-
 
 def build_def_scaffold(
     file_path: str,
@@ -322,9 +315,7 @@ def build_def_scaffold(
             lines.append(f"describes {first}")
     return "\n".join(lines) if lines else ""
 
-
 # ── Scaffold extraction from index DB ─────────────────────────────
-
 
 def build_scaffolds_for_defs(
     session: Session,
@@ -440,9 +431,7 @@ def build_scaffolds_for_defs(
             result[d.def_uid] = scaffold
     return result
 
-
 # ── Encoder wrapper ──────────────────────────────────────────────
-
 
 @dataclass
 class SpladeEncoder:
@@ -683,12 +672,9 @@ def sparse_dot(a: dict[int, float], b: dict[int, float]) -> float:
             total += val * b[idx]
     return total
 
-
 # ── Batch index + storage ────────────────────────────────────────
 
-
 _encoder_singleton: SpladeEncoder | None = None
-
 
 def _get_encoder() -> SpladeEncoder:
     """Get or create the singleton encoder."""
@@ -706,12 +692,10 @@ def _json_to_vec(blob: str) -> dict[int, float]:
     raw = json.loads(blob)
     return {int(k): float(v) for k, v in raw.items()}
 
-
 import struct
 
 _PAIR_FMT = "If"  # uint32 term_id + float32 weight
 _PAIR_SIZE = struct.calcsize(_PAIR_FMT)
-
 
 def _vec_to_blob(vec: dict[int, float]) -> bytes:
     """Pack a sparse vector as binary: sequence of (uint32, float32) pairs."""
@@ -729,9 +713,7 @@ def _blob_to_vec(data: bytes) -> dict[int, float]:
         result[tid] = w
     return result
 
-
 # ── Vector I/O ───────────────────────────────────────────────────
-
 
 def load_all_vectors_fast(
     db: "Database",
@@ -896,7 +878,6 @@ def backfill_scaffold_text(
     log.info("splade.scaffold_backfill_done", extra={"updated": updated})
     return updated
 
-
 # ── Query-time retrieval ─────────────────────────────────────────
 
 # Score floor: minimum SPLADE dot-product to be considered a candidate.
@@ -908,7 +889,6 @@ _SCORE_FLOOR = 1.0
 # Safety cap: prevent pathological queries from flooding the merge pool.
 # Aligned with BM25 harvester's effective ceiling (~200 files × defs).
 _HARD_CAP = 500
-
 
 def retrieve_splade(
     db: Database,

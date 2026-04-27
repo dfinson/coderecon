@@ -10,7 +10,6 @@ import pytest
 
 from coderecon.daemon.stdio_transport import _handle_request, _write_message
 
-
 class TestWriteMessage:
     """Tests for _write_message."""
 
@@ -51,7 +50,6 @@ class TestWriteMessage:
         # After releasing lock, task should complete
         await task
         transport.write.assert_called_once()
-
 
 class TestHandleRequest:
     """Tests for _handle_request."""

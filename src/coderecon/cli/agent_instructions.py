@@ -8,7 +8,6 @@ from coderecon.files.ops import atomic_write_text
 
 _CODERECON_SNIPPET_MARKER = "<!-- coderecon-instructions -->"
 
-
 def _make_coderecon_snippet(tool_prefix: str) -> str:
     """Generate the CodeRecon instruction snippet with the actual tool prefix.
     Args:
@@ -133,7 +132,6 @@ Budget resets on failure. `fix_plan` is always in the checkpoint response — no
   (recon gate, mutation budget) carries over and blocks the next task
 <!-- /coderecon-instructions -->
 """
-
 
 def _inject_agent_instructions(
     repo_root: Path, tool_prefix: str, targets: list[str] | None = None

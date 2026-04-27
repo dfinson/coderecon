@@ -25,7 +25,6 @@ log = structlog.get_logger(__name__)
 
 _TIER_ORDER = {"proven": 0, "strong": 1, "anchored": 2, "unknown": 3}
 
-
 def _merge_candidates(
     *harvests: dict[str, HarvestCandidate],
 ) -> dict[str, HarvestCandidate]:
@@ -66,7 +65,6 @@ def _merge_candidates(
                     existing.def_fact = cand.def_fact
 
     return merged
-
 
 async def _enrich_candidates(
     app_ctx: AppContext,
@@ -199,7 +197,6 @@ async def _enrich_candidates(
                 if uid in anchor_import_uids:
                     cand.is_imported_by_top = True
 
-
 async def _expand_via_coverage(
     app_ctx: AppContext,
     candidates: dict[str, HarvestCandidate],
@@ -252,7 +249,6 @@ async def _expand_via_coverage(
 
     return new
 
-
 def _select_graph_seeds(
     merged: dict[str, HarvestCandidate],
     *,
@@ -280,7 +276,6 @@ def _select_graph_seeds(
     ]
     term_scored.sort(key=lambda x: x[1], reverse=True)
     return [uid for uid, _ in term_scored[:fallback_top_k]]
-
 
 def _add_file_defs_as_candidates(
     fq: object,  # FactQueries
@@ -325,7 +320,6 @@ def _add_file_defs_as_candidates(
             import_direction=import_direction,
             evidence=[EvidenceRecord(category=category, detail=detail, score=score)],
         )
-
 
 def _infer_test_paths(source_path: str) -> list[str]:
     """Infer candidate test file paths from a source file path.

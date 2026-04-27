@@ -27,11 +27,9 @@ from coderecon.index.ops import IndexCoordinatorEngine
 from coderecon.mutation.ops import MutationOps
 from coderecon.refactor.ops import RefactorOps
 
-
 def rel(path: Path, root: Path) -> str:
     """Get relative path string for index_files."""
     return str(path.relative_to(root))
-
 
 @pytest.fixture
 def test_db(tmp_path: Path) -> Generator[Database, None, None]:
@@ -62,7 +60,6 @@ def test_db(tmp_path: Path) -> Generator[Database, None, None]:
         session.commit()
 
     yield db
-
 
 @pytest.fixture
 def refactor_project(tmp_path: Path) -> Path:
@@ -125,7 +122,6 @@ def test_my_function():
 ''')
 
     return tmp_path
-
 
 @pytest.fixture
 def indexed_project(
@@ -190,7 +186,6 @@ def indexed_project(
 
     return refactor_project, test_db, lexical_index
 
-
 @pytest.fixture
 async def refactor_ops(
     indexed_project: tuple[Path, Database, LexicalIndex],
@@ -219,7 +214,6 @@ async def refactor_ops(
     assert loaded, "Coordinator failed to load existing index"
 
     return RefactorOps(repo_root, coordinator)
-
 
 @pytest.mark.asyncio
 class TestRefactorRenameIntegration:
@@ -384,7 +378,6 @@ class TestRefactorRenameIntegration:
                 assert "line" in match
                 assert "snippet" in match
                 assert int(match["line"]) > 0
-
 
 @pytest.mark.asyncio
 class TestRefactorEdgeCases:

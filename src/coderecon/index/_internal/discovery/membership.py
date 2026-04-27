@@ -17,13 +17,11 @@ from dataclasses import dataclass, field
 from coderecon.index._internal.discovery.scanner import INCLUDE_SPECS, UNIVERSAL_EXCLUDES
 from coderecon.index.models import CandidateContext, LanguageFamily
 
-
 @dataclass
 class MembershipResult:
     """Result of membership resolution."""
 
     contexts: list[CandidateContext] = field(default_factory=list)
-
 
 class MembershipResolver:
     """
@@ -115,7 +113,6 @@ class MembershipResolver:
         if path.startswith(root + "/"):
             return path[len(root) + 1 :]
         return path
-
 
 def is_inside(file_path: str, root_path: str) -> bool:
     """

@@ -21,7 +21,6 @@ _DELTA_CHAR_MAP: dict[str, DeltaStatus] = {
     "C": "copied",
 }
 
-
 @dataclass(frozen=True, slots=True)
 class Signature:
     """Git author/committer signature."""
@@ -33,7 +32,6 @@ class Signature:
     @classmethod
     def from_git(cls, sig: GitSig) -> Signature:
         return cls(sig.name, sig.email, datetime.fromtimestamp(sig.time, tz=UTC))
-
 
 @dataclass(frozen=True, slots=True)
 class CommitInfo:
@@ -56,7 +54,6 @@ class CommitInfo:
             committer=Signature.from_git(commit.committer),
             parent_shas=commit.parent_shas,
         )
-
 
 @dataclass(frozen=True, slots=True)
 class BranchInfo:
@@ -90,7 +87,6 @@ class BranchInfo:
             upstream=upstream,
         )
 
-
 @dataclass(frozen=True, slots=True)
 class TagInfo:
     """Git tag information."""
@@ -101,7 +97,6 @@ class TagInfo:
     message: str | None = None
     tagger: Signature | None = None
 
-
 @dataclass(frozen=True, slots=True)
 class RemoteInfo:
     """Git remote information."""
@@ -109,7 +104,6 @@ class RemoteInfo:
     name: str
     url: str
     push_url: str | None = None
-
 
 @dataclass(frozen=True, slots=True)
 class DiffFile:
@@ -120,7 +114,6 @@ class DiffFile:
     status: DeltaStatus
     additions: int
     deletions: int
-
 
 @dataclass(frozen=True, slots=True)
 class DiffInfo:
@@ -165,7 +158,6 @@ class DiffInfo:
             patch=diff_text if include_patch else None,
         )
 
-
 @dataclass(frozen=True, slots=True)
 class FileDiffSummary:
     """Per-file diff statistics."""
@@ -176,11 +168,9 @@ class FileDiffSummary:
     deletions: int
     word_count: int | None = None  # Only populated if include_word_count=True
 
-
 def _count_words(text: str) -> int:
     """Count words in text."""
     return len(text.split())
-
 
 @dataclass(frozen=True, slots=True)
 class DiffSummary:
@@ -256,7 +246,6 @@ class DiffSummary:
             total_word_count=total_words,
         )
 
-
 @dataclass(frozen=True, slots=True)
 class BlameHunk:
     """A hunk in blame output."""
@@ -266,7 +255,6 @@ class BlameHunk:
     start_line: int
     line_count: int
     original_start_line: int
-
 
 @dataclass(frozen=True, slots=True)
 class BlameInfo:
@@ -296,7 +284,6 @@ class BlameInfo:
             ),
         )
 
-
 @dataclass(frozen=True, slots=True)
 class StashEntry:
     """Git stash entry."""
@@ -304,7 +291,6 @@ class StashEntry:
     index: int
     message: str
     commit_sha: str
-
 
 @dataclass(frozen=True, slots=True)
 class RefInfo:
@@ -315,7 +301,6 @@ class RefInfo:
     shorthand: str
     is_detached: bool = False
 
-
 @dataclass(frozen=True, slots=True)
 class MergeResult:
     """Result of a merge operation."""
@@ -323,7 +308,6 @@ class MergeResult:
     success: bool
     commit_sha: str | None
     conflict_paths: tuple[str, ...] = field(default_factory=tuple)
-
 
 @dataclass(frozen=True, slots=True)
 class PullResult:
@@ -334,7 +318,6 @@ class PullResult:
     up_to_date: bool = False
     conflict_paths: tuple[str, ...] = field(default_factory=tuple)
 
-
 @dataclass(frozen=True, slots=True)
 class MergeAnalysis:
     """Result of merge analysis."""
@@ -343,7 +326,6 @@ class MergeAnalysis:
     fastforward_possible: bool
     conflicts_likely: bool
 
-
 @dataclass(frozen=True, slots=True)
 class OperationResult:
     """Result of cherrypick/revert operations."""
@@ -351,9 +333,7 @@ class OperationResult:
     success: bool
     conflict_paths: tuple[str, ...] = field(default_factory=tuple)
 
-
 # Worktree Types
-
 
 @dataclass(frozen=True, slots=True)
 class WorktreeInfo:
@@ -369,7 +349,6 @@ class WorktreeInfo:
     lock_reason: str | None
     is_prunable: bool  # True if worktree directory is missing
 
-
 # Submodule Types
 
 SubmoduleState = Literal[
@@ -379,7 +358,6 @@ SubmoduleState = Literal[
     "outdated",  # Behind recorded commit
     "missing",  # Directory missing
 ]
-
 
 @dataclass(frozen=True, slots=True)
 class SubmoduleInfo:
@@ -392,7 +370,6 @@ class SubmoduleInfo:
     head_sha: str | None
     status: SubmoduleState
 
-
 @dataclass(frozen=True, slots=True)
 class SubmoduleStatus:
     """Detailed submodule status."""
@@ -404,7 +381,6 @@ class SubmoduleStatus:
     recorded_sha: str
     actual_sha: str | None
 
-
 @dataclass(frozen=True, slots=True)
 class SubmoduleUpdateResult:
     """Result of submodule update operation."""
@@ -413,12 +389,10 @@ class SubmoduleUpdateResult:
     failed: tuple[tuple[str, str], ...]  # (path, error)
     already_current: tuple[str, ...]
 
-
 # Rebase Types
 
 RebaseAction = Literal["pick", "reword", "edit", "squash", "fixup", "drop"]
 RebaseResultState = Literal["done", "conflict", "edit_pause", "aborted"]
-
 
 @dataclass(frozen=True, slots=True)
 class RebaseStep:
@@ -428,7 +402,6 @@ class RebaseStep:
     commit_sha: str
     message: str | None = None  # Original message, or override for reword/squash
 
-
 @dataclass(frozen=True, slots=True)
 class RebasePlan:
     """A rebase plan ready for execution."""
@@ -436,7 +409,6 @@ class RebasePlan:
     upstream: str
     onto: str
     steps: tuple[RebaseStep, ...]
-
 
 @dataclass(frozen=True, slots=True)
 class RebaseResult:
@@ -449,7 +421,6 @@ class RebaseResult:
     conflict_paths: tuple[str, ...] = field(default_factory=tuple)
     current_commit: str | None = None  # For edit_pause
     new_head: str | None = None  # Final HEAD after successful rebase
-
 
 def validate_branch_name(name: str) -> str:
     """Validate and clean a Git branch name.

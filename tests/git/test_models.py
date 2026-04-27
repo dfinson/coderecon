@@ -41,7 +41,6 @@ from coderecon.git.models import (
 # Tests for helper functions
 # =============================================================================
 
-
 class TestCountWords:
     """Tests for _count_words helper function."""
     def test_empty_string(self) -> None:
@@ -64,7 +63,6 @@ class TestCountWords:
 # Tests for Signature
 # =============================================================================
 
-
 class TestSignature:
     """Tests for Signature dataclass."""
     def test_creation(self) -> None:
@@ -83,7 +81,6 @@ class TestSignature:
 # =============================================================================
 # Tests for CommitInfo
 # =============================================================================
-
 
 class TestCommitInfo:
     """Tests for CommitInfo dataclass."""
@@ -108,7 +105,6 @@ class TestCommitInfo:
 # =============================================================================
 # Tests for BranchInfo
 # =============================================================================
-
 
 class TestBranchInfo:
     """Tests for BranchInfo dataclass."""
@@ -138,7 +134,6 @@ class TestBranchInfo:
 # =============================================================================
 # Tests for TagInfo
 # =============================================================================
-
 
 class TestTagInfo:
     """Tests for TagInfo dataclass."""
@@ -170,7 +165,6 @@ class TestTagInfo:
 # =============================================================================
 # Tests for DiffFile
 # =============================================================================
-
 
 class TestDiffFile:
     """Tests for DiffFile dataclass."""
@@ -224,7 +218,6 @@ class TestDiffFile:
 # Tests for DiffInfo
 # =============================================================================
 
-
 class TestDiffInfo:
     """Tests for DiffInfo dataclass."""
     def test_creation(self) -> None:
@@ -257,7 +250,6 @@ class TestDiffInfo:
 # Tests for FileDiffSummary
 # =============================================================================
 
-
 class TestFileDiffSummary:
     """Tests for FileDiffSummary dataclass."""
     def test_creation(self) -> None:
@@ -284,7 +276,6 @@ class TestFileDiffSummary:
 # =============================================================================
 # Tests for DiffSummary
 # =============================================================================
-
 
 class TestDiffSummary:
     """Tests for DiffSummary dataclass."""
@@ -354,7 +345,6 @@ class TestDiffSummary:
 # Tests for BlameHunk and BlameInfo
 # =============================================================================
 
-
 class TestBlameInfo:
     """Tests for blame-related dataclasses."""
     def test_blame_hunk(self) -> None:
@@ -385,7 +375,6 @@ class TestBlameInfo:
 # =============================================================================
 # Tests for operation result types
 # =============================================================================
-
 
 class TestOperationResults:
     """Tests for various operation result types."""
@@ -432,7 +421,6 @@ class TestOperationResults:
 # Tests for rebase types
 # =============================================================================
 
-
 class TestRebaseTypes:
     """Tests for rebase-related types."""
     def test_rebase_step(self) -> None:
@@ -470,7 +458,6 @@ class TestRebaseTypes:
 # =============================================================================
 # Tests for worktree and submodule types
 # =============================================================================
-
 
 class TestWorktreeSubmoduleTypes:
     """Tests for worktree and submodule types."""
@@ -514,7 +501,6 @@ class TestWorktreeSubmoduleTypes:
 # Tests for RefInfo and other types
 # =============================================================================
 
-
 class TestMiscTypes:
     """Tests for miscellaneous types."""
     def test_remote_info(self) -> None:
@@ -547,7 +533,6 @@ class TestMiscTypes:
 # =============================================================================
 # Tests for validate_branch_name
 # =============================================================================
-
 
 class TestValidateBranchName:
     """Tests for validate_branch_name."""

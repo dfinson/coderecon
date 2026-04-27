@@ -10,7 +10,6 @@ from coderecon.git import GitOps
 
 pytestmark = pytest.mark.integration
 
-
 class TestFetchWithLocalRemote:
     """Tests for fetch operations using local bare repo as remote."""
 
@@ -36,7 +35,6 @@ class TestFetchWithLocalRemote:
         # Remote refs should still be present
         branches_after = {b.short_name for b in ops.branches(include_remote=True)}
         assert "origin/feature/remote-test" in branches_after
-
 
 class TestPushWithLocalRemote:
     """Tests for push operations using local bare repo as remote."""
@@ -100,7 +98,6 @@ class TestPushWithLocalRemote:
             verify_ops = GitOps(verify_path)
             assert verify_ops.head().target_sha == original_sha
 
-
 class TestRemoteBranchCheckout:
     """Tests for checking out remote branches (planners.py coverage)."""
 
@@ -150,7 +147,6 @@ class TestRemoteBranchCheckout:
         ops.checkout("test-local")
         assert ops.current_branch() == "test-local"
 
-
 class TestRemoteInfo:
     """Tests for remote information retrieval."""
 
@@ -164,7 +160,6 @@ class TestRemoteInfo:
         assert len(remotes) == 1
         assert remotes[0].name == "origin"
         assert str(bare) in remotes[0].url
-
 
 class TestFetchNonexistentRemote:
     """Error handling for remote operations."""

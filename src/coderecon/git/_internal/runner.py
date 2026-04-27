@@ -7,7 +7,6 @@ from pathlib import Path
 
 from coderecon.git.errors import GitError, NotARepositoryError
 
-
 class GitRunner:
     """Runs git commands in a specific repository directory."""
 

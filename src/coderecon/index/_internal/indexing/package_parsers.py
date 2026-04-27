@@ -18,7 +18,6 @@ log = structlog.get_logger(__name__)
 
 _GO_MOD_MODULE_RE = re.compile(r"^module\s+(\S+)", re.MULTILINE)
 
-
 def parse_go_mod(go_mod_text: str) -> str | None:
     """Extract the module path from a go.mod file.
     >>> parse_go_mod('module github.com/user/repo\\n\\ngo 1.21\\n')
@@ -56,11 +55,9 @@ def resolve_go_module(
         return f"{go_mod_module}/{rel_dir}"
     return go_mod_module
 
-
 # Rust: Cargo.toml resolution
 
 _CARGO_NAME_RE = re.compile(r'^\[package\].*?^name\s*=\s*"([^"]+)"', re.MULTILINE | re.DOTALL)
-
 
 def parse_cargo_toml(cargo_text: str) -> str | None:
     """Extract the crate name from a Cargo.toml file.
@@ -102,9 +99,7 @@ def resolve_rust_module(
         parts.append(file_stem)
     return "::".join(parts)
 
-
 # JS/TS: package.json exports resolution
-
 
 def _parse_export_target(value: object) -> str | None:
     """Extract the source file path from a package.json exports value.

@@ -19,7 +19,6 @@ from coderecon.mcp.ledger import (
     get_ledger,
 )
 
-
 class TestOperationRecord:
     """Tests for OperationRecord dataclass."""
 
@@ -104,7 +103,6 @@ class TestOperationRecord:
         }
         assert set(d.keys()) == expected_keys
 
-
 class TestDryRunRecord:
     """Tests for DryRunRecord dataclass."""
 
@@ -145,7 +143,6 @@ class TestDryRunRecord:
         )
         assert record.start_line == 10
         assert record.end_line == 20
-
 
 class TestOperationLedgerLogOperation:
     """Tests for OperationLedger.log_operation."""
@@ -247,7 +244,6 @@ class TestOperationLedgerLogOperation:
         assert ledger._records[0].tool == "tool_5"
         assert ledger._records[4].tool == "tool_9"
 
-
 class TestOperationLedgerDryRun:
     """Tests for OperationLedger dry run operations."""
 
@@ -345,7 +341,6 @@ class TestOperationLedgerDryRun:
 
         assert r1.content_hash == r2.content_hash
 
-
 class TestOperationLedgerListOperations:
     """Tests for OperationLedger.list_operations."""
 
@@ -433,7 +428,6 @@ class TestOperationLedgerListOperations:
         assert len(records) == 1
         assert records[0].tool == "t1"
 
-
 class TestGetLedger:
     """Tests for get_ledger global function."""
 
@@ -460,7 +454,6 @@ class TestGetLedger:
             assert ledger_module._ledger is ledger
         finally:
             ledger_module._ledger = original
-
 
 class TestDryRunRecordValidity:
     """Edge cases for DryRunRecord validity."""

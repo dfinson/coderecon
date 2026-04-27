@@ -35,11 +35,9 @@ from coderecon.git._internal.constants import (
 )
 from coderecon.git.errors import GitError
 
-
 # ---------------------------------------------------------------------------
 # Helper to build a RepoAccess with mocked internals
 # ---------------------------------------------------------------------------
-
 
 def _make_repo_access(tmp_path: Path) -> RepoAccess:
     """Construct a RepoAccess bypassing __init__ validation."""
@@ -52,11 +50,9 @@ def _make_repo_access(tmp_path: Path) -> RepoAccess:
     ra._index = MagicMock()
     return ra
 
-
 # ===========================================================================
 # Dataclass tests
 # ===========================================================================
-
 
 class TestDataclassImmutability:
     """Verify frozen dataclasses reject mutation."""
@@ -85,11 +81,9 @@ class TestDataclassImmutability:
         assert tag.message is None
         assert tag.tagger is None
 
-
 # ===========================================================================
 # _parse_commit tests
 # ===========================================================================
-
 
 class TestParseCommit:
     """Tests for RepoAccess._parse_commit."""
@@ -174,11 +168,9 @@ class TestParseCommit:
         with pytest.raises(GitError, match="Failed to parse commit"):
             ra._parse_commit("HEAD")
 
-
 # ===========================================================================
 # _parse_log_output tests
 # ===========================================================================
-
 
 class TestParseLogOutput:
     """Tests for RepoAccess._parse_log_output."""
@@ -218,11 +210,9 @@ class TestParseLogOutput:
         commits = ra._parse_log_output(good + "\x00" + bad)
         assert len(commits) == 1
 
-
 # ===========================================================================
 # _parse_blame_output tests
 # ===========================================================================
-
 
 class TestParseBlameOutput:
     """Tests for RepoAccess._parse_blame_output."""
@@ -272,11 +262,9 @@ class TestParseBlameOutput:
         ra = _make_repo_access(tmp_path)
         assert ra._parse_blame_output("") == []
 
-
 # ===========================================================================
 # status() tests
 # ===========================================================================
-
 
 class TestStatus:
     """Tests for RepoAccess.status."""
@@ -328,11 +316,9 @@ class TestStatus:
         result = self._status_with(tmp_path, "x\nA  ok.py\n")
         assert result == {"ok.py": STATUS_INDEX_NEW}
 
-
 # ===========================================================================
 # state() tests
 # ===========================================================================
-
 
 class TestState:
     """Tests for RepoAccess.state using tmp_path for .git dir files."""
@@ -403,11 +389,9 @@ class TestState:
         (tmp_path / ".git" / "BISECT_LOG").touch()
         assert ra.state() == GIT_REPOSITORY_STATE_BISECT
 
-
 # ===========================================================================
 # normalize_path tests
 # ===========================================================================
-
 
 class TestNormalizePath:
     """Tests for RepoAccess.normalize_path."""

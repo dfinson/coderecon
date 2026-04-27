@@ -13,9 +13,7 @@ from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from coderecon.config.constants import MS_PER_SEC
 
-
 log = structlog.get_logger(__name__)
-
 
 def find_reusable_files(
     engine: Engine,
@@ -73,7 +71,6 @@ def find_reusable_files(
         )
 
     return reusable
-
 
 def clone_facts_from_source(
     engine: Engine,

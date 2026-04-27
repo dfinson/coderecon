@@ -77,7 +77,6 @@ from coderecon.files.ops import atomic_write_text
 
 log = structlog.get_logger(__name__)
 
-
 class GitOps:
     """Git operations via subprocess with serializable data models."""
     def __init__(self, repo_path: Path | str) -> None:

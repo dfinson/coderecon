@@ -6,7 +6,6 @@ from coderecon.index._internal.analysis.endpoint_detection import (
     detect_endpoints_in_source,
 )
 
-
 class TestPythonEndpoints:
     def test_flask_route(self) -> None:
         src = '''
@@ -45,7 +44,6 @@ response = requests.get("https://api.example.com/data")
         eps = detect_endpoints_in_source(src, "python")
         assert any(e.kind == "client" for e in eps)
 
-
 class TestJavaScriptEndpoints:
     def test_express_get(self) -> None:
         src = '''
@@ -62,7 +60,6 @@ getItems() {}
         eps = detect_endpoints_in_source(src, "typescript")
         assert any(e.url_pattern == "/items" for e in eps)
 
-
 class TestGoEndpoints:
     def test_gin_route(self) -> None:
         src = '''
@@ -70,7 +67,6 @@ r.GET("/api/health", healthHandler)
 '''
         eps = detect_endpoints_in_source(src, "go")
         assert any(e.url_pattern == "/api/health" for e in eps)
-
 
 class TestNoEndpoints:
     def test_empty_source(self) -> None:
@@ -81,7 +77,6 @@ class TestNoEndpoints:
         src = "def hello():\n    print('hello')\n"
         eps = detect_endpoints_in_source(src, "python")
         assert eps == []
-
 
 class TestClientDetection:
     def test_fetch(self) -> None:

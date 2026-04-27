@@ -23,7 +23,6 @@ from coderecon.index._internal.diff.models import ChangedFile, DefSnapshot
 # Fixtures
 # ============================================================================
 
-
 def _snap(
     kind: str = "function",
     name: str = "foo",
@@ -43,11 +42,9 @@ def _snap(
         end_line=end,
     )
 
-
 # ============================================================================
 # Tests: Hunk Intersection
 # ============================================================================
-
 
 class TestHunkIntersection:
     """Tests for _intersects_hunks."""
@@ -70,11 +67,9 @@ class TestHunkIntersection:
     def test_multiple_hunks_one_match(self) -> None:
         assert _intersects_hunks(5, 8, [(1, 3), (6, 10), (20, 30)]) is True
 
-
 # ============================================================================
 # Tests: Internal Variable Detection
 # ============================================================================
-
 
 class TestInternalVariable:
     """Tests for _is_internal_variable."""
@@ -98,11 +93,9 @@ class TestInternalVariable:
         var = _snap(kind="variable", name="x", start=5, end=5)
         assert _is_internal_variable(var, [cls, var]) is False
 
-
 # ============================================================================
 # Tests: Rename Detection
 # ============================================================================
-
 
 class TestRenameDetection:
     """Tests for _detect_renames."""
@@ -144,11 +137,9 @@ class TestRenameDetection:
         )
         assert len(renames) == 0
 
-
 # ============================================================================
 # Tests: Full Structural Diff
 # ============================================================================
-
 
 class TestComputeStructuralDiff:
     """Tests for compute_structural_diff."""
@@ -275,11 +266,9 @@ class TestComputeStructuralDiff:
         )
         assert result.changes[0].qualified_name == "MyClass.foo"
 
-
 # ============================================================================
 # Tests: Delta Tags
 # ============================================================================
-
 
 class TestDeltaTags:
     """Tests for _compute_delta_tags and derived tag functions."""
@@ -371,7 +360,6 @@ class TestDeltaTags:
         assert "minor_change" in tags
         assert "possibly_comment_or_whitespace" in tags
 
-
 class TestExtractParams:
     """Tests for _extract_params."""
 
@@ -394,7 +382,6 @@ class TestExtractParams:
         from coderecon.index._internal.diff.engine import _extract_params
 
         assert _extract_params("def foo()") == "()"
-
 
 class TestExtractReturnType:
     """Tests for _extract_return_type."""

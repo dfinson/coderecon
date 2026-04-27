@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from coderecon.refactor.ops import RefactorOps
     from coderecon.testing.ops import TestOps
 
-
 @dataclass
 class AppContext:
     """Context object passed to all MCP tool handlers.

@@ -12,7 +12,6 @@ from coderecon.config.user_config import UserConfig, write_user_config
 
 pytestmark = pytest.mark.integration
 
-
 @pytest.fixture(autouse=True)
 def clean_env() -> Generator[None, None, None]:
     """Remove CODERECON__* env vars for clean tests."""
@@ -25,7 +24,6 @@ def clean_env() -> Generator[None, None, None]:
             del os.environ[k]
     os.environ.update(orig)
 
-
 @pytest.fixture
 def temp_repo(tmp_path: Path) -> Path:
     """Create a temporary git repository."""
@@ -33,7 +31,6 @@ def temp_repo(tmp_path: Path) -> Path:
     repo.mkdir()
     (repo / ".git").mkdir()
     return repo
-
 
 @pytest.fixture
 def global_config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -45,7 +42,6 @@ def global_config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         global_dir / "config.yaml",
     )
     return global_dir
-
 
 class TestConfigCascade:
     """Test full config cascade: defaults < global < repo < env < kwargs."""

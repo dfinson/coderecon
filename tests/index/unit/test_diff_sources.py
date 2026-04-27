@@ -27,7 +27,6 @@ from coderecon.index.models import (
     Worktree,
 )
 
-
 @pytest.fixture
 def db(temp_dir: Path) -> Database:
     """Create a test database with schema."""
@@ -38,7 +37,6 @@ def db(temp_dir: Path) -> Database:
         session.add(Worktree(id=1, name="main", root_path="/test", is_main=True))
         session.commit()
     return db
-
 
 @pytest.fixture
 def seeded_db(db: Database) -> Database:
@@ -75,11 +73,9 @@ def seeded_db(db: Database) -> Database:
 
     return db
 
-
 # ============================================================================
 # Tests: snapshots_from_index
 # ============================================================================
-
 
 class TestSnapshotsFromIndex:
     """Tests for snapshots_from_index."""
@@ -97,11 +93,9 @@ class TestSnapshotsFromIndex:
             snaps = snapshots_from_index(session, "src/nonexistent.py")
         assert len(snaps) == 0
 
-
 # ============================================================================
 # Tests: snapshots_from_epoch
 # ============================================================================
-
 
 class TestSnapshotsFromEpoch:
     """Tests for snapshots_from_epoch."""
@@ -167,11 +161,9 @@ class TestSnapshotsFromEpoch:
         assert len(snaps) == 1
         assert snaps[0].name == "foo"
 
-
 # ============================================================================
 # Tests: _compute_lexical_path
 # ============================================================================
-
 
 class TestComputeLexicalPath:
     """Tests for _compute_lexical_path."""

@@ -7,7 +7,6 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-
 @dataclass
 class HookResult:
     """Result of running a git hook."""
@@ -17,7 +16,6 @@ class HookResult:
     stdout: str
     stderr: str
     modified_files: list[str]
-
 
 def run_hook(repo_path: Path, hook_name: str, *, timeout: int = 120) -> HookResult:
     """Run a git hook if it exists.
@@ -96,7 +94,6 @@ def run_hook(repo_path: Path, hook_name: str, *, timeout: int = 120) -> HookResu
         modified_files=all_modified,
     )
 
-
 def _get_modified_files(repo_path: Path) -> list[str]:
     """Get list of files with uncommitted changes."""
     try:
@@ -118,7 +115,6 @@ def _get_modified_files(repo_path: Path) -> list[str]:
         return [f for f in files if f]
     except (subprocess.SubprocessError, OSError):
         return []
-
 
 def _get_staged_hashes(repo_path: Path) -> dict[str, str]:
     """Get hash of each staged file to detect re-staging with different content."""

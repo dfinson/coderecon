@@ -50,7 +50,6 @@ from coderecon.testing.coverage.models import (
     FunctionCoverage,
 )
 
-
 class OpencoverParser:
     """Parser for OpenCover XML format."""
 

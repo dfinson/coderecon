@@ -22,7 +22,6 @@ from coderecon.testing.safe_execution import (
 # Fixtures
 # =============================================================================
 
-
 @pytest.fixture
 def temp_artifact_dir(tmp_path: Path) -> Path:
     """Create a temporary artifact directory."""
@@ -53,11 +52,9 @@ def safe_ctx(base_config: SafeExecutionConfig) -> SafeExecutionContext:
     """Create a SafeExecutionContext for testing."""
     return SafeExecutionContext(base_config)
 
-
 # =============================================================================
 # Language Family Mapping Tests
 # =============================================================================
-
 
 class TestLanguageFamilyMapping:
     """Tests for pack_id to language family mapping."""
@@ -117,7 +114,6 @@ class TestLanguageFamilyMapping:
 # Universal Environment Override Tests
 # =============================================================================
 
-
 class TestUniversalEnvironmentOverrides:
     """Tests for environment variables applied to all languages."""
     def test_ci_environment_set(self, safe_ctx: SafeExecutionContext) -> None:
@@ -170,7 +166,6 @@ class TestUniversalEnvironmentOverrides:
 # Python Environment Tests
 # =============================================================================
 
-
 class TestPythonEnvironment:
     """Tests for Python-specific environment overrides."""
     def test_coverage_file_isolation(
@@ -214,7 +209,6 @@ class TestPythonEnvironment:
 # JavaScript/TypeScript Environment Tests
 # =============================================================================
 
-
 class TestJavaScriptEnvironment:
     """Tests for JavaScript/TypeScript-specific environment overrides."""
     @pytest.mark.parametrize("pack_id", ["js.jest", "js.vitest", "ts.jest", "ts.vitest"])
@@ -255,7 +249,6 @@ class TestJavaScriptEnvironment:
 # Go Environment Tests
 # =============================================================================
 
-
 class TestGoEnvironment:
     """Tests for Go-specific environment overrides."""
     def test_module_mode_enabled(self, safe_ctx: SafeExecutionContext) -> None:
@@ -281,7 +274,6 @@ class TestGoEnvironment:
 # Rust Environment Tests
 # =============================================================================
 
-
 class TestRustEnvironment:
     """Tests for Rust-specific environment overrides."""
     @pytest.mark.parametrize("pack_id", ["rust.nextest", "rust.cargo_test"])
@@ -305,7 +297,6 @@ class TestRustEnvironment:
 # =============================================================================
 # Java/JVM Environment Tests
 # =============================================================================
-
 
 class TestJavaEnvironment:
     """Tests for Java/Kotlin/Scala-specific environment overrides."""
@@ -341,7 +332,6 @@ class TestJavaEnvironment:
 # C#/.NET Environment Tests
 # =============================================================================
 
-
 class TestCSharpEnvironment:
     """Tests for C#/.NET-specific environment overrides."""
     def test_dotnet_telemetry_disabled(self, safe_ctx: SafeExecutionContext) -> None:
@@ -371,7 +361,6 @@ class TestCSharpEnvironment:
 # C/C++ Environment Tests
 # =============================================================================
 
-
 class TestCppEnvironment:
     """Tests for C/C++-specific environment overrides."""
     @pytest.mark.parametrize("pack_id", ["cpp.ctest", "cpp.gtest", "cpp.catch2"])
@@ -400,7 +389,6 @@ class TestCppEnvironment:
 # Ruby Environment Tests
 # =============================================================================
 
-
 class TestRubyEnvironment:
     """Tests for Ruby-specific environment overrides."""
     @pytest.mark.parametrize("pack_id", ["ruby.rspec", "ruby.minitest"])
@@ -428,7 +416,6 @@ class TestRubyEnvironment:
 # PHP Environment Tests
 # =============================================================================
 
-
 class TestPHPEnvironment:
     """Tests for PHP-specific environment overrides."""
     @pytest.mark.parametrize("pack_id", ["php.phpunit", "php.pest"])
@@ -455,7 +442,6 @@ class TestPHPEnvironment:
 # Elixir Environment Tests
 # =============================================================================
 
-
 class TestElixirEnvironment:
     """Tests for Elixir-specific environment overrides."""
     def test_mix_env_set(self, safe_ctx: SafeExecutionContext) -> None:
@@ -475,7 +461,6 @@ class TestElixirEnvironment:
 # Dart/Flutter Environment Tests
 # =============================================================================
 
-
 class TestDartEnvironment:
     """Tests for Dart/Flutter-specific environment overrides."""
     @pytest.mark.parametrize("pack_id", ["dart.darttest", "dart.fluttertest"])
@@ -487,7 +472,6 @@ class TestDartEnvironment:
 # =============================================================================
 # Swift Environment Tests
 # =============================================================================
-
 
 class TestSwiftEnvironment:
     """Tests for Swift-specific environment overrides."""
@@ -505,7 +489,6 @@ class TestSwiftEnvironment:
 # =============================================================================
 # Python Command Sanitization Tests
 # =============================================================================
-
 
 class TestPythonCommandSanitization:
     """Tests for Python command sanitization."""
@@ -558,7 +541,6 @@ class TestPythonCommandSanitization:
 # JavaScript Command Sanitization Tests
 # =============================================================================
 
-
 class TestJavaScriptCommandSanitization:
     """Tests for JavaScript/TypeScript command sanitization."""
     def test_jest_force_exit_added(self, safe_ctx: SafeExecutionContext) -> None:
@@ -603,7 +585,6 @@ class TestJavaScriptCommandSanitization:
 # Go Command Sanitization Tests
 # =============================================================================
 
-
 class TestGoCommandSanitization:
     """Tests for Go command sanitization."""
     def test_cache_busting_added(self, safe_ctx: SafeExecutionContext) -> None:
@@ -627,7 +608,6 @@ class TestGoCommandSanitization:
 # Rust Command Sanitization Tests
 # =============================================================================
 
-
 class TestRustCommandSanitization:
     """Tests for Rust command sanitization."""
     @pytest.mark.parametrize("pack_id", ["rust.nextest", "rust.cargo_test"])
@@ -640,7 +620,6 @@ class TestRustCommandSanitization:
 # =============================================================================
 # Java Command Sanitization Tests
 # =============================================================================
-
 
 class TestJavaCommandSanitization:
     """Tests for Java/Maven/Gradle command sanitization."""
@@ -674,7 +653,6 @@ class TestJavaCommandSanitization:
 # C#/.NET Command Sanitization Tests
 # =============================================================================
 
-
 class TestCSharpCommandSanitization:
     """Tests for C#/.NET command sanitization."""
     def test_verbosity_added(self, safe_ctx: SafeExecutionContext) -> None:
@@ -686,7 +664,6 @@ class TestCSharpCommandSanitization:
 # =============================================================================
 # C/C++ Command Sanitization Tests
 # =============================================================================
-
 
 class TestCppCommandSanitization:
     """Tests for C/C++ command sanitization."""
@@ -704,7 +681,6 @@ class TestCppCommandSanitization:
 # =============================================================================
 # Ruby Command Sanitization Tests
 # =============================================================================
-
 
 class TestRubyCommandSanitization:
     """Tests for Ruby command sanitization."""
@@ -724,7 +700,6 @@ class TestRubyCommandSanitization:
 # PHP Command Sanitization Tests
 # =============================================================================
 
-
 class TestPHPCommandSanitization:
     """Tests for PHP command sanitization."""
     def test_phpunit_no_interaction_added(self, safe_ctx: SafeExecutionContext) -> None:
@@ -742,7 +717,6 @@ class TestPHPCommandSanitization:
 # Elixir Command Sanitization Tests
 # =============================================================================
 
-
 class TestElixirCommandSanitization:
     """Tests for Elixir command sanitization."""
     def test_stale_flag_removed(self, safe_ctx: SafeExecutionContext) -> None:
@@ -754,7 +728,6 @@ class TestElixirCommandSanitization:
 # =============================================================================
 # Dart Command Sanitization Tests
 # =============================================================================
-
 
 class TestDartCommandSanitization:
     """Tests for Dart/Flutter command sanitization."""
@@ -768,7 +741,6 @@ class TestDartCommandSanitization:
 # Swift Command Sanitization Tests
 # =============================================================================
 
-
 class TestSwiftCommandSanitization:
     """Tests for Swift command sanitization."""
     def test_parallel_added(self, safe_ctx: SafeExecutionContext) -> None:
@@ -780,7 +752,6 @@ class TestSwiftCommandSanitization:
 # =============================================================================
 # Unknown Language Tests
 # =============================================================================
-
 
 class TestUnknownLanguage:
     """Tests for unknown language handling."""
@@ -802,7 +773,6 @@ class TestUnknownLanguage:
 # =============================================================================
 # Factory Function Tests
 # =============================================================================
-
 
 class TestFactoryFunction:
     """Tests for create_safe_context factory function."""
@@ -837,7 +807,6 @@ class TestFactoryFunction:
 # Cleanup Tests
 # =============================================================================
 
-
 class TestCleanup:
     """Tests for cleanup functionality."""
     def test_cleanup_clears_temp_dirs(self, safe_ctx: SafeExecutionContext) -> None:
@@ -854,7 +823,6 @@ class TestCleanup:
 # =============================================================================
 # Edge Case Tests
 # =============================================================================
-
 
 class TestEdgeCases:
     """Tests for edge cases and error handling."""
@@ -901,7 +869,6 @@ class TestEdgeCases:
 # =============================================================================
 # Integration Tests
 # =============================================================================
-
 
 class TestIntegration:
     """Integration tests for SafeExecutionContext."""
@@ -1037,7 +1004,6 @@ class TestIntegration:
 # =============================================================================
 # Memory Ceiling Injection Tests
 # =============================================================================
-
 
 class TestMemoryCeilingInjection:
     """Tests that subprocess_memory_limit_mb is injected into language env vars."""

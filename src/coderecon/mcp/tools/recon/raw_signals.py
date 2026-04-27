@@ -32,14 +32,12 @@ from coderecon.mcp.tools.recon.models import HarvestCandidate
 from coderecon.mcp.tools.recon.parsing import parse_task
 from coderecon.config.constants import MS_PER_SEC
 
-
 if TYPE_CHECKING:
     from fastmcp import FastMCP
 
     from coderecon.mcp.context import AppContext
 
 log = structlog.get_logger(__name__)
-
 
 async def raw_signals_pipeline(
     app_ctx: AppContext,
@@ -300,7 +298,6 @@ async def raw_signals_pipeline(
         },
     }
 
-
 def register_raw_signals_tool(mcp: FastMCP, app_ctx: AppContext) -> None:
     """Register the recon_raw_signals tool with FastMCP server."""
 
@@ -354,9 +351,7 @@ def register_raw_signals_tool(mcp: FastMCP, app_ctx: AppContext) -> None:
             session_id=ctx.session_id,
         )
 
-
 # Locality helpers
-
 
 def _shared_prefix_depth(a: str, b: str) -> int:
     """Count shared directory prefix segments between two paths."""
@@ -369,7 +364,6 @@ def _shared_prefix_depth(a: str, b: str) -> int:
         else:
             break
     return shared
-
 
 def _min_path_distance(candidate_path: str, seed_paths: list[str]) -> int:
     """Minimum directory distance from candidate to any seed path.
@@ -388,7 +382,6 @@ def _min_path_distance(candidate_path: str, seed_paths: list[str]) -> int:
         if dist < best:
             best = dist
     return best
-
 
 def _min_package_distance(
     candidate_module: str, seed_modules: list[str]

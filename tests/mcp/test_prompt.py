@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from coderecon.cli.agent_instructions import _make_coderecon_snippet
 
-
 class TestPromptSize:
     """Tests for prompt size constraints."""
 
@@ -26,7 +25,6 @@ class TestPromptSize:
         snippet = _make_coderecon_snippet("test_prefix")
         lines = snippet.strip().split("\n")
         assert len(lines) <= 175, f"Prompt is {len(lines)} lines, expected <= 175"
-
 
 class TestPromptContent:
     """Tests for prompt content correctness."""

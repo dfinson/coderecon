@@ -9,7 +9,6 @@ from unittest.mock import MagicMock
 from coderecon.index._internal.db.epoch import EpochManager, EpochStats
 from coderecon.index.models import Epoch, RepoState
 
-
 class TestEpochStats:
     """Tests for EpochStats dataclass."""
 
@@ -35,7 +34,6 @@ class TestEpochStats:
             commit_hash=None,
         )
         assert stats.commit_hash is None
-
 
 class TestEpochManager:
     """Tests for EpochManager."""

@@ -35,7 +35,6 @@ from coderecon.core.languages import (
     is_test_file,
 )
 
-
 class TestLanguageDataclass:
     """Tests for Language dataclass."""
     def test_create_minimal_language(self) -> None:
@@ -470,7 +469,6 @@ class TestBuildIncludeSpecs:
 # =============================================================================
 # Convention-based test pairing (find_test_pairs)
 # =============================================================================
-
 
 class TestFindTestPairs:
     """Tests for find_test_pairs convention mapper."""

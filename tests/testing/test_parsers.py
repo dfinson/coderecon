@@ -12,7 +12,6 @@ from coderecon.testing.parsers import (
 # JUnit XML Parser
 # =============================================================================
 
-
 class TestJunitXmlParser:
     """Tests for JUnit XML parser."""
     def test_parse_basic_success(self) -> None:
@@ -163,11 +162,9 @@ class TestJunitXmlParser:
         result = parse_junit_xml(xml)
         assert result.duration_seconds == pytest.approx(1.5, 0.01)
 
-
 # =============================================================================
 # Go test JSON Parser
 # =============================================================================
-
 
 class TestGoTestJsonParser:
     """Tests for Go test NDJSON parser."""
@@ -246,11 +243,9 @@ not valid json
         # Build failure counts as package failure - at least has some result
         assert result is not None
 
-
 # =============================================================================
 # TAP Parser
 # =============================================================================
-
 
 class TestTapParser:
     """Tests for TAP (Test Anything Protocol) parser."""
@@ -329,11 +324,9 @@ Bail out! Critical failure
         # After bail out, remaining tests are not run
         assert result.passed >= 1
 
-
 # =============================================================================
 # auto_parse()
 # =============================================================================
-
 
 class TestAutoParse:
     """Tests for auto_parse detection."""
@@ -387,11 +380,9 @@ ok 2 - test two
         result = auto_parse(content, runner="pytest")
         assert result.total == 1
 
-
 # =============================================================================
 # Pytest JSON Parser
 # =============================================================================
-
 
 class TestPytestJsonParser:
     """Tests for pytest JSON output parser."""

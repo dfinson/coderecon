@@ -12,7 +12,6 @@ import pytest
 from coderecon.core.errors import PathTraversalError
 from coderecon.files.ops import validate_path_in_repo
 
-
 @pytest.fixture
 def temp_repo(tmp_path: Path) -> Path:
     """Create a temporary repository structure."""
@@ -21,7 +20,6 @@ def temp_repo(tmp_path: Path) -> Path:
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "readme.md").write_text("docs")
     return tmp_path
-
 
 class TestValidatePathInRepo:
     """Tests for validate_path_in_repo function."""

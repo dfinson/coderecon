@@ -33,7 +33,6 @@ _COLORS = [
     "#ff9e80", "#80deea", "#b39ddb", "#f48fb1", "#a5d6a7",
 ]
 
-
 def export_graph_html(
     engine: Engine,
     output_path: Path,
@@ -122,7 +121,6 @@ def export_graph_html(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(output_path, html)
     return output_path
-
 
 _EMPTY_HTML = """<!DOCTYPE html>
 <html><body><h2>No graph data available</h2>

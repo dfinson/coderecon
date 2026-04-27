@@ -7,7 +7,6 @@ from coderecon.index._internal.discovery.scanner import (
 )
 from coderecon.index.models import LanguageFamily, MarkerTier
 
-
 def test_discovery_result_defaults():
     """DiscoveryResult initializes with empty lists."""
     r = DiscoveryResult()
@@ -15,14 +14,12 @@ def test_discovery_result_defaults():
     assert r.markers == []
     assert r.errors == []
 
-
 def test_discovered_marker_construction():
     """DiscoveredMarker stores path, family, and tier."""
     m = DiscoveredMarker(path="Cargo.toml", family=LanguageFamily.RUST, tier=MarkerTier.PACKAGE)
     assert m.path == "Cargo.toml"
     assert m.family == LanguageFamily.RUST
     assert m.tier == MarkerTier.PACKAGE
-
 
 def test_discover_all_empty_repo(tmp_path):
     """discover_all on an empty dir returns a root fallback candidate."""
@@ -34,7 +31,6 @@ def test_discover_all_empty_repo(tmp_path):
     assert len(fallback) == 1
     assert fallback[0].language_family == LanguageFamily.UNKNOWN
 
-
 def test_discover_all_detects_python(tmp_path):
     """discover_all detects a Python project from pyproject.toml."""
     (tmp_path / "pyproject.toml").write_text("[project]\nname = 'foo'\n")
@@ -42,7 +38,6 @@ def test_discover_all_detects_python(tmp_path):
     result = cd.discover_all()
     families = {c.language_family for c in result.candidates}
     assert LanguageFamily.PYTHON in families
-
 
 def test_discover_all_detects_javascript(tmp_path):
     """discover_all detects a JS project from package.json."""
@@ -52,7 +47,6 @@ def test_discover_all_detects_javascript(tmp_path):
     families = {c.language_family for c in result.candidates}
     assert LanguageFamily.JAVASCRIPT in families
 
-
 def test_discover_family_python(tmp_path):
     """discover_family(PYTHON) finds pyproject.toml marker."""
     (tmp_path / "pyproject.toml").write_text("[project]\nname = 'foo'\n")
@@ -61,13 +55,11 @@ def test_discover_family_python(tmp_path):
     assert len(result.markers) > 0
     assert all(m.family == LanguageFamily.PYTHON for m in result.markers)
 
-
 def test_discover_family_no_markers(tmp_path):
     """discover_family returns empty markers when no matching files exist."""
     cd = ContextDiscovery(tmp_path)
     result = cd.discover_family(LanguageFamily.RUST)
     assert result.markers == []
-
 
 def test_discover_all_prunes_node_modules(tmp_path):
     """discover_all skips node_modules directories."""
@@ -79,7 +71,6 @@ def test_discover_all_prunes_node_modules(tmp_path):
     result = cd.discover_all()
     marker_paths = [m.path for m in result.markers]
     assert not any("node_modules" in p for p in marker_paths)
-
 
 def test_js_workspace_detection(tmp_path):
     """discover_all promotes package.json with workspaces to WORKSPACE tier."""

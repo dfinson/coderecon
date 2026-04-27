@@ -13,7 +13,6 @@ from coderecon.files.ops import atomic_write_text
 
 log = structlog.get_logger(__name__)
 
-
 def _get_mcp_server_name(repo_root: Path) -> str:
     """Get the normalized MCP server name for a repo."""
     repo_name = repo_root.name

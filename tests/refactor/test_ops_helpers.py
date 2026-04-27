@@ -22,7 +22,6 @@ from coderecon.refactor.ops import (
     _word_boundary_match,
 )
 
-
 class TestWordBoundaryMatch:
     """Tests for _word_boundary_match helper."""
 
@@ -57,7 +56,6 @@ class TestWordBoundaryMatch:
     def test_handles_underscores_as_word_boundary(self):
         # Note: Python \b considers underscore as word character
         assert _word_boundary_match("my_function_name", "function") is False
-
 
 class TestScanFileForCommentOccurrences:
     """Tests for _scan_file_for_comment_occurrences helper."""
@@ -153,7 +151,6 @@ const x = 1;
         results = _scan_file_for_comment_occurrences(content, "function", None)
         assert len(results) == 1
 
-
 class TestComputeRenameCertaintyFromRef:
     """Tests for _compute_rename_certainty_from_ref helper."""
 
@@ -205,7 +202,6 @@ class TestComputeRenameCertaintyFromRef:
         ref.certainty = "certain"
         assert _compute_rename_certainty_from_ref(ref) == "high"
 
-
 class TestEditHunk:
     """Tests for EditHunk dataclass."""
 
@@ -229,7 +225,6 @@ class TestEditHunk:
         hunk = EditHunk(old="x", new="y", line=1, certainty="low")
         assert hunk.certainty == "low"
 
-
 class TestFileEdit:
     """Tests for FileEdit dataclass."""
 
@@ -247,7 +242,6 @@ class TestFileEdit:
             ],
         )
         assert len(edit.hunks) == 2
-
 
 class TestRefactorPreview:
     """Tests for RefactorPreview dataclass."""
@@ -282,7 +276,6 @@ class TestRefactorPreview:
         assert len(preview.edits) == 1
         assert preview.verification_required is True
 
-
 class TestInspectResult:
     """Tests for InspectResult dataclass."""
 
@@ -305,7 +298,6 @@ class TestInspectResult:
         assert len(result.matches) == 2
         assert result.matches[0]["line"] == 10
 
-
 class TestRefactorDivergence:
     """Tests for RefactorDivergence dataclass."""
 
@@ -321,7 +313,6 @@ class TestRefactorDivergence:
         )
         assert len(div.conflicting_hunks) == 1
         assert "abort" in div.resolution_options
-
 
 class TestRefactorResult:
     """Tests for RefactorResult dataclass."""

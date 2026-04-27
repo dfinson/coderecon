@@ -18,7 +18,6 @@ from coderecon.core.logging import (
 
 pytestmark = pytest.mark.integration
 
-
 @pytest.fixture(autouse=True)
 def reset_logging() -> Generator[None, None, None]:
     """Reset logging state between tests."""
@@ -29,7 +28,6 @@ def reset_logging() -> Generator[None, None, None]:
     structlog.reset_defaults()
     logging.getLogger().handlers.clear()
     clear_request_id()
-
 
 class TestFileOutput:
     """Test logging to file destinations."""
@@ -57,7 +55,6 @@ class TestFileOutput:
         assert data["user"] == "alice"
         assert data["request_id"] == "req-123"
         assert data["level"] == "info"
-
 
 class TestMultiOutput:
     """Test multiple simultaneous log outputs."""
@@ -107,7 +104,6 @@ class TestMultiOutput:
         assert "info msg" not in warning_content
         assert "warn msg" in warning_content
         assert "error msg" in warning_content
-
 
 class TestRequestCorrelation:
     """Test request ID correlation across log entries."""

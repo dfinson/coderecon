@@ -28,9 +28,7 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-
 # ── Data classes ──────────────────────────────────────────────────
-
 
 @dataclass
 class SignalGap:
@@ -40,7 +38,6 @@ class SignalGap:
     reason: str  # "missing" or "version_mismatch"
     file_ids: list[int]
     gap_count: int  # number of defs/rows affected
-
 
 @dataclass
 class ConsistencyReport:
@@ -56,9 +53,7 @@ class ConsistencyReport:
     def total_gaps(self) -> int:
         return sum(g.gap_count for g in self.gaps)
 
-
 # ── Individual signal checks ─────────────────────────────────────
-
 
 def _check_splade_vecs(db: Database, expected_version: str) -> list[SignalGap]:
     """Check for defs missing SPLADE vectors or with stale model version."""
@@ -130,9 +125,7 @@ def _check_splade_vecs(db: Database, expected_version: str) -> list[SignalGap]:
 
     return gaps
 
-
 # ── Registry of signal checks ────────────────────────────────────
-
 
 @dataclass
 class SignalCheck:
@@ -141,7 +134,6 @@ class SignalCheck:
     name: str
     run: object  # Callable[[Database], list[SignalGap]]
     backfill: object | None = None  # Callable[[Database, list[int]], int] or None
-
 
 def _make_splade_check() -> SignalCheck:
     """Create the SPLADE signal check with current model version."""
@@ -156,7 +148,6 @@ def _make_splade_check() -> SignalCheck:
         return index_splade_vectors(db, file_ids=file_ids)
 
     return SignalCheck(name="splade_vecs", run=_run, backfill=_backfill)
-
 
 def _make_scaffold_text_check() -> SignalCheck:
     """Check for SpladeVec rows missing scaffold_text (pre-migration rows)."""
@@ -198,7 +189,6 @@ def _make_scaffold_text_check() -> SignalCheck:
 
     return SignalCheck(name="scaffold_text", run=_run, backfill=_backfill)
 
-
 # Add new signal checks here as they are introduced.
 # Each entry produces a list of SignalGap when its derived table is
 # inconsistent with the primary facts.
@@ -211,7 +201,6 @@ def _get_signal_checks() -> list[SignalCheck]:
         _make_semantic_neighbors_check(),
         _make_doc_chunks_check(),
     ]
-
 
 def _make_semantic_resolve_check() -> SignalCheck:
     """Check for unresolved refs/accesses/shapes that could be semantically resolved.
@@ -280,7 +269,6 @@ def _make_semantic_resolve_check() -> SignalCheck:
 
     return SignalCheck(name="semantic_resolve", run=_run, backfill=_backfill)
 
-
 def _make_semantic_neighbors_check() -> SignalCheck:
     """Check if semantic neighbor edges need (re)computation."""
     from coderecon.index._internal.indexing.splade import MODEL_VERSION
@@ -332,7 +320,6 @@ def _make_semantic_neighbors_check() -> SignalCheck:
         return compute_semantic_neighbors(db)
 
     return SignalCheck(name="semantic_neighbors", run=_run, backfill=_backfill)
-
 
 def _make_doc_chunks_check() -> SignalCheck:
     """Check for doc/config files missing chunk vectors and edges."""
@@ -392,9 +379,7 @@ def _make_doc_chunks_check() -> SignalCheck:
 
     return SignalCheck(name="doc_chunks", run=_run, backfill=_backfill)
 
-
 # ── Public API ────────────────────────────────────────────────────
-
 
 def check_consistency(db: Database) -> ConsistencyReport:
     """Scan all derived signals for gaps.
@@ -429,7 +414,6 @@ def check_consistency(db: Database) -> ConsistencyReport:
         log.debug("consistency.all_ok")
 
     return report
-
 
 def backfill_gaps(db: Database, report: ConsistencyReport) -> dict[str, int]:
     """Run backfill for each gap in the report.

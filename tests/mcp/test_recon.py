@@ -36,7 +36,6 @@ from coderecon.mcp.tools.recon.parsing import (
 # Tokenization tests
 # ---------------------------------------------------------------------------
 
-
 class TestTokenizeTask:
     """Tests for parse_task keyword extraction."""
 
@@ -115,11 +114,9 @@ class TestTokenizeTask:
         terms = parse_task(task).keywords
         assert expected_term in terms
 
-
 # ---------------------------------------------------------------------------
 # Path extraction tests
 # ---------------------------------------------------------------------------
-
 
 class TestExtractPaths:
     """Tests for parse_task path extraction."""
@@ -167,11 +164,9 @@ class TestExtractPaths:
         assert "lib/utils.js" in paths
         assert "main.go" in paths
 
-
 # ---------------------------------------------------------------------------
 # Helper unit tests
 # ---------------------------------------------------------------------------
-
 
 class TestDefSignatureText:
     """Tests for _def_signature_text."""
@@ -200,7 +195,6 @@ class TestDefSignatureText:
         d.return_type = None
         assert _def_signature_text(d) == "method run(self, timeout: float)"
 
-
 class TestReadLines:
     """Tests for _read_lines."""
 
@@ -219,7 +213,6 @@ class TestReadLines:
     def test_missing_file(self, tmp_path: Path) -> None:
         result = _read_lines(tmp_path / "nope.py", 1, 5)
         assert result == ""
-
 
 class TestReconRegistration:
     """Tests for recon tool registration."""
@@ -247,11 +240,9 @@ class TestReconInToolsInit:
 
         assert hasattr(recon, "register_tools")
 
-
 # ---------------------------------------------------------------------------
 # ArtifactKind classification tests
 # ---------------------------------------------------------------------------
-
 
 class TestArtifactKind:
     """Tests for _classify_artifact."""
@@ -276,11 +267,9 @@ class TestArtifactKind:
     def test_classification(self, path: str, expected: ArtifactKind) -> None:
         assert _classify_artifact(path) == expected
 
-
 # ---------------------------------------------------------------------------
 # TaskIntent tests
 # ---------------------------------------------------------------------------
-
 
 class TestTaskIntent:
     """Tests for _extract_intent."""
@@ -313,11 +302,9 @@ class TestTaskIntent:
         parsed = parse_task("IndexCoordinatorEngine")
         assert parsed.intent == TaskIntent.unknown
 
-
 # ---------------------------------------------------------------------------
 # EvidenceRecord tests
 # ---------------------------------------------------------------------------
-
 
 class TestEvidenceRecord:
     """Tests for EvidenceRecord dataclass."""
@@ -331,11 +318,9 @@ class TestEvidenceRecord:
         e = EvidenceRecord(category="explicit", detail="agent seed")
         assert e.score == 0.0
 
-
 # ---------------------------------------------------------------------------
 # HarvestCandidate with new fields tests
 # ---------------------------------------------------------------------------
-
 
 class TestHarvestCandidateNew:
     """Tests for new HarvestCandidate fields."""
@@ -364,11 +349,9 @@ class TestHarvestCandidateNew:
         c = HarvestCandidate(def_uid="test::func", from_term_match=True, from_explicit=True)
         assert c.evidence_axes == 2
 
-
 # ---------------------------------------------------------------------------
 # Negative mentions tests
 # ---------------------------------------------------------------------------
-
 
 class TestNegativeMentions:
     """Tests for _extract_negative_mentions."""
@@ -398,11 +381,9 @@ class TestNegativeMentions:
         parsed = parse_task("refactor handler not tests")
         assert "tests" in parsed.negative_mentions
 
-
 # ---------------------------------------------------------------------------
 # Stacktrace detection tests
 # ---------------------------------------------------------------------------
-
 
 class TestStacktraceDetection:
     """Tests for _detect_stacktrace_driven."""
@@ -424,11 +405,9 @@ class TestStacktraceDetection:
         parsed = parse_task("fix the traceback error in handler")
         assert parsed.is_stacktrace_driven
 
-
 # ---------------------------------------------------------------------------
 # Test-driven detection tests
 # ---------------------------------------------------------------------------
-
 
 class TestTestDrivenDetection:
     """Tests for _detect_test_driven."""

@@ -24,7 +24,6 @@ from coderecon.index._internal.indexing.module_mapping import (
 # path_to_module
 # ---------------------------------------------------------------------------
 
-
 class TestPathToModule:
     """Tests for path_to_module."""
 
@@ -54,11 +53,9 @@ class TestPathToModule:
         result = path_to_module("src\\coderecon\\ops.py")
         assert result == "src.coderecon.ops"
 
-
 # ---------------------------------------------------------------------------
 # module_to_candidate_paths
 # ---------------------------------------------------------------------------
-
 
 class TestModuleToCandidatePaths:
     """Tests for module_to_candidate_paths."""
@@ -76,11 +73,9 @@ class TestModuleToCandidatePaths:
         assert "utils" in candidates
         assert "src.utils" in candidates
 
-
 # ---------------------------------------------------------------------------
 # build_module_index + resolve_module_to_path
 # ---------------------------------------------------------------------------
-
 
 class TestBuildAndResolve:
     """Tests for build_module_index and resolve_module_to_path."""
@@ -122,11 +117,9 @@ class TestBuildAndResolve:
         result = resolve_module_to_path("nonexistent.module", sample_index)
         assert result is None
 
-
 # ---------------------------------------------------------------------------
 # file_to_import_candidates
 # ---------------------------------------------------------------------------
-
 
 class TestFileToImportCandidates:
     """Tests for file_to_import_candidates.
@@ -189,11 +182,9 @@ class TestFileToImportCandidates:
         assert "src.utils.helper" in candidates
         assert "utils.helper" in candidates
 
-
 # ---------------------------------------------------------------------------
 # file_to_import_sql_patterns
 # ---------------------------------------------------------------------------
-
 
 class TestFileToImportSqlPatterns:
     """Tests for file_to_import_sql_patterns."""

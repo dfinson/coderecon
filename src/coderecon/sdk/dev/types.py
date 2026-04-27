@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-
 @dataclass(frozen=True)
 class RawSignalsResult:
     """Full retrieval signal payload for training data collection."""
@@ -15,7 +14,6 @@ class RawSignalsResult:
     candidates: list[dict[str, Any]] = field(default_factory=list)
     diagnostics: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
-
 
 @dataclass(frozen=True)
 class DefEntry:
@@ -35,7 +33,6 @@ class DefEntry:
     has_return_type: bool = False
     object_size_lines: int = 0
 
-
 @dataclass(frozen=True)
 class IndexFactsResult:
     """Structured metadata extracted from the index for LLM grounding."""
@@ -49,7 +46,6 @@ class IndexFactsResult:
     def_count: int = 0
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
-
 @dataclass(frozen=True)
 class IndexStatusResult:
     """Per-worktree index status (file counts, def counts)."""
@@ -60,9 +56,7 @@ class IndexStatusResult:
     initialized: bool = False
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
-
 # Wire → typed conversion
-
 
 def _to_raw_signals_result(d: dict[str, Any]) -> RawSignalsResult:
     return RawSignalsResult(
@@ -72,7 +66,6 @@ def _to_raw_signals_result(d: dict[str, Any]) -> RawSignalsResult:
         diagnostics=d.get("diagnostics", {}),
         raw=d,
     )
-
 
 def _to_index_facts_result(d: dict[str, Any]) -> IndexFactsResult:
     return IndexFactsResult(
@@ -85,7 +78,6 @@ def _to_index_facts_result(d: dict[str, Any]) -> IndexFactsResult:
         def_count=d.get("def_count", 0),
         raw=d,
     )
-
 
 def _to_def_entries(d: dict[str, Any]) -> list[DefEntry]:
     return [
@@ -106,7 +98,6 @@ def _to_def_entries(d: dict[str, Any]) -> list[DefEntry]:
         )
         for e in d.get("defs", [])
     ]
-
 
 def _to_index_status_result(d: dict[str, Any]) -> IndexStatusResult:
     return IndexStatusResult(

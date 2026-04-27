@@ -16,7 +16,6 @@ from fastmcp import FastMCP
 from coderecon.mcp._compat import get_tools_sync
 from coderecon.mcp.tools import introspection
 
-
 @pytest.fixture
 def mcp_with_dummy_tool() -> FastMCP:
     """Create a FastMCP server with a tool that has no TOOL_DOCS entry."""
@@ -29,7 +28,6 @@ def mcp_with_dummy_tool() -> FastMCP:
 
     return mcp
 
-
 @pytest.fixture
 def app_ctx() -> MagicMock:
     """Minimal AppContext mock for describe()."""
@@ -39,14 +37,12 @@ def app_ctx() -> MagicMock:
     ctx.coordinator._initialized = True
     return ctx
 
-
 @pytest.fixture
 def fastmcp_ctx() -> MagicMock:
     """Minimal FastMCP Context mock."""
     ctx = MagicMock(spec=["session_id"])
     ctx.session_id = "test-session"
     return ctx
-
 
 class TestDescribeToolAction:
     """Tests for describe(action='tool') with get_tools_sync fallback."""

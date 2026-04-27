@@ -12,7 +12,6 @@ from coderecon.daemon.global_lifecycle import (
     stop_global_daemon,
 )
 
-
 @click.command()
 @click.option(
     "--port",

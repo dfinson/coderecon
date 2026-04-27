@@ -12,7 +12,6 @@ from coderecon.index._internal.analysis.coverage_ingestion import (
     mark_stale_coverage,
 )
 
-
 @pytest.fixture()
 def mock_engine():
     """Create a mock SQLAlchemy engine with a mock connection."""
@@ -22,7 +21,6 @@ def mock_engine():
     engine.connect.return_value.__exit__ = MagicMock(return_value=False)
     return engine, conn
 
-
 def test_ingest_coverage_empty_report(mock_engine):
     """ingest_coverage returns 0 when report has no files."""
     engine, conn = mock_engine
@@ -30,7 +28,6 @@ def test_ingest_coverage_empty_report(mock_engine):
     report.files = {}
     result = ingest_coverage(engine, report, epoch=1)
     assert result == 0
-
 
 def test_ingest_coverage_file_with_no_lines(mock_engine):
     """ingest_coverage skips files with empty line data."""
@@ -42,13 +39,11 @@ def test_ingest_coverage_file_with_no_lines(mock_engine):
     result = ingest_coverage(engine, report, epoch=1)
     assert result == 0
 
-
 def test_mark_stale_coverage_empty_list(mock_engine):
     """mark_stale_coverage returns 0 for empty def list."""
     engine, _ = mock_engine
     result = mark_stale_coverage(engine, [])
     assert result == 0
-
 
 def test_mark_stale_coverage_updates_rows(mock_engine):
     """mark_stale_coverage executes UPDATE for given def UIDs."""
@@ -61,13 +56,11 @@ def test_mark_stale_coverage_updates_rows(mock_engine):
     conn.execute.assert_called()
     conn.commit.assert_called_once()
 
-
 def test_get_covering_tests_empty_list():
     """get_covering_tests returns empty dict for empty input."""
     engine = MagicMock()
     result = get_covering_tests(engine, [])
     assert result == {}
-
 
 def test_get_covering_tests_returns_mapping(mock_engine):
     """get_covering_tests returns {def_uid: [test_ids]}."""
@@ -83,7 +76,6 @@ def test_get_covering_tests_returns_mapping(mock_engine):
     assert "test_b" in result["uid1"]
     assert "test_c" in result["uid2"]
 
-
 def test_get_uncovered_defs(mock_engine):
     """get_uncovered_defs returns list of uncovered def dicts."""
     engine, conn = mock_engine
@@ -94,7 +86,6 @@ def test_get_uncovered_defs(mock_engine):
     assert len(result) == 1
     assert result[0]["def_uid"] == "uid1"
     assert result[0]["name"] == "my_func"
-
 
 def test_get_coverage_summary_empty(mock_engine):
     """get_coverage_summary returns zeros when no data exists."""

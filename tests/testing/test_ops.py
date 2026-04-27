@@ -19,7 +19,6 @@ from coderecon.testing.ops import (
 )
 from coderecon.testing.runner_pack import runner_registry
 
-
 def create_mock_coordinator() -> MagicMock:
     """Create a mock IndexCoordinatorEngine for testing."""
     coordinator = MagicMock()
@@ -34,11 +33,9 @@ def create_mock_coordinator() -> MagicMock:
     coordinator.get_coverage_capability = AsyncMock(return_value={})
     return coordinator
 
-
 # =============================================================================
 # _is_prunable_path()
 # =============================================================================
-
 
 class TestIsPrunablePath:
     """Tests for the prunable path checker."""
@@ -60,7 +57,6 @@ class TestIsPrunablePath:
 # =============================================================================
 # detect_workspaces()
 # =============================================================================
-
 
 class TestDetectWorkspaces:
     """Tests for workspace detection."""
@@ -160,7 +156,6 @@ class TestDetectWorkspaces:
 # DetectedWorkspace
 # =============================================================================
 
-
 class TestDetectedWorkspace:
     """Tests for DetectedWorkspace dataclass."""
     def test_create(self) -> None:
@@ -179,7 +174,6 @@ class TestDetectedWorkspace:
 # =============================================================================
 # TestOps.discover()
 # =============================================================================
-
 
 class TestTestOpsDiscover:
     """Tests for TestOps.discover().
@@ -287,7 +281,6 @@ class TestTestOpsDiscover:
 # TestOps._generate_agentic_hint()
 # =============================================================================
 
-
 class TestAgenticHint:
     """Tests for agentic hint generation."""
     @pytest.mark.asyncio
@@ -360,7 +353,6 @@ class TestAgenticHint:
 # =============================================================================
 # TestOps.run()
 # =============================================================================
-
 
 class TestTestOpsRun:
     """Tests for TestOps.run().
@@ -438,7 +430,6 @@ class TestTestOpsRun:
 # TestOps._persist_result() and _load_result()
 # =============================================================================
 
-
 class TestPersistAndLoadResult:
     """Tests for result persistence."""
     def test_persist_and_load_roundtrip(self) -> None:
@@ -489,7 +480,6 @@ class TestPersistAndLoadResult:
 # =============================================================================
 # Integration-style tests for detect_workspaces
 # =============================================================================
-
 
 class TestDetectWorkspacesIntegration:
     """Integration-style tests for workspace detection."""

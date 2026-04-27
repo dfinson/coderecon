@@ -824,7 +824,6 @@ LANGUAGES_BY_NAME: dict[str, Language] = {lang.name: lang for lang in ALL_LANGUA
 
 _DEFAULT_EXPORTABLE_KINDS: frozenset[str] = frozenset({"function", "class"})
 
-
 def exportable_kinds_for_language(language_name: str) -> frozenset[str]:
     """Return the set of def kinds that are top-level exportable for a language."""
     lang = LANGUAGES_BY_NAME.get(language_name)
@@ -846,7 +845,6 @@ def is_name_exported(name: str, language_name: str) -> bool:
         return len(name) > 0 and name[0].isupper()
     # Default: assume exported (most languages use keyword-based visibility)
     return True
-
 
 # ── Cross-language kind taxonomies ───────────────────────────────
 #
@@ -876,7 +874,6 @@ CONSTANT_KINDS: frozenset[str] = frozenset({
 })
 """Def kinds that are low-signal for display purposes (constants,
 variables, fields).  Used as an exclusion filter in scaffolds."""
-
 
 def _build_extension_multimap() -> dict[str, tuple[str, ...]]:
     """Build extension -> families mapping, sorted by priority (highest first).
@@ -909,7 +906,6 @@ def _build_filename_map() -> dict[str, str]:
                 result[key] = lang.name
     return result
 
-
 # Extension -> all names (highest priority first)
 EXTENSION_TO_NAMES: dict[str, tuple[str, ...]] = _build_extension_multimap()
 
@@ -932,7 +928,6 @@ _COMPOUND_SUFFIXES: dict[str, str] = {
     ".test.ts": "javascript",  # Keep as JS name (test file)
 }
 
-
 # Ambiguous Extension Documentation
 # These extensions map to multiple families. Use context (project markers,
 # directory structure) to disambiguate when possible.
@@ -941,9 +936,7 @@ AMBIGUOUS_EXTENSIONS: dict[str, tuple[str, ...]] = {
     ext: families for ext, families in EXTENSION_TO_NAMES.items() if len(families) > 1
 }
 
-
 # Detection Functions
-
 
 def get_families_for_extension(ext: str) -> tuple[str, ...]:
     """Get all language families that use this extension, ordered by priority.
@@ -1002,9 +995,7 @@ def detect_language_family_enum(path: str | Path) -> LanguageFamily | None:
     except ValueError:
         return None
 
-
 # Include Glob Generation
-
 
 def _generate_include_globs(lang: Language) -> tuple[str, ...]:
     """Generate include globs from BOTH extensions AND filenames.
@@ -1030,9 +1021,7 @@ def get_include_globs(name: str) -> tuple[str, ...]:
         return ()
     return _generate_include_globs(LANGUAGES_BY_NAME[name])
 
-
 # Marker Functions
-
 
 def get_markers(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """Get (workspace_markers, package_markers) for a name.
@@ -1066,9 +1055,7 @@ def build_include_specs() -> dict[str, tuple[str, ...]]:
             result[lang.name] = globs
     return result
 
-
 # Other Accessors
-
 
 def get_test_patterns(name: str) -> tuple[str, ...]:
     """Get test file patterns for a name."""
@@ -1105,7 +1092,6 @@ def is_test_file(path: str | Path) -> bool:
                     return True
     return False
 
-
 # Convention-based test file pairing
 
 # Common source→test directory mappings.  Order matters: first match wins.
@@ -1119,7 +1105,6 @@ _SRC_TEST_DIR_PAIRS: tuple[tuple[str, str], ...] = (
     ("app/", "test/"),
     ("app/", "spec/"),
 )
-
 
 def find_test_pairs(source_path: str) -> list[str]:
     """Return plausible test file paths for a source file.
@@ -1355,9 +1340,7 @@ def get_all_indexable_filenames() -> set[str]:
     """Get all known special filenames."""
     return set(FILENAME_TO_NAME.keys())
 
-
 # Validation (for tests only - NOT run at import time)
-
 
 def validate_language_families() -> list[str]:
     """Validate that all name strings match LanguageFamily enum values.

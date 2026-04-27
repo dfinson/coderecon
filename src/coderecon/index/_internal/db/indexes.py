@@ -18,7 +18,6 @@ from sqlalchemy import text
 if TYPE_CHECKING:
     from sqlalchemy import Engine
 
-
 ADDITIONAL_INDEXES = [
     # Composite indexes for common Tier 1 query patterns
     # DefFact queries by file and name
@@ -49,14 +48,12 @@ ADDITIONAL_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_doc_cross_refs_target ON doc_cross_refs(target_def_uid)",
 ]
 
-
 def create_additional_indexes(engine: Engine) -> None:
     """Create additional composite indexes for Tier 1 fact tables."""
     with engine.connect() as conn:
         for sql in ADDITIONAL_INDEXES:
             conn.execute(text(sql))
         conn.commit()
-
 
 def drop_additional_indexes(engine: Engine) -> None:
     """Drop additional indexes (for testing/reset)."""

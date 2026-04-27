@@ -104,7 +104,6 @@ _string_node_types_cache: dict[int, frozenset[str]] = {}
 _STRING_REGEX_DQ = re.compile(r'"([^"]{4,80})"')
 _STRING_REGEX_SQ = re.compile(r"'([^']{4,80})'")
 
-
 def _discover_string_node_types(ts_language: tree_sitter.Language) -> frozenset[str]:
     """Discover string literal node types from tree-sitter Language metadata.
     Scans all node kinds in the grammar for types whose name matches
@@ -203,13 +202,11 @@ def _extract_string_literals_regex(
         results.append(text)
     return results
 
-
 # SEM_FACTS extraction — tree-sitter query driven (SPEC §16.6)
 
 # Cache: (grammar id, ts_lang_name) → compiled query object or None.
 # Bounded by the number of (language × query) pairs — O(supported languages).
 _sem_query_cache: dict[tuple[int, str], Any] = {}
-
 
 def _extract_sem_facts(
     root_node: tree_sitter.Node,

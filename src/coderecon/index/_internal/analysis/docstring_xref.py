@@ -22,7 +22,6 @@ from sqlalchemy import text
 if TYPE_CHECKING:
     from sqlalchemy.engine import Connection, Engine
 
-
 # Patterns for cross-references in docstrings/comments
 _PATTERNS = [
     # Sphinx :role:`target` — :func:`foo.bar`, :class:`Baz`, :meth:`Cls.method`
@@ -44,7 +43,6 @@ _QUALIFIED_RE = re.compile(r"(?<!\w)([a-z_][a-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)+)(
 # Bare CamelCase in docstrings — medium confidence
 _CAMELCASE_RE = re.compile(r"(?<![A-Za-z])([A-Z][a-z]+(?:[A-Z][a-z]+)+)(?![A-Za-z])")
 
-
 @dataclass(frozen=True, slots=True)
 class RawCrossRef:
     """A raw cross-reference extracted from text."""
@@ -53,7 +51,6 @@ class RawCrossRef:
     raw_text: str
     target_name: str  # unresolved name
     confidence: str  # high, medium, low
-
 
 def extract_cross_refs(
     text_content: str,
@@ -120,7 +117,6 @@ def extract_cross_refs(
 
     return refs
 
-
 def resolve_and_persist(
     engine: Engine,
     file_id: int,
@@ -181,7 +177,6 @@ def resolve_and_persist(
         conn.commit()
 
     return written
-
 
 def _resolve_target(conn: Connection, target_name: str) -> str | None:
     """Resolve a target name to a def_uid.

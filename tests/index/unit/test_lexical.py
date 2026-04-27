@@ -21,7 +21,6 @@ from coderecon.index._internal.indexing import (
     create_index,
 )
 
-
 @pytest.fixture
 def lexical_index(temp_dir: Path) -> LexicalIndex:
     """Create a fresh LexicalIndex for testing."""
@@ -902,7 +901,6 @@ class TestSearchSymbolsMultiTerm:
 # Red-Team Tests — probing edge cases derived from fixed bugs
 # =============================================================================
 
-
 class TestRedTeamQueryParsing:
     """Adversarial query parsing edge cases.
     Targets _build_tantivy_query and the fallback path in search().
@@ -1241,7 +1239,6 @@ class TestRedTeamSearchIntegration:
 # =============================================================================
 # Aggressive Red-Team Round 2 — probing every dark corner
 # =============================================================================
-
 
 class TestRedTeam2ExtractSearchTerms:
     """Deep adversarial tests for _extract_search_terms."""

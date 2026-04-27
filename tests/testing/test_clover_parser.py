@@ -8,11 +8,9 @@ import pytest
 from coderecon.testing.coverage.models import CoverageParseError
 from coderecon.testing.coverage.parsers.clover import CloverParser
 
-
 @pytest.fixture
 def parser() -> CloverParser:
     return CloverParser()
-
 
 MINIMAL_CLOVER = dedent("""\
     <?xml version="1.0"?>
@@ -30,11 +28,9 @@ MINIMAL_CLOVER = dedent("""\
     </coverage>
 """)
 
-
 class TestFormatId:
     def test_returns_clover(self, parser: CloverParser) -> None:
         assert parser.format_id == "clover"
-
 
 class TestCanParse:
     def test_file_with_clover_in_name(self, parser: CloverParser, tmp_path: Path) -> None:
@@ -65,7 +61,6 @@ class TestCanParse:
     def test_directory_with_coverage_clover_xml(self, parser: CloverParser, tmp_path: Path) -> None:
         (tmp_path / "coverage-clover.xml").write_text("<coverage/>")
         assert parser.can_parse(tmp_path) is True
-
 
 class TestParse:
     def test_parse_minimal(self, parser: CloverParser, tmp_path: Path) -> None:

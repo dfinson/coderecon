@@ -11,7 +11,6 @@ from coderecon.testing.runner_pack import runner_registry
 # Python - pytest
 # =============================================================================
 
-
 class TestPytestPack:
     """Tests for Python pytest runner pack."""
     def test_pack_id(self) -> None:
@@ -165,7 +164,6 @@ class TestPytestPack:
 # JavaScript - Jest
 # =============================================================================
 
-
 class TestJestPack:
     """Tests for JavaScript Jest runner pack."""
     def test_pack_id(self) -> None:
@@ -268,7 +266,6 @@ class TestJestPack:
 # JavaScript - Vitest
 # =============================================================================
 
-
 class TestVitestPack:
     """Tests for JavaScript Vitest runner pack."""
     def test_pack_id(self) -> None:
@@ -302,7 +299,6 @@ class TestVitestPack:
 # =============================================================================
 # Go - go test
 # =============================================================================
-
 
 class TestGoTestPack:
     """Tests for Go test runner pack."""
@@ -379,7 +375,6 @@ class TestGoTestPack:
 # Rust - cargo-nextest and cargo test
 # =============================================================================
 
-
 class TestCargoNextestPack:
     """Tests for Rust cargo-nextest runner pack."""
     def test_pack_id(self) -> None:
@@ -419,7 +414,6 @@ class TestCargoTestPack:
 # =============================================================================
 # Java - Maven and Gradle
 # =============================================================================
-
 
 class TestMavenSurefirePack:
     """Tests for Java Maven Surefire runner pack."""
@@ -475,7 +469,6 @@ class TestGradlePack:
 # C# - dotnet test
 # =============================================================================
 
-
 class TestDotnetTestPack:
     """Tests for C# dotnet test runner pack."""
     def test_pack_id(self) -> None:
@@ -503,7 +496,6 @@ class TestDotnetTestPack:
 # =============================================================================
 # C/C++ - CTest
 # =============================================================================
-
 
 class TestCTestPack:
     """Tests for C/C++ CTest runner pack."""
@@ -548,7 +540,6 @@ class TestCTestPack:
 # Ruby - RSpec
 # =============================================================================
 
-
 class TestRSpecPack:
     """Tests for Ruby RSpec runner pack."""
     def test_pack_id(self) -> None:
@@ -591,7 +582,6 @@ class TestRSpecPack:
 # PHP - PHPUnit
 # =============================================================================
 
-
 class TestPHPUnitPack:
     """Tests for PHP PHPUnit runner pack."""
     def test_pack_id(self) -> None:
@@ -633,7 +623,6 @@ class TestPHPUnitPack:
 # =============================================================================
 # parse_output and get_cwd Tests
 # =============================================================================
-
 
 class TestPytestParseOutput:
     """Tests for pytest parse_output method."""
@@ -748,11 +737,9 @@ class TestMavenParseOutput:
             assert result.total == 2
             assert result.passed == 2
 
-
 # =============================================================================
 # get_cwd Tests
 # =============================================================================
-
 
 class TestGetCwd:
     """Tests for get_cwd method across packs."""
@@ -816,7 +803,6 @@ class TestGetCwd:
 # =============================================================================
 # Additional Tier-1 build_command Coverage
 # =============================================================================
-
 
 class TestVitestBuildCommandDetailed:
     """Detailed tests for Vitest build_command method."""

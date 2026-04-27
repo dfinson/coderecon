@@ -9,7 +9,6 @@ from coderecon.index._internal.remerge import (
     drop_worktree_data,
 )
 
-
 class TestRemergeResult:
     def test_defaults(self) -> None:
         r = RemergeResult()
@@ -29,7 +28,6 @@ class TestRemergeResult:
         assert d["reindexed"] == 2
         assert d["pruned"] == 1
         assert d["elapsed_ms"] == 42.5
-
 
 class TestDropWorktreeData:
     def test_drop_empty_worktree(self, tmp_path: Path) -> None:

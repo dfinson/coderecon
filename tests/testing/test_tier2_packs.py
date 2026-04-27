@@ -11,7 +11,6 @@ from coderecon.testing.runner_pack import runner_registry
 # Kotlin - Gradle
 # =============================================================================
 
-
 class TestKotlinGradlePack:
     """Tests for Kotlin Gradle runner pack."""
     def test_pack_id(self) -> None:
@@ -50,7 +49,6 @@ class TestKotlinGradlePack:
 # =============================================================================
 # Swift - Swift Package Manager
 # =============================================================================
-
 
 class TestSwiftTestPack:
     """Tests for Swift test runner pack."""
@@ -92,7 +90,6 @@ class TestSwiftTestPack:
 # Scala - SBT
 # =============================================================================
 
-
 class TestSbtTestPack:
     """Tests for Scala SBT test runner pack."""
     def test_pack_id(self) -> None:
@@ -132,7 +129,6 @@ class TestSbtTestPack:
 # =============================================================================
 # Dart - dart test
 # =============================================================================
-
 
 class TestDartTestPack:
     """Tests for Dart test runner pack."""
@@ -175,7 +171,6 @@ class TestDartTestPack:
 # Flutter - flutter test
 # =============================================================================
 
-
 class TestFlutterTestPack:
     """Tests for Flutter test runner pack."""
     def test_pack_id(self) -> None:
@@ -215,7 +210,6 @@ class TestFlutterTestPack:
 # =============================================================================
 # Bash - BATS
 # =============================================================================
-
 
 class TestBatsPack:
     """Tests for BATS shell test runner pack."""
@@ -258,7 +252,6 @@ class TestBatsPack:
 # PowerShell - Pester
 # =============================================================================
 
-
 class TestPesterPack:
     """Tests for PowerShell Pester test runner pack."""
     def test_pack_id(self) -> None:
@@ -298,7 +291,6 @@ class TestPesterPack:
 # =============================================================================
 # Lua - Busted
 # =============================================================================
-
 
 class TestBustedPack:
     """Tests for Lua Busted test runner pack."""
@@ -348,7 +340,6 @@ class TestBustedPack:
 # =============================================================================
 # build_command Tests for Tier-2 Packs
 # =============================================================================
-
 
 class TestKotlinBuildCommand:
     """Tests for Kotlin Gradle build_command method."""
@@ -548,7 +539,6 @@ class TestBustedBuildCommand:
 # get_cwd Tests for Tier-2 Packs
 # =============================================================================
 
-
 class TestTier2GetCwd:
     """Tests for get_cwd method across tier-2 packs."""
     def test_kotlin_get_cwd(self) -> None:
@@ -625,7 +615,6 @@ class TestTier2GetCwd:
 # =============================================================================
 # parse_output Tests for Tier-2 Packs
 # =============================================================================
-
 
 class TestKotlinParseOutput:
     """Tests for Kotlin parse_output method."""

@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from coderecon.sdk.client import CodeRecon
 
-
 # Tool metadata — shared between adapters
 
 _TOOL_DEFS: list[dict[str, Any]] = [
@@ -145,9 +144,7 @@ _TOOL_DEFS: list[dict[str, Any]] = [
     },
 ]
 
-
 # OpenAI function calling
-
 
 def as_openai_tools(
     sdk: "CodeRecon",
@@ -200,7 +197,6 @@ def as_openai_tools(
 
     return tools
 
-
 def _takes_repo(method: Callable[..., Any]) -> bool:
     """Check if the method has a 'repo' parameter."""
     try:
@@ -209,9 +205,7 @@ def _takes_repo(method: Callable[..., Any]) -> bool:
     except (ValueError, TypeError):
         return True  # assume yes
 
-
 # LangChain adapter (optional dependency)
-
 
 def as_langchain_tools(
     sdk: "CodeRecon",

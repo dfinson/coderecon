@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from coderecon.lint.models import ParseResult, ToolCategory
 
-
 @dataclass
 class LintTool:
     """Definition of a lint/format/type-check tool."""
@@ -48,7 +47,6 @@ class LintTool:
         if self._parser is None:
             return ParseResult.ok([])
         return self._parser(stdout, stderr)
-
 
 def _check_config_exists(workspace_root: Path, config_spec: str) -> str | None:
     """Check if a config file exists and optionally contains required section.
@@ -106,7 +104,6 @@ def _check_config_exists(workspace_root: Path, config_spec: str) -> str | None:
         file_path = workspace_root / config_spec
         return config_spec if file_path.exists() else None
 
-
 class ToolRegistry:
     """Registry of lint tools."""
 
@@ -157,7 +154,6 @@ class ToolRegistry:
     def clear(self) -> None:
         """Clear all registered tools."""
         self._tools.clear()
-
 
 # Global registry
 registry = ToolRegistry()

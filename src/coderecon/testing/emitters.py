@@ -19,9 +19,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
-
 log = structlog.get_logger(__name__)
-
 
 class CoverageCapability(Enum):
     """Three-state coverage capability."""
@@ -29,7 +27,6 @@ class CoverageCapability(Enum):
     UNSUPPORTED = "unsupported"  # Pack does not support coverage
     AVAILABLE = "available"  # Coverage ready to use
     MISSING_PREREQ = "missing_prereq"  # Could work but prereq missing
-
 
 @dataclass
 class PackRuntime:
@@ -39,7 +36,6 @@ class PackRuntime:
     runner_available: bool  # Is the test runner installed?
     coverage_tools: dict[str, bool] = field(default_factory=dict)  # tool -> available
 
-
 @dataclass
 class CoverageArtifact:
     """Coverage artifact metadata."""
@@ -48,7 +44,6 @@ class CoverageArtifact:
     path: Path  # Path to coverage file/directory
     pack_id: str  # Which pack produced this
     invocation_id: str  # Links to test invocation
-
 
 class CoverageEmitter(ABC):
     """Abstract base for coverage emission.
@@ -93,9 +88,7 @@ class CoverageEmitter(ABC):
         """Path where coverage artifact will be written."""
         ...
 
-
 # Python - pytest-cov (lcov output)
-
 
 class PytestCovEmitter(CoverageEmitter):
     """Coverage via pytest-cov with lcov output."""
@@ -130,9 +123,7 @@ class PytestCovEmitter(CoverageEmitter):
     def artifact_path(self, output_dir: Path) -> Path:
         return output_dir / "coverage" / "lcov.info"
 
-
 # JavaScript - Jest/Vitest (istanbul/lcov)
-
 
 class JestCoverageEmitter(CoverageEmitter):
     """Coverage via Jest's built-in coverage (istanbul format)."""
@@ -165,7 +156,6 @@ class JestCoverageEmitter(CoverageEmitter):
     def artifact_path(self, output_dir: Path) -> Path:
         return output_dir / "coverage"
 
-
 class VitestCoverageEmitter(CoverageEmitter):
     """Coverage via Vitest's built-in coverage (v8/istanbul)."""
 
@@ -197,9 +187,7 @@ class VitestCoverageEmitter(CoverageEmitter):
     def artifact_path(self, output_dir: Path) -> Path:
         return output_dir / "coverage"
 
-
 # Go - go test -coverprofile
-
 
 class GoCoverageEmitter(CoverageEmitter):
     """Coverage via go test -coverprofile."""
@@ -227,9 +215,7 @@ class GoCoverageEmitter(CoverageEmitter):
     def artifact_path(self, output_dir: Path) -> Path:
         return output_dir / "coverage" / "coverage.out"
 
-
 # Rust - cargo-llvm-cov (lcov output)
-
 
 class CargoLlvmCovEmitter(CoverageEmitter):
     """Coverage via cargo-llvm-cov with lcov output."""
@@ -264,9 +250,7 @@ class CargoLlvmCovEmitter(CoverageEmitter):
     def artifact_path(self, output_dir: Path) -> Path:
         return output_dir / "coverage" / "lcov.info"
 
-
 # Java - JaCoCo (via Maven/Gradle)
-
 
 class MavenJacocoEmitter(CoverageEmitter):
     """Coverage via JaCoCo Maven plugin."""
@@ -295,7 +279,6 @@ class MavenJacocoEmitter(CoverageEmitter):
         # JaCoCo writes to target/site/jacoco
         return output_dir.parent / "target" / "site" / "jacoco"
 
-
 class GradleJacocoEmitter(CoverageEmitter):
     """Coverage via JaCoCo Gradle plugin."""
 
@@ -321,9 +304,7 @@ class GradleJacocoEmitter(CoverageEmitter):
         # Gradle JaCoCo writes to build/reports/jacoco
         return output_dir.parent / "build" / "reports" / "jacoco"
 
-
 # .NET - coverlet (cobertura output)
-
 
 class DotnetCoverletEmitter(CoverageEmitter):
     """Coverage via coverlet for .NET."""
@@ -354,9 +335,7 @@ class DotnetCoverletEmitter(CoverageEmitter):
     def artifact_path(self, output_dir: Path) -> Path:
         return output_dir / "coverage"
 
-
 # Ruby - SimpleCov
-
 
 class SimpleCovEmitter(CoverageEmitter):
     """Coverage via SimpleCov for Ruby."""
@@ -387,9 +366,7 @@ class SimpleCovEmitter(CoverageEmitter):
     def artifact_path(self, output_dir: Path) -> Path:
         return output_dir / "coverage"
 
-
 # PHP - PHPUnit coverage
-
 
 class PHPUnitCoverageEmitter(CoverageEmitter):
     """Coverage via PHPUnit with clover output."""
@@ -420,9 +397,7 @@ class PHPUnitCoverageEmitter(CoverageEmitter):
     def artifact_path(self, output_dir: Path) -> Path:
         return output_dir / "coverage" / "clover.xml"
 
-
 # Dart/Flutter
-
 
 class DartCoverageEmitter(CoverageEmitter):
     """Coverage via dart test --coverage."""
@@ -447,7 +422,6 @@ class DartCoverageEmitter(CoverageEmitter):
 
     def artifact_path(self, output_dir: Path) -> Path:
         return output_dir / "coverage"
-
 
 # Emitter Registry
 
@@ -480,14 +454,12 @@ NO_COVERAGE_PACKS: frozenset[str] = frozenset(
     }
 )
 
-
 def get_emitter(pack_id: str) -> CoverageEmitter | None:
     """Get coverage emitter for a pack."""
     emitter_class = EMITTER_REGISTRY.get(pack_id)
     if emitter_class is None:
         return None
     return emitter_class()
-
 
 def supports_coverage(pack_id: str) -> bool:
     """Check if a pack has coverage support."""

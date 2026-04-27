@@ -17,7 +17,6 @@ import structlog
 if TYPE_CHECKING:
     from tree_sitter import Node, Tree
 
-
 @dataclass
 class TypeAnnotationData:
     """Extracted type annotation data."""
@@ -36,7 +35,6 @@ class TypeAnnotationData:
     scope_id: int | None = None
     start_line: int = 0
     start_col: int = 0
-
 
 @dataclass
 class TypeMemberData:
@@ -57,7 +55,6 @@ class TypeMemberData:
     start_line: int = 0
     start_col: int = 0
 
-
 @dataclass
 class MemberAccessData:
     """Extracted member access chain data."""
@@ -77,7 +74,6 @@ class MemberAccessData:
     end_line: int = 0
     end_col: int = 0
 
-
 @dataclass
 class InterfaceImplData:
     """Extracted interface implementation data."""
@@ -89,7 +85,6 @@ class InterfaceImplData:
     impl_style: str = "explicit"  # explicit, structural, inferred
     start_line: int = 0
     start_col: int = 0
-
 
 @dataclass
 class ReceiverShapeData:
@@ -117,7 +112,6 @@ class ReceiverShapeData:
             }
         )
 
-
 @dataclass
 class TypeExtractionResult:
     """Complete extraction result from a single file."""
@@ -129,7 +123,6 @@ class TypeExtractionResult:
     interface_impls: list[InterfaceImplData] = field(default_factory=list)
     receiver_shapes: list[ReceiverShapeData] = field(default_factory=list)
     error: str | None = None
-
 
 @runtime_checkable
 class TypeExtractor(Protocol):
@@ -195,7 +188,6 @@ class TypeExtractor(Protocol):
     ) -> list[InterfaceImplData]:
         """Extract interface/trait implementations."""
         ...
-
 
 class BaseTypeExtractor(ABC):
     """Base class for type extractors with common utilities."""
@@ -406,7 +398,6 @@ class BaseTypeExtractor(ABC):
 
         return t.strip()
 
-
 class ShapeOnlyExtractor(BaseTypeExtractor):
     """Extractor for languages without type annotation support.
 
@@ -424,7 +415,6 @@ class ShapeOnlyExtractor(BaseTypeExtractor):
     @property
     def supports_interfaces(self) -> bool:
         return False
-
 
 class ExtractorRegistry:
     """Registry of language-specific type extractors."""
@@ -449,10 +439,8 @@ class ExtractorRegistry:
         """List all supported language families."""
         return list(self._extractors.keys())
 
-
 # Global registry instance
 _registry: ExtractorRegistry | None = None
-
 
 def get_registry() -> ExtractorRegistry:
     """Get the global extractor registry, initializing if needed."""
@@ -461,7 +449,6 @@ def get_registry() -> ExtractorRegistry:
         _registry = ExtractorRegistry()
         _register_builtin_extractors(_registry)
     return _registry
-
 
 def _register_builtin_extractors(registry: ExtractorRegistry) -> None:
     """Register all built-in extractors."""

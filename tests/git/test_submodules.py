@@ -8,7 +8,6 @@ import pytest
 
 from coderecon.git import GitOps, SubmoduleError, SubmoduleNotFoundError
 
-
 class TestSubmodulesList:
     """Tests for submodules() method."""
 
@@ -21,7 +20,6 @@ class TestSubmodulesList:
         submodules = ops.submodules()
 
         assert submodules == []
-
 
 class TestSubmoduleInit:
     """Tests for submodule_init() method."""
@@ -69,7 +67,6 @@ class TestSubmoduleInit:
 
         assert "libs/mylib" in initialized
 
-
 class TestSubmoduleStatus:
     """Tests for submodule_status() method."""
 
@@ -81,7 +78,6 @@ class TestSubmoduleStatus:
 
         with pytest.raises(SubmoduleNotFoundError):
             ops.submodule_status("nonexistent")
-
 
 class TestSubmoduleAdd:
     """Tests for submodule_add() method."""
@@ -118,7 +114,6 @@ class TestSubmoduleAdd:
         with pytest.raises(SubmoduleError):
             ops.submodule_add("/nonexistent/path", "libs/bad")
 
-
 class TestSubmoduleDeinit:
     """Tests for submodule_deinit() method."""
 
@@ -136,7 +131,6 @@ class TestSubmoduleDeinit:
         submod_path = main_path / "libs" / "mylib"
         # After deinit, working tree is removed
         assert not (submod_path / "lib.py").exists()
-
 
 class TestSubmoduleRemove:
     """Tests for submodule_remove() method."""
@@ -165,7 +159,6 @@ class TestSubmoduleRemove:
         with pytest.raises(SubmoduleNotFoundError):
             ops.submodule_remove("nonexistent")
 
-
 class TestSubmoduleSync:
     """Tests for submodule_sync() method."""
 
@@ -178,7 +171,6 @@ class TestSubmoduleSync:
         main_ops.submodule_add(str(sub_path), "libs/mylib")
         # Should not raise
         main_ops.submodule_sync(["libs/mylib"])
-
 
 class TestSubmoduleUpdate:
     """Tests for submodule_update() method."""
@@ -195,7 +187,6 @@ class TestSubmoduleUpdate:
         # libs/mylib should be in updated (already initialized by add)
         # or skipped if already at correct commit
         assert result is not None
-
 
 class TestSubmoduleStatusDetailed:
     """Tests for detailed submodule_status() method."""

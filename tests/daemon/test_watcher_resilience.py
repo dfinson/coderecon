@@ -10,7 +10,6 @@ import pytest
 from coderecon.daemon.watcher import FileWatcher, _collect_watch_dirs
 from coderecon.index._internal.ignore import IgnoreChecker
 
-
 class TestWatchCount:
     """Tests for the watch_count property."""
 
@@ -46,7 +45,6 @@ class TestWatchCount:
         await watcher.stop()
         # Implementation note: _watched_dirs is not cleared on stop.
         # watch_count is informational, not a liveness check.
-
 
 class TestEstimateWatchCount:
     """Tests for the static estimate_watch_count method."""
@@ -85,7 +83,6 @@ class TestEstimateWatchCount:
         actual = len(_collect_watch_dirs(tmp_path, ignore_checker))
         estimated = FileWatcher.estimate_watch_count(tmp_path)
         assert estimated == actual
-
 
 class TestDegradedToPoll:
     """Tests for the _degraded_to_poll flag."""

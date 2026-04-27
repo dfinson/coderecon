@@ -78,7 +78,6 @@ _PATH_STOP_TOKENS = frozenset(
     }
 )
 
-
 class ArtifactKind(StrEnum):
     """Classification of what kind of artifact a definition belongs to."""
     code = "code"
@@ -86,7 +85,6 @@ class ArtifactKind(StrEnum):
     config = "config"
     doc = "doc"
     build = "build"
-
 
 class TaskIntent(StrEnum):
     """High-level classification of what the user wants to do."""
@@ -96,7 +94,6 @@ class TaskIntent(StrEnum):
     understand = "understand"
     test = "test"
     unknown = "unknown"
-
 
 _INTENT_KEYWORDS: dict[TaskIntent, frozenset[str]] = {
     TaskIntent.debug: frozenset(
@@ -124,7 +121,6 @@ _INTENT_KEYWORDS: dict[TaskIntent, frozenset[str]] = {
     ),
 }
 
-
 def _is_test_file(path: str) -> bool:
     """Check if a file path points to a test file."""
     parts = path.split("/")
@@ -135,12 +131,10 @@ def _is_test_file(path: str) -> bool:
         or basename.endswith("_test.py")
     )
 
-
 def _is_barrel_file(path: str) -> bool:
     """Check if a file is a barrel/index re-export file."""
     name = PurePosixPath(path).name
     return name in _BARREL_FILENAMES
-
 
 def _classify_artifact(path: str) -> ArtifactKind:
     """Classify a file path into an ArtifactKind."""
@@ -155,7 +149,6 @@ def _classify_artifact(path: str) -> ArtifactKind:
     if suffix in _DOC_EXTENSIONS:
         return ArtifactKind.doc
     return ArtifactKind.code
-
 
 def _extract_intent(task: str) -> TaskIntent:
     """Extract the most likely intent from a task description."""

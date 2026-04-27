@@ -11,7 +11,6 @@ from coderecon.cli.global_commands import (
     worktrees_command,
 )
 
-
 def test_catalog_command_no_repos():
     """catalog prints a hint when no repos are registered."""
     runner = CliRunner()
@@ -22,7 +21,6 @@ def test_catalog_command_no_repos():
         result = runner.invoke(catalog_command)
     assert result.exit_code == 0
     assert "No repositories registered" in result.output
-
 
 def test_catalog_command_lists_repos():
     """catalog lists registered repos with their details."""
@@ -39,7 +37,6 @@ def test_catalog_command_lists_repos():
     assert result.exit_code == 0
     assert "my-repo" in result.output
 
-
 def test_unregister_command_daemon_not_running(tmp_path):
     """unregister falls back to direct catalog write when daemon not running."""
     runner = CliRunner()
@@ -52,7 +49,6 @@ def test_unregister_command_daemon_not_running(tmp_path):
         result = runner.invoke(unregister_command)
     assert result.exit_code == 0
     assert "Unregistered" in result.output
-
 
 def test_unregister_command_not_registered(tmp_path):
     """unregister prints 'Not registered' when repo isn't in catalog."""
@@ -67,7 +63,6 @@ def test_unregister_command_not_registered(tmp_path):
     assert result.exit_code == 0
     assert "Not registered" in result.output
 
-
 def test_worktrees_command_repo_not_found(tmp_path):
     """worktrees prints message when repo not in catalog."""
     runner = CliRunner()
@@ -80,7 +75,6 @@ def test_worktrees_command_repo_not_found(tmp_path):
     assert result.exit_code == 0
     assert "not found" in result.output
 
-
 def test_global_status_not_running():
     """global-status reports daemon not running."""
     runner = CliRunner()
@@ -88,7 +82,6 @@ def test_global_status_not_running():
         result = runner.invoke(global_status_command)
     assert result.exit_code == 0
     assert "not running" in result.output
-
 
 def test_global_status_running():
     """global-status shows PID and port when daemon is running."""

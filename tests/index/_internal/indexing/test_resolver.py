@@ -18,7 +18,6 @@ from coderecon.index._internal.indexing.resolver import (
     resolve_references,
 )
 
-
 class TestResolutionStats:
     """Tests for ResolutionStats dataclass."""
 
@@ -50,7 +49,6 @@ class TestResolutionStats:
         stats.refs_resolved = 5
         assert stats.refs_processed == 10
         assert stats.refs_resolved == 5
-
 
 class TestReferenceResolver:
     """Tests for ReferenceResolver class."""
@@ -208,7 +206,6 @@ class TestReferenceResolver:
 
         result = resolver._find_module_file("super::utils", importing_file_id=55)
         assert result == 60
-
 
 class TestResolveReferencesFunction:
     """Tests for resolve_references convenience function."""

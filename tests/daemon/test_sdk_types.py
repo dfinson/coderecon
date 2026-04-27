@@ -22,7 +22,6 @@ from coderecon.sdk.types import (
     _to_understand_result,
 )
 
-
 class TestReconResult:
     def test_full(self) -> None:
         wire = {"recon_id": "abc", "gate": "PARTIAL", "results": [{"a": 1}], "metrics": {"t": 0.5}, "hint": "look here"}
@@ -41,7 +40,6 @@ class TestReconResult:
         assert r.gate == "OK"
         assert r.results == []
 
-
 class TestMapResult:
     def test_basic(self) -> None:
         wire = {"overview": "Python repo", "languages": ["py"]}
@@ -49,7 +47,6 @@ class TestMapResult:
         assert isinstance(r, MapResult)
         assert r.overview == "Python repo"
         assert r.raw is wire
-
 
 class TestImpactResult:
     def test_basic(self) -> None:
@@ -59,20 +56,17 @@ class TestImpactResult:
         assert r.files_affected == 2
         assert len(r.references) == 1
 
-
 class TestUnderstandResult:
     def test_basic(self) -> None:
         r = _to_understand_result({"summary": "hello", "sections": {"a": "b"}})
         assert r.summary == "hello"
         assert r.sections == {"a": "b"}
 
-
 class TestRefactorResult:
     def test_basic(self) -> None:
         r = _to_refactor_result({"refactor_id": "r1", "status": "previewed", "agentic_hint": "check"})
         assert r.refactor_id == "r1"
         assert r.status == "previewed"
-
 
 class TestRefactorCommitResult:
     def test_applied(self) -> None:
@@ -83,7 +77,6 @@ class TestRefactorCommitResult:
         r = _to_refactor_commit_result({"refactor_id": "r1", "status": "inspected"})
         assert r.applied is False
 
-
 class TestRefactorCancelResult:
     def test_cancelled(self) -> None:
         r = _to_refactor_cancel_result({"refactor_id": "r1", "status": "cancelled"})
@@ -93,13 +86,11 @@ class TestRefactorCancelResult:
         r = _to_refactor_cancel_result({"refactor_id": "r1", "status": "not_found"})
         assert r.cancelled is False
 
-
 class TestDiffResult:
     def test_basic(self) -> None:
         r = _to_diff_result({"summary": "2 files changed", "structural_changes": [{"kind": "add"}]})
         assert r.summary == "2 files changed"
         assert len(r.structural_changes) == 1
-
 
 class TestCyclesResult:
     def test_basic(self) -> None:
@@ -107,18 +98,15 @@ class TestCyclesResult:
         assert r.level == "def"
         assert len(r.cycles) == 1
 
-
 class TestCommunitiesResult:
     def test_basic(self) -> None:
         r = _to_communities_result({"level": "file", "communities": [{"name": "c1"}]})
         assert len(r.communities) == 1
 
-
 class TestGraphExportResult:
     def test_basic(self) -> None:
         r = _to_graph_export_result({"path": "/tmp/out.json", "message": "ok"})
         assert r.path == "/tmp/out.json"
-
 
 class TestCheckpointResult:
     def test_passed(self) -> None:
@@ -126,20 +114,17 @@ class TestCheckpointResult:
         assert r.passed is True
         assert r.agentic_hint == "commit"
 
-
 class TestDescribeResult:
     def test_found(self) -> None:
         r = _to_describe_result({"found": True, "description": "does x"})
         assert r.found is True
         assert r.description == "does x"
 
-
 class TestRegisterResult:
     def test_basic(self) -> None:
         r = _to_register_result({"repo": "myrepo", "worktree": "main"})
         assert r.repo == "myrepo"
         assert r.worktree == "main"
-
 
 class TestStatusResult:
     def test_basic(self) -> None:

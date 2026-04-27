@@ -37,7 +37,6 @@ fi
 
 _HOOK_NAMES = ("post-checkout", "post-merge", "post-rewrite")
 
-
 def install_hooks(repo_root: Path) -> list[str]:
     """Install git hooks for auto-reindex.
 
@@ -74,7 +73,6 @@ def install_hooks(repo_root: Path) -> list[str]:
 
     return installed
 
-
 def uninstall_hooks(repo_root: Path) -> list[str]:
     """Remove coderecon-managed hooks.
 
@@ -101,7 +99,6 @@ def uninstall_hooks(repo_root: Path) -> list[str]:
             log.debug("hook_removed", hook=hook_name)
 
     return removed
-
 
 def hooks_installed(repo_root: Path) -> list[str]:
     """Check which coderecon hooks are currently installed."""

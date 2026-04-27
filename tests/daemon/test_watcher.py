@@ -33,7 +33,6 @@ from coderecon.index._internal.ignore import IgnoreChecker
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-
 class TestHardcodedDirs:
     """Tests for HARDCODED_DIRS constant."""
 
@@ -57,7 +56,6 @@ class TestHardcodedDirs:
     def test_is_frozenset(self) -> None:
         """HARDCODED_DIRS must be immutable."""
         assert isinstance(HARDCODED_DIRS, frozenset)
-
 
 class TestCollectWatchDirs:
     """Tests for _collect_watch_dirs function."""
@@ -172,7 +170,6 @@ class TestCollectWatchDirs:
         # src/ should still be watched
         assert "src" in dir_strs
 
-
 class TestCrossFilesystemDetection:
     """Tests for _is_cross_filesystem function."""
 
@@ -196,7 +193,6 @@ class TestCrossFilesystemDetection:
         assert _is_cross_filesystem(Path("/run/user/1000/gvfs/smb")) is True
         assert _is_cross_filesystem(Path("/media/usb")) is True
         assert _is_cross_filesystem(Path("/net/server/share")) is True
-
 
 class TestSummarizeChangesByType:
     """Tests for _summarize_changes_by_type function."""
@@ -237,7 +233,6 @@ class TestSummarizeChangesByType:
         """Empty list returns empty summary."""
         summary = _summarize_changes_by_type([])
         assert summary == ""
-
 
 class TestFileWatcherDebouncing:
     """Tests for FileWatcher debouncing behavior."""
@@ -306,7 +301,6 @@ class TestFileWatcherDebouncing:
         assert watcher._first_change_time == 0.0
         assert watcher._last_change_time == 0.0
 
-
 class TestFileWatcherPollingMode:
     """Tests for FileWatcher polling mode (cross-filesystem)."""
 
@@ -367,7 +361,6 @@ class TestFileWatcherPollingMode:
 
         # Verify debounce state was cleared (changes were flushed)
         assert polling_watcher._pending_changes == set()
-
 
 class TestFileWatcherNativeMode:
     """Tests for FileWatcher native (non-recursive inotify) mode."""
@@ -434,7 +427,6 @@ class TestFileWatcherNativeMode:
             assert "node_modules" not in watched_names
         finally:
             await native_watcher.stop()
-
 
 class TestFileWatcherCplignore:
     """Tests for reconignore change handling."""

@@ -28,7 +28,6 @@ from coderecon.git.errors import (
     NothingToCommitError,
 )
 
-
 class TestRequireNotUnborn:
     """Tests for require_not_unborn function."""
 
@@ -55,7 +54,6 @@ class TestRequireNotUnborn:
 
         with pytest.raises(GitError, match="test op"):
             require_not_unborn(access, "test op")
-
 
 class TestRequireCurrentBranch:
     """Tests for require_current_branch function."""
@@ -86,7 +84,6 @@ class TestRequireCurrentBranch:
 
         assert "push" in str(exc_info.value)
 
-
 class TestRequireNotCurrentBranch:
     """Tests for require_not_current_branch function."""
 
@@ -114,7 +111,6 @@ class TestRequireNotCurrentBranch:
         with pytest.raises(GitError, match="feature-x"):
             require_not_current_branch(access, "feature-x")
 
-
 class TestRequireBranchExists:
     """Tests for require_branch_exists function."""
 
@@ -141,7 +137,6 @@ class TestRequireBranchExists:
 
         require_branch_exists(access, "my-branch")
         access.has_local_branch.assert_called_once_with("my-branch")
-
 
 class TestCheckNothingToCommit:
     """Tests for check_nothing_to_commit function."""

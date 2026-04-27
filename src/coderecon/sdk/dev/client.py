@@ -25,7 +25,6 @@ from coderecon.sdk.dev.types import (
     _to_raw_signals_result,
 )
 
-
 class CodeReconDev(CodeRecon):
     """Extended SDK for training pipelines.
 

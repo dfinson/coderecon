@@ -11,7 +11,6 @@ import pytest
 from tests.e2e.conftest import TOOL_TIMEOUTS
 from tests.e2e.expectations.schema import RepoExpectation
 
-
 @pytest.mark.e2e
 def test_describe_anchors(
     coderecon_server: tuple[str, int],
@@ -55,7 +54,6 @@ def test_describe_anchors(
                 f"Symbol '{anchor.symbol}' should be found in path containing "
                 f"'{anchor.file_contains}'"
             )
-
 
 @pytest.mark.e2e
 def test_references(

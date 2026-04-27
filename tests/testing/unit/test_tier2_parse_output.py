@@ -13,7 +13,6 @@ from coderecon.testing.packs.tier2 import (
     MixTestPack,
 )
 
-
 class TestMixTestPackParseOutput:
     """Tests for MixTestPack.parse_output()."""
 
@@ -48,7 +47,6 @@ class TestMixTestPackParseOutput:
         result = pack.parse_output(Path("/out"), stdout)
         assert result.total == 0
         assert result.failed == 0
-
 
 class TestCabalTestPackParseOutput:
     """Tests for CabalTestPack.parse_output()."""
@@ -99,7 +97,6 @@ class TestCabalTestPackParseOutput:
         assert result.total == 1
         assert result.failed == 1
 
-
 class TestJuliaPkgTestPackParseOutput:
     """Tests for JuliaPkgTestPack.parse_output()."""
 
@@ -136,7 +133,6 @@ class TestJuliaPkgTestPackParseOutput:
         result = pack.parse_output(Path("/out"), stdout)
         assert result.total == 1
         assert result.failed == 1
-
 
 class TestDuneTestPackParseOutput:
     """Tests for DuneTestPack.parse_output()."""

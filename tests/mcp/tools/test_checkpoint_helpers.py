@@ -18,7 +18,6 @@ from coderecon.mcp.tools.checkpoint import (
 # _extract_traceback_locations
 # ---------------------------------------------------------------------------
 
-
 class TestExtractTracebackLocations:
     """Tests for _extract_traceback_locations."""
 
@@ -63,11 +62,9 @@ class TestExtractTracebackLocations:
         assert len(result) == 1
         assert result[0] == ("project/src/foo.py", 10)
 
-
 # ---------------------------------------------------------------------------
 # _build_failure_snippets
 # ---------------------------------------------------------------------------
-
 
 FILE_A = """\
 import os
@@ -102,7 +99,6 @@ def test_foo():
 def test_bar():
     assert foo() == 99
 """
-
 
 class TestBuildFailureSnippets:
     """Tests for _build_failure_snippets."""

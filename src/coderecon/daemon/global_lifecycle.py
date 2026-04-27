@@ -19,30 +19,25 @@ from coderecon.files.ops import atomic_write_text
 
 log = structlog.get_logger(__name__)
 
-
 class _Server(uvicorn.Server):
     """Uvicorn server that skips built-in signal handler installation."""
 
     def install_signal_handlers(self) -> None:
         return None
 
-
 def _coderecon_dir() -> Path:
     return _default_coderecon_home()
-
 
 def write_global_pid(home: Path, port: int) -> None:
     """Write PID and port files for global daemon discovery."""
     atomic_write_text(home / PID_FILE, str(os.getpid()))
     atomic_write_text(home / PORT_FILE, str(port))
 
-
 def remove_global_pid(home: Path) -> None:
     """Remove PID and port files on shutdown."""
     for name in (PID_FILE, PORT_FILE):
         with contextlib.suppress(FileNotFoundError):
             (home / name).unlink()
-
 
 def read_global_server_info(home: Path | None = None) -> tuple[int, int] | None:
     """Read global daemon PID and port. Returns (pid, port) or None."""
@@ -54,7 +49,6 @@ def read_global_server_info(home: Path | None = None) -> tuple[int, int] | None:
     except (FileNotFoundError, ValueError):
         log.debug("global_server_info_read_failed", exc_info=True)
         return None
-
 
 def is_global_server_running(home: Path | None = None) -> bool:
     """Check if the global daemon is running."""
@@ -71,7 +65,6 @@ def is_global_server_running(home: Path | None = None) -> bool:
         remove_global_pid(home)
         return False
 
-
 def stop_global_daemon(home: Path | None = None) -> bool:
     """Stop the global daemon by sending SIGTERM. Returns True if stopped."""
     home = home or _coderecon_dir()
@@ -87,7 +80,6 @@ def stop_global_daemon(home: Path | None = None) -> bool:
     except (OSError, ProcessLookupError):
         remove_global_pid(home)
         return False
-
 
 async def run_global_server(
     *,
@@ -177,7 +169,6 @@ async def run_global_server(
         except asyncio.TimeoutError:
             log.warning("daemon_stop_all_timeout")
         remove_global_pid(home)
-
 
 async def run_global_server_stdio(
     *,

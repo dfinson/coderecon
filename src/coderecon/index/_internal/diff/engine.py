@@ -28,7 +28,6 @@ log = structlog.get_logger(__name__)
 # Identity key type: (kind, lexical_path)
 _IdentityKey = tuple[str, str]
 
-
 def compute_structural_diff(
     base_facts: dict[str, list[DefSnapshot]],
     target_facts: dict[str, list[DefSnapshot]],
@@ -88,7 +87,6 @@ def compute_structural_diff(
         files_analyzed=files_analyzed,
     )
 
-
 def _classify_file(path: str) -> str:
     """Classify a file into a category based on path patterns."""
     from coderecon.core.languages import is_test_file
@@ -136,7 +134,6 @@ def _classify_file(path: str) -> str:
         return "docs"
 
     return "prod"
-
 
 def _compute_delta_tags(
     change: str,
@@ -196,7 +193,6 @@ def _compute_delta_tags(
 
     return tags
 
-
 def _extract_params(sig: str) -> str:
     """Extract parameter portion from a signature string.
 
@@ -215,7 +211,6 @@ def _extract_params(sig: str) -> str:
             if depth == 0:
                 return sig[paren_start : i + 1]
     return sig[paren_start:]
-
 
 def _extract_return_type(sig: str) -> str:
     """Extract return type annotation from a signature.
@@ -237,7 +232,6 @@ def _extract_return_type(sig: str) -> str:
             rest = rest[:brace].strip()
         return rest
     return ""
-
 
 def _diff_file(
     path: str,
@@ -386,7 +380,6 @@ def _diff_file(
 
     return changes
 
-
 def _count_changed_lines(
     start: int,
     end: int,
@@ -402,7 +395,6 @@ def _count_changed_lines(
         if overlap_start <= overlap_end:
             total += overlap_end - overlap_start + 1
     return total if total > 0 else None
-
 
 def _detect_renames(
     removed: list[tuple[_IdentityKey, DefSnapshot]],
@@ -433,7 +425,6 @@ def _detect_renames(
 
     return renames
 
-
 def _intersects_hunks(
     start: int,
     end: int,
@@ -447,7 +438,6 @@ def _intersects_hunks(
     if hunks is None:
         return True
     return any(h_start <= end and h_end >= start for h_start, h_end in hunks)
-
 
 def _is_internal_variable(snap: DefSnapshot, all_snaps: list[DefSnapshot]) -> bool:
     """Check if a variable is local to a function/method (not public)."""

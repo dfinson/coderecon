@@ -17,7 +17,6 @@ from sqlalchemy import text
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
-
 @dataclass(frozen=True, slots=True)
 class TestCandidate:
     """A test suggested for execution."""
@@ -27,7 +26,6 @@ class TestCandidate:
     distance: int  # Hops from changed def
     confidence: float  # 0.0-1.0
     reason: str  # Human-readable explanation
-
 
 @dataclass(slots=True)
 class BlastRadiusResult:
@@ -47,7 +45,6 @@ class BlastRadiusResult:
                 seen.add(c.test_id)
                 result.append(c.test_id)
         return result
-
 
 def select_tests_for_changed_defs(
     engine: Engine,
@@ -126,9 +123,7 @@ def select_tests_for_changed_defs(
 
     return result
 
-
 # Layer implementations
-
 
 def _get_direct_coverage(
     conn: object, def_uids: list[str]
@@ -159,7 +154,6 @@ def _get_direct_coverage(
         )
         for row in rows
     ]
-
 
 def _get_caller_coverage(
     conn: object, def_uids: list[str]
@@ -198,7 +192,6 @@ def _get_caller_coverage(
         )
         for row in rows
     ]
-
 
 def _get_scope_affinity(
     conn: object, def_uids: list[str]

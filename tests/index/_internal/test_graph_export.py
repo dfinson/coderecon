@@ -8,7 +8,6 @@ import pytest
 
 from coderecon.index._internal.db import Database, create_additional_indexes
 
-
 @pytest.fixture
 def export_db(tmp_path: Path) -> Database:
     db = Database(tmp_path / "test.db")
@@ -41,7 +40,6 @@ def export_db(tmp_path: Path) -> Database:
         session.commit()
 
     return db
-
 
 class TestGraphExport:
     def test_generates_html(self, export_db: Database, tmp_path: Path) -> None:

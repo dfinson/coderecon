@@ -21,7 +21,6 @@ from fastmcp import Context
 from pydantic import Field
 from coderecon.config.constants import MS_PER_SEC
 
-
 if TYPE_CHECKING:
     from fastmcp import FastMCP
     from coderecon.index import Database
@@ -37,7 +36,6 @@ from coderecon.mcp.tools.recon.pipeline_scoring import (  # noqa: E402
     _score_cross_encoder,
     _score_cross_encoder_tiny,
 )
-
 
 def _build_query_metrics(diagnostics: dict, candidates: list, seeds: list | None, pins: list | None) -> dict:
     """Build aggregate query metrics from diagnostics."""
@@ -111,7 +109,6 @@ def _models_available() -> bool:
         (data_dir / name).exists()
         for name in ("gate.lgbm", "file_ranker.lgbm", "ranker.lgbm", "cutoff.lgbm")
     )
-
 
 async def recon_pipeline(
     app_ctx: AppContext,
@@ -316,7 +313,6 @@ def _build_output(
         "metrics": metrics,
         "hints": hints,
     }
-
 
 async def recon_map_core(app_ctx: "AppContext") -> dict[str, Any]:
     """Repository structure map (transport-agnostic)."""

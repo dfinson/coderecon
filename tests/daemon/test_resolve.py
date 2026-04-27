@@ -9,7 +9,6 @@ import pytest
 
 from coderecon.daemon.resolve import resolve_worktree
 
-
 class TestResolveWorktree:
     """Tests for the resolve_worktree function."""
 

@@ -46,7 +46,6 @@ from coderecon.testing.coverage.models import (
     FileCoverage,
 )
 
-
 class SimplecovParser:
     """Parser for SimpleCov JSON format."""
 

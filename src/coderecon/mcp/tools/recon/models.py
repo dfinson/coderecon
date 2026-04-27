@@ -28,7 +28,6 @@ from coderecon.mcp.tools.recon.recon_constants import (
 if TYPE_CHECKING:
     from coderecon.index.models import DefFact
 
-
 @dataclass
 class EvidenceRecord:
     """A single piece of evidence supporting a candidate's relevance."""
@@ -37,7 +36,6 @@ class EvidenceRecord:
     score: float = 0.0  # Normalized [0, 1] contribution
 
 # HarvestCandidate — unified representation from all harvesters
-
 
 @dataclass
 class HarvestCandidate:
@@ -146,7 +144,6 @@ class HarvestCandidate:
         return self.from_explicit or self.hub_score >= 8 or len(self.matched_terms) >= 3
 
 # ParsedTask — structured extraction from free-text
-
 
 @dataclass(frozen=True)
 class ParsedTask:

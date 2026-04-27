@@ -43,7 +43,6 @@ from coderecon.testing.coverage.models import (
     FunctionCoverage,
 )
 
-
 class CloverParser:
     """Parser for Clover XML format."""
 

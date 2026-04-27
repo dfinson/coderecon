@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from coderecon.mcp.context import AppContext
 
-
 async def dev_index_facts(app_ctx: "AppContext", **kwargs: Any) -> dict[str, Any]:
     """Return structured index metadata for LLM grounding."""
     from sqlmodel import col, select
@@ -88,7 +87,6 @@ async def dev_index_facts(app_ctx: "AppContext", **kwargs: Any) -> dict[str, Any
         "def_count": len(defs),
     }
 
-
 async def dev_lookup_defs(app_ctx: "AppContext", **kwargs: Any) -> dict[str, Any]:
     """Look up definitions by coordinates."""
     from sqlmodel import col, select
@@ -154,7 +152,6 @@ async def dev_lookup_defs(app_ctx: "AppContext", **kwargs: Any) -> dict[str, Any
             })
 
     return {"defs": entries}
-
 
 async def dev_index_status(app_ctx: "AppContext", **kwargs: Any) -> dict[str, Any]:
     """Return file/def counts for a worktree."""

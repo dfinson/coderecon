@@ -13,7 +13,6 @@ import structlog
 
 log = structlog.get_logger(__name__)
 
-
 class Ranker:
     """LambdaMART object ranker backed by a serialized LightGBM model."""
 
@@ -48,7 +47,6 @@ class Ranker:
             for f in candidate_features
         ])
         return self._model.predict(X).tolist()
-
 
 def load_ranker(model_path: Path | None = None) -> Ranker:
     """Load the ranker from package data or an explicit path."""

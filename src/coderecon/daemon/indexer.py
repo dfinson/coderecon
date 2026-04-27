@@ -32,7 +32,6 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-
 class IndexerState(Enum):
     """Background indexer state."""
 
@@ -40,7 +39,6 @@ class IndexerState(Enum):
     INDEXING = "indexing"
     STOPPING = "stopping"
     STOPPED = "stopped"
-
 
 @dataclass
 class IndexerStatus:
@@ -50,7 +48,6 @@ class IndexerStatus:
     queue_size: int
     last_stats: IndexStats | None = None
     last_error: str | None = None
-
 
 @dataclass
 class BackgroundIndexer:

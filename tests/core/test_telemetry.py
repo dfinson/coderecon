@@ -36,7 +36,6 @@ from coderecon.core.telemetry import (
 # Mock TelemetryConfig for testing
 # =============================================================================
 
-
 class MockTelemetryConfig:
     """Mock TelemetryConfig for testing."""
 
@@ -53,7 +52,6 @@ class MockTelemetryConfig:
 # =============================================================================
 # Tests for _is_telemetry_enabled
 # =============================================================================
-
 
 class TestIsTelemetryEnabled:
     """Tests for _is_telemetry_enabled function."""
@@ -94,7 +92,6 @@ class TestIsTelemetryEnabled:
 # Tests for _get_otlp_endpoint
 # =============================================================================
 
-
 class TestGetOtlpEndpoint:
     """Tests for _get_otlp_endpoint function."""
 
@@ -128,7 +125,6 @@ class TestGetOtlpEndpoint:
 # Tests for _get_service_name
 # =============================================================================
 
-
 class TestGetServiceName:
     """Tests for _get_service_name function."""
 
@@ -154,7 +150,6 @@ class TestGetServiceName:
 # =============================================================================
 # Tests for NoOp classes
 # =============================================================================
-
 
 class TestNoOpSpan:
     """Tests for _NoOpSpan class."""
@@ -277,7 +272,6 @@ class TestNoOpHistogram:
 # Tests for get_tracer / get_meter
 # =============================================================================
 
-
 class TestGetTracer:
     """Tests for get_tracer function."""
 
@@ -312,7 +306,6 @@ class TestGetMeter:
 # =============================================================================
 # Tests for traced decorator
 # =============================================================================
-
 
 class TestTracedDecorator:
     """Tests for traced decorator."""
@@ -384,7 +377,6 @@ class TestTracedDecorator:
 # Tests for span_context
 # =============================================================================
 
-
 class TestSpanContext:
     """Tests for span_context context manager."""
 
@@ -415,7 +407,6 @@ class TestSpanContext:
 # Tests for is_telemetry_enabled / is_otel_available
 # =============================================================================
 
-
 class TestTelemetryStatusFunctions:
     """Tests for telemetry status check functions."""
 
@@ -439,7 +430,6 @@ class TestTelemetryStatusFunctions:
 # =============================================================================
 # Tests for shutdown_telemetry
 # =============================================================================
-
 
 class TestShutdownTelemetry:
     """Tests for shutdown_telemetry function."""

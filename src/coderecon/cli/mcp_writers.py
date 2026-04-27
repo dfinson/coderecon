@@ -35,9 +35,7 @@ log = structlog.get_logger(__name__)
 #: All tool IDs recognised by the writers.
 ALL_TOOLS: tuple[str, ...] = ("vscode", "claude", "cursor", "opencode")
 
-
 # Auto-detection
-
 
 def detect_tools(repo_root: Path) -> list[str]:
     """Return the list of AI tools that appear to be present in this environment.
@@ -75,7 +73,6 @@ def detect_tools(repo_root: Path) -> list[str]:
 
     return found if found else ["vscode"]
 
-
 def resolve_targets(targets: list[str], repo_root: Path) -> list[str]:
     """Expand ``auto`` / ``all`` pseudo-targets and de-duplicate.
 
@@ -103,9 +100,7 @@ def resolve_targets(targets: list[str], repo_root: Path) -> list[str]:
             out.append(t)
     return out
 
-
 # Per-tool writers
-
 
 def _write_vscode(repo_root: Path, port: int, server_name: str) -> bool:
     """Write / update ``.vscode/mcp.json``.
@@ -148,7 +143,6 @@ def _write_vscode(repo_root: Path, port: int, server_name: str) -> bool:
     atomic_write_text(mcp_json_path, json.dumps(config, indent=2) + "\n")
     return True
 
-
 def _write_claude(repo_root: Path, port: int, server_name: str) -> bool:
     """Write / update project-level ``.mcp.json`` for Claude Code.
 
@@ -188,7 +182,6 @@ def _write_claude(repo_root: Path, port: int, server_name: str) -> bool:
     atomic_write_text(mcp_path, json.dumps(config, indent=2) + "\n")
     return True
 
-
 def _write_cursor(repo_root: Path, port: int, server_name: str) -> bool:
     """Write / update ``.cursor/mcp.json`` for Cursor.
 
@@ -223,7 +216,6 @@ def _write_cursor(repo_root: Path, port: int, server_name: str) -> bool:
     config: dict[str, Any] = {"mcpServers": {server_name: expected_entry}}
     atomic_write_text(mcp_path, json.dumps(config, indent=2) + "\n")
     return True
-
 
 def _write_opencode(_repo_root: Path, port: int, server_name: str) -> bool:
     """Write / update OpenCode global config at ``~/.config/opencode/config.json``.
@@ -275,7 +267,6 @@ def _write_opencode(_repo_root: Path, port: int, server_name: str) -> bool:
     atomic_write_text(config_path, json.dumps(config, indent=2) + "\n")
     return True
 
-
 # Dispatch table
 
 _WRITERS = {
@@ -284,7 +275,6 @@ _WRITERS = {
     "cursor": _write_cursor,
     "opencode": _write_opencode,
 }
-
 
 def write_mcp_configs(
     repo_root: Path, port: int, server_name: str, targets: list[str]
@@ -313,7 +303,6 @@ def write_mcp_configs(
             written.append(label)
     return written
 
-
 def sync_mcp_port(repo_root: Path, port: int, server_name: str, targets: list[str]) -> list[str]:
     """Update port in all tool MCP configs.
 
@@ -331,9 +320,7 @@ def sync_mcp_port(repo_root: Path, port: int, server_name: str, targets: list[st
     """
     return write_mcp_configs(repo_root, port, server_name, targets)
 
-
 # Helpers
-
 
 def _tool_config_label(tool: str, _repo_root: Path) -> str:
     """Short human-readable label for the config file written by *tool*."""

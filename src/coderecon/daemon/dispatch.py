@@ -29,11 +29,9 @@ log = structlog.get_logger(__name__)
 # Type for core functions: (app_ctx, session?, **params) -> dict (sync or async)
 CoreFn = Callable[..., Any]
 
-
 # Lazy-loaded dispatch table — avoids importing every tool module at startup
 
 _CORE_FUNCTIONS: dict[str, CoreFn] | None = None
-
 
 def _load_core_functions() -> dict[str, CoreFn]:
     """Build the dispatch table on first use."""
@@ -86,13 +84,11 @@ def _load_core_functions() -> dict[str, CoreFn]:
         "index_status": dev_index_status,
     }
 
-
 def _get_core_functions() -> dict[str, CoreFn]:
     global _CORE_FUNCTIONS  # noqa: PLW0603
     if _CORE_FUNCTIONS is None:
         _CORE_FUNCTIONS = _load_core_functions()
     return _CORE_FUNCTIONS
-
 
 # Management methods — no repo context needed
 
@@ -109,7 +105,6 @@ _NO_SESSION_METHODS = frozenset({
     # Dev/training methods
     "index_facts", "lookup_defs", "index_status",
 })
-
 
 async def _handle_register(
     daemon: "GlobalDaemon",
@@ -129,7 +124,6 @@ async def _handle_register(
     except (OSError, ValueError, RuntimeError) as exc:
         return _error_response(request_id, "REGISTER_FAILED", str(exc))
 
-
 async def _handle_catalog(
     registry: "CatalogRegistry",
     request_id: str | None,
@@ -144,7 +138,6 @@ async def _handle_catalog(
             "worktrees": [{"name": w.name, "root_path": w.root_path} for w in wts],
         })
     return _success_response(request_id, {"repos": entries})
-
 
 async def _handle_status(
     daemon: "GlobalDaemon",
@@ -164,7 +157,6 @@ async def _handle_status(
         "active_repos": slots,
     })
 
-
 async def _handle_describe(
     params: dict[str, Any],
     request_id: str | None,
@@ -176,7 +168,6 @@ async def _handle_describe(
     params.setdefault("available_tool_names", list(core_fns.keys()))
     result = await describe_fn(**params)
     return _success_response(request_id, result)
-
 
 async def _handle_unregister(
     registry: "CatalogRegistry",
@@ -191,7 +182,6 @@ async def _handle_unregister(
         return _success_response(request_id, {"removed": ok})
     except (OSError, ValueError, RuntimeError) as exc:
         return _error_response(request_id, "UNREGISTER_FAILED", str(exc))
-
 
 async def _handle_reindex(
     daemon: "GlobalDaemon",
@@ -235,7 +225,6 @@ async def _handle_reindex(
         "files_indexed": getattr(stats, "files_indexed", 0),
     })
 
-
 async def _handle_session_close(
     daemon: "GlobalDaemon",
     params: dict[str, Any],
@@ -255,9 +244,7 @@ async def _handle_session_close(
     wt_slot.app_ctx.session_manager.close(session_id)
     return _success_response(request_id, {"closed": True})
 
-
 # Main dispatch
-
 
 async def dispatch(
     daemon: "GlobalDaemon",
@@ -339,16 +326,13 @@ async def dispatch(
         log.error("dispatch.error", method=method, exc_info=True)
         return _error_response(request_id, "INTERNAL", str(exc))
 
-
 # Response helpers
-
 
 def _success_response(request_id: str | None, result: Any) -> dict[str, Any]:
     resp: dict[str, Any] = {"result": result}
     if request_id is not None:
         resp["id"] = request_id
     return resp
-
 
 def _error_response(request_id: str | None, code: str, message: str) -> dict[str, Any]:
     resp: dict[str, Any] = {"error": {"code": code, "message": message}}

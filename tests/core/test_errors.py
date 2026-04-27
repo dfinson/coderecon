@@ -9,7 +9,6 @@ from coderecon.core.errors import (
     InternalErrorCode,
 )
 
-
 class TestInternalErrorCode:
     """Error code value tests."""
 
@@ -34,7 +33,6 @@ class TestInternalErrorCode:
 
         # Then
         assert expected_range <= value < expected_range + 1000
-
 
 class TestCodeReconError:
     """Base error behavior tests."""
@@ -74,7 +72,6 @@ class TestCodeReconError:
 
         # Then
         assert result == "[9001] INTERNAL_ERROR: Something broke"
-
 
 class TestConfigError:
     """ConfigError factory method tests."""
@@ -121,7 +118,6 @@ class TestConfigError:
         # Then
         assert error.details["path"] == path
         assert reason in error.message
-
 
 class TestInternalError:
     """InternalError tests."""

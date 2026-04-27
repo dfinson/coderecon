@@ -32,7 +32,6 @@ IncludeOption = Literal[
     "structure", "languages", "entry_points", "dependencies", "test_layout", "public_api"
 ]
 
-
 @dataclass
 class DirectoryNode:
     """A node in the directory tree."""
@@ -44,7 +43,6 @@ class DirectoryNode:
     file_count: int = 0
     line_count: int | None = None  # Only for files
 
-
 @dataclass
 class LanguageStats:
     """Statistics for a language name."""
@@ -52,7 +50,6 @@ class LanguageStats:
     language: str
     file_count: int
     percentage: float
-
 
 @dataclass
 class EntryPoint:
@@ -63,7 +60,6 @@ class EntryPoint:
     name: str
     qualified_name: str | None
 
-
 @dataclass
 class IndexedDependencies:
     """Dependencies extracted from ImportFact."""
@@ -71,14 +67,12 @@ class IndexedDependencies:
     external_modules: list[str]  # Unique source_literal values
     import_count: int
 
-
 @dataclass
 class TestLayout:
     """Test file layout from index."""
 
     test_files: list[str]
     test_count: int
-
 
 @dataclass
 class PublicSymbol:
@@ -88,7 +82,6 @@ class PublicSymbol:
     def_uid: str | None
     certainty: str
     evidence: str | None
-
 
 @dataclass
 class StructureInfo:
@@ -103,7 +96,6 @@ class StructureInfo:
     formatter to build depth-collapsed directory summaries without
     re-querying the database."""
 
-
 @dataclass
 class MapRepoResult:
     """Result of map_repo tool."""
@@ -114,7 +106,6 @@ class MapRepoResult:
     dependencies: IndexedDependencies | None = None
     test_layout: TestLayout | None = None
     public_api: list[PublicSymbol] | None = None
-
 
 class RepoMapper:
     """Maps repository structure from the index."""

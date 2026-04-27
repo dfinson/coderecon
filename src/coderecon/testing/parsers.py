@@ -28,7 +28,6 @@ __all__ = [
     "auto_parse",
 ]
 
-
 def parse_junit_xml(content: str) -> ParsedTestSuite:
     """Parse JUnit XML format (canonical format)."""
     try:
@@ -119,7 +118,6 @@ def parse_junit_xml(content: str) -> ParsedTestSuite:
         duration_seconds=total_duration,
     )
 
-
 def parse_pytest_json(content: str) -> ParsedTestSuite:
     """Parse pytest JSON output (pytest-json-report format)."""
     try:
@@ -195,7 +193,6 @@ def parse_pytest_json(content: str) -> ParsedTestSuite:
         duration_seconds=data.get("duration", sum(t.duration_seconds for t in tests)),
     )
 
-
 def parse_go_test_json(content: str) -> ParsedTestSuite:
     """Parse Go test JSON output (go test -json)."""
     tests: dict[str, ParsedTestCase] = {}
@@ -260,7 +257,6 @@ def parse_go_test_json(content: str) -> ParsedTestSuite:
         duration_seconds=total_duration,
     )
 
-
 def parse_tap(content: str) -> ParsedTestSuite:
     """Parse TAP (Test Anything Protocol) format."""
     tests: list[ParsedTestCase] = []
@@ -298,7 +294,6 @@ def parse_tap(content: str) -> ParsedTestSuite:
         errors=0,
         duration_seconds=0,
     )
-
 
 def auto_parse(content: str, runner: str | None = None) -> ParsedTestSuite:  # noqa: ARG001
     """Auto-detect format and parse.

@@ -11,7 +11,6 @@ from coderecon.index._internal.ignore import (
     matches_glob,
 )
 
-
 class TestPrunableDirs:
     """Tests for PRUNABLE_DIRS constant."""
 
@@ -25,7 +24,6 @@ class TestPrunableDirs:
         assert ".git" in PRUNABLE_DIRS
         assert "__pycache__" in PRUNABLE_DIRS
         assert ".venv" in PRUNABLE_DIRS
-
 
 class TestMatchesGlob:
     """Tests for matches_glob helper."""
@@ -45,7 +43,6 @@ class TestMatchesGlob:
         """Should return False for non-matches."""
         assert matches_glob("test.py", "*.js") is False
         assert matches_glob("other.py", "test.py") is False
-
 
 class TestIgnoreChecker:
     """Tests for IgnoreChecker class."""
@@ -175,7 +172,6 @@ class TestIgnoreChecker:
         checker = IgnoreChecker(tmp_path)
         outside_path = tmp_path.parent / "outside.py"
         assert checker.should_ignore(outside_path)
-
 
 class TestIgnoreCheckerEmpty:
     """Tests for IgnoreChecker.empty() and load_ignore_file() streaming API."""

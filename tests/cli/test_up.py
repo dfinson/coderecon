@@ -10,7 +10,6 @@ from coderecon.cli.main import cli
 
 runner = CliRunner()
 
-
 class TestUpCommand:
     """recon up command tests."""
 

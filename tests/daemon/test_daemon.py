@@ -9,7 +9,6 @@ from coderecon.config.models import IndexerConfig
 from coderecon.daemon.concurrency import FreshnessGate
 from coderecon.daemon.indexer import BackgroundIndexer, IndexerState
 
-
 class TestBackgroundIndexer:
     """Tests for BackgroundIndexer."""
     def test_given_indexer_when_start_then_state_is_idle(self) -> None:

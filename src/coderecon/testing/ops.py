@@ -63,9 +63,7 @@ log = structlog.get_logger(__name__)
 
 _STDERR_TRUNCATION_CHARS = 2000  # cap stderr in diagnostics to avoid response bloat
 
-
 # Environment Detection
-
 
 def detect_python_venv(workspace_root: Path) -> Path | None:
     """Detect Python virtual environment in workspace."""
@@ -98,10 +96,8 @@ def get_python_executable(workspace_root: Path) -> str:
             return str(unix_python)
     return "python"
 
-
 # Cache for coverage tool detection - keyed by (workspace_root, runner_pack_id)
 _coverage_tools_cache: dict[tuple[Path, str], dict[str, bool]] = {}
-
 
 def clear_coverage_tools_cache() -> None:
     """Clear the coverage tools cache. Useful for testing."""
@@ -184,9 +180,7 @@ def _default_parallelism() -> int:
     # Use 2x CPU count for I/O-bound test execution, capped at reasonable max
     return min(cpu_count * 2, 16)
 
-
 # Workspace Detection
-
 
 @dataclass
 class DetectedWorkspace:
@@ -345,9 +339,7 @@ def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
             seen[key] = ws
     return list(seen.values())
 
-
 # TestOps - Main Implementation
-
 
 def _os_script_path(unix_path: str) -> str:
     """Convert Unix script path to OS-appropriate form.

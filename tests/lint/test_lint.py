@@ -22,7 +22,6 @@ from coderecon.lint.ops import (
 )
 from coderecon.lint.tools import LintTool
 
-
 def create_mock_coordinator() -> MagicMock:
     """Create a mock IndexCoordinatorEngine for testing."""
     coordinator = MagicMock()
@@ -33,11 +32,9 @@ def create_mock_coordinator() -> MagicMock:
     coordinator.get_lint_tools = AsyncMock(return_value=[])
     return coordinator
 
-
 # =============================================================================
 # Model Tests
 # =============================================================================
-
 
 class TestLintTimeoutConstant:
     """Tests for LINT_TIMEOUT_SECONDS constant."""
@@ -214,7 +211,6 @@ class TestLintResult:
 # Registry Tests
 # =============================================================================
 
-
 class TestRegistry:
     def test_registry_has_tools(self) -> None:
         tools = registry.all()
@@ -309,7 +305,6 @@ class TestLintTool:
 # =============================================================================
 # Parser Tests
 # =============================================================================
-
 
 class TestSeverityFromStr:
     def test_error_variants(self) -> None:
@@ -701,11 +696,9 @@ b.ts(2,2): error TS2: msg2"""
         assert parsers.parse_sqlfluff("not json", "").diagnostics == []
         assert parsers.parse_sqlfluff("{}", "").diagnostics == []  # Missing results
 
-
 # =============================================================================
 # Agentic Hint Tests
 # =============================================================================
-
 
 class TestAgenticHint:
     def test_generate_hint_python(self) -> None:
@@ -747,7 +740,6 @@ class TestAgenticHint:
 # =============================================================================
 # LintOps Tests
 # =============================================================================
-
 
 class TestLintOps:
     @pytest.mark.asyncio

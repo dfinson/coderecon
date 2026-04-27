@@ -85,7 +85,6 @@ _SKIP_PREFIXES: tuple[str, ...] = (
     "~=",
 )
 
-
 def _is_config_file(path: str) -> bool:
     """Check if a file path is a config file we should scan."""
     lower = path.lower()
@@ -103,7 +102,6 @@ def _is_config_file(path: str) -> bool:
         return ext in _CONFIG_EXTENSIONS
 
     return False
-
 
 def _extract_strings(content: str) -> list[tuple[str, int]]:
     """Extract quoted strings from file content with line numbers.
@@ -133,7 +131,6 @@ def _extract_strings(content: str) -> list[tuple[str, int]]:
                 results.append((value, line))
 
     return results
-
 
 def _extract_makefile_tokens(content: str) -> list[tuple[str, int]]:
     """Extract unquoted path-like tokens from Makefile content.
@@ -195,19 +192,16 @@ def _extract_makefile_tokens(content: str) -> list[tuple[str, int]]:
 
     return results
 
-
 def _is_makefile(path: str) -> bool:
     """Check if a file path is a Makefile variant."""
     basename = path.rsplit("/", 1)[-1].lower()
     name_no_ext = basename.split(".")[0]
     return name_no_ext in _CONFIG_BASENAMES or basename in _CONFIG_BASENAMES
 
-
 def _make_import_uid(config_path: str, resolved_path: str, line: int) -> str:
     """Generate a deterministic import UID for a config file ref."""
     raw = f"config_ref:{config_path}:{line}:{resolved_path}"
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
-
 
 def _try_resolve(
     value: str,
@@ -254,7 +248,6 @@ def _try_resolve(
 
     return None
 
-
 def _resolve_module_path(dotted: str, path_set: frozenset[str]) -> str | None:
     """Convert a dotted module path to a file path and check existence.
 
@@ -285,7 +278,6 @@ def _resolve_module_path(dotted: str, path_set: frozenset[str]) -> str | None:
         return src_init
 
     return None
-
 
 def resolve_config_file_refs(
     db: Database,

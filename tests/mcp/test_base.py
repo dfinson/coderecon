@@ -5,7 +5,6 @@ from pydantic import ValidationError
 
 from coderecon.mcp.tools.base import BaseParams
 
-
 class TestBaseParams:
     """Tests for BaseParams base class."""
 

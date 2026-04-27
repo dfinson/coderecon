@@ -18,7 +18,6 @@ log = structlog.get_logger(__name__)
 
 _LABEL_MAP = {0: GateLabel.OK, 1: GateLabel.UNSAT, 2: GateLabel.BROAD, 3: GateLabel.AMBIG}
 
-
 class Gate:
     """LightGBM multiclass classifier for query gating."""
 
@@ -48,7 +47,6 @@ class Gate:
         probs = self._model.predict(X)[0]
         class_idx = int(np.argmax(probs))
         return _LABEL_MAP.get(class_idx, GateLabel.OK)
-
 
 def load_gate(model_path: Path | None = None) -> Gate:
     """Load the gate model from package data or an explicit path."""

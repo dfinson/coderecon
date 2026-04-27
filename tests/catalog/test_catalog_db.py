@@ -9,13 +9,11 @@ import pytest
 from coderecon.catalog.db import CatalogDB
 from coderecon.catalog.models import RepoEntry, WorktreeEntry
 
-
 @pytest.fixture
 def catalog(tmp_path: Path) -> CatalogDB:
     db = CatalogDB(home=tmp_path / ".coderecon")
     db.create_all()
     return db
-
 
 class TestCatalogDB:
     def test_creates_home_dir(self, tmp_path: Path) -> None:

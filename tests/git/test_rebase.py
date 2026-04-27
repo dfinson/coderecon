@@ -12,7 +12,6 @@ from coderecon.git import (
     RebasePlan,
 )
 
-
 class TestRebasePlan:
     """Tests for rebase_plan() method."""
     def test_given_linear_history_when_plan_then_returns_picks(

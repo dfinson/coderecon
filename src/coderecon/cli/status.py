@@ -14,7 +14,6 @@ from coderecon.daemon.global_lifecycle import is_global_server_running, read_glo
 
 log = structlog.get_logger(__name__)
 
-
 @click.command()
 @click.argument("path", default=None, required=False, type=click.Path(exists=True, path_type=Path))
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")

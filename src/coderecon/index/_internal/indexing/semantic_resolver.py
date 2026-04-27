@@ -46,7 +46,6 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-
 # Minimum CE score to persist a semantic edge.  MiniLM-L6-v2 logits
 # are unbounded; typical relevant pairs score 2-6, irrelevant <0.
 # Start conservative — false edges are worse than missing edges.
@@ -60,11 +59,9 @@ _CANDIDATE_POOL = 50
 # Batch size for CE scoring.
 _CE_BATCH = 64
 
-
 def _load_all_vecs(db: Database) -> dict[str, dict[int, float]]:
     """Load all SPLADE vectors into memory (uses binary cache when available)."""
     return load_all_vectors_fast(db)
-
 
 def _batch_splade_retrieve(
     queries: list[str],
@@ -139,7 +136,6 @@ def _batch_splade_retrieve(
         scored.sort(key=lambda x: -x[1])
         results.append(scored[:pool_size])
     return results
-
 
 def resolve_unresolved_refs(db: Database, *, file_ids: list[int] | None = None) -> int:
     """Find unresolved refs and attempt SPLADE+CE resolution.
@@ -244,7 +240,6 @@ def resolve_unresolved_refs(db: Database, *, file_ids: list[int] | None = None) 
     log.info("semantic_resolver.refs_done resolved=%d total=%d elapsed=%.1fs",
              resolved, len(unresolved), elapsed)
     return resolved
-
 
 def resolve_unresolved_accesses(db: Database, *, file_ids: list[int] | None = None) -> int:
     """Find unresolved member access chains and attempt SPLADE+CE resolution.
@@ -371,7 +366,6 @@ def resolve_unresolved_accesses(db: Database, *, file_ids: list[int] | None = No
     log.info("semantic_resolver.accesses_done resolved=%d total=%d elapsed=%.1fs pairs=%d",
              resolved, len(unresolved), elapsed, len(ce_pairs))
     return resolved
-
 
 def resolve_unresolved_shapes(db: Database, *, file_ids: list[int] | None = None) -> int:
     """Find unresolved receiver shapes and attempt SPLADE+CE type matching.

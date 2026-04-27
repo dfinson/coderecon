@@ -135,16 +135,13 @@ DEFAULT_PRUNABLE_DIRS: frozenset[str] = frozenset(
 
 PRUNABLE_DIRS: frozenset[str] = HARDCODED_DIRS | DEFAULT_PRUNABLE_DIRS
 
-
 def is_hardcoded_dir(dirname: str) -> bool:
     """Check if directory is hardcoded (never traversable, not overridable)."""
     return dirname in HARDCODED_DIRS
 
-
 def is_default_prunable(dirname: str) -> bool:
     """Check if directory is prunable by default (but user can override)."""
     return dirname in DEFAULT_PRUNABLE_DIRS
-
 
 UNIVERSAL_EXCLUDE_GLOBS: tuple[str, ...] = tuple(f"**/{d}/**" for d in PRUNABLE_DIRS)
 
@@ -394,10 +391,8 @@ pdm.lock
 **/*.pb.py
 """
 
-
 def generate_reconignore_template() -> str:
     return _CPLIGNORE
-
 
 __all__ = [
     "HARDCODED_DIRS",

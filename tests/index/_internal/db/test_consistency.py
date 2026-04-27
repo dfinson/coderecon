@@ -12,9 +12,7 @@ from coderecon.index._internal.db.consistency import (
     check_consistency,
 )
 
-
 # ── Data class tests ──────────────────────────────────────────────
-
 
 class TestSignalGap:
     def test_basic_construction(self) -> None:
@@ -23,7 +21,6 @@ class TestSignalGap:
         assert gap.reason == "missing"
         assert gap.file_ids == [1, 2]
         assert gap.gap_count == 5
-
 
 class TestConsistencyReport:
     def test_empty_report_is_consistent(self) -> None:
@@ -41,9 +38,7 @@ class TestConsistencyReport:
         assert report.consistent is False
         assert report.total_gaps == 10
 
-
 # ── check_consistency tests ───────────────────────────────────────
-
 
 class TestCheckConsistency:
     def test_all_consistent_returns_empty(self) -> None:
@@ -101,9 +96,7 @@ class TestCheckConsistency:
         assert report.total_gaps == 6
         assert len(report.gaps) == 2
 
-
 # ── backfill_gaps tests ───────────────────────────────────────────
-
 
 class TestBackfillGaps:
     def test_consistent_report_skips(self) -> None:

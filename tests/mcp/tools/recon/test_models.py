@@ -17,9 +17,7 @@ from coderecon.mcp.tools.recon.models import (
     _is_test_file,
 )
 
-
 # ── _is_test_file ────────────────────────────────────────────────
-
 
 class TestIsTestFile:
     def test_test_prefix(self):
@@ -44,9 +42,7 @@ class TestIsTestFile:
         # "testing.py" does NOT match — it doesn't start with "test_"
         assert _is_test_file("src/testing.py") is False
 
-
 # ── _is_barrel_file ──────────────────────────────────────────────
-
 
 class TestIsBarrelFile:
     def test_python_init(self):
@@ -67,9 +63,7 @@ class TestIsBarrelFile:
     def test_tsx_index(self):
         assert _is_barrel_file("components/index.tsx") is True
 
-
 # ── _classify_artifact ──────────────────────────────────────────
-
 
 class TestClassifyArtifact:
     def test_python_source(self):
@@ -109,9 +103,7 @@ class TestClassifyArtifact:
         # A .json file inside tests/ → test, not config
         assert _classify_artifact("tests/fixtures/data.json") == ArtifactKind.test
 
-
 # ── _extract_intent ──────────────────────────────────────────────
-
 
 class TestExtractIntent:
     def test_debug_intent(self):
@@ -144,9 +136,7 @@ class TestExtractIntent:
     def test_case_insensitive(self):
         assert _extract_intent("FIX THE BUG") == TaskIntent.debug
 
-
 # ── ArtifactKind ──────────────────────────────────────────────────
-
 
 class TestArtifactKind:
     def test_is_str_enum(self):
@@ -157,18 +147,14 @@ class TestArtifactKind:
         expected = {"code", "test", "config", "doc", "build"}
         assert {k.value for k in ArtifactKind} == expected
 
-
 # ── TaskIntent ───────────────────────────────────────────────────
-
 
 class TestTaskIntent:
     def test_all_values(self):
         expected = {"debug", "implement", "refactor", "understand", "test", "unknown"}
         assert {k.value for k in TaskIntent} == expected
 
-
 # ── EvidenceRecord ───────────────────────────────────────────────
-
 
 class TestEvidenceRecord:
     def test_basic_creation(self):
@@ -180,9 +166,7 @@ class TestEvidenceRecord:
         ev = EvidenceRecord(category="explicit", detail="agent provided")
         assert ev.score == 0.0
 
-
 # ── HarvestCandidate properties ──────────────────────────────────
-
 
 class TestHarvestCandidate:
     def test_evidence_axes_none(self):
@@ -288,9 +272,7 @@ class TestHarvestCandidate:
         c = HarvestCandidate(def_uid="uid1", hub_score=7, matched_terms={"a", "b"})
         assert c.has_strong_single_axis is False
 
-
 # ── ParsedTask ───────────────────────────────────────────────────
-
 
 class TestParsedTask:
     def test_frozen(self):

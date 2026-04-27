@@ -30,7 +30,6 @@ log = structlog.get_logger(__name__)
 # Tier 2 debounce: batch rapid changes before running tests
 _TIER2_DEBOUNCE_SEC = 2.0
 
-
 @dataclass
 class AnalysisPipeline:
     """Background analysis that runs after indexing.

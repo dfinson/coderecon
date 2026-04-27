@@ -24,7 +24,6 @@ from coderecon.index.models import CandidateContext, LanguageFamily
 if TYPE_CHECKING:
     from coderecon.index.models import Context
 
-
 @dataclass
 class FileRoute:
     """Routing result for a single file."""
@@ -35,7 +34,6 @@ class FileRoute:
     routed: bool = False
     reason: str = ""
 
-
 @dataclass
 class RoutingResult:
     """Result of routing files to contexts."""
@@ -43,7 +41,6 @@ class RoutingResult:
     routes: list[FileRoute] = field(default_factory=list)
     unrouted_count: int = 0
     routed_count: int = 0
-
 
 class ContextRouter:
     """
@@ -268,7 +265,6 @@ class ContextRouter:
                 return ctx
 
         return None
-
 
 def route_single_file(file_path: str, contexts: list[CandidateContext]) -> FileRoute | None:
     """

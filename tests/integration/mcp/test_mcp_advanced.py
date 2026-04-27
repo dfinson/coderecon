@@ -16,7 +16,6 @@ from coderecon.mutation.ops import Edit, MutationOps
 
 pytestmark = pytest.mark.integration
 
-
 def _make_coordinator(repo_path: Path) -> IndexCoordinatorEngine:
     """Create an IndexCoordinatorEngine with proper paths."""
     coderecon_dir = repo_path / ".recon"
@@ -25,11 +24,9 @@ def _make_coordinator(repo_path: Path) -> IndexCoordinatorEngine:
     tantivy_path = coderecon_dir / "tantivy"
     return IndexCoordinatorEngine(repo_path, db_path, tantivy_path)
 
-
 def _noop_progress(indexed: int, total: int, by_ext: dict[str, int], phase: str = "") -> None:
     """No-op progress callback."""
     pass
-
 
 class TestSearchAfterMutation:
     """Tests that search reflects file mutations."""
@@ -46,7 +43,6 @@ class TestSearchAfterMutation:
         # SearchResponse has .results attribute which is a list
         assert result is not None
         assert isinstance(result.results, list)
-
 
 class TestGitAfterMutation:
     """Tests git operations after file mutations."""
@@ -120,7 +116,6 @@ class TestGitAfterMutation:
         status = git_ops.status()
         assert "feature.py" not in str(status)
 
-
 class TestMapRepoAfterInit:
     """Tests map_repo after initialization."""
 
@@ -135,7 +130,6 @@ class TestMapRepoAfterInit:
         # MapRepoResult has structure which contains tree
         assert result is not None
         assert result.structure is not None
-
 
 class TestFileOpsWithGit:
     """Tests file operations with git tracking."""
@@ -162,7 +156,6 @@ class TestFileOpsWithGit:
 
         # Should return something (possibly error or marker)
         assert len(result.files) == 1
-
 
 class TestMultiFileOperations:
     """Tests involving multiple files."""

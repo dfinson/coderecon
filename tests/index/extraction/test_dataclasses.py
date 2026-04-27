@@ -16,7 +16,6 @@ from coderecon.index._internal.extraction import (
     TypeMemberData,
 )
 
-
 class TestTypeAnnotationData:
     """Tests for TypeAnnotationData dataclass."""
 
@@ -95,7 +94,6 @@ class TestTypeAnnotationData:
         assert data.start_line == 10
         assert data.start_col == 4
 
-
 class TestTypeMemberData:
     """Tests for TypeMemberData dataclass."""
 
@@ -173,7 +171,6 @@ class TestTypeMemberData:
         assert data.parent_kind == "struct"
         assert data.start_line == 5
         assert data.start_col == 4
-
 
 class TestMemberAccessData:
     """Tests for MemberAccessData dataclass."""
@@ -264,7 +261,6 @@ class TestMemberAccessData:
         assert data.start_line == 5
         assert data.end_line == 5
 
-
 class TestInterfaceImplData:
     """Tests for InterfaceImplData dataclass."""
 
@@ -303,7 +299,6 @@ class TestInterfaceImplData:
         )
         assert data.impl_style == "inferred"
         assert data.start_line == 10
-
 
 class TestReceiverShapeData:
     """Tests for ReceiverShapeData dataclass."""

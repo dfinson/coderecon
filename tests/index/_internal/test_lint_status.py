@@ -8,14 +8,12 @@ import pytest
 
 from coderecon.index._internal.db import Database, create_additional_indexes
 
-
 @pytest.fixture
 def lint_db(tmp_path: Path) -> Database:
     db = Database(tmp_path / "test.db")
     db.create_all()
     create_additional_indexes(db.engine)
     return db
-
 
 class TestLintStatus:
     def test_persist_and_read(self, lint_db: Database) -> None:

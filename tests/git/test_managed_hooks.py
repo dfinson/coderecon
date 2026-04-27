@@ -7,14 +7,12 @@ from pathlib import Path
 
 import pytest
 
-
 @pytest.fixture
 def git_repo(tmp_path: Path) -> Path:
     """Create a fake git repo with hooks dir."""
     hooks_dir = tmp_path / ".git" / "hooks"
     hooks_dir.mkdir(parents=True)
     return tmp_path
-
 
 class TestInstallHooks:
     def test_installs_hooks(self, git_repo: Path) -> None:
@@ -59,7 +57,6 @@ class TestInstallHooks:
         installed = install_hooks(tmp_path)
         assert installed == []
 
-
 class TestUninstallHooks:
     def test_removes_managed_hooks(self, git_repo: Path) -> None:
         from coderecon.git._internal.managed_hooks import install_hooks, uninstall_hooks
@@ -80,7 +77,6 @@ class TestUninstallHooks:
         removed = uninstall_hooks(git_repo)
         assert "post-checkout" not in removed
         assert hook.exists()
-
 
 class TestHooksInstalled:
     def test_detects_installed(self, git_repo: Path) -> None:

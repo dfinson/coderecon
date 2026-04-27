@@ -15,14 +15,11 @@ log = structlog.get_logger(__name__)
 if TYPE_CHECKING:
     from coderecon.index.models import DefFact
 
-
 # Low-level helpers
-
 
 def _compute_sha256(full_path: Path) -> str:
     """Compute SHA256 of file contents."""
     return hashlib.sha256(full_path.read_bytes()).hexdigest()
-
 
 def _read_lines(full_path: Path, start: int, end: int) -> str:
     """Read lines [start, end] (1-indexed, inclusive) from a file."""
@@ -35,7 +32,6 @@ def _read_lines(full_path: Path, start: int, end: int) -> str:
     s = max(0, start - 1)
     e = min(len(lines), end)
     return "".join(lines[s:e])
-
 
 def _def_signature_text(d: DefFact) -> str:
     """Build a compact one-line signature for a DefFact."""

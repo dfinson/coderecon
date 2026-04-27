@@ -7,7 +7,6 @@ from contextlib import AbstractContextManager, contextmanager
 
 from coderecon.git.errors import AuthenticationError, GitError, RemoteError
 
-
 class ErrorMapper:
     """Maps subprocess git errors to domain errors."""
 
@@ -24,7 +23,6 @@ class ErrorMapper:
             if remote:
                 raise RemoteError(remote, str(e)) from e
             raise
-
 
 def git_operation(operation: str, *, remote: str | None = None) -> AbstractContextManager[None]:
     """Decorator for consistent exception translation."""

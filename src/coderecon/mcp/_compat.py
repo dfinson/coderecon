@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from fastmcp import FastMCP
     from fastmcp.tools.function_tool import FunctionTool
 
-
 def get_tools_sync(mcp: FastMCP) -> dict[str, FunctionTool]:
     """Get all registered tools as a {name: FunctionTool} dict.
 

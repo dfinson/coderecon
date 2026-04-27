@@ -14,7 +14,6 @@ from coderecon.daemon.dispatch import (
     dispatch,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -24,13 +23,11 @@ def _make_registry_mock() -> MagicMock:
     registry.list_repos.return_value = []
     return registry
 
-
 def _make_daemon_mock(*, slot_names: list[str] | None = None) -> MagicMock:
     daemon = MagicMock()
     daemon.slot_names = slot_names or []
     daemon.get_slot.return_value = None
     return daemon
-
 
 # ---------------------------------------------------------------------------
 # Response helpers
@@ -51,7 +48,6 @@ class TestResponseHelpers:
         assert resp["id"] == "r2"
         assert resp["error"]["code"] == "FAIL"
         assert resp["error"]["message"] == "broken"
-
 
 # ---------------------------------------------------------------------------
 # Management dispatch
@@ -106,7 +102,6 @@ class TestManagementMethods:
         assert resp["result"]["repo"] == "myrepo"
         assert resp["result"]["worktree"] == "main"
 
-
 # ---------------------------------------------------------------------------
 # Tool dispatch
 # ---------------------------------------------------------------------------
@@ -143,7 +138,6 @@ class TestToolDispatch:
             })
         assert resp["error"]["code"] == "METHOD_NOT_FOUND"
 
-
 class TestDescribeDispatch:
     @pytest.mark.asyncio
     async def test_describe_no_repo_required(self) -> None:
@@ -156,7 +150,6 @@ class TestDescribeDispatch:
         })
         # Should get a result, not an INVALID_PARAMS error
         assert "error" not in resp or resp.get("error", {}).get("code") != "INVALID_PARAMS"
-
 
 class TestUnregisterDispatch:
     @pytest.mark.asyncio
@@ -177,7 +170,6 @@ class TestUnregisterDispatch:
             "id": "r1", "method": "unregister", "params": {"path": "/tmp/repo"},
         })
         assert resp["result"]["removed"] is True
-
 
 class TestReindexDispatch:
     @pytest.mark.asyncio

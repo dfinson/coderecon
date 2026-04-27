@@ -41,7 +41,6 @@ DIFF_CHANGES_MAX = 100
 INLINE_CAP_BYTES = 30_000
 """Default inline cap for delivery envelope. Fits within VS Code's inline display."""
 
-
 MAX_SPAN_LINES = 500
 """Maximum lines per span in read_source."""
 
@@ -53,7 +52,6 @@ MAX_TARGETS_PER_CALL = 20
 
 SMALL_FILE_THRESHOLD = 1_000
 """Files under this byte count skip two-phase confirmation in read_file_full."""
-
 
 EPOCH_POLL_MS = 10
 """Polling interval (ms) for epoch await. Tight loop, not configurable."""

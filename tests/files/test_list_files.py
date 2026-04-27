@@ -19,7 +19,6 @@ import pytest
 
 from coderecon.files.ops import FileOps
 
-
 @pytest.fixture
 def temp_repo(tmp_path: Path) -> Path:
     """Create a temporary repository structure."""
@@ -48,11 +47,9 @@ def temp_repo(tmp_path: Path) -> Path:
 
     return tmp_path
 
-
 @pytest.fixture
 def file_ops(temp_repo: Path) -> FileOps:
     return FileOps(temp_repo)
-
 
 class TestBasicListing:
     """Test basic directory listing."""
@@ -102,7 +99,6 @@ class TestBasicListing:
             elif entry.type == "directory" and found_file:
                 pytest.fail("Directory found after file - sorting broken")
 
-
 class TestPatternFiltering:
     """Test glob pattern filtering."""
 
@@ -132,7 +128,6 @@ class TestPatternFiltering:
         assert "test_main.py" in names
         assert "conftest.py" not in names
 
-
 class TestRecursiveListing:
     """Test recursive directory listing."""
 
@@ -151,7 +146,6 @@ class TestRecursiveListing:
         paths = [e.path for e in result.entries]
         assert not any(".hidden_dir" in p for p in paths)
         assert not any("secret.txt" in p for p in paths)
-
 
 class TestHiddenFiles:
     """Test hidden file handling."""
@@ -178,7 +172,6 @@ class TestHiddenFiles:
 
         paths = [e.path for e in result.entries]
         assert any("secret.txt" in p for p in paths)
-
 
 class TestMetadata:
     """Test metadata inclusion."""
@@ -215,7 +208,6 @@ class TestMetadata:
             assert d.size is None
             assert d.modified_at is None
 
-
 class TestFileTypeFilter:
     """Test file type filtering."""
 
@@ -241,7 +233,6 @@ class TestFileTypeFilter:
         assert "file" in types
         assert "directory" in types
 
-
 class TestLimitAndTruncation:
     """Test limit and truncation."""
 
@@ -264,7 +255,6 @@ class TestLimitAndTruncation:
         result_full = file_ops.list_files(recursive=True, limit=1000)
 
         assert result_limited.total == result_full.total
-
 
 class TestEdgeCases:
     """Test edge cases."""

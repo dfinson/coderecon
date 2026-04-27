@@ -16,9 +16,7 @@ from coderecon.core.gpu import (
     probe_gpu,
 )
 
-
 # ── GpuProbeResult property tests ────────────────────────────────
-
 
 class TestGpuProbeResult:
     def test_empty_result_has_no_gpu(self) -> None:
@@ -79,9 +77,7 @@ class TestGpuProbeResult:
         r = GpuProbeResult(detected_gpus=[GpuVendor.NVIDIA, GpuVendor.AMD])
         assert r.provider_name == "CUDA"
 
-
 # ── Hardware detection tests ─────────────────────────────────────
-
 
 class TestCheckNvidiaGpu:
     def test_nvidia_smi_not_found(self) -> None:
@@ -128,7 +124,6 @@ class TestCheckNvidiaGpu:
         ):
             assert _check_nvidia_gpu() is False
 
-
 class TestCheckAmdGpu:
     def test_rocm_smi_not_found(self) -> None:
         with patch("coderecon.core.gpu.shutil.which", return_value=None):
@@ -154,9 +149,7 @@ class TestCheckAmdGpu:
         ):
             assert _check_amd_gpu() is False
 
-
 # ── probe_gpu integration tests ──────────────────────────────────
-
 
 class TestProbeGpu:
     def test_no_gpu_no_ort(self) -> None:

@@ -30,7 +30,6 @@ from coderecon.git import (
     TagInfo,
 )
 
-
 class TestGitOpsInit:
     def test_init_valid_repo(self, temp_repo: Path) -> None:
         ops = GitOps(temp_repo)

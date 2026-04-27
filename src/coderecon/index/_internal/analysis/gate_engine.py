@@ -20,7 +20,6 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-
 @dataclass(frozen=True, slots=True)
 class GateViolation:
     """A governance rule violation."""
@@ -29,7 +28,6 @@ class GateViolation:
     level: str  # "error", "warning", "info"
     message: str
     details: dict[str, object] | None = None
-
 
 @dataclass(slots=True)
 class GateResult:
@@ -70,7 +68,6 @@ class GateResult:
                 for v in self.violations
             ],
         }
-
 
 def evaluate_gates(
     governance: GovernanceConfig,
@@ -124,7 +121,6 @@ def evaluate_gates(
 
     return result
 
-
 def _check_coverage_floor(
     engine: Engine,
     rule: object,
@@ -155,7 +151,6 @@ def _check_coverage_floor(
     except SQLAlchemyError:
         log.debug("gate.coverage_floor.failed", exc_info=True)
 
-
 def _check_lint_clean(
     rule: object,
     result: GateResult,
@@ -170,7 +165,6 @@ def _check_lint_clean(
             message=rule.message or "Lint errors must be resolved.",
             details={"diagnostics": lint_diagnostics},
         ))
-
 
 def _check_no_new_cycles(
     engine: Engine,
@@ -213,7 +207,6 @@ def _check_no_new_cycles(
     except SQLAlchemyError:
         log.debug("gate.no_new_cycles.failed", exc_info=True)
 
-
 def _check_test_debt(
     rule: object,
     result: GateResult,
@@ -228,7 +221,6 @@ def _check_test_debt(
             message=rule.message or "Source files changed without test updates.",
             details={"missing_updates": len(missing), "files": missing[:5]},
         ))
-
 
 def _check_coverage_regression(
     engine: Engine,
@@ -268,7 +260,6 @@ def _check_coverage_regression(
                 ))
     except SQLAlchemyError:
         log.debug("gate.coverage_regression.failed", exc_info=True)
-
 
 def _check_centrality_impact(
     engine: Engine,

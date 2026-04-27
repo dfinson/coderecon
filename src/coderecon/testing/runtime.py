@@ -35,9 +35,7 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-
 # Database Model: ContextRuntime
-
 
 class ContextRuntime(SQLModel, table=True):
     """Execution environment captured at context discovery time.
@@ -93,7 +91,6 @@ class ContextRuntime(SQLModel, table=True):
         self.env_vars_json = json.dumps(env_vars) if env_vars else None
 
 # Non-Table Models: Tool Configuration
-
 
 @dataclass
 class ToolConfig:
@@ -181,7 +178,6 @@ RuntimeResolutionMethod = Literal[
     "path_detected",  # Found executable in PATH
     "not_found",  # Could not find runtime
 ]
-
 
 @dataclass
 class RuntimeResolutionResult:
@@ -599,7 +595,6 @@ class RuntimeResolver:
         return self._run_version_check([ruby_exe, "--version"], _parse)
 
 # Execution Context Builder
-
 
 class ExecutionContextBuilder:
     """Builds RuntimeExecutionContext from Context and ContextRuntime.

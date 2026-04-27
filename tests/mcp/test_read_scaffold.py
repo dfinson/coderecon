@@ -17,7 +17,6 @@ import pytest
 # Fake DefFact for tree builder tests
 # =============================================================================
 
-
 class FakeDef:
     """Minimal stand-in for DefFact rows used by _build_symbol_tree."""
     def __init__(
@@ -47,7 +46,6 @@ class FakeDef:
 # =============================================================================
 # _build_symbol_tree tests
 # =============================================================================
-
 
 class TestBuildSymbolTree:
     """Test the _build_symbol_tree helper from files.py."""
@@ -221,7 +219,6 @@ class TestBuildSymbolTree:
 # _build_unindexed_fallback tests
 # =============================================================================
 
-
 class TestBuildUnindexedFallback:
     """Test the _build_unindexed_fallback helper."""
     def _import_fallback(self) -> Any:
@@ -262,7 +259,6 @@ class TestBuildUnindexedFallback:
 # Fake ImportFact for lite scaffold tests
 # =============================================================================
 
-
 class FakeImport:
     """Minimal stand-in for ImportFact rows used by _build_lite_scaffold."""
     def __init__(
@@ -278,7 +274,6 @@ class FakeImport:
 # =============================================================================
 # _build_lite_scaffold tests
 # =============================================================================
-
 
 class TestBuildLiteScaffold:
     """Test the _build_lite_scaffold helper from files.py."""
@@ -441,7 +436,6 @@ class TestBuildLiteScaffold:
 # Structural indexer: new DefFact fields persisted
 # =============================================================================
 
-
 class TestDefFactNewFields:
     """Test that new DefFact fields are populated by the structural indexer."""
     def test_def_dict_has_scaffold_fields(self, tmp_path: Path) -> None:
@@ -478,11 +472,9 @@ def helper(x: int) -> str:
         assert bare_def.get("decorators_json") is None
         assert bare_def.get("docstring") is None
 
-
 # =============================================================================
 # Structural indexer: ImportFact line numbers persisted
 # =============================================================================
-
 
 class TestImportFactLineNumbers:
     """Test that import line numbers are persisted in the indexer."""

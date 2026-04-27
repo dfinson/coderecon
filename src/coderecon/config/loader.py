@@ -43,7 +43,6 @@ from coderecon.core.errors import ConfigError
 
 GLOBAL_CONFIG_PATH = Path("~/.config/coderecon/config.yaml").expanduser()
 
-
 def _load_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -53,7 +52,6 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     except yaml.YAMLError as e:
         raise ConfigError.parse_error(str(path), str(e)) from e
 
-
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     result = base.copy()
     for key, value in override.items():
@@ -62,7 +60,6 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
         else:
             result[key] = value
     return result
-
 
 class _YamlSource(PydanticBaseSettingsSource):
     """Settings source that reads from pre-loaded YAML config."""
@@ -81,7 +78,6 @@ class _YamlSource(PydanticBaseSettingsSource):
 
     def __call__(self) -> dict[str, Any]:
         return self._yaml_config
-
 
 def _make_settings_class(yaml_config: dict[str, Any]) -> type[BaseSettings]:
     """Create a Settings class with instance-based YAML source (thread-safe)."""
@@ -120,10 +116,8 @@ def _make_settings_class(yaml_config: dict[str, Any]) -> type[BaseSettings]:
 
     return CodeReconSettings
 
-
 # Alias for backward compatibility - use CodeReconConfig from models for type hints
 CodeReconSettings = _make_settings_class({})
-
 
 def load_config(repo_root: Path | None = None, **kwargs: Any) -> CodeReconConfig:
     """Load config: defaults < user config < state < env vars < kwargs.
@@ -175,7 +169,6 @@ def load_config(repo_root: Path | None = None, **kwargs: Any) -> CodeReconConfig
         err = e.errors()[0]
         field = ".".join(str(loc) for loc in err["loc"])
         raise ConfigError.invalid_value(field, err.get("input"), err["msg"]) from e
-
 
 def get_index_paths(repo_root: Path) -> tuple[Path, Path]:
     """Get db_path and tantivy_path for a repo, respecting config.index.index_path."""

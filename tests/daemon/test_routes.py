@@ -17,7 +17,6 @@ from starlette.testclient import TestClient
 
 from coderecon.daemon.routes import create_routes
 
-
 class TestCreateRoutes:
     """Tests for create_routes function."""
 
@@ -56,9 +55,6 @@ class TestCreateRoutes:
         routes = create_routes(mock_controller)
         paths = [r.path for r in routes]
         assert "/status" in paths
-
-
-
 
 class TestHealthEndpoint:
     """Tests for /health endpoint."""
@@ -101,7 +97,6 @@ class TestHealthEndpoint:
         response = client.get("/health")
         data = response.json()
         assert "version" in data
-
 
 class TestStatusEndpoint:
     """Tests for /status endpoint."""
@@ -183,7 +178,6 @@ class TestStatusEndpoint:
         response = client.get("/status")
         data = response.json()
         assert data["watcher"]["running"] is False
-
 
 # =============================================================================
 

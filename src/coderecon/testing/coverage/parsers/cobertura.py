@@ -47,7 +47,6 @@ from coderecon.testing.coverage.models import (
     FunctionCoverage,
 )
 
-
 class CoberturaParser:
     """Parser for Cobertura XML format."""
 

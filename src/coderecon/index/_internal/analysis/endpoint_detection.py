@@ -76,7 +76,6 @@ _METHOD_MAP = {
     "handlefunc": "*",
 }
 
-
 @dataclass(frozen=True, slots=True)
 class DetectedEndpoint:
     """An endpoint detected from source code."""
@@ -86,7 +85,6 @@ class DetectedEndpoint:
     url_pattern: str
     line: int
     framework: str | None = None
-
 
 def detect_endpoints_in_source(
     source: str,
@@ -163,7 +161,6 @@ def detect_endpoints_in_source(
 
     return endpoints
 
-
 def persist_endpoints(
     engine: Engine,
     file_id: int,
@@ -210,7 +207,6 @@ def persist_endpoints(
 
     return written
 
-
 def find_endpoint_edges(engine: Engine) -> list[dict[str, str]]:
     """Find server↔client endpoint matches by URL pattern.
 
@@ -240,7 +236,6 @@ def find_endpoint_edges(engine: Engine) -> list[dict[str, str]]:
         }
         for row in rows
     ]
-
 
 def _detect_framework(line: str, language: str) -> str | None:
     """Best-effort framework detection from line content."""

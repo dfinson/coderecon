@@ -9,7 +9,6 @@ from coderecon.index._internal.db import Database, EpochManager
 from coderecon.index._internal.indexing import LexicalIndex
 from coderecon.index.models import RepoState
 
-
 class TestEpochManager:
     """Tests for EpochManager."""
 

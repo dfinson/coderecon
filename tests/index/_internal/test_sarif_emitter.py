@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 
-
 class TestGateResultToSarif:
     def test_empty_result(self) -> None:
         from coderecon.index._internal.analysis.gate_engine import GateResult
@@ -57,7 +56,6 @@ class TestGateResultToSarif:
         # Should be JSON serializable
         json.dumps(sarif)
 
-
 class TestLintDiagnosticsToSarif:
     def test_basic(self) -> None:
         from coderecon.index._internal.analysis.sarif_emitter import lint_diagnostics_to_sarif
@@ -73,7 +71,6 @@ class TestLintDiagnosticsToSarif:
         assert results[0]["level"] == "error"
         assert results[1]["level"] == "warning"
         assert results[0]["locations"][0]["physicalLocation"]["region"]["startLine"] == 10
-
 
 class TestWriteSarif:
     def test_writes_file(self, tmp_path) -> None:

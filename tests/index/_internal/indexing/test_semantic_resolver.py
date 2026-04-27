@@ -9,7 +9,6 @@ from coderecon.index._internal.indexing.semantic_resolver import (
     _batch_splade_retrieve,
 )
 
-
 class TestThresholdConstants:
     """Verify CE threshold constants have sensible values."""
 
@@ -31,7 +30,6 @@ class TestThresholdConstants:
 
     def test_ce_batch_is_reasonable(self):
         assert 1 <= _CE_BATCH <= 256
-
 
 class TestBatchSpladeRetrieve:
     """Test _batch_splade_retrieve with empty/degenerate inputs."""

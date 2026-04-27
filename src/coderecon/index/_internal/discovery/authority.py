@@ -33,7 +33,6 @@ from coderecon.index.models import CandidateContext, LanguageFamily, ProbeStatus
 
 log = structlog.get_logger(__name__)
 
-
 @dataclass
 class AuthorityResult:
     """Result of authority filtering."""

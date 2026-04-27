@@ -23,7 +23,6 @@ from coderecon.index._internal.indexing.config_resolver import (
 # _parse_export_target
 # ---------------------------------------------------------------------------
 
-
 class TestParseExportTarget:
     """Tests for extracting source file path from exports value."""
 
@@ -58,11 +57,9 @@ class TestParseExportTarget:
         assert _parse_export_target(42) is None
         assert _parse_export_target(None) is None
 
-
 # ---------------------------------------------------------------------------
 # _resolve_export_target
 # ---------------------------------------------------------------------------
-
 
 class TestResolveExportTarget:
     """Tests for resolving export target to actual file path."""
@@ -97,11 +94,9 @@ class TestResolveExportTarget:
         paths = {"src/other.ts"}
         assert _resolve_export_target("src/missing", paths) is None
 
-
 # ---------------------------------------------------------------------------
 # build_js_package_exports
 # ---------------------------------------------------------------------------
-
 
 class TestBuildJsPackageExports:
     """Tests for building bare specifier -> file path map."""
@@ -222,11 +217,9 @@ class TestBuildJsPackageExports:
         assert result["@scope/core"] == "packages/core/src/index.ts"
         assert result["@scope/utils"] == "packages/utils/src/index.ts"
 
-
 # ---------------------------------------------------------------------------
 # ImportPathResolver._resolve_js with exports
 # ---------------------------------------------------------------------------
-
 
 class TestResolveJsBareSpecifier:
     """Tests for bare specifier resolution via package.json exports."""

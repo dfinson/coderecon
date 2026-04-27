@@ -22,7 +22,6 @@ from coderecon.index._internal.discovery import (
 )
 from coderecon.index.models import LanguageFamily, MarkerTier
 
-
 class TestMarkerDefinitions:
     """Tests for marker file definitions."""
     def test_marker_definitions_exist(self) -> None:

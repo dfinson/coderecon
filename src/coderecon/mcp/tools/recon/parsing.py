@@ -90,7 +90,6 @@ _TEST_DRIVEN_TOKENS = frozenset(
     }
 )
 
-
 def _extract_negative_mentions(task: str) -> list[str]:
     """Extract terms that the user explicitly wants excluded.
 
@@ -105,7 +104,6 @@ def _extract_negative_mentions(task: str) -> list[str]:
             mentions.append(term)
     return mentions
 
-
 def _detect_stacktrace_driven(task: str) -> bool:
     """Detect if the task involves error/stacktrace investigation."""
     lower = task.lower()
@@ -118,14 +116,12 @@ def _detect_stacktrace_driven(task: str) -> bool:
     hits = words & _STACKTRACE_TOKENS
     return len(hits) >= 2  # Require 2+ indicators to avoid false positives
 
-
 def _detect_test_driven(task: str, intent: TaskIntent) -> bool:
     """Detect if the task is primarily about writing/fixing tests."""
     if intent == TaskIntent.test:
         return True
     lower = task.lower()
     return any(phrase in lower for phrase in _TEST_DRIVEN_TOKENS)
-
 
 def parse_task(task: str) -> ParsedTask:
     """Parse a free-text task description into structured fields.

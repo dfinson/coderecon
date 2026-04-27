@@ -8,7 +8,6 @@ from enum import Enum, auto
 from coderecon.git._internal.access import RepoAccess
 from coderecon.git.errors import RefNotFoundError
 
-
 class DiffType(Enum):
     """Types of diff operations."""
 
@@ -18,7 +17,6 @@ class DiffType(Enum):
     REF_TO_WORKING = auto()
     REF_TO_REF = auto()
 
-
 @dataclass(frozen=True, slots=True)
 class DiffPlan:
     """Plan for executing a diff operation."""
@@ -27,14 +25,12 @@ class DiffPlan:
     base_sha: str | None = None
     target_sha: str | None = None
 
-
 @dataclass(frozen=True, slots=True)
 class DiffResult:
     """Result of a diff execution - raw diff text and parsed stats."""
 
     diff_text: str
     numstat: list[tuple[str, int, int, str]]  # (status, adds, dels, path)
-
 
 class DiffPlanner:
     """Plans and executes diff operations."""
@@ -98,7 +94,6 @@ class DiffPlanner:
         numstat = self._access.diff_numstat(plan.base_sha, plan.target_sha)  # type: ignore[arg-type]  # both shas guaranteed non-None for REF_TO_REF
         return DiffResult(diff_text, numstat)
 
-
 class CheckoutType(Enum):
     """Types of checkout operations."""
 
@@ -107,7 +102,6 @@ class CheckoutType(Enum):
     REMOTE_BRANCH_EXISTING_LOCAL = auto()
     DETACHED = auto()
 
-
 @dataclass(frozen=True, slots=True)
 class CheckoutPlan:
     """Plan for executing a checkout operation."""
@@ -115,7 +109,6 @@ class CheckoutPlan:
     checkout_type: CheckoutType
     ref: str
     local_name: str | None = None
-
 
 class CheckoutPlanner:
     """Plans and executes checkout operations."""

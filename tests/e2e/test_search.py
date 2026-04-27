@@ -11,7 +11,6 @@ import pytest
 from tests.e2e.conftest import MCP_ACCEPT_HEADER, TOOL_TIMEOUTS
 from tests.e2e.expectations.schema import RepoExpectation
 
-
 @pytest.mark.e2e
 def test_search(
     mcp_session: tuple[str, str],

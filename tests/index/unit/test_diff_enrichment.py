@@ -21,7 +21,6 @@ from coderecon.index._internal.diff.models import StructuralChange
 # Tests: Test file enrichment
 # ============================================================================
 
-
 class TestEnrichTestFiles:
     """Tests for _enrich_test_files."""
 
@@ -53,11 +52,9 @@ class TestEnrichTestFiles:
         assert result is not None
         assert len(result) == 1
 
-
 # ============================================================================
 # Tests: Confidence
 # ============================================================================
-
 
 class TestConfidence:
     """Tests for _get_confidence."""
@@ -68,11 +65,9 @@ class TestConfidence:
     def test_unknown_extension_is_low(self) -> None:
         assert _get_confidence("src/main.xyz") == "low"
 
-
 # ============================================================================
 # Tests: Summary Generation
 # ============================================================================
-
 
 def _change(
     change: str = "added",
@@ -93,7 +88,6 @@ def _change(
         impact=None,
         nested_changes=None,
     )
-
 
 class TestBuildSummary:
     """Tests for _build_summary."""
@@ -116,7 +110,6 @@ class TestBuildSummary:
         assert "added" in result
         assert "removed" in result
         assert "signature changed" in result
-
 
 class TestBuildBreakingSummary:
     """Tests for _build_breaking_summary."""
@@ -144,11 +137,9 @@ class TestBuildBreakingSummary:
         assert result is not None
         assert "2 breaking changes" in result
 
-
 # ============================================================================
 # Tests: Behavior Risk Assessment
 # ============================================================================
-
 
 class TestAssessBehaviorRisk:
     """Tests for _assess_behavior_risk."""
@@ -203,7 +194,6 @@ class TestAssessBehaviorRisk:
         assert risk == "unknown"
         assert basis == "unclassified_change"
 
-
 class TestSummaryFormat:
     """Tests for summary output format."""
 
@@ -216,11 +206,9 @@ class TestSummaryFormat:
         assert result == "No changes detected"
         assert "(symbols)" not in result
 
-
 # ============================================================================
 # Tests: Test/Build Path Categorization
 # ============================================================================
-
 
 class TestIsTestOrBuildPath:
     """Tests for _is_test_or_build_path."""

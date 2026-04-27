@@ -35,7 +35,6 @@ _OOM_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"runtime: out of memory", re.IGNORECASE),
 ]
 
-
 class MemoryBudget:
     """Cross-platform memory budget using ``psutil``.
 
@@ -60,7 +59,6 @@ class MemoryBudget:
         raw = psutil.virtual_memory().available - self._reserve_bytes
         return max(int(raw // BYTES_PER_MB), _MIN_SUBPROCESS_CEILING_MB)  # floor avoids starving subprocesses
 
-
 def child_rss_mb(pid: int) -> int:
     """Sum of RSS (MB) for *pid* and all its descendants.
 
@@ -78,7 +76,6 @@ def child_rss_mb(pid: int) -> int:
         return int(total // BYTES_PER_MB)
     except (psutil.NoSuchProcess, psutil.AccessDenied):
         return 0
-
 
 def classify_oom(
     exit_code: int | None,
@@ -108,18 +105,15 @@ def classify_oom(
 
     return False
 
-
 # Persistent per-repo history
 
 _HISTORY_FILENAME = "test_memory_profile.json"
-
 
 @dataclass
 class _TargetProfile:
     peak_rss_mb: int = 0
     last_run_ts: float = 0.0
     oom_count: int = 0
-
 
 @dataclass
 class MemoryHistory:

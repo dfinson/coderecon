@@ -22,7 +22,6 @@ from coderecon.testing.coverage.models import (
     FunctionCoverage,
 )
 
-
 def merge_file_coverage(files: Iterable[FileCoverage]) -> FileCoverage:
     """Merge multiple FileCoverage objects for the same file.
 
@@ -85,7 +84,6 @@ def merge_file_coverage(files: Iterable[FileCoverage]) -> FileCoverage:
 
     return result
 
-
 def merge_reports(reports: Iterable[CoverageReport]) -> CoverageReport:
     """Merge multiple CoverageReport objects.
 
@@ -129,7 +127,6 @@ def merge_reports(reports: Iterable[CoverageReport]) -> CoverageReport:
     source_format = source_formats.pop() if len(source_formats) == 1 else "merged"
 
     return CoverageReport(source_format=source_format, files=merged_files)
-
 
 def merge(*reports: CoverageReport) -> CoverageReport:
     """Convenience function to merge reports as varargs.

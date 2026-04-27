@@ -14,7 +14,6 @@ from coderecon.config.constants import INLINE_CAP_BYTES
 
 _STRUCTURE_TRUNCATION_CHARS = 2000  # keep structure section readable in MCP responses
 
-
 def wrap_response(
     data: dict[str, Any],
     *,
@@ -41,7 +40,6 @@ def wrap_response(
     trimmed = _trim(data, resource_kind, max_bytes)
     return trimmed
 
-
 def _trim(data: dict[str, Any], kind: str, budget: int) -> dict[str, Any]:
     """Trim response to fit within budget."""
     if kind == "recon_result":
@@ -52,7 +50,6 @@ def _trim(data: dict[str, Any], kind: str, budget: int) -> dict[str, Any]:
         return _trim_raw_signals(data, budget)
     # Generic: drop largest key until it fits
     return _trim_generic(data, budget)
-
 
 def _trim_recon(data: dict[str, Any], budget: int) -> dict[str, Any]:
     """Trim recon results by removing snippets from bottom results first."""
@@ -88,7 +85,6 @@ def _trim_recon(data: dict[str, Any], budget: int) -> dict[str, Any]:
 
     return trimmed
 
-
 def _trim_repo_map(data: dict[str, Any], budget: int) -> dict[str, Any]:
     """Trim repo map by truncating structure."""
     trimmed = dict(data)
@@ -102,11 +98,9 @@ def _trim_repo_map(data: dict[str, Any], budget: int) -> dict[str, Any]:
         trimmed.pop("entry_points", None)
     return trimmed
 
-
 def _trim_raw_signals(data: dict[str, Any], budget: int) -> dict[str, Any]:
     """Raw signals has no budget — always return full inline."""
     return data
-
 
 def _trim_generic(data: dict[str, Any], budget: int) -> dict[str, Any]:
     """Generic trimming: drop largest values until it fits."""

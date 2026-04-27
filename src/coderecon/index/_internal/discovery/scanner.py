@@ -51,7 +51,6 @@ AMBIENT_NAMES: frozenset[LanguageFamily] = frozenset(
     LanguageFamily(f) for f in _AMBIENT_NAMES_STR if f in [e.value for e in LanguageFamily]
 )
 
-
 def _walk_with_pruning(root: Path) -> list[tuple[str, str]]:
     """Walk all files, pruning PRUNABLE_DIRS. Returns (rel_dir_posix, filename)."""
     results: list[tuple[str, str]] = []
@@ -65,20 +64,17 @@ def _walk_with_pruning(root: Path) -> list[tuple[str, str]]:
             results.append((rel_dir_posix, filename))
     return results
 
-
 @dataclass
 class DiscoveredMarker:
     path: str
     family: LanguageFamily
     tier: MarkerTier
 
-
 @dataclass
 class DiscoveryResult:
     candidates: list[CandidateContext] = field(default_factory=list)
     markers: list[DiscoveredMarker] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
-
 
 class ContextDiscovery:
     """Discovers project contexts by scanning for marker files."""

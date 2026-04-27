@@ -13,7 +13,6 @@ import math
 from collections import Counter
 from typing import Any
 
-
 def extract_ranker_features(
     candidates: list[dict[str, Any]],
     query_features: dict[str, Any],
@@ -150,7 +149,6 @@ def extract_ranker_features(
 
     return features_out
 
-
 def extract_cutoff_features(
     ranked_candidates: list[dict[str, Any]],
     query_features: dict[str, Any],
@@ -253,7 +251,6 @@ def extract_cutoff_features(
     ) / n_ranked
 
     return f
-
 
 def extract_gate_features(
     candidates: list[dict[str, Any]],
@@ -369,7 +366,6 @@ def extract_gate_features(
     )
 
     return f
-
 
 def extract_file_ranker_features(
     candidates: list[dict[str, Any]],

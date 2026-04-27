@@ -17,10 +17,8 @@ import pytest
 
 from coderecon.git._internal.hooks import HookResult
 
-
 def _hook_ok() -> HookResult:
     return HookResult(success=True, exit_code=0, stdout="", stderr="", modified_files=[])
-
 
 def _lint_clean() -> MagicMock:
     return MagicMock(
@@ -33,7 +31,6 @@ def _lint_clean() -> MagicMock:
         agentic_hint=None,
     )
 
-
 def _lint_dirty() -> MagicMock:
     return MagicMock(
         action="check",
@@ -44,7 +41,6 @@ def _lint_dirty() -> MagicMock:
         tools_run=[],
         agentic_hint=None,
     )
-
 
 def _test_result_ok() -> MagicMock:
     from coderecon.testing.models import TestResult, TestRunStatus
@@ -62,9 +58,7 @@ def _test_result_ok() -> MagicMock:
         agentic_hint=None,
     )
 
-
 # ---- Fixtures ---------------------------------------------------------------
-
 
 @pytest.fixture
 def mock_ctx() -> MagicMock:
@@ -74,7 +68,6 @@ def mock_ctx() -> MagicMock:
     ctx.info = AsyncMock()
     ctx.warning = AsyncMock()
     return ctx
-
 
 @pytest.fixture
 def checkpoint_tool(mock_context: MagicMock) -> Any:
@@ -112,9 +105,7 @@ def checkpoint_tool(mock_context: MagicMock) -> Any:
 
     return _wrapper
 
-
 # ---- Tests -------------------------------------------------------------------
-
 
 class TestCheckpointCommitChain:
     """Checkpoint with commit_message chains commit on pass."""
@@ -241,7 +232,6 @@ class TestCheckpointCommitChain:
         # semantic_diff failed gracefully
         assert "diff" not in result["commit"]
 
-
 class TestCheckpointSemanticDiff:
     """Checkpoint with commit_message returns semantic_diff on success."""
 
@@ -318,9 +308,7 @@ class TestCheckpointSemanticDiff:
         assert result["commit"]["oid"] == "ddd4444555566667777"
         assert "diff" not in result["commit"]
 
-
 # ---- _validate_paths_exist unit tests ----------------------------------------
-
 
 class TestValidatePathsExist:
     """Unit tests for _validate_paths_exist with git-aware deletion support."""

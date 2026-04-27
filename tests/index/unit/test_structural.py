@@ -25,7 +25,6 @@ from coderecon.index._internal.indexing.structural import (
 from coderecon.index._internal.parsing import SyntacticScope
 from coderecon.index.models import Context, DefFact, RefFact, RefTier, Role
 
-
 @pytest.fixture
 def db(temp_dir: Path) -> Database:
     """Create a test database with schema."""

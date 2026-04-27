@@ -11,14 +11,12 @@ import pytest
 from coderecon.git._internal.runner import GitRunner
 from coderecon.git.errors import GitError, NotARepositoryError
 
-
 class TestGitRunnerInit:
     """Test GitRunner initialization."""
 
     def test_cwd_property(self, tmp_path: Path) -> None:
         runner = GitRunner(tmp_path)
         assert runner.cwd == tmp_path
-
 
 class TestGitRunnerRun:
     """Test GitRunner.run method."""
@@ -83,7 +81,6 @@ class TestGitRunnerRun:
         with patch("subprocess.run", return_value=cp) as mock_run:
             runner.run("log", timeout=30)
         assert mock_run.call_args[1]["timeout"] == 30
-
 
 class TestGitRunnerRunRaw:
     """Test GitRunner.run_raw method."""

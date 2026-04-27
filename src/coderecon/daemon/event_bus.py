@@ -25,7 +25,6 @@ log = structlog.get_logger(__name__)
 # Type alias for the async write function provided by the stdio transport.
 WriteMessageFn = Callable[[dict[str, Any]], Coroutine[Any, Any, None]]
 
-
 class EventBus:
     """Collects events and writes them as NDJSON to the stdio transport."""
 
@@ -72,7 +71,6 @@ class EventBus:
             self._transport.write(raw)
         except (OSError, RuntimeError):
             log.debug("event_bus.emit_sync_failed", event_name=event_type, exc_info=True)
-
 
 def wire_event_hooks(daemon: "GlobalDaemon", bus: EventBus) -> None:
     """Connect internal daemon lifecycle hooks to the event bus.

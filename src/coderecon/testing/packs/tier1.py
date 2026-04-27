@@ -38,9 +38,7 @@ from coderecon.config.constants import MS_PER_SEC
 
 log = structlog.get_logger(__name__)
 
-
 # Python - pytest
-
 
 @runner_registry.register
 class PytestPack(RunnerPack):
@@ -175,7 +173,6 @@ class PytestPack(RunnerPack):
         return ParsedTestSuite(name="pytest", errors=1)
 
 # JavaScript/TypeScript - Jest
-
 
 @runner_registry.register
 class JestPack(RunnerPack):
@@ -320,7 +317,6 @@ class JestPack(RunnerPack):
 
 # JavaScript/TypeScript - Vitest
 
-
 @runner_registry.register
 class VitestPack(RunnerPack):
     """JavaScript/TypeScript Vitest runner."""
@@ -423,7 +419,6 @@ class VitestPack(RunnerPack):
 
 # Go - go test
 
-
 @runner_registry.register
 class GoTestPack(RunnerPack):
     """Go test runner."""
@@ -506,7 +501,6 @@ class GoTestPack(RunnerPack):
         return parse_go_test_json(stdout)
 
 # Rust - cargo-nextest (preferred) or cargo test
-
 
 @runner_registry.register
 class CargoNextestPack(RunnerPack):
@@ -702,7 +696,6 @@ class CargoTestPack(RunnerPack):
 
 # Java - Maven Surefire
 
-
 @runner_registry.register
 class MavenSurefirePack(RunnerPack):
     """Java Maven Surefire runner."""
@@ -818,7 +811,6 @@ class MavenSurefirePack(RunnerPack):
         )
 
 # Java - Gradle
-
 
 @runner_registry.register
 class GradlePack(RunnerPack):
@@ -952,7 +944,6 @@ class GradlePack(RunnerPack):
 
 # C# - dotnet test
 
-
 @runner_registry.register
 class DotnetTestPack(RunnerPack):
     """C# dotnet test runner."""
@@ -1048,7 +1039,6 @@ class DotnetTestPack(RunnerPack):
 
 # C/C++ - CTest
 
-
 @runner_registry.register
 class CTestPack(RunnerPack):
     """C/C++ CTest runner."""
@@ -1134,7 +1124,6 @@ class CTestPack(RunnerPack):
         )
 
 # Ruby - RSpec
-
 
 @runner_registry.register
 class RSpecPack(RunnerPack):
@@ -1322,7 +1311,6 @@ class MinitestPack(RunnerPack):
         return ParsedTestSuite(name="minitest", errors=1)
 
 # PHP - PHPUnit
-
 
 @runner_registry.register
 class PHPUnitPack(RunnerPack):

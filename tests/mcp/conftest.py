@@ -11,7 +11,6 @@ import pytest
 if TYPE_CHECKING:
     pass
 
-
 @pytest.fixture
 def tmp_repo(tmp_path: Path) -> Path:
     """Create a temporary git repository."""
@@ -31,7 +30,6 @@ def tmp_repo(tmp_path: Path) -> Path:
         capture_output=True,
     )
     return tmp_path
-
 
 @pytest.fixture
 def mock_git_ops() -> MagicMock:
@@ -64,7 +62,6 @@ def mock_git_ops() -> MagicMock:
 
     return mock
 
-
 @pytest.fixture
 def mock_coordinator() -> MagicMock:
     """Create a mock IndexCoordinatorEngine."""
@@ -89,7 +86,6 @@ def mock_coordinator() -> MagicMock:
     mock.db = MagicMock()
     return mock
 
-
 @pytest.fixture
 def mock_file_ops() -> MagicMock:
     """Create a mock FileOps."""
@@ -102,7 +98,6 @@ def mock_file_ops() -> MagicMock:
         truncated=False,
     )
     return mock
-
 
 @pytest.fixture
 def mock_mutation_ops() -> MagicMock:
@@ -121,7 +116,6 @@ def mock_mutation_ops() -> MagicMock:
         dry_run_info=None,
     )
     return mock
-
 
 @pytest.fixture
 def mock_refactor_ops() -> MagicMock:
@@ -174,7 +168,6 @@ def mock_refactor_ops() -> MagicMock:
         )
     )
     return mock
-
 
 @pytest.fixture
 def mock_test_ops() -> MagicMock:
@@ -237,7 +230,6 @@ def mock_test_ops() -> MagicMock:
     )
     return mock
 
-
 @pytest.fixture
 def mock_lint_ops() -> MagicMock:
     """Create a mock LintOps."""
@@ -257,12 +249,10 @@ def mock_lint_ops() -> MagicMock:
     )
     return mock
 
-
 @pytest.fixture
 def mock_session_manager() -> MagicMock:
     """Create a mock SessionManager."""
     return MagicMock()
-
 
 @pytest.fixture
 def mock_context(

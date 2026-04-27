@@ -8,7 +8,6 @@ import pytest
 
 from coderecon.index._internal.db import Database, create_additional_indexes
 
-
 @pytest.fixture
 def gate_db(tmp_path: Path) -> Database:
     """DB with some lint and coverage facts for gate testing."""
@@ -55,7 +54,6 @@ def gate_db(tmp_path: Path) -> Database:
         conn.commit()
 
     return db
-
 
 class TestGateEvaluation:
     def test_all_disabled(self, gate_db: Database) -> None:

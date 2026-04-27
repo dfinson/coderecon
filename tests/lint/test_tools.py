@@ -8,7 +8,6 @@ from pathlib import Path
 from coderecon.lint.models import Diagnostic, Severity, ToolCategory
 from coderecon.lint.tools import LintTool, ToolRegistry, _check_config_exists
 
-
 class TestLintTool:
     """Tests for LintTool dataclass."""
 
@@ -87,7 +86,6 @@ class TestLintTool:
         assert len(result.diagnostics) == 1
         assert result.diagnostics[0].message == "test message"
 
-
 class TestCheckConfigExists:
     """Tests for _check_config_exists helper."""
 
@@ -142,7 +140,6 @@ testpaths = ["tests"]
         (tmp_path / "pyproject.toml").write_text(toml_content)
         result = _check_config_exists(tmp_path, "pyproject.toml:tool.pytest.ini_options")
         assert result == "pyproject.toml"
-
 
 class TestToolRegistry:
     """Tests for ToolRegistry class."""

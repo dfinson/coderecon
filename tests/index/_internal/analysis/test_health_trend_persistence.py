@@ -14,7 +14,6 @@ from coderecon.index._internal.analysis.health_trend import (
     persist_snapshot,
 )
 
-
 def _snap(
     epoch: int = 1,
     coverage_rate: float = 0.5,
@@ -38,9 +37,7 @@ def _snap(
         cycle_count=cycles,
     )
 
-
 # ── HealthSnapshot tests ─────────────────────────────────────────
-
 
 class TestHealthSnapshot:
     def test_construction(self) -> None:
@@ -53,9 +50,7 @@ class TestHealthSnapshot:
         with pytest.raises(AttributeError):
             s.epoch = 99  # type: ignore[misc]
 
-
 # ── HealthTrend tests ─────────────────────────────────────────────
-
 
 class TestHealthTrend:
     def test_empty_trend(self) -> None:
@@ -126,9 +121,7 @@ class TestHealthTrend:
         assert d["latest"] is None
         assert d["history_length"] == 0
 
-
 # ── Persistence tests ─────────────────────────────────────────────
-
 
 class TestPersistence:
     def test_persist_and_load(self) -> None:

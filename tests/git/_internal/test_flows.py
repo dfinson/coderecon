@@ -14,7 +14,6 @@ import pytest
 
 from coderecon.git._internal.flows import ConflictCheckResult, WriteFlows
 
-
 class TestConflictCheckResult:
     """Tests for ConflictCheckResult dataclass."""
 
@@ -46,7 +45,6 @@ class TestConflictCheckResult:
             conflict_paths=("a.py", "b.py"),
         )
         assert isinstance(result.conflict_paths, tuple)
-
 
 class TestWriteFlows:
     """Tests for WriteFlows class."""

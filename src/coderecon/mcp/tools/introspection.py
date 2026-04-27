@@ -21,9 +21,7 @@ if TYPE_CHECKING:
 
     from coderecon.mcp.context import AppContext
 
-
 # Core Function (transport-agnostic)
-
 
 def describe_core(
     *,
@@ -90,9 +88,7 @@ def describe_core(
 
     return {"error": f"unknown action: {action}", "summary": "error: unknown action"}
 
-
 # Tool Registration
-
 
 def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
     """Register introspection tools with FastMCP server."""

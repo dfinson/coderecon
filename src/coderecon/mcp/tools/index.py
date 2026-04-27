@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from coderecon.index._internal.diff.models import StructuralChange
     from coderecon.tools.map_repo import MapRepoResult
 
-
 class _DirNode:
     """Trie node for directory tree formatting."""
 
@@ -22,7 +21,6 @@ class _DirNode:
     def __init__(self) -> None:
         self.children: dict[str, _DirNode] = {}
         self.files: list[str] = []
-
 
 def _change_to_text(c: StructuralChange, depth: int = 0) -> list[str]:
     """Convert a StructuralChange to compact text lines.
@@ -65,7 +63,6 @@ def _change_to_text(c: StructuralChange, depth: int = 0) -> list[str]:
             result_lines.extend(_change_to_text(nc, depth + 1))
     return result_lines
 
-
 def _tree_to_text(
     nodes: list[Any], *, include_line_counts: bool = True, depth: int = 0
 ) -> list[str]:
@@ -93,7 +90,6 @@ def _tree_to_text(
             else:
                 lines.append(f"{indent}{name}")
     return lines
-
 
 def _tree_to_hybrid_text(
     all_paths: list[tuple[str, int | None]],
@@ -163,7 +159,6 @@ def _tree_to_hybrid_text(
         lines.append(" | ".join(root.files))
     return lines
 
-
 def _map_repo_sections_to_text(
     result: MapRepoResult,
 ) -> dict[str, Any]:
@@ -227,7 +222,6 @@ def _map_repo_sections_to_text(
         ]
 
     return sections
-
 
 def _build_overview(result: MapRepoResult) -> dict[str, Any]:
     """Build the always-fits overview block with counts."""

@@ -27,7 +27,6 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-
 async def _write_message(
     data: dict[str, Any],
     transport: asyncio.WriteTransport,
@@ -38,7 +37,6 @@ async def _write_message(
     raw = line.encode("utf-8")
     async with lock:
         transport.write(raw)
-
 
 async def _handle_request(
     daemon: "GlobalDaemon",
@@ -58,7 +56,6 @@ async def _handle_request(
             **({"id": request_id} if request_id else {}),
             "error": {"code": "INTERNAL", "message": "Unhandled dispatch error"},
         })
-
 
 async def run_stdio_loop(
     daemon: "GlobalDaemon",

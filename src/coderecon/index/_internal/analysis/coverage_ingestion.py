@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 
     from coderecon.testing.coverage.models import CoverageReport
 
-
 def ingest_coverage(
     engine: Engine,
     report: "CoverageReport",
@@ -119,7 +118,6 @@ def ingest_coverage(
 
     return total_written
 
-
 def mark_stale_coverage(
     engine: Engine,
     changed_def_uids: list[str],
@@ -143,7 +141,6 @@ def mark_stale_coverage(
         )
         conn.commit()
         return result.rowcount  # type: ignore[return-value]
-
 
 def get_covering_tests(
     engine: Engine,
@@ -180,7 +177,6 @@ def get_covering_tests(
 
     return result
 
-
 def get_uncovered_defs(engine: Engine) -> list[dict[str, str]]:
     """Find defs with zero test coverage (full suite has run but no hits).
 
@@ -204,7 +200,6 @@ def get_uncovered_defs(engine: Engine) -> list[dict[str, str]]:
             {"def_uid": uid, "name": name, "kind": kind, "file_path": path}
             for uid, name, kind, path in rows
         ]
-
 
 def get_coverage_summary(engine: Engine) -> dict[str, float | int]:
     """Aggregate coverage statistics from TestCoverageFact."""
@@ -242,9 +237,7 @@ def get_coverage_summary(engine: Engine) -> dict[str, float | int]:
             "stale_facts": row[3] or 0,
         }
 
-
 # Internal helpers
-
 
 def _extract_test_ids(file_cov: object, prefix: str) -> list[str]:
     """Extract individual test IDs from function coverage data."""
@@ -256,7 +249,6 @@ def _extract_test_ids(file_cov: object, prefix: str) -> list[str]:
                 tid = f"{prefix}{name}" if prefix else name
                 test_ids.append(tid)
     return test_ids
-
 
 def _resolve_test_passed(
     test_id: str, failed_test_ids: set[str] | None,
@@ -276,7 +268,6 @@ def _resolve_test_passed(
         if test_id == fid or test_id.startswith(fid) or fid.startswith(test_id):
             return False
     return True
-
 
 def _upsert_coverage_fact(
     conn: object,

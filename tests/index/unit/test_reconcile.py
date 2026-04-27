@@ -29,7 +29,6 @@ from coderecon.index.models import File, RepoState, Worktree
 if TYPE_CHECKING:
     pass
 
-
 @pytest.fixture
 def reconciler_setup(
     temp_dir: Path,
@@ -61,7 +60,6 @@ def reconciler_setup(
     reconciler = Reconciler(db, repo_path)
 
     return repo_path, db, reconciler
-
 
 class TestReconcilerBasics:
     """Basic reconciliation tests."""
@@ -151,7 +149,6 @@ class TestReconcilerBasics:
         result2 = reconciler.reconcile(worktree_id=1, paths=[Path("delete_me.py")])
         assert result2.files_removed == 1
 
-
 class TestReconcilerIdempotency:
     """Tests for reconciliation idempotency."""
 
@@ -197,7 +194,6 @@ class TestReconcilerIdempotency:
         result2 = reconciler.reconcile(worktree_id=1, paths=[Path("idempotent.py")])
         assert result2.files_modified == 0
         assert result2.files_unchanged == 1
-
 
 class TestRepoStateManagement:
     """Tests for RepoState updates."""
@@ -254,7 +250,6 @@ class TestRepoStateManagement:
         assert result2.head_before == head1
         assert result2.head_after != head1
 
-
 class TestGetChangedFiles:
     """Tests for get_changed_files method."""
 
@@ -278,7 +273,6 @@ class TestGetChangedFiles:
         paths = {c.path for c in changed}
         assert "changed1.py" in paths
         assert "changed2.py" in paths
-
 
 class TestErrorHandling:
     """Tests for error handling."""
@@ -323,7 +317,6 @@ class TestErrorHandling:
         # Should complete without error
         assert result.files_checked >= 0
 
-
 class TestReconcileResult:
     """Tests for ReconcileResult dataclass."""
 
@@ -347,7 +340,6 @@ class TestReconcileResult:
         assert result.files_unchanged == 0
         assert result.errors == []
         assert result.reconignore_changed is False
-
 
 class TestCplignoreChangeDetection:
     """Tests for .reconignore change detection."""

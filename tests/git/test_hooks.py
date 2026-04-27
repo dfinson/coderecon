@@ -7,7 +7,6 @@ from pathlib import Path
 
 from coderecon.git._internal.hooks import HookResult, run_hook
 
-
 class TestRunHook:
     """Tests for run_hook function."""
 
@@ -87,7 +86,6 @@ class TestRunHook:
         assert result.success is False
         assert result.exit_code == -1
         assert "timed out" in result.stderr
-
 
 class TestHookResult:
     """Tests for HookResult dataclass."""

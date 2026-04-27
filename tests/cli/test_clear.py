@@ -17,7 +17,6 @@ import pytest
 
 from coderecon.cli.clear import clear_repo
 
-
 class TestClearRepoNothingToRemove:
     """Tests when there's nothing to clear."""
 
@@ -36,7 +35,6 @@ class TestClearRepoNothingToRemove:
         # Rich Console writes to stderr by default in our code
         # The capsys captures both, so we need to check stderr
         # Since Console(stderr=True), output goes to stderr
-
 
 class TestClearRepoCodereconDir:
     """Tests for removing .recon/ directory."""
@@ -65,7 +63,6 @@ class TestClearRepoCodereconDir:
 
         assert not coderecon_dir.exists()
 
-
 class TestClearRepoXdgDir:
     """Tests for removing XDG index directory."""
 
@@ -89,7 +86,6 @@ class TestClearRepoXdgDir:
 
         assert result is True
         assert not xdg_dir.exists()
-
 
 class TestClearRepoYesFlag:
     """Tests for --yes flag behavior."""
@@ -126,7 +122,6 @@ class TestClearRepoYesFlag:
 
         assert result is True
         assert not coderecon_dir.exists()
-
 
 class TestClearRepoErrors:
     """Tests for error handling."""
@@ -166,7 +161,6 @@ class TestClearRepoErrors:
 
         # Should return False due to error, but attempt both
         assert result is False
-
 
 class TestClearRepoBothDirs:
     """Tests for clearing both directories."""

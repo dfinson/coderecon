@@ -6,7 +6,6 @@ import re
 
 from coderecon.lint.models import Diagnostic, ParseResult, Severity
 
-
 def _severity_from_str(s: str) -> Severity:
     """Convert string to Severity."""
     s = s.lower()
@@ -18,9 +17,7 @@ def _severity_from_str(s: str) -> Severity:
         return Severity.INFO
     return Severity.HINT
 
-
 # Generic Parsers
-
 
 def parse_sarif(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse SARIF format (Static Analysis Results Interchange Format)."""
@@ -55,9 +52,7 @@ def parse_sarif(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
         return ParseResult.error(f"SARIF parse error: {e}")
     return ParseResult.ok(diagnostics)
 
-
 # Python Parsers
-
 
 def parse_ruff(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse ruff JSON output."""
@@ -172,9 +167,7 @@ def parse_black_check(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
             )
     return ParseResult.ok(diagnostics)
 
-
 # JavaScript/TypeScript Parsers
-
 
 def parse_eslint(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse eslint JSON output."""
@@ -289,5 +282,4 @@ from coderecon.lint.parsers_ext import (  # noqa: E402, F401
     parse_staticcheck,
     parse_yamllint,
 )
-
 

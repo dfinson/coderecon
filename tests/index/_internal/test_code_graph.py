@@ -8,7 +8,6 @@ import pytest
 
 from coderecon.index._internal.db import Database, create_additional_indexes
 
-
 @pytest.fixture
 def graph_db(tmp_path: Path) -> Database:
     """Create a test DB with files, imports, defs, and refs for graph testing."""
@@ -62,7 +61,6 @@ def graph_db(tmp_path: Path) -> Database:
 
     return db
 
-
 class TestBuildFileGraph:
     def test_builds_graph_from_imports(self, graph_db: Database) -> None:
         from coderecon.index._internal.analysis.code_graph import build_file_graph
@@ -83,14 +81,12 @@ class TestBuildFileGraph:
         g = build_file_graph(db.engine)
         assert g.number_of_nodes() == 0
 
-
 class TestBuildDefGraph:
     def test_builds_def_edges(self, graph_db: Database) -> None:
         from coderecon.index._internal.analysis.code_graph import build_def_graph
 
         g = build_def_graph(graph_db.engine)
         assert g.number_of_nodes() >= 2
-
 
 class TestPageRank:
     def test_compute_file_pagerank(self, graph_db: Database) -> None:
@@ -119,7 +115,6 @@ class TestPageRank:
             ranked = compute_pagerank(g, top_k=3)
             assert all(s.pagerank > 0 for s in ranked)
 
-
 class TestCycleDetection:
     def test_detects_cycle(self, graph_db: Database) -> None:
         from coderecon.index._internal.analysis.code_graph import (
@@ -147,7 +142,6 @@ class TestCycleDetection:
         cycles = detect_cycles(g)
         assert len(cycles) == 0
 
-
 class TestCommunityDetection:
     def test_detects_communities(self, graph_db: Database) -> None:
         from coderecon.index._internal.analysis.code_graph import (
@@ -161,7 +155,6 @@ class TestCommunityDetection:
         # All nodes should be covered
         all_members = {m for c in communities for m in c.members}
         assert all_members == set(g.nodes())
-
 
 class TestAnalyzeConvenience:
     def test_analyze_file_graph(self, graph_db: Database) -> None:

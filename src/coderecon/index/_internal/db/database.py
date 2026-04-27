@@ -37,12 +37,10 @@ DEFAULT_MAX_RETRIES = 3
 DEFAULT_RETRY_BASE_DELAY = 0.1  # 100ms base
 DEFAULT_RETRY_MAX_DELAY = 2.0  # 2s max
 
-
 def _is_database_locked_error(error: Exception) -> bool:
     """Check if error is a SQLite database locked error."""
     error_str = str(error).lower()
     return "database is locked" in error_str or "database is busy" in error_str
-
 
 def _run_index_migrations(engine: "Engine") -> None:
     """Run Alembic migrations to bring the index DB up to date."""
@@ -57,7 +55,6 @@ def _run_index_migrations(engine: "Engine") -> None:
     with engine.begin() as connection:
         cfg.attributes["connection"] = connection
         command.upgrade(cfg, "head")
-
 
 class Database:
     """SQLite connection manager with WAL mode for concurrent access.
@@ -209,7 +206,6 @@ class Database:
             conn.execute(text(f"PRAGMA wal_checkpoint({mode.upper()})"))
             log.debug("wal_checkpoint_completed", mode=mode)
 
-
 def _configure_pragmas(
     dbapi_conn: DBAPIConnection, _connection_record: ConnectionPoolEntry, busy_timeout_ms: int = 30_000
 ) -> None:
@@ -221,7 +217,6 @@ def _configure_pragmas(
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.execute("PRAGMA cache_size=-64000")  # 64MB cache
     cursor.close()
-
 
 class BulkWriter:
     """High-performance bulk insert using Core SQL, bypassing ORM overhead."""

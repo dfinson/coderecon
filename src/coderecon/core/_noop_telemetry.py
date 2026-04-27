@@ -5,7 +5,6 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import Any
 
-
 class NoOpSpan:
     """No-op span for when telemetry is disabled."""
 
@@ -33,7 +32,6 @@ class NoOpSpan:
     def is_recording(self) -> bool:
         return False
 
-
 class NoOpTracer:
     """No-op tracer for when telemetry is disabled."""
 
@@ -46,7 +44,6 @@ class NoOpTracer:
     @contextmanager
     def start_as_current_span_cm(self, _name: str, **_kwargs: Any) -> Any:  # noqa: ANN401 — Generator yield type
         yield NoOpSpan()
-
 
 class NoOpMeter:
     """No-op meter for when telemetry is disabled."""
@@ -75,13 +72,11 @@ class NoOpMeter:
     ) -> NoOpObservable:
         return NoOpObservable()
 
-
 class NoOpCounter:
     """No-op counter instrument."""
 
     def add(self, amount: int | float, attributes: dict[str, Any] | None = None) -> None:
         return None
-
 
 class NoOpHistogram:
     """No-op histogram instrument."""
@@ -89,12 +84,10 @@ class NoOpHistogram:
     def record(self, amount: int | float, attributes: dict[str, Any] | None = None) -> None:
         return None
 
-
 class NoOpObservable:
     """No-op observable instrument."""
 
     pass
-
 
 noop_tracer = NoOpTracer()
 noop_meter = NoOpMeter()

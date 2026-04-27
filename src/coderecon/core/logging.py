@@ -27,10 +27,8 @@ _request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
 # Track the current log file path for exception pointers
 _log_file_path: Path | None = None
 
-
 def get_request_id() -> str | None:
     return _request_id.get()
-
 
 def set_request_id(request_id: str | None = None) -> str:
     """Set or generate request correlation ID."""
@@ -38,10 +36,8 @@ def set_request_id(request_id: str | None = None) -> str:
     _request_id.set(rid)
     return rid
 
-
 def clear_request_id() -> None:
     _request_id.set(None)
-
 
 def get_log_file_path() -> Path | None:
     """Get the current log file path, if any.
@@ -50,7 +46,6 @@ def get_log_file_path() -> Path | None:
     """
     return _log_file_path
 
-
 def _set_log_file_path(path: Path | None) -> None:
     """Set the current log file path.
 
@@ -58,7 +53,6 @@ def _set_log_file_path(path: Path | None) -> None:
     """
     global _log_file_path
     _log_file_path = path
-
 
 def _add_request_id(
     _logger: structlog.types.WrappedLogger,
@@ -69,7 +63,6 @@ def _add_request_id(
         event_dict["request_id"] = rid
     return event_dict
 
-
 _LEVEL_MAP = {
     "DEBUG": logging.DEBUG,
     "INFO": logging.INFO,
@@ -77,7 +70,6 @@ _LEVEL_MAP = {
     "WARNING": logging.WARNING,
     "ERROR": logging.ERROR,
 }
-
 
 class ConsoleSuppressingFilter(logging.Filter):
     """Filter that blocks structlog console output.
@@ -97,7 +89,6 @@ class ConsoleSuppressingFilter(logging.Filter):
         # During Live displays (spinners, progress bars) this also prevents
         # corruption of the Rich layout.
         return False
-
 
 def configure_logging(
     *,
@@ -132,7 +123,6 @@ def configure_logging(
     # Always use stdlib logging for proper resource management
     _configure_stdlib_logging(config, shared_processors, default_level)
 
-
 def _create_handler(destination: str, is_console: bool = False) -> logging.Handler:
     """Create handler for stderr, stdout, or file path.
 
@@ -155,7 +145,6 @@ def _create_handler(destination: str, is_console: bool = False) -> logging.Handl
         handler.addFilter(ConsoleSuppressingFilter())
 
     return handler
-
 
 def _configure_stdlib_logging(
     config: LoggingConfig,
@@ -220,7 +209,6 @@ def _configure_stdlib_logging(
         handler.setLevel(output_level)
         handler.setFormatter(formatter)
         root_logger.addHandler(handler)
-
 
 def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
     logger = structlog.get_logger()

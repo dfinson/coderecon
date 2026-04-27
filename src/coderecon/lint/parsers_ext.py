@@ -118,9 +118,7 @@ def parse_ruff_format(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
         # or diff output lines (--- / +++ / @@ / context) -- skip all of these
     return ParseResult.ok(diagnostics)
 
-
 # Rust Parsers
-
 
 def parse_clippy(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse clippy JSON output."""
@@ -194,9 +192,7 @@ def parse_cargo_audit(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
         return ParseResult.error(f"cargo-audit JSON parse error: {e}")
     return ParseResult.ok(diagnostics)
 
-
 # Java/Kotlin Parsers
-
 
 def parse_checkstyle(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse checkstyle XML output."""
@@ -247,9 +243,7 @@ def parse_ktlint(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
         return ParseResult.error(f"ktlint JSON parse error: {e}")
     return ParseResult.ok(diagnostics)
 
-
 # C#/.NET Parsers
-
 
 def parse_dotnet_format(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse dotnet format output."""
@@ -269,9 +263,7 @@ def parse_dotnet_format(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG00
             )
     return ParseResult.ok(diagnostics)
 
-
 # Ruby Parsers
-
 
 def parse_rubocop(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse rubocop JSON output."""
@@ -300,9 +292,7 @@ def parse_rubocop(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
         return ParseResult.error(f"rubocop JSON parse error: {e}")
     return ParseResult.ok(diagnostics)
 
-
 # PHP Parsers
-
 
 def parse_phpcs(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse phpcs JSON output."""
@@ -347,9 +337,7 @@ def parse_phpstan(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
         return ParseResult.error(f"phpstan JSON parse error: {e}")
     return ParseResult.ok(diagnostics)
 
-
 # Shell Parsers
-
 
 def parse_shellcheck(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse shellcheck JSON output."""
@@ -393,9 +381,7 @@ def parse_shfmt(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
             )
     return ParseResult.ok(diagnostics)
 
-
 # Misc Parsers
-
 
 def parse_hadolint(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse hadolint JSON output."""

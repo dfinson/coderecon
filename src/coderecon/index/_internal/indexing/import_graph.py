@@ -35,7 +35,6 @@ from coderecon.index.models import File, ImportFact
 if TYPE_CHECKING:
     from sqlmodel import Session
 
-
 class ImportGraph:
     """Reverse import graph queries over the structural index.
     All queries operate on ``ImportFact.source_literal`` for module-level

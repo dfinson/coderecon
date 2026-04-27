@@ -34,13 +34,11 @@ from coderecon.index._internal.parsing.packs import (
 
 # Convenience aliases
 
-
 def _cfg(name: str) -> TypeExtractionConfig:
     """Get type_config for a language, asserting it exists."""
     tc = PACKS[name].type_config
     assert tc is not None, f"Missing type_config for {name}"
     return tc
-
 
 PYTHON_CONFIG = _cfg("python")
 TYPESCRIPT_CONFIG = _cfg("typescript")
@@ -458,11 +456,9 @@ GENERIC_TYPE_SAMPLES: list[tuple[TypeExtractionConfig, str, str]] = [
     (JAVA_CONFIG, "java", "class C { void f(Map<String, Integer> x) {} }"),
 ]
 
-
 # =============================================================================
 # Helper Functions
 # =============================================================================
-
 
 def make_tree(code: str, language: str) -> Any:
     """Parse code into a tree-sitter tree."""
@@ -515,11 +511,9 @@ def make_extractor(
     except ValueError as e:
         pytest.skip(f"Grammar not installed: {e}")
 
-
 # =============================================================================
 # Parametrized Tests: Type Annotations
 # =============================================================================
-
 
 class TestTypeAnnotationExtraction:
     """Test type annotation extraction across all languages."""
@@ -658,7 +652,6 @@ class TestTypeAnnotationExtraction:
 # Parametrized Tests: Type Members
 # =============================================================================
 
-
 class TestTypeMemberExtraction:
     """Test type member extraction across all languages."""
     @pytest.mark.parametrize(
@@ -698,7 +691,6 @@ class TestTypeMemberExtraction:
 # Parametrized Tests: Member Accesses
 # =============================================================================
 
-
 class TestMemberAccessExtraction:
     """Test member access extraction across all languages."""
     @pytest.mark.parametrize(
@@ -737,7 +729,6 @@ class TestMemberAccessExtraction:
 # Parametrized Tests: Interface Implementations
 # =============================================================================
 
-
 class TestInterfaceImplExtraction:
     """Test interface implementation extraction across all languages."""
     @pytest.mark.parametrize(
@@ -775,7 +766,6 @@ class TestInterfaceImplExtraction:
 # =============================================================================
 # Extractor Properties Tests
 # =============================================================================
-
 
 class TestExtractorProperties:
     """Test QueryBasedExtractor property accessors."""
@@ -853,7 +843,6 @@ class TestExtractorProperties:
 # Registry Tests
 # =============================================================================
 
-
 class TestExtractorRegistry:
     """Test the extractor registry functionality."""
     def test_registry_has_extractors(self) -> None:
@@ -903,7 +892,6 @@ class TestExtractorRegistry:
 # =============================================================================
 # Output Format Consistency Tests
 # =============================================================================
-
 
 class TestOutputFormatConsistency:
     """Verify all extractors produce consistent output formats."""
@@ -1052,7 +1040,6 @@ class TestOutputFormatConsistency:
 # Edge Cases and Error Handling
 # =============================================================================
 
-
 class TestEdgeCases:
     """Test edge cases and error handling."""
     @pytest.mark.parametrize(
@@ -1197,11 +1184,9 @@ def long_sig(
             # Scope lookup should work (exact result depends on tree positions)
             assert isinstance(param_anns[0].scope_id, int | type(None))
 
-
 # =============================================================================
 # Utility Method Tests
 # =============================================================================
-
 
 class TestUtilityMethods:
     """Test internal utility methods."""
@@ -1269,7 +1254,6 @@ class TestUtilityMethods:
 # Language-Specific Quirks Tests
 # =============================================================================
 
-
 class TestLanguageSpecificBehavior:
     """Test language-specific extraction behavior."""
     def test_python_private_visibility(self) -> None:
@@ -1319,7 +1303,6 @@ class TestLanguageSpecificBehavior:
 # =============================================================================
 # Grammar Loading Tests
 # =============================================================================
-
 
 class TestGrammarLoading:
     """Test grammar loading behavior."""

@@ -14,7 +14,6 @@ from typing import Literal
 
 from coderecon.files.ops import atomic_write_text
 
-
 @dataclass
 class Edit:
     """A single file edit."""
@@ -24,7 +23,6 @@ class Edit:
 
     # For create/update with full content
     content: str | None = None
-
 
 @dataclass
 class FileDelta:
@@ -37,7 +35,6 @@ class FileDelta:
     insertions: int = 0
     deletions: int = 0
 
-
 @dataclass
 class MutationDelta:
     """Structured delta from a mutation."""
@@ -47,7 +44,6 @@ class MutationDelta:
     insertions: int
     deletions: int
     files: list[FileDelta] = field(default_factory=list)
-
 
 @dataclass
 class MutationResult:
@@ -60,7 +56,6 @@ class MutationResult:
     affected_symbols: list[str] | None = None
     affected_tests: list[str] | None = None
     repo_fingerprint: str = ""
-
 
 class MutationOps:
     """Mutation operations for the write_source tool.
@@ -182,7 +177,6 @@ class MutationOps:
                 files=file_deltas,
             ),
         )
-
 
 def _hash_content(content: str) -> str:
     """Hash content for delta tracking."""

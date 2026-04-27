@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-
 @dataclass(frozen=True, slots=True)
 class DefSnapshot:
     """Point-in-time snapshot of a single definition.
@@ -26,7 +25,6 @@ class DefSnapshot:
     end_line: int = 0
     end_col: int = 0
 
-
 @dataclass(frozen=True, slots=True)
 class ChangedFile:
     """A file that appears in the git diff."""
@@ -36,7 +34,6 @@ class ChangedFile:
     has_grammar: bool
     language: str | None = None  # language family detected for this file
 
-
 @dataclass(frozen=True, slots=True)
 class FileChangeInfo:
     """Structured metadata for a non-structurally-analyzed file."""
@@ -45,7 +42,6 @@ class FileChangeInfo:
     status: str  # "added", "modified", "deleted", "renamed"
     category: str  # "prod", "test", "build", "config", "docs", "unknown"
     language: str | None = None
-
 
 @dataclass
 class RefTierBreakdown:
@@ -59,7 +55,6 @@ class RefTierBreakdown:
     @property
     def total(self) -> int:
         return self.proven + self.strong + self.anchored + self.unknown
-
 
 @dataclass
 class ImpactInfo:
@@ -75,7 +70,6 @@ class ImpactInfo:
     confidence: str = "high"  # high | medium | low
     visibility: str | None = None  # public | private | protected | internal
     is_static: bool | None = None
-
 
 @dataclass
 class StructuralChange:
@@ -107,7 +101,6 @@ class StructuralChange:
     delta_tags: list[str] = field(default_factory=list)  # e.g. ["control_flow_changed"]
     change_preview: str | None = None  # first N changed lines
 
-
 @dataclass
 class RawStructuralChange:
     """Pre-enrichment structural change from the engine."""
@@ -129,7 +122,6 @@ class RawStructuralChange:
     lines_changed: int | None = None
     delta_tags: list[str] | None = None  # e.g. ["parameters_changed", "minor_change"]
 
-
 @dataclass
 class RawDiffResult:
     """Result from the engine layer, before enrichment."""
@@ -137,7 +129,6 @@ class RawDiffResult:
     changes: list[RawStructuralChange]
     non_structural_files: list[FileChangeInfo]
     files_analyzed: int
-
 
 @dataclass
 class AnalysisScope:
@@ -156,7 +147,6 @@ class AnalysisScope:
     files_no_grammar: int = 0  # files with no supported grammar
     files_parse_failed: int = 0  # files where parsing was attempted but failed
     languages_analyzed: list[str] = field(default_factory=list)  # languages seen
-
 
 @dataclass
 class SemanticDiffResult:

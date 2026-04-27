@@ -23,7 +23,6 @@ from coderecon.testing.runtime import (
 # Tests for ContextRuntime
 # =============================================================================
 
-
 class TestContextRuntime:
     """Tests for ContextRuntime SQLModel."""
 
@@ -68,11 +67,9 @@ class TestContextRuntime:
         retrieved = runtime.get_env_vars()
         assert retrieved == original
 
-
 # =============================================================================
 # Tests for ToolConfig
 # =============================================================================
-
 
 class TestToolConfig:
     """Tests for ToolConfig dataclass."""
@@ -104,11 +101,9 @@ class TestToolConfig:
         assert config.env_overrides == {"NO_COLOR": "1"}
         assert config.version == "0.1.9"
 
-
 # =============================================================================
 # Tests for RuntimeExecutionContext
 # =============================================================================
-
 
 class TestRuntimeExecutionContext:
     """Tests for RuntimeExecutionContext dataclass."""
@@ -195,11 +190,9 @@ class TestRuntimeExecutionContext:
         assert "VIRTUAL_ENV" in env
         assert "CUSTOM" in env
 
-
 # =============================================================================
 # Tests for RuntimeResolver
 # =============================================================================
-
 
 class TestRuntimeResolver:
     """Tests for RuntimeResolver class."""
@@ -320,11 +313,9 @@ class TestRuntimeResolver:
 
             assert result.runtime.package_manager == "pnpm"
 
-
 # =============================================================================
 # Tests for ExecutionContextBuilder
 # =============================================================================
-
 
 class TestExecutionContextBuilder:
     """Tests for ExecutionContextBuilder class."""
@@ -461,11 +452,9 @@ class TestExecutionContextBuilder:
 
             assert ctx.working_directory == workspace
 
-
 # =============================================================================
 # Tests for RuntimeResolutionResult
 # =============================================================================
-
 
 class TestRuntimeResolutionResult:
     """Tests for RuntimeResolutionResult dataclass."""

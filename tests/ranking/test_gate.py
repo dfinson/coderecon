@@ -7,7 +7,6 @@ from pathlib import Path
 from coderecon.ranking.gate import Gate, load_gate
 from coderecon.ranking.models import GateLabel
 
-
 class TestGate:
     """Tests for Gate classifier."""
 
@@ -21,7 +20,6 @@ class TestGate:
         gate = Gate(model_path)
         result = gate.classify({"feature_a": 1.0})
         assert result == GateLabel.OK
-
 
 class TestLoadGate:
     """Tests for load_gate factory."""

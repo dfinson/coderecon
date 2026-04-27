@@ -19,7 +19,6 @@ log = structlog.get_logger(__name__)
 if TYPE_CHECKING:
     from coderecon.index.ops import IndexCoordinatorEngine
 
-
 # Language name to tool language mapping
 _LANGUAGE_TO_TOOL_PREFIX: dict[str, str] = {
     "python": "python",
@@ -38,7 +37,6 @@ _LANGUAGE_TO_TOOL_PREFIX: dict[str, str] = {
 
 LINT_TIMEOUT_SECONDS: int = 30
 """Default timeout in seconds for lint subprocess execution."""
-
 
 def _generate_agentic_hint(languages: list[str]) -> str:
     """Generate agentic hint for unhandled case based on detected languages."""
@@ -66,7 +64,6 @@ def _generate_agentic_hint(languages: list[str]) -> str:
         )
 
     return "\n".join(hints)
-
 
 class LintOps:
     """Lint operations for a repository.

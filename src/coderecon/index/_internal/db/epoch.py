@@ -40,7 +40,6 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-
 @dataclass
 class EpochStats:
     """Statistics from an epoch publication."""
@@ -49,7 +48,6 @@ class EpochStats:
     files_indexed: int
     published_at: float
     commit_hash: str | None
-
 
 @dataclass
 class EpochJournal:
@@ -80,7 +78,6 @@ class EpochJournal:
             sqlite_committed=bool(data.get("sqlite_committed", False)),
             created_at=float(data.get("created_at", 0.0)),
         )
-
 
 class EpochManager:
     """Manages epoch lifecycle for atomic index updates.

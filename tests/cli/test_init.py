@@ -13,7 +13,6 @@ from coderecon.cli.main import cli
 
 runner = CliRunner()
 
-
 @pytest.fixture
 def temp_git_repo(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a temporary git repository with initial commit."""
@@ -30,14 +29,12 @@ def temp_git_repo(tmp_path: Path) -> Generator[Path, None, None]:
 
     yield repo_path
 
-
 @pytest.fixture
 def temp_non_git(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a temporary non-git directory."""
     non_git = tmp_path / "not-a-repo"
     non_git.mkdir()
     yield non_git
-
 
 class TestInitCommand:
     """recon init command tests."""

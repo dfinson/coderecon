@@ -21,21 +21,17 @@ from coderecon.index._internal.parsing import (
     TreeSitterParser,
 )
 
-
 @pytest.fixture
 def parser() -> TreeSitterParser:
     return TreeSitterParser()
-
 
 @pytest.fixture
 def temp_dir(tmp_path: Path) -> Path:
     return tmp_path
 
-
 # =============================================================================
 # Python: decorators, docstrings, return types
 # =============================================================================
-
 
 class TestPythonScaffoldExtraction:
     """Test scaffold fields for Python."""
@@ -157,11 +153,9 @@ def legacy_func():
         assert "str" in method.return_type
         assert method.docstring == "Serialize to JSON."
 
-
 # =============================================================================
 # JavaScript: JSDoc comments
 # =============================================================================
-
 
 class TestJavaScriptScaffoldExtraction:
     """Test scaffold fields for JavaScript."""
@@ -222,11 +216,9 @@ class SessionManager {
         assert cls.docstring is not None
         assert "session" in cls.docstring.lower()
 
-
 # =============================================================================
 # TypeScript: return types + JSDoc
 # =============================================================================
-
 
 class TestTypeScriptScaffoldExtraction:
     """Test scaffold fields for TypeScript."""
@@ -247,11 +239,9 @@ class TestTypeScriptScaffoldExtraction:
         # At minimum, signature should be present
         assert func.signature_text is not None
 
-
 # =============================================================================
 # Rust: #[...] attributes and /// doc comments
 # =============================================================================
-
 
 class TestRustScaffoldExtraction:
     """Test scaffold fields for Rust."""
@@ -304,11 +294,9 @@ fn add(a: i32, b: i32) -> i32 {
         # Rust return types: might be extracted via 'return_type' field
         assert func.signature_text is not None
 
-
 # =============================================================================
 # Java: annotations + Javadoc
 # =============================================================================
-
 
 class TestJavaScaffoldExtraction:
     """Test scaffold fields for Java."""
@@ -358,11 +346,9 @@ public class Application {
             assert cls.docstring is not None
             assert "entry point" in cls.docstring.lower()
 
-
 # =============================================================================
 # Go: no decorators, doc comments
 # =============================================================================
-
 
 class TestGoScaffoldExtraction:
     """Test scaffold fields for Go."""
@@ -384,11 +370,9 @@ func Add(a int, b int) int {
         assert func.decorators is None  # Go has no decorators
         assert func.signature_text is not None
 
-
 # =============================================================================
 # C#: attributes + XML doc comments
 # =============================================================================
-
 
 class TestCSharpScaffoldExtraction:
     """Test scaffold fields for C#."""

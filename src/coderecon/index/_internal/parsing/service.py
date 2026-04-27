@@ -43,7 +43,6 @@ from coderecon.index._internal.parsing.treesitter import (
     TreeSitterParser,
 )
 
-
 class TreeSitterService:
     """Singleton wrapper around :class:`TreeSitterParser`.
 
@@ -139,9 +138,7 @@ class TreeSitterService:
         """Extract C# namespace-to-types mapping."""
         return self._parser.extract_csharp_namespace_types(root_node)
 
-
 # Generic scope walker -- replaces 3 near-identical methods (~170 lines)
-
 
 def _extract_scopes_generic(
     root: tree_sitter.Node,
@@ -201,7 +198,6 @@ def _extract_scopes_generic(
 
     return scopes
 
-
 def _extract_scopes_by_pattern(
     root: tree_sitter.Node,
     patterns: dict[str, str],
@@ -258,7 +254,6 @@ def _extract_scopes_by_pattern(
         walk(child, 0)
 
     return scopes
-
 
 # Module-level singleton
 

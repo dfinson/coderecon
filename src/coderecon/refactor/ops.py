@@ -26,7 +26,6 @@ log = structlog.get_logger(__name__)
 
 RefactorAction = Literal["rename", "move", "delete", "preview", "apply", "cancel"]
 
-
 @dataclass
 class EditHunk:
     """A single edit hunk in a refactor preview."""

@@ -14,7 +14,6 @@ from coderecon.core.formatting import (
     truncate_query,
 )
 
-
 class TestCompressPath:
     """Tests for compress_path function."""
 
@@ -58,7 +57,6 @@ class TestCompressPath:
         path = "a/b/c/d/e.py"
         assert compress_path(path, max_len=50) == path
         assert compress_path(path, max_len=10) == "a/.../e.py"
-
 
 class TestFormatPathList:
     """Tests for format_path_list function."""
@@ -119,7 +117,6 @@ class TestFormatPathList:
         result = format_path_list([long_path], compress=False)
         assert result == long_path
 
-
 class TestPluralize:
     """Tests for pluralize function."""
 
@@ -150,7 +147,6 @@ class TestPluralize:
         """Negative counts use plural form."""
         # Edge case - should use plural for non-1 values
         assert pluralize(-1, "file") == "-1 files"
-
 
 class TestTruncateAtWord:
     """Tests for truncate_at_word function."""
@@ -198,7 +194,6 @@ class TestTruncateAtWord:
         result = truncate_at_word("hello world", max_len=3, suffix="...")
         assert result == "..."
 
-
 class TestTruncateQuery:
     """Tests for truncate_query function."""
 
@@ -227,7 +222,6 @@ class TestTruncateQuery:
         query = "search query"
         assert truncate_query(query, max_len=10) == "search ..."
         assert truncate_query(query, max_len=50) == query
-
 
 class TestFormatDuration:
     """Tests for format_duration function."""

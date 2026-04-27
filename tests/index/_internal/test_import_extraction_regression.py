@@ -19,7 +19,6 @@ import pytest
 
 from coderecon.index._internal.parsing import SyntacticImport, TreeSitterParser
 
-
 @pytest.fixture
 def parser() -> TreeSitterParser:
     return TreeSitterParser()
@@ -34,11 +33,9 @@ def _names(imports: list[SyntacticImport]) -> set[str]:
 def _sources(imports: list[SyntacticImport]) -> set[str | None]:
     return {i.source_literal for i in imports}
 
-
 # =========================================================================
 # Python
 # =========================================================================
-
 
 class TestPythonImports:
     """Regression tests for Python import extraction."""
@@ -104,7 +101,6 @@ class TestPythonImports:
 # =========================================================================
 # JavaScript / TypeScript
 # =========================================================================
-
 
 class TestJavaScriptImports:
     """Regression tests for JavaScript/TypeScript import extraction."""
@@ -192,7 +188,6 @@ class TestTypeScriptImports:
 # Go
 # =========================================================================
 
-
 class TestGoImportsRegression:
     def test_single_import(self, parser: TreeSitterParser, tmp_path: Path) -> None:
         code = b'package main\n\nimport "fmt"\n'
@@ -232,7 +227,6 @@ class TestGoImportsRegression:
 # =========================================================================
 # Rust
 # =========================================================================
-
 
 class TestRustImportsRegression:
     def test_simple_use(self, parser: TreeSitterParser, tmp_path: Path) -> None:
@@ -280,7 +274,6 @@ class TestRustImportsRegression:
 # Java
 # =========================================================================
 
-
 class TestJavaImportsRegression:
     def test_simple_import(self, parser: TreeSitterParser, tmp_path: Path) -> None:
         code = b"import java.util.List;\n"
@@ -308,7 +301,6 @@ class TestJavaImportsRegression:
 # Kotlin
 # =========================================================================
 
-
 class TestKotlinImportsRegression:
     def test_simple_import(self, parser: TreeSitterParser, tmp_path: Path) -> None:
         code = b"import kotlin.collections.List\n"
@@ -332,7 +324,6 @@ class TestKotlinImportsRegression:
 # =========================================================================
 # Scala
 # =========================================================================
-
 
 class TestScalaImportsRegression:
     def test_simple_import(self, parser: TreeSitterParser, tmp_path: Path) -> None:
@@ -362,7 +353,6 @@ class TestScalaImportsRegression:
 # =========================================================================
 # C#
 # =========================================================================
-
 
 class TestCSharpImportsRegression:
     def test_using_directive(self, parser: TreeSitterParser, tmp_path: Path) -> None:
@@ -394,7 +384,6 @@ class TestCSharpImportsRegression:
 # Ruby
 # =========================================================================
 
-
 class TestRubyImportsRegression:
     def test_require(self, parser: TreeSitterParser, tmp_path: Path) -> None:
         code = b"require 'json'\nrequire 'yaml'\n"
@@ -417,7 +406,6 @@ class TestRubyImportsRegression:
 # PHP
 # =========================================================================
 
-
 class TestPHPImportsRegression:
     def test_use_statement(self, parser: TreeSitterParser, tmp_path: Path) -> None:
         code = b"<?php\nuse App\\Models\\User;\nuse App\\Http\\Controllers\\Controller;\n"
@@ -430,7 +418,6 @@ class TestPHPImportsRegression:
 # =========================================================================
 # Swift
 # =========================================================================
-
 
 class TestSwiftImportsRegression:
     def test_import_module(self, parser: TreeSitterParser, tmp_path: Path) -> None:
@@ -446,7 +433,6 @@ class TestSwiftImportsRegression:
 # =========================================================================
 # C / C++
 # =========================================================================
-
 
 class TestCImportsRegression:
     def test_include_angle(self, parser: TreeSitterParser, tmp_path: Path) -> None:
@@ -475,7 +461,6 @@ class TestCImportsRegression:
 # Elixir
 # =========================================================================
 
-
 class TestElixirImportsRegression:
     def test_import(self, parser: TreeSitterParser, tmp_path: Path) -> None:
         code = b"defmodule MyApp do\n  import Ecto.Query\n  alias MyApp.Repo\nend\n"
@@ -495,7 +480,6 @@ class TestElixirImportsRegression:
 # =========================================================================
 # Haskell
 # =========================================================================
-
 
 class TestHaskellImportsRegression:
     def test_simple_import(self, parser: TreeSitterParser, tmp_path: Path) -> None:
@@ -521,7 +505,6 @@ class TestHaskellImportsRegression:
 # OCaml
 # =========================================================================
 
-
 class TestOCamlImportsRegression:
     def test_open(self, parser: TreeSitterParser, tmp_path: Path) -> None:
         code = b"open Printf\nopen List\n"
@@ -537,7 +520,6 @@ class TestOCamlImportsRegression:
 # =========================================================================
 # Julia
 # =========================================================================
-
 
 class TestJuliaImportsRegression:
     def test_using(self, parser: TreeSitterParser, tmp_path: Path) -> None:
@@ -558,7 +540,6 @@ class TestJuliaImportsRegression:
 # =========================================================================
 # Lua
 # =========================================================================
-
 
 class TestLuaImportsRegression:
     def test_require(self, parser: TreeSitterParser, tmp_path: Path) -> None:

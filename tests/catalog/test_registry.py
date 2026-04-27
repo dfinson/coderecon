@@ -10,12 +10,10 @@ import pytest
 from coderecon.catalog.db import CatalogDB
 from coderecon.catalog.registry import CatalogRegistry
 
-
 @pytest.fixture
 def registry(tmp_path: Path) -> CatalogRegistry:
     catalog = CatalogDB(home=tmp_path / ".coderecon")
     return CatalogRegistry(catalog)
-
 
 @pytest.fixture
 def git_repo(tmp_path: Path) -> Path:
@@ -31,7 +29,6 @@ def git_repo(tmp_path: Path) -> Path:
              "HOME": str(tmp_path), "PATH": "/usr/bin:/bin"},
     )
     return repo
-
 
 class TestRegister:
     def test_register_new_repo(self, registry: CatalogRegistry, git_repo: Path) -> None:
@@ -51,7 +48,6 @@ class TestRegister:
         repo, _ = registry.register(git_repo)
         assert Path(repo.storage_dir).is_dir()
 
-
 class TestUnregister:
     def test_unregister_existing(self, registry: CatalogRegistry, git_repo: Path) -> None:
         registry.register(git_repo)
@@ -66,7 +62,6 @@ class TestUnregister:
         registry.register(git_repo)
         registry.unregister(git_repo)
         assert registry.list_repos() == []
-
 
 class TestLookup:
     def test_lookup_by_path_exact(self, registry: CatalogRegistry, git_repo: Path) -> None:
@@ -97,7 +92,6 @@ class TestLookup:
     def test_lookup_by_name_miss(self, registry: CatalogRegistry) -> None:
         assert registry.lookup_by_name("nope") is None
 
-
 class TestListRepos:
     def test_empty(self, registry: CatalogRegistry) -> None:
         assert registry.list_repos() == []
@@ -112,7 +106,6 @@ class TestListRepos:
         repos = registry.list_repos()
         names = {r.name for r in repos}
         assert names == {"repo-a", "repo-b"}
-
 
 class TestDiscoverWorktrees:
     def test_single_repo_returns_root(self, registry: CatalogRegistry, git_repo: Path) -> None:

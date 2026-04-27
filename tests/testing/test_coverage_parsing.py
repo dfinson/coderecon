@@ -32,7 +32,6 @@ from coderecon.testing.coverage.report import (
 # _compress_ranges tests
 # =============================================================================
 
-
 class TestCompressRanges:
     """Tests for _compress_ranges helper."""
 
@@ -64,7 +63,6 @@ class TestCompressRanges:
 # _path_matches tests
 # =============================================================================
 
-
 class TestPathMatches:
     """Tests for _path_matches helper."""
 
@@ -85,7 +83,6 @@ class TestPathMatches:
 # =============================================================================
 # FileCoverage model tests
 # =============================================================================
-
 
 class TestFileCoverage:
     """Tests for FileCoverage model properties."""
@@ -122,7 +119,6 @@ class TestFileCoverage:
 # CoverageReport model tests
 # =============================================================================
 
-
 class TestCoverageReport:
     """Tests for CoverageReport model properties."""
 
@@ -152,7 +148,6 @@ class TestCoverageReport:
 # =============================================================================
 # merge tests
 # =============================================================================
-
 
 class TestMerge:
     """Tests for merge function."""
@@ -186,7 +181,6 @@ class TestMerge:
 # =============================================================================
 # build_compact_summary tests
 # =============================================================================
-
 
 class TestBuildCompactSummary:
     """Tests for build_compact_summary function."""
@@ -232,7 +226,6 @@ class TestBuildCompactSummary:
 # _compress_ranges_tolerant tests
 # =============================================================================
 
-
 class TestCompressRangesTolerant:
     """Tests for gap-tolerant range compression."""
 
@@ -268,7 +261,6 @@ class TestCompressRangesTolerant:
 # =============================================================================
 # build_tiered_coverage tests
 # =============================================================================
-
 
 class TestBuildTieredCoverage:
     """Tests for tiered coverage output."""
@@ -377,7 +369,6 @@ class TestBuildTieredCoverage:
 # Parser tests - LCOV format
 # =============================================================================
 
-
 class TestLcovParser:
     """Tests for LCOV format parser."""
 
@@ -445,7 +436,6 @@ end_of_record
 # Parser tests - Cobertura format
 # =============================================================================
 
-
 class TestCoberturaParser:
     """Tests for Cobertura XML format parser."""
 
@@ -481,7 +471,6 @@ class TestCoberturaParser:
 # =============================================================================
 # Error handling tests
 # =============================================================================
-
 
 class TestParserErrors:
     """Tests for parser error handling."""

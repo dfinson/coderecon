@@ -8,7 +8,6 @@ Design principles:
 
 from __future__ import annotations
 
-
 def compress_path(path: str, max_len: int = 30) -> str:
     """Compress path to fit within max_len.
 
@@ -31,7 +30,6 @@ def compress_path(path: str, max_len: int = 30) -> str:
 
     # Even that's too long, just use filename
     return parts[-1]
-
 
 def format_path_list(
     paths: list[str],
@@ -78,7 +76,6 @@ def format_path_list(
 
     return result
 
-
 def pluralize(count: int, singular: str, plural: str | None = None) -> str:
     """Return grammatically correct singular/plural form.
 
@@ -94,7 +91,6 @@ def pluralize(count: int, singular: str, plural: str | None = None) -> str:
         plural = singular + "s"
     word = singular if count == 1 else plural
     return f"{count} {word}"
-
 
 def truncate_at_word(text: str, max_len: int = 40, suffix: str = "...") -> str:
     """Truncate text at word boundary.
@@ -123,7 +119,6 @@ def truncate_at_word(text: str, max_len: int = 40, suffix: str = "...") -> str:
     # No space found, hard cut
     return text[:cut_at] + suffix
 
-
 def truncate_query(query: str, max_len: int = 20) -> str:
     """Truncate a search query for display.
 
@@ -138,7 +133,6 @@ def truncate_query(query: str, max_len: int = 20) -> str:
     if len(query) <= max_len:
         return query
     return query[: max_len - 3] + "..."
-
 
 def format_duration(seconds: float) -> str:
     """Format a duration in seconds to a human-readable string.

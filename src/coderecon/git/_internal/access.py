@@ -40,7 +40,6 @@ from coderecon.git.errors import (
 
 # Lightweight replacement types (avoid dependency on pygit2 types)
 
-
 @dataclass(frozen=True, slots=True)
 class GitSignature:
     """Lightweight git signature (author/committer)."""
@@ -104,7 +103,6 @@ _WT_STATUS_MAP = {
     "M": STATUS_WT_MODIFIED,
     "D": STATUS_WT_DELETED,
 }
-
 
 class GitIndex:
     """Git index operations via subprocess."""

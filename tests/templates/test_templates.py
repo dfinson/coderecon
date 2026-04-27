@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from coderecon.templates import get_reconignore_template
 
-
 class TestGetCplignoreTemplate:
     """Tests for get_reconignore_template function."""
 

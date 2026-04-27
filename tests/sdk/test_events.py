@@ -7,10 +7,8 @@ from unittest.mock import MagicMock
 from coderecon.sdk.events import EventRouter
 from coderecon.sdk.types import Event
 
-
 def _event(type_: str = "index.complete", data: dict | None = None) -> Event:
     return Event(type=type_, data=data or {})
-
 
 class TestEventRouter:
     def test_callback_fires_on_match(self) -> None:

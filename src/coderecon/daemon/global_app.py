@@ -35,7 +35,6 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-
 @dataclass
 class WorktreeSlot:
     """Runtime state for a single worktree within a repo."""
@@ -87,7 +86,6 @@ class RepoSlot:
 # /proc/sys/fs/inotify/max_user_watches but 200_000 is a safe budget to
 # stay well below the typical 524288 default and leave room for other procs.
 _DEFAULT_WATCH_CEILING = 200_000
-
 
 class GlobalDaemon:
     """Manages multiple repos behind a single Starlette app."""

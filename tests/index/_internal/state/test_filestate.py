@@ -10,7 +10,6 @@ from coderecon.index._internal.state.filestate import (
 )
 from coderecon.index.models import Certainty, FileState, Freshness
 
-
 class TestMutationGateResult:
     """Tests for MutationGateResult class."""
 
@@ -36,7 +35,6 @@ class TestMutationGateResult:
             all_allowed=True,
         )
         assert result.all_allowed is True
-
 
 class TestFileStateService:
     """Tests for FileStateService."""

@@ -9,7 +9,6 @@ from coderecon.mcp.tools.recon.pipeline import (
     _models_available,
 )
 
-
 class TestReadSnippet:
     """Test _read_snippet with real temp files."""
 
@@ -28,7 +27,6 @@ class TestReadSnippet:
         f.write_text("only\n")
         result = _read_snippet(tmp_path, "short.py", 1, 100)
         assert result == "only"
-
 
 class TestReadSignature:
     """Test _read_signature with real temp files."""
@@ -49,7 +47,6 @@ class TestReadSignature:
         f.write_text("")
         result = _read_signature(tmp_path, "empty.py", 1, 1)
         assert result is None
-
 
 class TestBuildQueryMetrics:
     """Test _build_query_metrics pure function."""
@@ -92,7 +89,6 @@ class TestBuildQueryMetrics:
         )
         assert metrics["seed_hit_rate"] == 0.5
 
-
 class TestBuildHints:
     """Test _build_hints pure function."""
 
@@ -118,7 +114,6 @@ class TestBuildHints:
         hints = _build_hints(metrics, gate_label="proceed")
         assert any("term matches" in h.lower() for h in hints)
 
-
 class TestBuildCeDocuments:
     """Test _build_ce_documents pure function."""
 
@@ -138,7 +133,6 @@ class TestBuildCeDocuments:
 
     def test_empty_candidates(self):
         assert _build_ce_documents([], {}) == []
-
 
 class TestModelsAvailable:
     """Test _models_available returns a boolean."""

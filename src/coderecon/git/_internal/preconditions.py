@@ -12,12 +12,10 @@ from coderecon.git.errors import (
 
 # Branch Preconditions
 
-
 def require_not_unborn(access: RepoAccess, operation: str) -> None:
     """Raise if HEAD is unborn (no commits yet)."""
     if access.is_unborn:
         raise GitError(f"Cannot {operation}: no commits yet")
-
 
 def require_current_branch(access: RepoAccess, operation: str) -> str:
     """Raise if detached HEAD; return current branch name."""
@@ -26,21 +24,17 @@ def require_current_branch(access: RepoAccess, operation: str) -> str:
         raise DetachedHeadError(operation)
     return branch
 
-
 def require_not_current_branch(access: RepoAccess, branch_name: str) -> None:
     """Raise if trying to operate on current branch."""
     if branch_name == access.current_branch_name():
         raise GitError(f"Cannot delete current branch: {branch_name}")
-
 
 def require_branch_exists(access: RepoAccess, branch_name: str) -> None:
     """Raise if branch doesn't exist."""
     if not access.has_local_branch(branch_name):
         raise BranchNotFoundError(branch_name)
 
-
 # Unborn HEAD Policy - centralized rules for unborn state
-
 
 def check_nothing_to_commit(access: RepoAccess, allow_empty: bool) -> None:
     """Check if there's something to commit, respecting unborn state."""

@@ -17,7 +17,6 @@ from sqlmodel import select
 from coderecon.index._internal.db import Database
 from coderecon.index.models import Context, DefFact, File, ProbeStatus, Worktree
 
-
 class TestDatabaseEngine:
     """Tests for Database engine configuration."""
     def test_engine_created_with_wal_mode(self, temp_dir: Path) -> None:

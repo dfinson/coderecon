@@ -19,17 +19,14 @@ from coderecon.daemon.global_app import (
     _DEFAULT_WATCH_CEILING,
 )
 
-
 @pytest.fixture
 def registry(tmp_path: Path) -> CatalogRegistry:
     catalog = CatalogDB(home=tmp_path / ".coderecon")
     return CatalogRegistry(catalog)
 
-
 @pytest.fixture
 def daemon(registry: CatalogRegistry) -> GlobalDaemon:
     return GlobalDaemon(registry)
-
 
 def _stub_watcher(watch_count: int = 100) -> Any:
     """Create a minimal stub that quacks like a FileWatcher."""
@@ -37,7 +34,6 @@ def _stub_watcher(watch_count: int = 100) -> Any:
     watcher.watch_count = watch_count
     watcher.stop = AsyncMock()
     return watcher
-
 
 def _make_wt_slot(
     name: str = "wt-1",
@@ -60,7 +56,6 @@ def _make_wt_slot(
     if last_request_at is not None:
         slot.last_request_at = last_request_at
     return slot
-
 
 class TestEvictionLoop:
     """Tests for the idle eviction background task."""
@@ -162,7 +157,6 @@ class TestEvictionLoop:
         await daemon.stop_all()
         assert daemon._eviction_task is None
 
-
 class TestWatchCeiling:
     """Tests for inotify watch ceiling enforcement."""
 
@@ -224,7 +218,6 @@ class TestWatchCeiling:
             result = await daemon.lazy_activate_worktree("repo-a", "wt-big")
 
         assert result is None
-
 
 class TestWorktreeSlotTimestamps:
     """Tests for activated_at and last_request_at fields."""

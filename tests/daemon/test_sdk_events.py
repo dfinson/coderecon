@@ -5,7 +5,6 @@ from __future__ import annotations
 from coderecon.sdk.events import EventRouter
 from coderecon.sdk.types import Event
 
-
 class TestEventRouter:
     def test_callback_match(self) -> None:
         router = EventRouter()

@@ -17,7 +17,6 @@ import pytest
 
 from coderecon.git._internal.hooks import HookResult
 
-
 def _make_hook_result(
     *,
     success: bool,
@@ -33,7 +32,6 @@ def _make_hook_result(
         stderr=stderr,
         modified_files=modified_files or [],
     )
-
 
 @pytest.fixture
 def checkpoint_commit_tool(
@@ -76,7 +74,6 @@ def checkpoint_commit_tool(
 
     return _wrapper
 
-
 @pytest.fixture
 def mock_ctx() -> MagicMock:
     ctx = MagicMock()
@@ -85,7 +82,6 @@ def mock_ctx() -> MagicMock:
     ctx.info = AsyncMock()
     ctx.warning = AsyncMock()
     return ctx
-
 
 class TestCheckpointCommitHookAutoRetry:
     """Tests for auto-restage and retry on pre-commit hook auto-fixes."""

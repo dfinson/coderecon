@@ -22,7 +22,6 @@ if TYPE_CHECKING:
         UnderstandResult,
     )
 
-
 @contextmanager
 def _override_session(
     sdk: "CodeRecon", session_id: str | None,
@@ -35,7 +34,6 @@ def _override_session(
         yield
     finally:
         sdk._explicit_session = old
-
 
 class SessionHandle:
     """A session-bound proxy — all calls use a fixed session ID.
@@ -131,7 +129,6 @@ class SessionHandle:
 
     async def graph_export(self, repo: str, **kwargs: Any) -> "GraphExportResult":
         return await self._sdk.graph_export(repo, **kwargs)
-
 
 class RepoHandle:
     """A repo-bound proxy — all calls have ``repo`` pre-bound.

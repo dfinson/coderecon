@@ -23,7 +23,6 @@ from coderecon.index._internal.parsing import (
     TreeSitterParser,
 )
 
-
 @pytest.fixture
 def parser() -> TreeSitterParser:
     """Create a TreeSitterParser instance."""

@@ -12,7 +12,6 @@ import pytest
 from coderecon.sdk.client import CodeRecon
 from coderecon.sdk.protocol import CodeReconError
 
-
 # ---------------------------------------------------------------------------
 # Helpers: mock subprocess that speaks NDJSON
 # ---------------------------------------------------------------------------
@@ -37,7 +36,6 @@ class MockStdout:
             return line
         return b""  # EOF
 
-
 class MockStdin:
     """Captures writes for inspection."""
 
@@ -54,7 +52,6 @@ class MockStdin:
     def close(self) -> None:
         self._closed = True
 
-
 def _make_mock_process(
     stdout_lines: list[dict[str, Any]] | None = None,
 ) -> tuple[MagicMock, MockStdin, MockStdout]:
@@ -69,7 +66,6 @@ def _make_mock_process(
     proc.wait = AsyncMock(return_value=0)
     proc.terminate = MagicMock()
     return proc, stdin, stdout
-
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -108,7 +104,6 @@ class TestCodeReconLifecycle:
         await sdk.stop()
         assert fut.cancelled()
 
-
 class TestCodeReconSessionManagement:
     def test_resolve_auto_session(self) -> None:
         sdk = CodeRecon()
@@ -138,7 +133,6 @@ class TestCodeReconSessionManagement:
         handle = sdk.repo("myrepo", "feat")
         assert handle._repo == "myrepo"
         assert handle._worktree == "feat"
-
 
 class TestCodeReconCall:
     @pytest.mark.asyncio

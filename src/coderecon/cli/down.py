@@ -13,7 +13,6 @@ from coderecon.daemon.global_lifecycle import (
     stop_global_daemon,
 )
 
-
 @click.command()
 @click.argument("path", default=None, required=False, type=click.Path(exists=True, path_type=Path))
 def down_command(path: Path | None) -> None:

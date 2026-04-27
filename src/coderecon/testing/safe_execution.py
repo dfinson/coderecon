@@ -25,7 +25,6 @@ from coderecon.config.constants import BYTES_PER_MB
 # leaked from CodeRecon's own environment (e.g., COVERAGE_FILE).
 _DELETE_KEY = object()
 
-
 @dataclass
 class SafeExecutionConfig:
     """Configuration for safe execution context."""
@@ -58,7 +57,6 @@ LanguageFamily = Literal[
     "scala",
     "unknown",
 ]
-
 
 def _get_language_family(pack_id: str) -> LanguageFamily:
     """Map pack_id to language family for strategy selection."""
@@ -761,7 +759,6 @@ class SafeExecutionContext:
         return result
 
 # Factory Function
-
 
 def create_safe_context(
     artifact_dir: Path,

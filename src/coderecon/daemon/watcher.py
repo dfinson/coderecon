@@ -38,7 +38,6 @@ log = structlog.get_logger(__name__)
 DEBOUNCE_WINDOW_SEC = 0.5  # Sliding window for batching rapid changes
 MAX_DEBOUNCE_WAIT_SEC = 2.0  # Maximum wait before forcing flush
 
-
 @dataclass
 class FileWatcher:
     """

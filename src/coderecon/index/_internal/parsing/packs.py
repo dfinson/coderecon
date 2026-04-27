@@ -21,7 +21,6 @@ from dataclasses import dataclass, field
 
 # Dataclasses
 
-
 @dataclass(frozen=True)
 class SymbolPattern:
     """Maps a query pattern index to symbol extraction metadata."""
@@ -70,7 +69,6 @@ class TypeExtractionConfig:
     reference_indicator: str = ""
 
 # Declarative extraction configs (replace per-language Python handlers)
-
 
 @dataclass(frozen=True)
 class ImportQueryConfig:
@@ -369,7 +367,6 @@ _GENERIC_SCOPE_PATTERNS: dict[str, str] = {
     "lambda": "lambda",
 }
 
-
 # PYTHON
 
 _PYTHON_SYMBOLS = SymbolQueryConfig(
@@ -502,7 +499,6 @@ PYTHON_PACK = LanguagePack(
     """,
     dynamic_handler="_extract_python_dynamic",
 )
-
 
 # JAVASCRIPT
 
@@ -679,7 +675,6 @@ JAVASCRIPT_PACK = LanguagePack(
     dynamic_handler="_extract_js_dynamic",
 )
 
-
 # TYPESCRIPT
 
 _TYPESCRIPT_SYMBOLS = SymbolQueryConfig(
@@ -777,7 +772,6 @@ TSX_PACK = LanguagePack(
     """,
     dynamic_handler="_extract_js_dynamic",
 )
-
 
 # GO
 
@@ -928,7 +922,6 @@ GO_PACK = LanguagePack(
     declared_module_query="(package_clause) @module_node",
     declared_module_handler="_declared_module_go",
 )
-
 
 # RUST
 
@@ -1093,7 +1086,6 @@ RUST_PACK = LanguagePack(
     ),
 )
 
-
 # JAVA
 
 _JAVA_SYMBOLS = SymbolQueryConfig(
@@ -1233,7 +1225,6 @@ JAVA_PACK = LanguagePack(
     declared_module_query="(package_declaration) @module_node",
     declared_module_handler="_declared_module_java",
 )
-
 
 # C#
 
@@ -1395,7 +1386,6 @@ CSHARP_PACK = LanguagePack(
     declared_module_handler="_declared_module_csharp",
 )
 
-
 # KOTLIN
 
 _KOTLIN_SYMBOLS = SymbolQueryConfig(
@@ -1513,7 +1503,6 @@ KOTLIN_PACK = LanguagePack(
     declared_module_handler="_declared_module_kotlin",
 )
 
-
 # SCALA
 
 _SCALA_SYMBOLS = SymbolQueryConfig(
@@ -1627,7 +1616,6 @@ SCALA_PACK = LanguagePack(
     declared_module_query="(package_clause) @module_node",
     declared_module_handler="_declared_module_scala",
 )
-
 
 # C / C++
 
@@ -1913,7 +1901,6 @@ C_PACK = LanguagePack(
     ),
 )
 
-
 # RUBY
 
 _RUBY_SYMBOLS = SymbolQueryConfig(
@@ -2018,7 +2005,6 @@ RUBY_PACK = LanguagePack(
     ),
     declared_module_handler="_declared_module_ruby",
 )
-
 
 # PHP
 
@@ -2150,7 +2136,6 @@ PHP_PACK = LanguagePack(
     declared_module_handler="_declared_module_php",
 )
 
-
 # SWIFT
 
 _SWIFT_SYMBOLS = SymbolQueryConfig(
@@ -2281,7 +2266,6 @@ SWIFT_PACK = LanguagePack(
         pattern_kinds={0: "swift_import"},
     ),
 )
-
 
 # ELIXIR
 
@@ -2431,7 +2415,6 @@ ELIXIR_PACK = LanguagePack(
     declared_module_handler="_declared_module_elixir",
 )
 
-
 # HASKELL
 
 _HASKELL_SYMBOLS = SymbolQueryConfig(
@@ -2538,7 +2521,6 @@ HASKELL_PACK = LanguagePack(
     declared_module_handler="_declared_module_haskell",
 )
 
-
 # OCAML
 
 _OCAML_SYMBOLS = SymbolQueryConfig(
@@ -2628,7 +2610,6 @@ OCAML_PACK = LanguagePack(
     declared_module_handler="_declared_module_ocaml",
 )
 
-
 # ZIG
 
 _ZIG_TYPES = TypeExtractionConfig(
@@ -2703,7 +2684,6 @@ ZIG_PACK = LanguagePack(
     type_config=_ZIG_TYPES,
 )
 
-
 # JULIA
 
 _JULIA_SYMBOLS = SymbolQueryConfig(
@@ -2777,7 +2757,6 @@ JULIA_PACK = LanguagePack(
     declared_module_handler="_declared_module_julia",
 )
 
-
 # LUA
 
 _LUA_SYMBOLS = SymbolQueryConfig(
@@ -2826,7 +2805,6 @@ LUA_PACK = LanguagePack(
     ),
 )
 
-
 # BASH
 
 _BASH_SYMBOLS = SymbolQueryConfig(
@@ -2858,7 +2836,6 @@ BASH_PACK = LanguagePack(
         "case_statement": "block",
     },
 )
-
 
 # DATA/CONFIG/BUILD formats (symbol queries only, no import/type/scope)
 
@@ -2925,7 +2902,6 @@ _DOCKERFILE_SYMBOLS = SymbolQueryConfig(
         SymbolPattern(kind="entrypoint"),
     ),
 )
-
 
 # MINIMAL PACKS (grammar metadata + extensions only)
 
@@ -3125,7 +3101,6 @@ REQUIREMENTS_PACK = LanguagePack(
     extensions=frozenset({"txt"}),
 )
 
-
 # Canonical registries
 
 _ALL_PACKS: tuple[LanguagePack, ...] = (
@@ -3190,9 +3165,7 @@ for _pack in _ALL_PACKS:
     for _fn in _pack.filenames:
         _FILENAME_TO_PACK[_fn] = _pack
 
-
 # Public API
-
 
 def get_pack_for_ext(ext: str) -> LanguagePack | None:
     """Get a LanguagePack for a file extension (without leading dot)."""

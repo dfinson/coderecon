@@ -8,7 +8,6 @@ from coderecon.mcp.tools.index import (
     _tree_to_text,
 )
 
-
 class MockFileNode:
     """Mock file node for testing."""
     def __init__(

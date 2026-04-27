@@ -26,7 +26,6 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-
 def _is_test_or_build_path(path: str) -> bool:
     """Check if a file is in a test or build directory."""
     from coderecon.core.languages import is_test_file
@@ -49,7 +48,6 @@ def _is_test_or_build_path(path: str) -> bool:
     )
     return any(indicator in lower for indicator in build_indicators)
 
-
 def _resolve_entity_id(session: Session, file_path: str, kind: str, name: str) -> str | None:
     """Look up entity_id (def_uid) for a symbol."""
     from coderecon.index.models import DefFact, File
@@ -61,7 +59,6 @@ def _resolve_entity_id(session: Session, file_path: str, kind: str, name: str) -
     )
     result = session.exec(stmt).first()
     return result if result else None
-
 
 def enrich_diff(
     raw: RawDiffResult,
@@ -97,7 +94,6 @@ def enrich_diff(
         base_description="",  # Filled by caller
         target_description="",  # Filled by caller
     )
-
 
 def _enrich_single_change(
     rc: object,  # RawStructuralChange
@@ -212,7 +208,6 @@ def _enrich_single_change(
         delta_tags=rc.delta_tags or [],
     )
 
-
 def _assess_behavior_risk(change: str, ref_count: int | None) -> tuple[str, str]:
     """Assess behavior change risk based on change type and blast radius.
 
@@ -235,7 +230,6 @@ def _assess_behavior_risk(change: str, ref_count: int | None) -> tuple[str, str]
             return "medium", f"body_changed_high_blast_radius(refs={ref_count})"
         return "unknown", "body_changed_unknown_impact"
     return "unknown", "unclassified_change"
-
 
 def _enrich_references(
     session: Session,
@@ -296,7 +290,6 @@ def _enrich_references(
 
     return tiers, file_paths, basis, entity_id
 
-
 def _enrich_imports(
     session: Session,
     name: str,
@@ -311,7 +304,6 @@ def _enrich_imports(
     )
     paths = list(session.exec(stmt).all())
     return paths if paths else None
-
 
 def _enrich_visibility(
     session: Session,
@@ -339,7 +331,6 @@ def _enrich_visibility(
 
     return member.visibility, member.is_static
 
-
 def _enrich_test_files(
     referencing_files: list[str] | None,
     importing_files: list[str] | None,
@@ -359,7 +350,6 @@ def _enrich_test_files(
     test_files = sorted({f for f in all_files if is_test_file(f)})
     return test_files if test_files else None
 
-
 def _get_confidence(file_path: str) -> str:
     """Determine confidence level based on language support."""
     from coderecon.core.languages import detect_language_family, has_grammar
@@ -368,7 +358,6 @@ def _get_confidence(file_path: str) -> str:
     if lang and has_grammar(lang):
         return "high"
     return "low"
-
 
 def _nest_changes(changes: list[StructuralChange]) -> list[StructuralChange]:
     """Group method changes under their parent class change."""
@@ -398,7 +387,6 @@ def _nest_changes(changes: list[StructuralChange]) -> list[StructuralChange]:
 
     return list(class_changes.values()) + other_changes
 
-
 def _build_summary(changes: list[StructuralChange]) -> str:
     """Build a human-readable summary of changes."""
     if not changes:
@@ -411,7 +399,6 @@ def _build_summary(changes: list[StructuralChange]) -> str:
 
     parts = [f"{count} {kind}" for kind, count in sorted(counts.items())]
     return f"{', '.join(parts)} (symbols)"
-
 
 def _build_breaking_summary(changes: list[StructuralChange]) -> str | None:
     """Build a summary of breaking changes, or None if none."""

@@ -25,10 +25,8 @@ from coderecon.git import GitOps
 from coderecon.index.models import File, Freshness, RepoState
 from coderecon.config.constants import MS_PER_SEC
 
-
 if TYPE_CHECKING:
     from coderecon.index._internal.db.database import Database
-
 
 @dataclass
 class ChangedFile:
@@ -38,7 +36,6 @@ class ChangedFile:
     old_hash: str | None
     new_hash: str
     change_type: str  # 'added', 'modified', 'deleted'
-
 
 @dataclass
 class ReconcileResult:
@@ -59,7 +56,6 @@ class ReconcileResult:
     def files_changed(self) -> int:
         """Total files that changed."""
         return self.files_added + self.files_modified + self.files_removed
-
 
 class Reconciler:
     """Filesystem reconciliation service. INVARIANT: Caller must hold reconcile_lock."""

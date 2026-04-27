@@ -11,7 +11,6 @@ from coderecon.config import CodeReconConfig, load_config
 from coderecon.config.models import LoggingConfig
 from coderecon.config.user_config import UserConfig, write_user_config
 
-
 @pytest.fixture
 def temp_repo(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a temporary git repository."""
@@ -19,7 +18,6 @@ def temp_repo(tmp_path: Path) -> Generator[Path, None, None]:
     repo.mkdir()
     (repo / ".git").mkdir()  # Fake git dir
     yield repo
-
 
 @pytest.fixture(autouse=True)
 def clean_env() -> Generator[None, None, None]:
@@ -34,7 +32,6 @@ def clean_env() -> Generator[None, None, None]:
         del os.environ[k]
     # Restore original values
     os.environ.update(orig)
-
 
 class TestConfigModels:
     """Configuration model validation tests."""
@@ -77,7 +74,6 @@ class TestConfigModels:
         else:
             with pytest.raises(ValidationError):
                 CodeReconConfig(server=daemon_config)
-
 
 class TestConfigLoading:
     """Configuration loading and precedence tests."""
@@ -158,7 +154,6 @@ class TestConfigLoading:
 
         # Then - defaults used
         assert config.server.port == 7654
-
 
 class TestUserConfig:
     """Tests for the new simplified user config format."""

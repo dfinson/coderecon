@@ -18,7 +18,6 @@ from coderecon.index._internal.watcher import (
     WatcherQueue,
 )
 
-
 class TestWatcherConfig:
     """Tests for WatcherConfig."""
     def test_default_config(self, tmp_path: Path) -> None:

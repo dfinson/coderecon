@@ -28,7 +28,6 @@ from coderecon.config.constants import PORT_MAX
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
-
 class LogOutputConfig(BaseModel):
     """Single logging output configuration.
 
@@ -49,7 +48,6 @@ class LogOutputConfig(BaseModel):
             raise ValueError(f"File destination must be absolute path: {v}")
         return str(path)
 
-
 class LoggingConfig(BaseModel):
     """Logging configuration.
 
@@ -62,7 +60,6 @@ class LoggingConfig(BaseModel):
         description="Root log level. DEBUG is verbose and may impact performance.",
     )
     outputs: list[LogOutputConfig] = Field(default_factory=lambda: [LogOutputConfig()])
-
 
 class ServerConfig(BaseModel):
     """Server configuration.
@@ -109,7 +106,6 @@ class ServerConfig(BaseModel):
             raise ValueError(f"Port must be 0-{PORT_MAX}, got {v}")
         return v
 
-
 class IndexConfig(BaseModel):
     """Index configuration.
 
@@ -132,7 +128,6 @@ class IndexConfig(BaseModel):
         description="Override index storage location. Use for WSL cross-filesystem "
         "performance (store index on native FS). Default: .recon/ in repo.",
     )
-
 
 class TimeoutsConfig(BaseModel):
     """Timeout configuration for daemon components.
@@ -168,7 +163,6 @@ class TimeoutsConfig(BaseModel):
         description="TTL for dry-run refactoring previews.",
     )
 
-
 class IndexerConfig(BaseModel):
     """Background indexer configuration.
 
@@ -192,7 +186,6 @@ class IndexerConfig(BaseModel):
         description="Max queued file paths. Excess paths are dropped (logged). "
         "RISK: Too low loses changes during bulk operations.",
     )
-
 
 class LimitsConfig(BaseModel):
     """Query limit defaults.
@@ -231,7 +224,6 @@ class LimitsConfig(BaseModel):
         description="Max ledger operation records to return.",
     )
 
-
 class TestingConfig(BaseModel):
     """Testing subsystem configuration.
 
@@ -261,7 +253,6 @@ class TestingConfig(BaseModel):
         "If None, computed dynamically from available memory at launch time.",
     )
 
-
 class TelemetryConfig(BaseModel):
     """OpenTelemetry configuration.
 
@@ -286,7 +277,6 @@ class TelemetryConfig(BaseModel):
         default="coderecon",
         description="Service name for traces/metrics.",
     )
-
 
 class DatabaseConfig(BaseModel):
     """Database connection configuration.
@@ -322,7 +312,6 @@ class DatabaseConfig(BaseModel):
         "TRADEOFF: Lower = more frequent I/O; higher = larger WAL files.",
     )
 
-
 class DebugConfig(BaseModel):
     """Debug and development configuration.
 
@@ -340,7 +329,6 @@ class DebugConfig(BaseModel):
         description="Include stack traces in MCP error responses. "
         "SECURITY RISK: May leak sensitive path/code information.",
     )
-
 
 class GovernancePolicyRule(BaseModel):
     """A single governance policy rule.
@@ -362,7 +350,6 @@ class GovernancePolicyRule(BaseModel):
         default="",
         description="Custom message shown when rule fires.",
     )
-
 
 class GovernanceConfig(BaseModel):
     """Governance policies for checkpoint gating.
@@ -434,7 +421,6 @@ class GovernanceConfig(BaseModel):
         ),
         description="Warn when changes affect high-PageRank symbols.",
     )
-
 
 class CodeReconConfig(BaseModel):
     """Root configuration for CodeRecon.

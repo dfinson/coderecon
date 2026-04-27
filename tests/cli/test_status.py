@@ -16,7 +16,6 @@ from coderecon.cli.main import cli
 
 runner = CliRunner()
 
-
 @pytest.fixture
 def temp_git_repo(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a temporary git repository with initial commit."""
@@ -32,14 +31,12 @@ def temp_git_repo(tmp_path: Path) -> Generator[Path, None, None]:
 
     yield repo_path
 
-
 @pytest.fixture
 def temp_non_git(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a temporary non-git directory."""
     non_git = tmp_path / "not-a-repo"
     non_git.mkdir()
     yield non_git
-
 
 @pytest.fixture
 def initialized_repo(temp_git_repo: Path) -> Path:
@@ -49,7 +46,6 @@ def initialized_repo(temp_git_repo: Path) -> Path:
     (coderecon_dir / "config.yaml").write_text("logging:\n  level: INFO\n")
     return temp_git_repo
 
-
 @pytest.fixture
 def running_repo(initialized_repo: Path) -> Path:
     """Create an initialized repo with running daemon files."""
@@ -57,7 +53,6 @@ def running_repo(initialized_repo: Path) -> Path:
     (coderecon_dir / "daemon.pid").write_text("12345")
     (coderecon_dir / "daemon.port").write_text("8765")
     return initialized_repo
-
 
 class TestStatusCommand:
     """recon status command tests."""

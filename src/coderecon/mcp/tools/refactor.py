@@ -16,9 +16,7 @@ if TYPE_CHECKING:
     from coderecon.mcp.session import SessionState
     from coderecon.refactor.ops import RefactorPreview, RefactorResult
 
-
 # Summary Helpers
-
 
 def _summarize_refactor(status: str, files_affected: int, preview: RefactorPreview | None) -> str:
     """Generate summary for refactor operations."""
@@ -37,7 +35,6 @@ def _summarize_refactor(status: str, files_affected: int, preview: RefactorPrevi
         return " ".join(parts)
     return status
 
-
 def _display_refactor(status: str, files_affected: int, preview: RefactorPreview | None, refactor_id: str) -> str:
     """Human-friendly message for refactor operations."""
     if status == "cancelled":
@@ -54,7 +51,6 @@ def _display_refactor(status: str, files_affected: int, preview: RefactorPreview
             f"Preview ready: {total} changes in {files_affected} files. Refactor ID: {refactor_id}"
         )
     return f"Refactoring {status}."
-
 
 def _build_refactor_agentic_hint(result: "RefactorResult", files_affected: int) -> str:
     """Build next-step instruction for the agent after a refactor operation."""
@@ -96,7 +92,6 @@ def _build_refactor_agentic_hint(result: "RefactorResult", files_affected: int) 
         return "".join(parts)
 
     return f"Refactoring status: {result.status}."
-
 
 def _serialize_refactor_result(result: "RefactorResult") -> dict[str, Any]:
     """Convert RefactorResult to dict."""
@@ -178,7 +173,6 @@ def _serialize_refactor_result(result: "RefactorResult") -> dict[str, Any]:
 
     return wrap_response(output, resource_kind="refactor_preview")
 
-
 def _serialize_impact_result(result: "RefactorResult") -> dict[str, Any]:
     """Convert impact RefactorResult to a read-only reference list.
 
@@ -215,9 +209,7 @@ def _serialize_impact_result(result: "RefactorResult") -> dict[str, Any]:
         resource_kind="impact_analysis",
     )
 
-
 # Core Functions (transport-agnostic)
-
 
 def _require_recon(session: "SessionState") -> None:
     """Gate: recon must have been called before refactoring."""
@@ -229,7 +221,6 @@ def _require_recon(session: "SessionState") -> None:
                 'Call recon(task="...") first to discover files, then use refactor tools.'
             ),
         )
-
 
 async def refactor_rename_core(
     app_ctx: "AppContext",
@@ -248,7 +239,6 @@ async def refactor_rename_core(
     session.mutation_ctx.pending_refactors[result.refactor_id] = "rename"
     return _serialize_refactor_result(result)
 
-
 async def refactor_move_core(
     app_ctx: "AppContext",
     session: "SessionState",
@@ -265,7 +255,6 @@ async def refactor_move_core(
     session.mutation_ctx.pending_refactors[result.refactor_id] = "move"
     return _serialize_refactor_result(result)
 
-
 async def recon_impact_core(
     app_ctx: "AppContext",
     session: "SessionState",
@@ -279,7 +268,6 @@ async def recon_impact_core(
         target, include_comments=include_comments,
     )
     return _serialize_impact_result(result)
-
 
 async def refactor_commit_core(
     app_ctx: "AppContext",
@@ -312,7 +300,6 @@ async def refactor_commit_core(
     session.mutation_ctx.pending_refactors.pop(refactor_id, None)
     return _serialize_refactor_result(result)
 
-
 async def refactor_cancel_core(
     app_ctx: "AppContext",
     session: "SessionState",
@@ -324,9 +311,7 @@ async def refactor_cancel_core(
     session.mutation_ctx.pending_refactors.pop(refactor_id, None)
     return _serialize_refactor_result(result)
 
-
 # Tool Registration
-
 
 def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
     """Register refactor tools with FastMCP server."""

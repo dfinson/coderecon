@@ -16,11 +16,9 @@ from enum import Enum
 
 log = structlog.get_logger(__name__)
 
-
 class GpuVendor(Enum):
     NVIDIA = "nvidia"
     AMD = "amd"
-
 
 @dataclass
 class GpuProbeResult:
@@ -68,7 +66,6 @@ class GpuProbeResult:
             return "ROCm"
         return None
 
-
 def probe_gpu() -> GpuProbeResult:
     """Detect GPU hardware and check ONNX Runtime provider availability.
 
@@ -99,7 +96,6 @@ def probe_gpu() -> GpuProbeResult:
 
     return result
 
-
 def _check_nvidia_gpu() -> bool:
     """Return True if an NVIDIA GPU is detected via nvidia-smi."""
     if shutil.which("nvidia-smi") is None:
@@ -113,7 +109,6 @@ def _check_nvidia_gpu() -> bool:
         return proc.returncode == 0 and len(proc.stdout.strip()) > 0
     except (OSError, subprocess.SubprocessError):
         return False
-
 
 def _check_amd_gpu() -> bool:
     """Return True if an AMD GPU is detected via rocm-smi."""

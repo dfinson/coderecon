@@ -12,7 +12,6 @@ from coderecon.index._internal.ignore import IgnoreChecker
 
 log = structlog.get_logger(__name__)
 
-
 def collect_watch_dirs(
     repo_root: Path,
     ignore_checker: IgnoreChecker,
@@ -46,7 +45,6 @@ def collect_watch_dirs(
         log.debug("dir_walk_failed", root=str(repo_root), exc_info=True)
     return dirs
 
-
 def is_cross_filesystem(path: Path) -> bool:
     """Detect if path is on a cross-filesystem mount (WSL /mnt/*, network drives, etc.)."""
     resolved = path.resolve()
@@ -59,7 +57,6 @@ def is_cross_filesystem(path: Path) -> bool:
     ):
         return True
     return path_str.startswith(("/run/user/", "/media/", "/net/"))
-
 
 def summarize_changes_by_type(paths: list[Path]) -> str:
     """Summarize file changes by extension/type with grammatical correctness."""

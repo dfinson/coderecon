@@ -27,10 +27,8 @@ from coderecon.index.models import (
 if TYPE_CHECKING:
     from coderecon.index._internal.db import Database
 
-
 # Hard cap on exemplar ref_ids per AnchorGroup (SPEC §7.3.9).
 _ANCHOR_EXEMPLAR_CAP = 10
-
 
 def materialize_exports(
     db: Database,
@@ -190,7 +188,6 @@ def materialize_exports(
 
     return surfaces_written
 
-
 def materialize_thunks(
     db: Database,
     *,
@@ -345,7 +342,6 @@ def materialize_thunks(
 
     return thunks_written
 
-
 def materialize_anchor_groups(
     db: Database,
     *,
@@ -462,7 +458,6 @@ def materialize_anchor_groups(
         session.commit()
 
     return groups_written
-
 
 def materialize_all(
     db: Database,

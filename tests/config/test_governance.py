@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 class TestGovernanceConfig:
     def test_default_config(self) -> None:
         from coderecon.config.models import GovernanceConfig

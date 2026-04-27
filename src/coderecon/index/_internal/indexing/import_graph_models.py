@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-
 @dataclass
 class ImpactMatch:
     """A single test file matched by the import graph."""
@@ -15,7 +14,6 @@ class ImpactMatch:
     reason: str
     hop: int = 0
 
-
 @dataclass
 class ImpactConfidence:
     """Confidence assessment for an import graph query."""
@@ -24,7 +22,6 @@ class ImpactConfidence:
     unresolved_files: list[str]
     null_source_count: int
     reasoning: str
-
 
 @dataclass
 class ImportGraphResult:
@@ -53,7 +50,6 @@ class ImportGraphResult:
             result.setdefault(m.hop, []).append(m.test_file)
         return result
 
-
 @dataclass
 class CoverageSourceResult:
     """Result of an imported_sources query."""
@@ -61,7 +57,6 @@ class CoverageSourceResult:
     source_modules: list[str]
     confidence: Literal["complete", "partial"]
     null_import_count: int
-
 
 @dataclass
 class CoverageGap:

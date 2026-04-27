@@ -15,7 +15,6 @@ from coderecon.index._internal.grammars import (
 )
 from coderecon.index.models import LanguageFamily
 
-
 class TestGrammarPackages:
     """Tests for GRAMMAR_PACKAGES constant."""
 
@@ -43,7 +42,6 @@ class TestGrammarPackages:
         assert pkg == "tree-sitter-python"
         assert import_name == "tree_sitter_python"
 
-
 class TestExtraPackages:
     """Tests for EXTRA_PACKAGES constant."""
 
@@ -67,7 +65,6 @@ class TestExtraPackages:
         pkg_names = [e[0] for e in extras]
         assert "tree-sitter-c" in pkg_names
 
-
 class TestIsGrammarInstalled:
     """Tests for is_grammar_installed function."""
 
@@ -79,7 +76,6 @@ class TestIsGrammarInstalled:
     def test_returns_false_for_uninstalled(self) -> None:
         """Should return False for non-existent modules."""
         assert is_grammar_installed("nonexistent_module_xyz_123") is False
-
 
 class TestGetNeededGrammars:
     """Tests for get_needed_grammars function."""
@@ -120,7 +116,6 @@ class TestGetNeededGrammars:
             pkg_names = [p[0] for p in result]
             assert "tree-sitter-javascript" in pkg_names
             assert "tree-sitter-typescript" in pkg_names
-
 
 class TestScanRepoLanguages:
     """Tests for scan_repo_languages function."""

@@ -14,7 +14,6 @@ from coderecon.daemon.global_lifecycle import (
     write_global_pid,
 )
 
-
 class TestWriteGlobalPid:
     """Tests for write_global_pid."""
 
@@ -23,7 +22,6 @@ class TestWriteGlobalPid:
             write_global_pid(tmp_path, 7654)
         assert (tmp_path / "daemon.pid").read_text() == "42"
         assert (tmp_path / "daemon.port").read_text() == "7654"
-
 
 class TestRemoveGlobalPid:
     """Tests for remove_global_pid."""
@@ -37,7 +35,6 @@ class TestRemoveGlobalPid:
 
     def test_no_error_if_files_missing(self, tmp_path: Path) -> None:
         remove_global_pid(tmp_path)  # Should not raise
-
 
 class TestReadGlobalServerInfo:
     """Tests for read_global_server_info."""
@@ -63,7 +60,6 @@ class TestReadGlobalServerInfo:
         result = read_global_server_info(tmp_path)
         assert result is None
 
-
 class TestIsGlobalServerRunning:
     """Tests for is_global_server_running."""
 
@@ -82,7 +78,6 @@ class TestIsGlobalServerRunning:
         assert is_global_server_running(tmp_path) is False
         # Stale PID files should be cleaned up
         assert not (tmp_path / "daemon.pid").exists()
-
 
 class TestStopGlobalDaemon:
     """Tests for stop_global_daemon."""

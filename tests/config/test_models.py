@@ -30,7 +30,6 @@ from coderecon.config.models import (
     TimeoutsConfig,
 )
 
-
 class TestLogOutputConfig:
     """Tests for LogOutputConfig model."""
 
@@ -66,7 +65,6 @@ class TestLogOutputConfig:
         LogOutputConfig(format="json")
         LogOutputConfig(format="console")
 
-
 class TestLoggingConfig:
     """Tests for LoggingConfig model."""
 
@@ -86,7 +84,6 @@ class TestLoggingConfig:
         """Invalid level is rejected."""
         with pytest.raises(ValidationError):
             LoggingConfig(level="TRACE")
-
 
 class TestServerConfig:
     """Tests for ServerConfig model."""
@@ -114,7 +111,6 @@ class TestServerConfig:
         with pytest.raises(ValidationError):
             ServerConfig(port=65536)
 
-
 class TestIndexConfig:
     """Tests for IndexConfig model."""
 
@@ -135,7 +131,6 @@ class TestIndexConfig:
         config = IndexConfig(index_path="/custom/index")
         assert config.index_path == "/custom/index"
 
-
 class TestTimeoutsConfig:
     """Tests for TimeoutsConfig model."""
 
@@ -147,7 +142,6 @@ class TestTimeoutsConfig:
         assert config.session_idle_sec == 1800.0  # 30 minutes
         assert config.dry_run_ttl_sec == 60.0
 
-
 class TestIndexerConfig:
     """Tests for IndexerConfig model."""
 
@@ -158,7 +152,6 @@ class TestIndexerConfig:
         assert config.max_workers == 1
         assert config.queue_max_size == 10000
 
-
 class TestLimitsConfig:
     """Tests for LimitsConfig model."""
 
@@ -168,7 +161,6 @@ class TestLimitsConfig:
         assert config.search_default == 20
         assert config.map_depth_default == 3
 
-
 class TestTestingConfig:
     """Tests for TestingConfig model."""
 
@@ -177,7 +169,6 @@ class TestTestingConfig:
         config = TestingConfig()
         assert config.default_parallelism == 4
         assert config.default_timeout_sec == 300
-
 
 class TestCodeReconConfig:
     """Tests for CodeReconConfig root model."""

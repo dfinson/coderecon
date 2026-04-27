@@ -8,7 +8,6 @@ import pytest
 
 from coderecon.index._internal.db import Database, create_additional_indexes
 
-
 @pytest.fixture
 def blast_db(tmp_path: Path) -> Database:
     """DB with defs, refs, and coverage facts for blast radius testing."""
@@ -61,7 +60,6 @@ def blast_db(tmp_path: Path) -> Database:
         conn.commit()
 
     return db
-
 
 class TestBlastRadius:
     def test_direct_coverage(self, blast_db: Database) -> None:

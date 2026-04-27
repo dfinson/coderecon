@@ -17,9 +17,7 @@ import structlog
 from sqlalchemy import Engine, text
 from coderecon.config.constants import MS_PER_SEC
 
-
 log = structlog.get_logger(__name__)
-
 
 def compute_file_hashes(repo_root: Path, paths: list[str]) -> dict[str, str]:
     """Compute content hashes for a list of files using git hash-object.
@@ -54,7 +52,6 @@ def compute_file_hashes(repo_root: Path, paths: list[str]) -> dict[str, str]:
 
     return hashes
 
-
 def get_changed_files_since(
     repo_root: Path,
     since_ref: str = "ORIG_HEAD",
@@ -77,7 +74,6 @@ def get_changed_files_since(
         log.debug("changed_files_since_failed", ref=since_ref, exc_info=True)
     return []
 
-
 class RemergeResult:
     """Result of a remerge operation."""
 
@@ -96,7 +92,6 @@ class RemergeResult:
             "pruned": self.pruned,
             "elapsed_ms": round(self.elapsed_ms, 1),
         }
-
 
 def remerge_worktree(
     engine: Engine,
@@ -195,7 +190,6 @@ def remerge_worktree(
 
     return result
 
-
 def drop_worktree_data(engine: Engine, worktree_id: int) -> int:
     """Remove all data for a deleted worktree.
 
@@ -246,7 +240,6 @@ def drop_worktree_data(engine: Engine, worktree_id: int) -> int:
     log.info("worktree_data_dropped", worktree_id=worktree_id, files=count)
     return count
 
-
 def _prune_file(engine: Engine, file_id: int) -> None:
     """Remove a single file and all its facts.
 
@@ -255,7 +248,6 @@ def _prune_file(engine: Engine, file_id: int) -> None:
     with engine.connect() as conn:
         conn.execute(text("DELETE FROM files WHERE id = :fid"), {"fid": file_id})
         conn.commit()
-
 
 def _find_file_by_hash(
     engine: Engine,
@@ -275,7 +267,6 @@ def _find_file_by_hash(
             {"wt_id": worktree_id, "path": path, "hash": content_hash},
         ).fetchone()
         return row[0] if row else None
-
 
 def _update_file_hash(engine: Engine, file_id: int, content_hash: str) -> None:
     """Update a file's content hash."""

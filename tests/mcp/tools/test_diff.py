@@ -27,7 +27,6 @@ from coderecon.mcp.tools.diff_formatting import (
 # Helpers
 # ============================================================================
 
-
 def _change(
     change: str = "added",
     structural_severity: str = "non_breaking",
@@ -81,11 +80,9 @@ def _result(
         target_description="working tree",
     )
 
-
 # ============================================================================
 # Tests: Agentic Hint Generation
 # ============================================================================
-
 
 class TestAgenticHint:
     """Tests for _build_agentic_hint.
@@ -147,7 +144,6 @@ class TestAgenticHint:
 # Tests: Result Serialization
 # ============================================================================
 
-
 class TestResultSerialization:
     """Tests for _result_to_dict."""
     def test_empty_result(self) -> None:
@@ -162,7 +158,6 @@ class TestResultSerialization:
 # ============================================================================
 # Tests: Scope Serialization
 # ============================================================================
-
 
 class TestScopeSerialization:
     """Tests for AnalysisScope serialization in _result_to_dict."""
@@ -212,7 +207,6 @@ class TestScopeSerialization:
 # Tests: Risk Basis Serialization
 # ============================================================================
 
-
 class TestRiskBasisSerialization:
     """Tests for risk_basis serialization in _result_to_dict."""
     def test_risk_basis_included_when_present(self) -> None:
@@ -257,7 +251,6 @@ class TestRiskBasisSerialization:
 # Tests: Import Count Serialization
 # ============================================================================
 
-
 class TestImportCountSerialization:
     """Tests for import_count in ImpactInfo serialization."""
     def test_import_count_separate_from_reference_count(self) -> None:
@@ -280,7 +273,6 @@ class TestImportCountSerialization:
 # ============================================================================
 # Tests: Schema Refinements (classification_confidence, invariants, renames)
 # ============================================================================
-
 
 class TestClassificationConfidence:
     """Tests for classification_confidence always present in serialized output."""
@@ -397,7 +389,6 @@ class TestSchemaInvariants:
 # ============================================================================
 # Tests: Text Format Serialization
 # ============================================================================
-
 
 class TestResultToText:
     """Tests for _result_to_text."""
@@ -542,7 +533,6 @@ class TestResultToText:
 # =============================================================================
 # Domain Classification
 # =============================================================================
-
 
 class TestDomainKey:
     """Unit tests for _domain_key."""

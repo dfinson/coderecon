@@ -32,7 +32,6 @@ from tests.e2e.expectations.schema import (
 if TYPE_CHECKING:
     from subprocess import Popen
 
-
 # Operation-specific HTTP timeouts for MCP tool calls
 TOOL_TIMEOUTS: dict[str, float] = {
     "describe": 30.0,
@@ -45,7 +44,6 @@ TOOL_TIMEOUTS: dict[str, float] = {
 
 # MCP protocol headers
 MCP_ACCEPT_HEADER = "application/json, text/event-stream"
-
 
 @dataclass
 class CodeReconServer:
@@ -235,7 +233,6 @@ class CodeReconServer:
         response.raise_for_status()
         return cast(dict[str, Any], response.json())
 
-
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     """Generate test cases from expectation YAML files."""
     if "expectation" in metafunc.fixturenames or "_expectation" in metafunc.fixturenames:
@@ -246,12 +243,10 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
             ids=[exp.test_id for exp in expectations],
         )
 
-
 @pytest.fixture
 def timeout_config(expectation: RepoExpectation) -> TimeoutConfig:
     """Get the timeout configuration for the current test."""
     return expectation.timeout_config
-
 
 @pytest.fixture
 def cloned_repo(
@@ -290,7 +285,6 @@ def cloned_repo(
 
     # Cleanup
     shutil.rmtree(repo_dir, ignore_errors=True)
-
 
 def _run_with_cleanup(
     cmd: list[str],
@@ -332,7 +326,6 @@ def _run_with_cleanup(
         proc.wait(timeout=5.0)
         raise
 
-
 @pytest.fixture
 def initialized_repo(
     cloned_repo: Path,
@@ -354,7 +347,6 @@ def initialized_repo(
 
     return cloned_repo
 
-
 @pytest.fixture
 def coderecon_server(
     initialized_repo: Path,
@@ -374,7 +366,6 @@ def coderecon_server(
         yield url, port
     finally:
         server.stop()
-
 
 @pytest.fixture
 def mcp_session(

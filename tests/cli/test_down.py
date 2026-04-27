@@ -8,7 +8,6 @@ from click.testing import CliRunner
 
 from coderecon.cli.down import down_command
 
-
 class TestDownCommand:
     """Tests for the down CLI command."""
 

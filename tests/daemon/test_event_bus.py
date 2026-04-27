@@ -9,7 +9,6 @@ import pytest
 
 from coderecon.daemon.event_bus import EventBus, wire_event_hooks
 
-
 class TestEventBus:
     """Tests for EventBus.emit and emit_sync."""
 
@@ -62,7 +61,6 @@ class TestEventBus:
         bus = EventBus(write_message)
         await bus.emit("fail.event")
 
-
 class TestEventBusEmitSync:
     """Tests for EventBus.emit_sync."""
 
@@ -109,7 +107,6 @@ class TestEventBusEmitSync:
         transport.write.side_effect = RuntimeError("closed")
         bus = EventBus(AsyncMock(), transport=transport)
         bus.emit_sync("fail")
-
 
 class TestWireEventHooks:
     """Tests for wire_event_hooks."""

@@ -28,7 +28,6 @@ from coderecon.config.constants import MS_PER_SEC
 #         ``{worktree}:{path}`` key for per-worktree deletion.
 SCHEMA_VERSION = 2
 
-
 @dataclass
 class SearchResult:
     """A single search result."""

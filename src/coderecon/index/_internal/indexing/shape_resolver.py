@@ -33,7 +33,6 @@ from coderecon.index.models import (
 if TYPE_CHECKING:
     from coderecon.index._internal.db import Database
 
-
 @dataclass
 class ShapeInferenceStats:
     """Statistics from shape-based inference."""
@@ -44,7 +43,6 @@ class ShapeInferenceStats:
     shapes_unmatched: int = 0
     accesses_upgraded: int = 0
 
-
 @dataclass
 class TypeMatch:
     """A candidate type match for a shape."""
@@ -53,7 +51,6 @@ class TypeMatch:
     confidence: float  # 0.0 - 1.0
     matched_members: list[str]
     unmatched_members: list[str]
-
 
 class ShapeInferenceResolver:
     """Infers types from observed member access patterns.
@@ -339,7 +336,6 @@ class ShapeInferenceResolver:
             type_name = member.parent_type_name
             self._type_shapes[type_name].add(member.member_name)
             self._type_member_uids[type_name][member.member_name] = member.member_def_uid
-
 
 def resolve_shape_inference(db: Database, file_ids: list[int] | None = None) -> ShapeInferenceStats:
     """Convenience function to run shape inference.

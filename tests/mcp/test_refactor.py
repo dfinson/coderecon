@@ -14,7 +14,6 @@ from coderecon.mcp.tools.refactor import (
     _summarize_refactor,
 )
 
-
 class TestSummarizeRefactor:
     """Tests for _summarize_refactor helper."""
 
@@ -38,7 +37,6 @@ class TestSummarizeRefactor:
         result = _summarize_refactor("pending", 3, preview)
         assert "preview" in result
         assert "15 changes" in result
-
 
 class TestDisplayRefactor:
     """Tests for _display_refactor helper."""

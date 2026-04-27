@@ -19,7 +19,6 @@ from coderecon.git.errors import (
     WorktreeNotFoundError,
 )
 
-
 class TestGitErrorMessages:
     """Tests for git error message formatting."""
 

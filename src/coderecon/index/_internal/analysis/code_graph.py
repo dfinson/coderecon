@@ -17,9 +17,7 @@ from sqlalchemy import text
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
-
 # Data models
-
 
 @dataclass(frozen=True, slots=True)
 class RankedSymbol:
@@ -32,14 +30,12 @@ class RankedSymbol:
     file_path: str
     pagerank: float
 
-
 @dataclass(frozen=True, slots=True)
 class CycleCluster:
     """Strongly connected component (circular dependency)."""
 
     nodes: frozenset[str]  # file paths or def_uids
     size: int
-
 
 @dataclass(frozen=True, slots=True)
 class Community:
@@ -49,7 +45,6 @@ class Community:
     members: list[str]  # file paths
     size: int
     representative: str | None  # Highest-PageRank member
-
 
 @dataclass(slots=True)
 class GraphAnalysisResult:
@@ -61,9 +56,7 @@ class GraphAnalysisResult:
     cycles: list[CycleCluster] = field(default_factory=list)
     communities: list[Community] = field(default_factory=list)
 
-
 # Graph construction
-
 
 def build_file_graph(engine: Engine) -> nx.DiGraph:
     """Build directed file-level graph from ImportFact.resolved_path.
@@ -91,7 +84,6 @@ def build_file_graph(engine: Engine) -> nx.DiGraph:
             g.add_edge(src_path, dst_path)
 
     return g
-
 
 def build_def_graph(engine: Engine) -> nx.DiGraph:
     """Build directed definition-level graph from RefFact→DefFact bindings.
@@ -141,9 +133,7 @@ def build_def_graph(engine: Engine) -> nx.DiGraph:
 
     return g
 
-
 # Algorithms
-
 
 def compute_pagerank(
     g: nx.DiGraph, *, top_k: int = 50
@@ -171,7 +161,6 @@ def compute_pagerank(
         )
     return result
 
-
 def compute_file_pagerank(
     g: nx.DiGraph, *, top_k: int = 30
 ) -> list[tuple[str, float]]:
@@ -180,7 +169,6 @@ def compute_file_pagerank(
         return []
     scores = nx.pagerank(g, alpha=0.85, max_iter=100, tol=1e-06)
     return sorted(scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
-
 
 def detect_cycles(g: nx.DiGraph) -> list[CycleCluster]:
     """Find all strongly connected components with size > 1 (circular deps)."""
@@ -196,7 +184,6 @@ def detect_cycles(g: nx.DiGraph) -> list[CycleCluster]:
     # Sort by size descending
     cycles.sort(key=lambda c: c.size, reverse=True)
     return cycles
-
 
 def detect_communities(
     g: nx.DiGraph, *, resolution: float = 1.0
@@ -242,9 +229,7 @@ def detect_communities(
     communities.sort(key=lambda c: c.size, reverse=True)
     return communities
 
-
 # Full analysis (convenience)
-
 
 def analyze_file_graph(engine: Engine) -> GraphAnalysisResult:
     """Build file graph and run all algorithms."""
@@ -270,7 +255,6 @@ def analyze_file_graph(engine: Engine) -> GraphAnalysisResult:
         cycles=cycles,
         communities=communities,
     )
-
 
 def analyze_def_graph(engine: Engine, *, top_k: int = 50) -> GraphAnalysisResult:
     """Build def graph and run all algorithms."""

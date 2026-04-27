@@ -16,7 +16,6 @@ from coderecon.index.models import (
 )
 from coderecon.tools.map_repo import RepoMapper
 
-
 @pytest.fixture
 def db_session() -> Session:
     """Create an in-memory database session with schema."""
@@ -27,7 +26,6 @@ def db_session() -> Session:
     session.add(Worktree(name="main", root_path="/test", is_main=True))
     session.commit()
     return session
-
 
 class TestRepoMapper:
     """Tests for RepoMapper."""

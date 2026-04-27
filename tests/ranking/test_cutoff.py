@@ -6,7 +6,6 @@ from pathlib import Path
 
 from coderecon.ranking.cutoff import Cutoff, load_cutoff
 
-
 class TestCutoff:
     """Tests for Cutoff class."""
 
@@ -20,7 +19,6 @@ class TestCutoff:
         cutoff = Cutoff(model_path)
         result = cutoff.predict({"feature_a": 1.0})
         assert result == 20  # _DEFAULT_N
-
 
 class TestLoadCutoff:
     """Tests for load_cutoff factory."""

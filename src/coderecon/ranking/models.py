@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-
 class GateLabel(StrEnum):
     """Gate classification for a (query, repo) pair."""
 
@@ -17,7 +16,6 @@ class GateLabel(StrEnum):
     UNSAT = "UNSAT"
     BROAD = "BROAD"
     AMBIG = "AMBIG"
-
 
 @dataclass(frozen=True)
 class ScoredCandidate:
@@ -30,7 +28,6 @@ class ScoredCandidate:
     start_line: int
     end_line: int
     score: float
-
 
 @dataclass(frozen=True)
 class RankingResult:

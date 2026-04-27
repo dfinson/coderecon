@@ -16,7 +16,6 @@ import pytest
 
 from coderecon.daemon.middleware import REPO_HEADER, RepoHeaderMiddleware
 
-
 class TestRepoHeader:
     """Tests for REPO_HEADER constant."""
 
@@ -27,7 +26,6 @@ class TestRepoHeader:
     def test_header_is_string(self) -> None:
         """Header is a string."""
         assert isinstance(REPO_HEADER, str)
-
 
 class TestRepoHeaderMiddleware:
     """Tests for RepoHeaderMiddleware class."""

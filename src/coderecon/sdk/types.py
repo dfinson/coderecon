@@ -10,7 +10,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-
 @dataclass(frozen=True)
 class CodeSpan:
     file: str
@@ -19,7 +18,6 @@ class CodeSpan:
     content: str
     symbol: str | None = None
     score: float = 0.0
-
 
 @dataclass(frozen=True)
 class ReconResult:
@@ -30,13 +28,11 @@ class ReconResult:
     hint: str = ""
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
-
 @dataclass(frozen=True)
 class MapResult:
     overview: str = ""
     sections: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
-
 
 @dataclass(frozen=True)
 class ImpactResult:
@@ -46,13 +42,11 @@ class ImpactResult:
     summary: str = ""
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
-
 @dataclass(frozen=True)
 class UnderstandResult:
     sections: dict[str, Any] = field(default_factory=dict)
     summary: str = ""
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
-
 
 @dataclass(frozen=True)
 class RefactorResult:
@@ -61,7 +55,6 @@ class RefactorResult:
     preview: dict[str, Any] | None = None
     agentic_hint: str = ""
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
-
 
 @dataclass(frozen=True)
 class RefactorCommitResult:
@@ -72,13 +65,11 @@ class RefactorCommitResult:
     inspection: dict[str, Any] | None = None
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
-
 @dataclass(frozen=True)
 class RefactorCancelResult:
     refactor_id: str = ""
     cancelled: bool = False
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
-
 
 @dataclass(frozen=True)
 class DiffResult:
@@ -87,14 +78,12 @@ class DiffResult:
     scope: dict[str, Any] | None = None
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
-
 @dataclass(frozen=True)
 class CyclesResult:
     level: str = "file"
     cycles: list[dict[str, Any]] = field(default_factory=list)
     summary: str = ""
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
-
 
 @dataclass(frozen=True)
 class CommunitiesResult:
@@ -103,13 +92,11 @@ class CommunitiesResult:
     summary: str = ""
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
-
 @dataclass(frozen=True)
 class GraphExportResult:
     path: str = ""
     message: str = ""
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
-
 
 @dataclass(frozen=True)
 class CheckpointResult:
@@ -121,20 +108,17 @@ class CheckpointResult:
     agentic_hint: str = ""
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
-
 @dataclass(frozen=True)
 class DescribeResult:
     found: bool = False
     description: str | None = None
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
-
 @dataclass(frozen=True)
 class RegisterResult:
     repo: str = ""
     worktree: str = ""
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
-
 
 @dataclass(frozen=True)
 class CatalogEntry:
@@ -143,13 +127,11 @@ class CatalogEntry:
     worktrees: list[dict[str, Any]] = field(default_factory=list)
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
-
 @dataclass(frozen=True)
 class StatusResult:
     daemon_healthy: bool = False
     active_repos: list[dict[str, Any]] = field(default_factory=list)
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
-
 
 @dataclass(frozen=True)
 class RawSignalsResult:
@@ -159,13 +141,11 @@ class RawSignalsResult:
     diagnostics: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
-
 @dataclass(frozen=True)
 class Event:
     type: str
     data: dict[str, Any] = field(default_factory=dict)
     ts: float = 0.0
-
 
 # Wire → typed conversion
 
@@ -179,10 +159,8 @@ def _to_recon_result(d: dict[str, Any]) -> ReconResult:
         raw=d,
     )
 
-
 def _to_map_result(d: dict[str, Any]) -> MapResult:
     return MapResult(overview=d.get("overview", ""), sections=d, raw=d)
-
 
 def _to_impact_result(d: dict[str, Any]) -> ImpactResult:
     return ImpactResult(
@@ -193,14 +171,12 @@ def _to_impact_result(d: dict[str, Any]) -> ImpactResult:
         raw=d,
     )
 
-
 def _to_understand_result(d: dict[str, Any]) -> UnderstandResult:
     return UnderstandResult(
         sections=d.get("sections", {}),
         summary=d.get("summary", ""),
         raw=d,
     )
-
 
 def _to_refactor_result(d: dict[str, Any]) -> RefactorResult:
     return RefactorResult(
@@ -210,7 +186,6 @@ def _to_refactor_result(d: dict[str, Any]) -> RefactorResult:
         agentic_hint=d.get("agentic_hint", ""),
         raw=d,
     )
-
 
 def _to_refactor_commit_result(d: dict[str, Any]) -> RefactorCommitResult:
     return RefactorCommitResult(
@@ -222,14 +197,12 @@ def _to_refactor_commit_result(d: dict[str, Any]) -> RefactorCommitResult:
         raw=d,
     )
 
-
 def _to_refactor_cancel_result(d: dict[str, Any]) -> RefactorCancelResult:
     return RefactorCancelResult(
         refactor_id=d.get("refactor_id", ""),
         cancelled=d.get("status") == "cancelled",
         raw=d,
     )
-
 
 def _to_diff_result(d: dict[str, Any]) -> DiffResult:
     return DiffResult(
@@ -239,7 +212,6 @@ def _to_diff_result(d: dict[str, Any]) -> DiffResult:
         raw=d,
     )
 
-
 def _to_cycles_result(d: dict[str, Any]) -> CyclesResult:
     return CyclesResult(
         level=d.get("level", "file"),
@@ -247,7 +219,6 @@ def _to_cycles_result(d: dict[str, Any]) -> CyclesResult:
         summary=d.get("summary", ""),
         raw=d,
     )
-
 
 def _to_communities_result(d: dict[str, Any]) -> CommunitiesResult:
     return CommunitiesResult(
@@ -257,14 +228,12 @@ def _to_communities_result(d: dict[str, Any]) -> CommunitiesResult:
         raw=d,
     )
 
-
 def _to_graph_export_result(d: dict[str, Any]) -> GraphExportResult:
     return GraphExportResult(
         path=d.get("path", ""),
         message=d.get("message", ""),
         raw=d,
     )
-
 
 def _to_checkpoint_result(d: dict[str, Any]) -> CheckpointResult:
     return CheckpointResult(
@@ -277,7 +246,6 @@ def _to_checkpoint_result(d: dict[str, Any]) -> CheckpointResult:
         raw=d,
     )
 
-
 def _to_describe_result(d: dict[str, Any]) -> DescribeResult:
     return DescribeResult(
         found=d.get("found", False),
@@ -285,10 +253,8 @@ def _to_describe_result(d: dict[str, Any]) -> DescribeResult:
         raw=d,
     )
 
-
 def _to_register_result(d: dict[str, Any]) -> RegisterResult:
     return RegisterResult(repo=d.get("repo", ""), worktree=d.get("worktree", ""), raw=d)
-
 
 def _to_status_result(d: dict[str, Any]) -> StatusResult:
     return StatusResult(
@@ -296,7 +262,6 @@ def _to_status_result(d: dict[str, Any]) -> StatusResult:
         active_repos=d.get("active_repos", []),
         raw=d,
     )
-
 
 def _to_raw_signals_result(d: dict[str, Any]) -> RawSignalsResult:
     return RawSignalsResult(

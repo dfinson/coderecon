@@ -11,7 +11,6 @@ from coderecon.index._internal.db import Database
 from coderecon.index._internal.state.filestate import FileStateService, MutationGateResult
 from coderecon.index.models import Certainty, File, FileState, Freshness, Worktree
 
-
 @pytest.fixture
 def db(tmp_path: Path) -> Database:
     """Create a test database."""
@@ -23,12 +22,10 @@ def db(tmp_path: Path) -> Database:
         session.commit()
     return database
 
-
 @pytest.fixture
 def service(db: Database) -> FileStateService:
     """Create FileStateService with test database."""
     return FileStateService(db)
-
 
 class TestGetFileState:
     """Tests for get_file_state method."""
@@ -109,7 +106,6 @@ class TestGetFileState:
         assert state1 is state2
         assert (file_id, 1) in memo
 
-
 class TestGetFileStatesBatch:
     """Tests for batch file state retrieval."""
 
@@ -145,7 +141,6 @@ class TestGetFileStatesBatch:
         """Empty file list returns empty dict."""
         states = service.get_file_states_batch([], context_id=1)
         assert states == {}
-
 
 class TestCheckMutationGate:
     """Tests for mutation gate checking."""
@@ -255,7 +250,6 @@ class TestCheckMutationGate:
         assert result.blocked == []
         assert result.all_allowed is True
 
-
 class TestMarkFileDirtyAndStale:
     """Tests for mark_file_dirty and mark_file_stale (no-ops in Tier 0+1)."""
 
@@ -268,7 +262,6 @@ class TestMarkFileDirtyAndStale:
         """mark_file_stale is a no-op in Tier 0+1."""
         # Should not raise
         service.mark_file_stale(file_id=1, context_id=1)
-
 
 class TestMutationGateResult:
     """Tests for MutationGateResult dataclass."""

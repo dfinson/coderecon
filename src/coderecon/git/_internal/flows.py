@@ -8,14 +8,12 @@ from dataclasses import dataclass
 
 from coderecon.git._internal.access import GitSignature, RepoAccess
 
-
 @dataclass(frozen=True, slots=True)
 class ConflictCheckResult:
     """Result of an operation that may produce conflicts."""
 
     has_conflicts: bool
     conflict_paths: tuple[str, ...]
-
 
 class WriteFlows:
     """Reusable transactional patterns for git write operations."""

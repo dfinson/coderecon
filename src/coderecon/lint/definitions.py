@@ -122,7 +122,6 @@ registry.register(
     parser=parsers.parse_gofmt,  # Lists files
 )
 
-
 # JavaScript/TypeScript Tools
 
 registry.register(

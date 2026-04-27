@@ -23,7 +23,6 @@ log = structlog.get_logger(__name__)
 
 _rich_handler_patched = False
 
-
 def _patch_rich_handler() -> None:
     """Suppress Rich tracebacks by patching RichHandler.emit.
 
@@ -47,7 +46,6 @@ def _patch_rich_handler() -> None:
     _RichHandler.emit = _patched_rich_emit  # type: ignore[method-assign]
     _rich_handler_patched = True
 
-
 @asynccontextmanager
 async def _noop_docket_lifespan(*_args: Any, **_kwargs: Any) -> AsyncIterator[None]:
     """No-op lifespan that replaces FastMCP's Docket task queue.
@@ -57,7 +55,6 @@ async def _noop_docket_lifespan(*_args: Any, **_kwargs: Any) -> AsyncIterator[No
     we replace the lifespan with a no-op to eliminate this CPU drain.
     """
     yield
-
 
 def _patch_fastmcp_docket() -> None:
     """Disable FastMCP's Docket task queue to eliminate idle CPU usage.
@@ -73,7 +70,6 @@ def _patch_fastmcp_docket() -> None:
         FastMCP._docket_lifespan = staticmethod(_noop_docket_lifespan)  # type: ignore[method-assign]
         FastMCP._docket_patched = True  # type: ignore[attr-defined]
         log.debug("fastmcp_docket_disabled")
-
 
 def _enrich_tool_descriptions(mcp: "FastMCP") -> None:
     """Enrich tool descriptions with inline examples from TOOL_DOCS.
@@ -92,7 +88,6 @@ def _enrich_tool_descriptions(mcp: "FastMCP") -> None:
         if enriched_desc != original_desc:
             tool.description = enriched_desc
             enriched_count += 1
-
 
 def create_mcp_server(context: "AppContext", *, dev_mode: bool = False) -> "FastMCP":
     """Create FastMCP server with all tools wired to context.
@@ -153,7 +148,6 @@ def create_mcp_server(context: "AppContext", *, dev_mode: bool = False) -> "Fast
     log.info("mcp_server_created", tool_count=tool_count)
 
     return mcp
-
 
 def run_server(repo_root: Path, db_path: Path, tantivy_path: Path) -> None:
     """Create and run the MCP server."""

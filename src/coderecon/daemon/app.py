@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from coderecon.daemon.lifecycle import ServerController
     from coderecon.index.ops import IndexCoordinatorEngine
 
-
 def create_app(
     controller: ServerController,
     repo_root: Path,

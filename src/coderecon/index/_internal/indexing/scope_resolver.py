@@ -17,7 +17,6 @@ from coderecon.index.models import File, ScopeFact, ScopeKind
 if TYPE_CHECKING:
     from sqlmodel import Session
 
-
 @dataclass
 class ScopeRegion:
     """A resolved scope region with content."""
@@ -26,7 +25,6 @@ class ScopeRegion:
     end_line: int
     kind: str  # ScopeKind value: function, class, block, file, etc. or "lines" for fallback
     resolved: bool  # True if structural, False if fallback
-
 
 def find_enclosing_scope(
     session: Session,
@@ -83,7 +81,6 @@ def find_enclosing_scope(
 
     # Last resort: file-level scope
     return scopes[0] if scopes else None
-
 
 def resolve_scope_region(
     session: Session,
@@ -167,7 +164,6 @@ def resolve_scope_region(
         ),
         content_str,
     )
-
 
 def resolve_scope_region_for_path(
     session: Session,

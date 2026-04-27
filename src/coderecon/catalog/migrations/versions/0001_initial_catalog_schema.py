@@ -16,7 +16,6 @@ down_revision: str | None = None
 branch_labels: str | None = None
 depends_on: str | None = None
 
-
 def upgrade() -> None:
     # Use batch mode for SQLite compatibility.
     # If tables already exist (pre-alembic databases), this is a no-op.
@@ -54,7 +53,6 @@ def upgrade() -> None:
             sa.Column("registered_at", sa.Float, nullable=False),
             sa.Column("last_indexed_at", sa.Float, nullable=True),
         )
-
 
 def downgrade() -> None:
     op.drop_table("catalog_worktrees")

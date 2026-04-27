@@ -42,7 +42,6 @@ SIGMA_FLOOR = 15.0  # Calibrate from GT co-touch distributions
 # Maximum neighbors per definition.
 MAX_NEIGHBORS_PER_DEF = 20
 
-
 def compute_semantic_neighbors(
     db: Database,
     *,

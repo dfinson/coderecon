@@ -25,7 +25,6 @@ DEFAULT_PORT = 7654
 DEFAULT_MAX_FILE_SIZE_MB = 20
 DEFAULT_LOG_LEVEL: LogLevel = "INFO"
 
-
 class UserConfig(BaseModel):
     """User-facing configuration options.
 
@@ -46,7 +45,6 @@ class UserConfig(BaseModel):
         description="Log level. DEBUG is very verbose.",
     )
 
-
 class RuntimeState(BaseModel):
     """Auto-generated runtime state. NOT user-editable.
 
@@ -57,14 +55,12 @@ class RuntimeState(BaseModel):
         description="Path where index files are stored. Auto-detected.",
     )
 
-
 STATE_HEADER = """\
 # AUTO-GENERATED - DO NOT EDIT MANUALLY
 # This file tracks runtime state for this repository.
 # Delete .recon/ and run 'recon init' to regenerate.
 
 """
-
 
 def write_user_config(path: Path, config: UserConfig | None = None) -> None:
     """Write user config file with helpful comments.
@@ -106,13 +102,11 @@ def write_user_config(path: Path, config: UserConfig | None = None) -> None:
 
     atomic_write_text(path, "\n".join(lines))
 
-
 def write_runtime_state(path: Path, state: RuntimeState) -> None:
     """Write runtime state file with warning header."""
     data = state.model_dump()
     content = STATE_HEADER + yaml.dump(data, default_flow_style=False, sort_keys=False)
     atomic_write_text(path, content)
-
 
 def load_user_config(path: Path) -> UserConfig:
     """Load user config from YAML file."""
@@ -125,7 +119,6 @@ def load_user_config(path: Path) -> UserConfig:
     except (OSError, yaml.YAMLError, TypeError, ValueError):
         log.debug("user_config_parse_failed", exc_info=True)
         return UserConfig()
-
 
 def load_runtime_state(path: Path) -> RuntimeState | None:
     """Load runtime state from YAML file."""

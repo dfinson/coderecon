@@ -13,7 +13,6 @@ from coderecon.index._internal.grammars import (
 )
 from coderecon.index.models import LanguageFamily
 
-
 class TestIsGrammarInstalled:
     """Tests for is_grammar_installed."""
 
@@ -25,7 +24,6 @@ class TestIsGrammarInstalled:
     def test_missing_module(self) -> None:
         """Returns False for missing modules."""
         assert is_grammar_installed("nonexistent_module_xyz") is False
-
 
 class TestGetNeededGrammars:
     """Tests for get_needed_grammars."""
@@ -66,7 +64,6 @@ class TestGetNeededGrammars:
         assert "tree-sitter-javascript" in pkg_names
         assert "tree-sitter-typescript" in pkg_names
 
-
 class TestGrammarInstallResult:
     """Tests for GrammarInstallResult dataclass."""
 
@@ -91,7 +88,6 @@ class TestGrammarInstallResult:
         assert result.success is False
         assert len(result.failed_packages) == 2
         assert len(result.installed_packages) == 2
-
 
 class TestInstallGrammars:
     """Tests for install_grammars."""
@@ -218,7 +214,6 @@ class TestInstallGrammars:
         with patch("importlib.invalidate_caches") as mock_invalidate:
             install_grammars([("tree-sitter-python", "0.23.0")])
             mock_invalidate.assert_called_once()
-
 
 class TestScanRepoLanguages:
     """Tests for scan_repo_languages."""

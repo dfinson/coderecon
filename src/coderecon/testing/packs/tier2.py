@@ -39,9 +39,7 @@ from coderecon.config.constants import MS_PER_SEC
 
 log = structlog.get_logger(__name__)
 
-
 # Kotlin - Gradle with Kotlin DSL
-
 
 @runner_registry.register
 class KotlinGradlePack(RunnerPack):
@@ -139,7 +137,6 @@ class KotlinGradlePack(RunnerPack):
 
 # Swift - swift test
 
-
 @runner_registry.register
 class SwiftTestPack(RunnerPack):
     """Swift Package Manager test runner."""
@@ -213,7 +210,6 @@ class SwiftTestPack(RunnerPack):
         )
 
 # Scala - sbt test
-
 
 @runner_registry.register
 class SbtTestPack(RunnerPack):
@@ -293,7 +289,6 @@ class SbtTestPack(RunnerPack):
         )
 
 # Dart - dart test / flutter test
-
 
 @runner_registry.register
 class DartTestPack(RunnerPack):
@@ -471,7 +466,6 @@ class FlutterTestPack(RunnerPack):
 
 # Bash - bats (Bash Automated Testing System)
 
-
 @runner_registry.register
 class BatsPack(RunnerPack):
     """Bash bats test runner."""
@@ -539,7 +533,6 @@ class BatsPack(RunnerPack):
         return parse_tap(stdout)
 
 # PowerShell - Pester
-
 
 @runner_registry.register
 class PesterPack(RunnerPack):
@@ -611,9 +604,7 @@ $config.TestResult.OutputFormat = 'JUnitXml'
             return parse_junit_xml(output_path.read_text())
         return ParsedTestSuite(name="pester", errors=1)
 
-
 # Lua - busted
-
 
 @runner_registry.register
 class BustedPack(RunnerPack):
@@ -680,7 +671,6 @@ class BustedPack(RunnerPack):
         return ParsedTestSuite(name="busted", errors=1)
 
 # Elixir - Mix Test (ExUnit)
-
 
 @runner_registry.register
 class MixTestPack(RunnerPack):
@@ -779,7 +769,6 @@ class MixTestPack(RunnerPack):
 
 # Haskell - Cabal Test
 
-
 @runner_registry.register
 class CabalTestPack(RunnerPack):
     """Haskell cabal test runner."""
@@ -869,7 +858,6 @@ class CabalTestPack(RunnerPack):
 
 # Julia - Pkg.test (Julia standard package testing)
 
-
 @runner_registry.register
 class JuliaPkgTestPack(RunnerPack):
     """Julia Pkg.test() runner."""
@@ -951,7 +939,6 @@ class JuliaPkgTestPack(RunnerPack):
         return suite
 
 # OCaml - Dune Test
-
 
 @runner_registry.register
 class DuneTestPack(RunnerPack):

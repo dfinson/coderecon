@@ -3127,7 +3127,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 files.append(full_path)
         return files
 
-
 __all__ = [
     "IndexCoordinatorEngine",
     "IndexStats",

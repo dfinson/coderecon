@@ -23,10 +23,8 @@ if TYPE_CHECKING:
 
 from coderecon.files.ops import atomic_write_text
 
-
 # Rebase state file stored in .git/
 REBASE_STATE_FILE = "coderecon-rebase-state.json"
-
 
 @dataclass
 class RebaseState:
@@ -38,7 +36,6 @@ class RebaseState:
     steps: list[dict[str, str | None]]
     current_step: int
     completed_commits: list[str]
-
 
 class RebasePlanner:
     """Generates rebase plans from commit ranges."""
@@ -60,7 +57,6 @@ class RebasePlanner:
         )
 
         return RebasePlan(upstream=upstream, onto=onto_ref, steps=steps)
-
 
 class RebaseFlow:
     """Executes rebase plans with state persistence."""

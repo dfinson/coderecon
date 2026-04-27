@@ -25,7 +25,6 @@ _LEVEL_MAP = {
     "info": "note",
 }
 
-
 def gate_result_to_sarif(
     gate_result: "GateResult",
     *,
@@ -96,7 +95,6 @@ def gate_result_to_sarif(
         ],
     }
 
-
 def lint_diagnostics_to_sarif(
     diagnostics: list[dict[str, Any]],
     *,
@@ -164,7 +162,6 @@ def lint_diagnostics_to_sarif(
             },
         ],
     }
-
 
 def write_sarif(sarif: dict[str, Any], output_path: Path) -> Path:
     """Write SARIF dict to a JSON file."""

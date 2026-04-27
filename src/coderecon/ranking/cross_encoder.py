@@ -28,7 +28,6 @@ log = structlog.get_logger(__name__)
 from coderecon_models_ce import ONNX_PATH as _ONNX_PATH
 from coderecon_models_ce import TOKENIZER_PATH as _TOKENIZER_PATH
 
-
 @dataclass
 class CrossEncoderScorer:
     """ONNX cross-encoder scorer for (query, document) pairs.
@@ -174,11 +173,9 @@ class CrossEncoderScorer:
 
         return np.concatenate(all_scores)
 
-
 # ── Singleton ─────────────────────────────────────────────────────
 
 _SCORER: CrossEncoderScorer | None = None
-
 
 def get_scorer() -> CrossEncoderScorer:
     """Return the singleton cross-encoder scorer (lazy-loaded)."""
@@ -187,11 +184,9 @@ def get_scorer() -> CrossEncoderScorer:
         _SCORER = CrossEncoderScorer()
     return _SCORER
 
-
 # ── TinyBERT fast scorer ─────────────────────────────────────────
 
 _TINY_SCORER: CrossEncoderScorer | None = None
-
 
 def get_tiny_scorer() -> CrossEncoderScorer:
     """Return the singleton TinyBERT cross-encoder scorer (lazy-loaded).

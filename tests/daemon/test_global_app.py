@@ -11,13 +11,11 @@ from coderecon.catalog.registry import CatalogRegistry
 from coderecon.daemon.global_app import GlobalDaemon
 from coderecon.daemon.global_routes import DynamicMcpRouter
 
-
 @pytest.fixture
 def daemon(tmp_path: Path) -> GlobalDaemon:
     catalog = CatalogDB(home=tmp_path / ".coderecon")
     registry = CatalogRegistry(catalog)
     return GlobalDaemon(registry)
-
 
 class TestGlobalDaemon:
     def test_initial_state(self, daemon: GlobalDaemon) -> None:
@@ -43,7 +41,6 @@ class TestGlobalDaemon:
     def test_build_app_includes_dynamic_mcp_router(self, daemon: GlobalDaemon) -> None:
         app = daemon.build_app()
         assert any(isinstance(r, DynamicMcpRouter) for r in app.routes)
-
 
 class TestGlobalAppRoutes:
     """Test the Starlette routes without actually starting a server."""

@@ -6,7 +6,6 @@ from pathlib import Path
 
 from coderecon.index._internal.ignore import PRUNABLE_DIRS
 
-
 def _is_prunable_path(
     path: Path,
     workspace_root: Path,
@@ -31,7 +30,6 @@ def _is_prunable_path(
         return False
     except ValueError:
         return True
-
 
 # Import tiers to register packs
 from coderecon.testing.packs import tier1 as _tier1  # noqa: F401, E402

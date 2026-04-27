@@ -74,7 +74,6 @@ _SOURCE_TAGS = {
 # Global flag to suppress console logging during spinners (Issue #5)
 _suppress_console_logs = threading.local()
 
-
 def _timestamp() -> str:
     """Return current time as HH:MM:SS for log prefix."""
     return time.strftime("%H:%M:%S")

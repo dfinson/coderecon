@@ -14,7 +14,6 @@ from coderecon.core.excludes import (
     generate_reconignore_template,
 )
 
-
 class TestPrunableDirs:
     """Tests for PRUNABLE_DIRS constant."""
 
@@ -62,7 +61,6 @@ class TestPrunableDirs:
         """No empty strings in the set."""
         assert "" not in PRUNABLE_DIRS
 
-
 class TestUniversalExcludeGlobs:
     """Tests for UNIVERSAL_EXCLUDE_GLOBS constant."""
 
@@ -87,7 +85,6 @@ class TestUniversalExcludeGlobs:
     def test_no_empty_strings(self) -> None:
         """No empty strings in the tuple."""
         assert "" not in UNIVERSAL_EXCLUDE_GLOBS
-
 
 class TestGenerateCplignoreTemplate:
     """Tests for generate_reconignore_template function."""
@@ -150,7 +147,6 @@ class TestGenerateCplignoreTemplate:
         result1 = generate_reconignore_template()
         result2 = generate_reconignore_template()
         assert result1 == result2
-
 
 class TestPrunableDirsAndGlobsRelationship:
     """Tests for relationship between PRUNABLE_DIRS and UNIVERSAL_EXCLUDE_GLOBS."""

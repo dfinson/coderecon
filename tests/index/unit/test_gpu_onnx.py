@@ -22,9 +22,7 @@ from coderecon.index._internal.indexing.splade import (
     is_gpu_active,
 )
 
-
 # ── _select_onnx_providers tests ─────────────────────────────────
-
 
 def _provider_name(entry: str | tuple) -> str:
     """Extract provider name from a string or (name, opts) tuple."""
@@ -130,7 +128,6 @@ class TestSelectOnnxProviders:
 
 # ── _ensure_cuda_lib_path tests ──────────────────────────────────
 
-
 class TestEnsureCudaLibPath:
     def test_noop_on_non_linux(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(sys, "platform", "darwin")
@@ -234,7 +231,6 @@ class TestEnsureCudaLibPath:
         assert os.environ.get("LD_LIBRARY_PATH", "") == ""
 
 # ── Adaptive batch size tests ────────────────────────────────────
-
 
 class TestAdaptiveBatchSize:
     def test_default_batch_size_is_cpu(self) -> None:
@@ -350,7 +346,6 @@ class TestAdaptiveBatchSize:
 
 # ── _query_gpu_vram_bytes tests ─────────────────────────────────
 
-
 class TestQueryGpuVram:
     def test_returns_bytes_from_nvidia_smi(self) -> None:
         with patch("subprocess.run") as mock_run:
@@ -371,7 +366,6 @@ class TestQueryGpuVram:
         assert result == 8192 * 1024 * 1024
 
 # ── _compute_gpu_batch_size tests ───────────────────────────────
-
 
 class TestComputeGpuBatchSize:
     VRAM_4GB = 4 * 1024 * 1024 * 1024
@@ -396,7 +390,6 @@ class TestComputeGpuBatchSize:
         assert bs_short > bs_long
 
 # ── OOM fallback tests ─────────────────────────────────────────
-
 
 class TestOomFallback:
     def test_encode_batch_safe_halves_on_oom(self) -> None:

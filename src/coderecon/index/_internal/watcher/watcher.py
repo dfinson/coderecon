@@ -25,14 +25,12 @@ from coderecon.index._internal.ignore import IgnoreChecker
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
-
 class FileChangeKind(Enum):
     """Kind of file change detected."""
 
     CREATED = "created"
     MODIFIED = "modified"
     DELETED = "deleted"
-
 
 @dataclass
 class FileChangeEvent:
@@ -46,7 +44,6 @@ class FileChangeEvent:
     def relative_path(self) -> str:
         """Get the path relative to the watch root."""
         return str(self.path)
-
 
 @dataclass
 class WatcherConfig:
@@ -85,7 +82,6 @@ class WatcherConfig:
 
     # Max queue size for pending changes
     max_queue_size: int = 10000
-
 
 class FileWatcher:
     """Watches filesystem for changes and emits debounced events.
@@ -245,7 +241,6 @@ class FileWatcher:
         """Check if a path should be ignored."""
         return self._ignore_checker.should_ignore(path)
 
-
 class WatcherQueue:
     """Async queue for file change events with backpressure."""
 
@@ -275,7 +270,6 @@ class WatcherQueue:
     def empty(self) -> bool:
         """Check if queue is empty."""
         return self._queue.empty()
-
 
 class BackgroundIndexer:
     """Coordinates file watching with background indexing.

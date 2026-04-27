@@ -20,7 +20,6 @@ from coderecon.index.ops import (
     SearchResult,
 )
 
-
 def _noop_progress(indexed: int, total: int, files_by_ext: dict[str, int], phase: str = "") -> None:
     """No-op progress callback for tests."""
     pass

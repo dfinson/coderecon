@@ -18,7 +18,6 @@ from coderecon.index._internal.indexing.type_resolver import (
     resolve_type_traced,
 )
 
-
 class TestTypeTracedStats:
     """Tests for TypeTracedStats dataclass."""
 
@@ -49,7 +48,6 @@ class TestTypeTracedStats:
         stats = TypeTracedStats()
         stats.accesses_resolved = 10
         assert stats.accesses_resolved == 10
-
 
 class TestTypeTracedResolver:
     """Tests for TypeTracedResolver class."""
@@ -128,7 +126,6 @@ class TestTypeTracedResolver:
         key = ("AppContext", "file_ops")
         assert key in resolver._member_map
         assert resolver._member_map[key] is member
-
 
 class TestResolveTypeTracedFunction:
     """Tests for resolve_type_traced convenience function."""

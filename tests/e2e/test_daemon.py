@@ -9,7 +9,6 @@ import pytest
 
 from tests.e2e.expectations.schema import RepoExpectation
 
-
 @pytest.mark.e2e
 def test_daemon_started(
     coderecon_server: tuple[str, int],
@@ -23,7 +22,6 @@ def test_daemon_started(
     if daemon.starts:
         _url, port = coderecon_server
         assert port > 0, "Daemon should have started and bound to a port"
-
 
 @pytest.mark.e2e
 def test_daemon_health(

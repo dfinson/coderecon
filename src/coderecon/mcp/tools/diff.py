@@ -38,9 +38,7 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-
 # Core Function (transport-agnostic)
-
 
 def semantic_diff_core(
     app_ctx: "AppContext",
@@ -63,9 +61,7 @@ def semantic_diff_core(
         resource_kind="semantic_diff",
     )
 
-
 # Tool Registration
-
 
 def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
     """Register semantic_diff MCP tool."""
@@ -284,9 +280,7 @@ def _run_epoch_diff(
     )
     return result
 
-
 _PREVIEW_MAX_LINES = 5  # Max changed lines to include in preview
-
 
 def _extract_patch_lines(
     diff_text: str,
@@ -368,5 +362,4 @@ def _annotate_change_previews(
                             break
                 if nc_relevant:
                     nc.change_preview = "\n".join(nc_relevant)
-
 

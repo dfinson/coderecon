@@ -53,7 +53,6 @@ __all__ = [
     "SimplecovParser",
 ]
 
-
 def detect_parser(path: Path) -> CoverageParser | None:
     """Auto-detect the appropriate parser for a coverage artifact.
 
@@ -71,7 +70,6 @@ def detect_parser(path: Path) -> CoverageParser | None:
         if parser.can_parse(path):
             return parser
     return None
-
 
 def parse_artifact(
     path: Path,

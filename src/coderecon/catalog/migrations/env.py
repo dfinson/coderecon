@@ -9,7 +9,6 @@ from coderecon.catalog.models import RepoEntry, WorktreeEntry  # noqa: F401
 
 target_metadata = SQLModel.metadata
 
-
 def run_migrations_online() -> None:
     """Run migrations against a live database connection."""
     connection = context.config.attributes.get("connection")
@@ -23,6 +22,5 @@ def run_migrations_online() -> None:
     )
     with context.begin_transaction():
         context.run_migrations()
-
 
 run_migrations_online()

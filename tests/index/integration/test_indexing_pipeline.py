@@ -28,7 +28,6 @@ from coderecon.index.models import (
     Worktree,
 )
 
-
 def rel(path: Path, root: Path) -> str:
     """Get relative path string for index_files."""
     return str(path.relative_to(root))

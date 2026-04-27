@@ -9,35 +9,29 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 @dataclass
 class _FakeDiag:
     path: str
     severity: MagicMock
-
 
 @dataclass
 class _FakeToolResult:
     tool_id: str
     diagnostics: list[_FakeDiag]
 
-
 @dataclass
 class _FakeLintResult:
     tools_run: list[_FakeToolResult]
     total_diagnostics: int
 
-
 @dataclass
 class _FakeGraphResult:
     test_files: list[str]
-
 
 def _severity(val: int) -> MagicMock:
     s = MagicMock()
     s.value = val
     return s
-
 
 def _make_pipeline(*, lint_ops: MagicMock | None = None, test_ops: MagicMock | None = None):  # noqa: ANN202
     from coderecon.daemon.analysis_pipeline import AnalysisPipeline
@@ -64,7 +58,6 @@ def _make_pipeline(*, lint_ops: MagicMock | None = None, test_ops: MagicMock | N
         test_ops=test_ops,
         repo_root=Path("/repo"),
     )
-
 
 class TestTier1:
     """Tier 1: lint analysis."""
@@ -144,7 +137,6 @@ class TestTier1:
         assert diag_call.kwargs["warning_count"] == 1
         assert diag_call.kwargs["error_count"] == 0
 
-
 class TestTier2:
     """Tier 2: test + coverage analysis."""
 
@@ -193,7 +185,6 @@ class TestTier2:
         # Should not raise
         await pipeline._run_tier2()
 
-
 class TestOnIndexComplete:
     """Integration: on_index_complete triggers tiers."""
 
@@ -219,7 +210,6 @@ class TestOnIndexComplete:
             )
         assert "src/a.py" in pipeline._tier2_pending
 
-
 class TestStop:
     """Pipeline stop behaviour."""
 
@@ -236,7 +226,6 @@ class TestStop:
         pipeline = _make_pipeline()
         await pipeline.stop()
         assert pipeline._running is False
-
 
 class TestScheduleTier2:
     """Tier 2 scheduling and debounce."""

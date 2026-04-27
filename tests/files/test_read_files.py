@@ -17,7 +17,6 @@ import pytest
 
 from coderecon.files.ops import FileOps, FileResult, ReadFilesResult
 
-
 @pytest.fixture
 def temp_repo(tmp_path: Path) -> Path:
     """Create a temporary repository structure."""
@@ -27,7 +26,6 @@ def temp_repo(tmp_path: Path) -> Path:
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "utils.py").write_text("def foo():\n    pass\n")
     return tmp_path
-
 
 class TestReadFilesSingle:
     """Tests for reading a single file."""
@@ -70,7 +68,6 @@ class TestReadFilesSingle:
         assert result.files[0].path == "src/utils.py"
         assert "def foo" in result.files[0].content
 
-
 class TestReadFilesMultiple:
     """Tests for reading multiple files."""
 
@@ -97,7 +94,6 @@ class TestReadFilesMultiple:
         ops = FileOps(temp_repo)
         result = ops.read_files(["missing1.txt", "missing2.txt"])
         assert len(result.files) == 0
-
 
 class TestReadFilesRanges:
     """Tests for line range extraction."""
@@ -143,7 +139,6 @@ class TestReadFilesRanges:
         result = ops.read_files("main.py")
         assert result.files[0].range is None
 
-
 class TestReadFilesMetadata:
     """Tests for metadata inclusion."""
 
@@ -163,7 +158,6 @@ class TestReadFilesMetadata:
         assert "size_bytes" in metadata
         assert "modified_at" in metadata
         assert metadata["size_bytes"] > 0
-
 
 class TestFileResult:
     """Tests for FileResult dataclass."""

@@ -11,7 +11,6 @@ from rich.progress import BarColumn, Progress, TaskID, TaskProgressColumn, TextC
 from rich.table import Table
 from rich.text import Text
 
-
 class PhaseBox:
     """Dynamic boxed phase with Live + Panel for real-time updating content.
 

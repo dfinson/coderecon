@@ -26,7 +26,6 @@ pytestmark = pytest.mark.integration
 
 runner = CliRunner()
 
-
 @pytest.fixture(autouse=True)
 def reset_state() -> Generator[None, None, None]:
     """Reset logging and env state between tests."""
@@ -45,7 +44,6 @@ def reset_state() -> Generator[None, None, None]:
             del os.environ[k]
     os.environ.update(orig)
 
-
 @pytest.fixture
 def temp_repo(tmp_path: Path) -> Path:
     """Create a temporary git repository with initial commit."""
@@ -61,7 +59,6 @@ def temp_repo(tmp_path: Path) -> Path:
     subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_path, capture_output=True, check=True)
 
     return repo_path
-
 
 class TestErrorPropagation:
     """Test that errors propagate properly through CLI."""
@@ -94,7 +91,6 @@ class TestErrorPropagation:
         # Then
         assert result.exit_code == 1
         assert "not" in result.output.lower() and "git repository" in result.output.lower()
-
 
 class TestWorkflows:
     """Test complete user workflows through CLI."""

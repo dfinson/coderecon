@@ -108,11 +108,9 @@ EXTRA_PACKAGES: dict[LanguageFamily, list[tuple[str, str, str]]] = {
     ],
 }
 
-
 def is_grammar_installed(import_name: str) -> bool:
     """Check if a grammar package is installed."""
     return find_spec(import_name) is not None
-
 
 def get_needed_grammars(languages: set[LanguageFamily]) -> list[tuple[str, str]]:
     """Get list of (package, version) tuples needed but not installed."""
@@ -133,7 +131,6 @@ def get_needed_grammars(languages: set[LanguageFamily]) -> list[tuple[str, str]]
 
     return needed
 
-
 @dataclass
 class GrammarInstallResult:
     """Result of grammar installation attempt."""
@@ -141,7 +138,6 @@ class GrammarInstallResult:
     success: bool
     failed_packages: list[str]
     installed_packages: list[str]
-
 
 def install_grammars(
     packages: list[tuple[str, str]], quiet: bool = False, status_fn: Callable[[str], None] | None = None
@@ -198,7 +194,6 @@ def install_grammars(
         installed_packages=installed_packages,
     )
 
-
 def scan_repo_languages(repo_root: Path) -> set[LanguageFamily]:
     """Quick scan of repo to determine which languages are present.
 
@@ -252,7 +247,6 @@ def scan_repo_languages(repo_root: Path) -> set[LanguageFamily]:
                     languages.add(lang)
 
     return languages
-
 
 def ensure_grammars_for_repo(repo_root: Path, quiet: bool = False, status_fn: Callable[[str], None] | None = None) -> bool:
     """Scan repo and install any missing grammars.

@@ -27,7 +27,6 @@ from coderecon.config.loader import (
 )
 from coderecon.core.errors import ConfigError
 
-
 class TestLoadYaml:
     """Tests for _load_yaml function."""
 
@@ -68,7 +67,6 @@ class TestLoadYaml:
         with pytest.raises(ConfigError):
             _load_yaml(yaml_file)
 
-
 class TestDeepMerge:
     """Tests for _deep_merge function."""
 
@@ -107,7 +105,6 @@ class TestDeepMerge:
         override = {"b": 2}
         _deep_merge(base, override)
         assert base == {"a": 1}
-
 
 class TestLoadConfig:
     """Tests for load_config function."""
@@ -164,7 +161,6 @@ class TestLoadConfig:
         ):
             load_config(tmp_path)
 
-
 class TestGetIndexPaths:
     """Tests for get_index_paths function."""
 
@@ -187,7 +183,6 @@ class TestGetIndexPaths:
             db_path, tantivy_path = get_index_paths(tmp_path)
             assert db_path == custom_path / "index.db"
             assert tantivy_path == custom_path / "tantivy"
-
 
 class TestGlobalConfigPath:
     """Tests for GLOBAL_CONFIG_PATH constant."""

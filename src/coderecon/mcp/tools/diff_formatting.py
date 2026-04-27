@@ -17,7 +17,6 @@ from coderecon.index._internal.diff.models import (
 # Default: group by first 2 path segments (e.g. src/coderecon → "src/coderecon")
 _DOMAIN_PREFIX_DEPTH = 2
 
-
 def _domain_key(path: str) -> str:
     """Derive a domain key from a file path.
     Uses the first ``_DOMAIN_PREFIX_DEPTH`` path segments as the domain.
@@ -118,9 +117,7 @@ def _detect_cross_domain_edges(
                 edges.add((src_domain, imp_domain))
     return [{"from_domain": a, "to_domain": b, "relationship": "import"} for a, b in sorted(edges)]
 
-
 # Agentic Hint
-
 
 def _build_agentic_hint(
     result: SemanticDiffResult,

@@ -6,7 +6,6 @@ from coderecon.index._internal.indexing.semantic_neighbors import (
     compute_semantic_neighbors,
 )
 
-
 class TestConstants:
     """Verify tuning constants have sensible values."""
 
@@ -15,7 +14,6 @@ class TestConstants:
 
     def test_max_neighbors_is_bounded(self):
         assert 1 <= MAX_NEIGHBORS_PER_DEF <= 100
-
 
 class TestComputeSemanticNeighborsSignature:
     """Verify the function signature and default parameters."""

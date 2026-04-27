@@ -45,7 +45,6 @@ log = structlog.get_logger(__name__)
 # Minimum SPLADE dot-product score to persist a doc→code edge.
 SIGMA_DOC_FLOOR = 12.0
 
-
 # Maximum edges per chunk (cap noisy chunks).
 MAX_EDGES_PER_CHUNK = 10
 
@@ -70,9 +69,7 @@ _DOC_FAMILIES: frozenset[str] = frozenset({
     LanguageFamily.BAZEL,
 })
 
-
 # ── Chunking ─────────────────────────────────────────────────────
-
 
 def _chunk_markdown(text: str) -> list[tuple[str, str, int, int]]:
     """Split markdown by heading boundaries.
@@ -104,7 +101,6 @@ def _chunk_markdown(text: str) -> list[tuple[str, str, int, int]]:
             chunks.append((current_key, chunk_text[:MAX_CHUNK_LENGTH], start, len(lines)))
 
     return chunks
-
 
 def _chunk_keyvalue(text: str) -> list[tuple[str, str, int, int]]:
     """Split YAML/TOML/INI by top-level keys.
@@ -138,7 +134,6 @@ def _chunk_keyvalue(text: str) -> list[tuple[str, str, int, int]]:
 
     return chunks
 
-
 def _chunk_paragraphs(text: str) -> list[tuple[str, str, int, int]]:
     """Fallback: split on double newlines."""
     lines = text.split("\n")
@@ -165,7 +160,6 @@ def _chunk_paragraphs(text: str) -> list[tuple[str, str, int, int]]:
 
     return chunks
 
-
 def chunk_file(text: str, language_family: str) -> list[tuple[str, str, int, int]]:
     """Chunk a non-code file into semantic segments.
 
@@ -178,9 +172,7 @@ def chunk_file(text: str, language_family: str) -> list[tuple[str, str, int, int
     else:
         return _chunk_paragraphs(text)
 
-
 # ── Core pipeline ────────────────────────────────────────────────
-
 
 def index_doc_chunk_vectors(
     db: Database,
@@ -264,7 +256,6 @@ def index_doc_chunk_vectors(
     log.info("doc_chunks.encode_done", extra={"chunks": chunks_encoded,
              "elapsed_s": round(elapsed, 1)})
     return chunks_encoded
-
 
 def link_doc_chunks_to_defs(
     db: Database,
@@ -354,7 +345,6 @@ def link_doc_chunks_to_defs(
     log.info("doc_chunks.link_done", extra={"edges": edges_written,
              "elapsed_s": round(elapsed, 1)})
     return edges_written
-
 
 def _read_file_content(db: Database, f: File) -> str | None:
     """Read file content from disk via the worktree path."""
