@@ -254,11 +254,6 @@ def build_include_specs() -> dict[str, tuple[str, ...]]:
 
 # Other Accessors
 
-
-    if swapped:
-        out.append(f"{swapped}/test_{stem}{ext}")
-        out.append(f"{swapped}/{stem}_test{ext}")
-
 def get_grammar_name(name: str) -> str | None:
     """Get tree-sitter grammar name for a name.
     Returns None if no tree-sitter grammar is available for the language.
