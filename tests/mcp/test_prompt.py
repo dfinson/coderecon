@@ -9,7 +9,7 @@ Covers:
 
 from __future__ import annotations
 
-from coderecon.cli.init import _make_coderecon_snippet
+from coderecon.cli.agent_instructions import _make_coderecon_snippet
 
 
 class TestPromptSize:

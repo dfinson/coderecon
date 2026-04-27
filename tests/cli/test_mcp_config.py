@@ -6,7 +6,7 @@ Covers _get_mcp_server_name, _ensure_vscode_mcp_config, and sync_vscode_mcp_port
 import json
 from pathlib import Path
 
-from coderecon.cli.init import (
+from coderecon.cli.mcp_config import (
     _ensure_vscode_mcp_config,
     _get_mcp_server_name,
     sync_vscode_mcp_port,

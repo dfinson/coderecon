@@ -240,7 +240,7 @@ async def raw_signals_pipeline(
 
     # Cross-encoder scoring (TinyBERT) — needed for training features
     coordinator = app_ctx.coordinator
-    from coderecon.mcp.tools.recon.pipeline import _score_cross_encoder_tiny
+    from coderecon.mcp.tools.recon.pipeline_scoring import _score_cross_encoder_tiny
     candidates_out = _score_cross_encoder_tiny(candidates_out, query, coordinator.db)
 
     # RRF fusion — attaches rrf_score to each candidate
