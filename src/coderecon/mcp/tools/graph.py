@@ -209,9 +209,9 @@ async def recon_understand_core(
             f"Coverage: {c['defs_covered']}/{c['total_defs']} defs ({c['coverage_rate']:.0%})"
         )
     if "lint" in sections:
-        l = sections["lint"]
+        lint = sections["lint"]
         parts.append(
-            f"Lint: {l['clean_files']}/{l['files_checked']} files clean ({l['total_errors']} errors)"
+            f"Lint: {lint['clean_files']}/{lint['files_checked']} files clean ({lint['total_errors']} errors)"
         )
 
     summary = ". ".join(parts) + "." if parts else "No analysis data available yet."

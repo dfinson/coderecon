@@ -407,7 +407,7 @@ async def _harvest_imports(
             )
             reverse_fids = list(session.exec(reverse_stmt).all())
             # Batch lookup all reverse file IDs (include seed files for import_direction tagging)
-            reverse_fids_to_lookup = [rfid for rfid in reverse_fids]
+            reverse_fids_to_lookup = list(reverse_fids)
             if reverse_fids_to_lookup:
                 reverse_files = fq.batch_get_files(reverse_fids_to_lookup)
                 for _rfid, rfile in reverse_files.items():

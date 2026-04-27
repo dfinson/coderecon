@@ -99,11 +99,7 @@ def classify_oom(
         return True
 
     # Runtime printed an OOM message
-    for pat in _OOM_PATTERNS:
-        if pat.search(stderr):
-            return True
-
-    return False
+    return any(pat.search(stderr) for pat in _OOM_PATTERNS)
 
 # Persistent per-repo history
 
