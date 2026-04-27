@@ -36,3 +36,5 @@ from coderecon.testing.packs import tier1 as _tier1  # noqa: F401, E402
 from coderecon.testing.packs import tier1_compiled as _tier1c  # noqa: F401, E402
 from coderecon.testing.packs import tier1_other as _tier1o  # noqa: F401, E402
 from coderecon.testing.packs import tier2 as _tier2  # noqa: F401, E402
+from coderecon.testing.packs import tier2_scripting as _tier2_scripting  # noqa: F401, E402
+from coderecon.testing.packs import tier2_functional as _tier2_functional  # noqa: F401, E402
