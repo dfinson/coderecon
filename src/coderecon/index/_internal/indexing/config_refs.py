@@ -64,7 +64,7 @@ _RE_PATH_LIKE = re.compile(r"^[a-zA-Z0-9_.][a-zA-Z0-9_./\-]*$")
 # ``packages/evee-mlflow/tests``, ``experiment/config.yaml``.
 _RE_MAKEFILE_TOKEN = re.compile(
     r"(?:^|\s|,|=)"
-    r"(\.?/?[a-zA-Z_][a-zA-Z0-9_./-]*(?:/[a-zA-Z0-9_./-]+)+"
+    r"(\.?/?[a-zA-Z_][a-zA-Z0-9_.-]*(?:/[a-zA-Z0-9_.-]+)+"
     r"|(?:^|(?<=\s))[a-zA-Z_][a-zA-Z0-9_-]*(?:\.[a-zA-Z0-9]+))"
     r"(?=\s|$|,|\))",
     re.MULTILINE,

@@ -18,7 +18,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from coderecon.index._internal.discovery.membership import is_inside
+from coderecon.index._internal.discovery.membership import is_inside, relative_to
 from coderecon.index.models import CandidateContext, LanguageFamily
 
 if TYPE_CHECKING:
@@ -213,13 +213,7 @@ class ContextRouter:
 
     def _relative_to(self, path: str, root: str) -> str:
         """Get path relative to root."""
-        if root == "":
-            return path
-        if path == root:
-            return ""
-        if path.startswith(root + "/"):
-            return path[len(root) + 1 :]
-        return path
+        return relative_to(path, root)
 
     def _matches_pattern(self, path: str, pattern: str) -> bool:
         """Match path against glob-like pattern."""

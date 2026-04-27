@@ -583,38 +583,5 @@ class RepoAccess(_WorktreeMixin, _ParseMixin):
                     target_sha=tag_sha,
                     is_annotated=False,
                 )
-    # Remote Operations
-    def merge_base(self, sha1: str, sha2: str) -> str | None:
-        """Find merge base of two commits. Returns None if unrelated."""
-        rc, stdout, _ = self._git.run_raw("merge-base", sha1, sha2)
-        if rc != 0:
-            return None
-        return stdout.strip()
-    # Diff Parsing
-    def diff_numstat(self, *args: str) -> list[tuple[str, int, int, str]]:
-        """Run diff with --numstat and return (status, additions, deletions, path) tuples."""
-        result = self._git.run("diff", "--numstat", "--diff-filter=ACDMR", "--no-color", *args)
-        # Also get name-status for the delta status
-        status_result = self._git.run("diff", "--name-status", "--diff-filter=ACDMR", "--no-color", *args)
-        status_map: dict[str, str] = {}
-        for line in status_result.stdout.strip().splitlines():
-            if not line:
-                continue
-            parts = line.split("\t")
-            if len(parts) >= 2:
-                status_char = parts[0][0]  # First char of status
-                path = parts[-1]  # Last part is the path (handles renames)
-                status_map[path] = status_char
-        entries = []
-        for line in result.stdout.strip().splitlines():
-            if not line:
-                continue
-            parts = line.split("\t")
-            if len(parts) >= 3:
-                adds = int(parts[0]) if parts[0] != "-" else 0
-                dels = int(parts[1]) if parts[1] != "-" else 0
-                path = parts[2]
-                status = status_map.get(path, "M")
-                entries.append((status, adds, dels, path))
-        return entries
+    # merge_base and diff_numstat inherited from _WorktreeMixin
     # Internal Parsing

@@ -106,13 +106,17 @@ class MembershipResolver:
 
     def _relative_to(self, path: str, root: str) -> str:
         """Get path relative to root."""
-        if root == "":
-            return path
-        if path == root:
-            return ""
-        if path.startswith(root + "/"):
-            return path[len(root) + 1 :]
+        return relative_to(path, root)
+
+def relative_to(path: str, root: str) -> str:
+    """Get path relative to root (segment-safe)."""
+    if root == "":
         return path
+    if path == root:
+        return ""
+    if path.startswith(root + "/"):
+        return path[len(root) + 1 :]
+    return path
 
 def is_inside(file_path: str, root_path: str) -> bool:
     """
