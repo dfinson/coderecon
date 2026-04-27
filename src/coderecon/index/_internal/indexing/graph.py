@@ -34,19 +34,16 @@ if TYPE_CHECKING:
 
 class FactQueries:
     """Bounded fact queries for the Tier 1 index.
-
     All queries require explicit limits. No unbounded returns.
     """
     def __init__(self, session: Session) -> None:
         self._session = session
-
     # Definition lookups
     def get_def(self, def_uid: str) -> DefFact | None:
         """Get a definition by its stable UID."""
         return self._session.get(DefFact, def_uid)
     def batch_get_defs(self, def_uids: list[str]) -> dict[str, DefFact]:
         """Get multiple definitions by UID in a single query.
-
         Returns a dict mapping def_uid → DefFact for found UIDs.
         Missing UIDs are silently omitted.
         """
@@ -68,7 +65,6 @@ class FactQueries:
             .limit(limit)
         )
         return list(self._session.exec(stmt).all())
-
     # Reference lookups
     def list_refs_by_def_uid(
         self,
@@ -79,13 +75,11 @@ class FactQueries:
         offset: int = 0,
     ) -> list[RefFact]:
         """List references to a definition with pagination.
-
         Args:
             def_uid: Stable definition UID.
             tier: Optional tier filter.
             limit: Maximum results per page (default 250).
             offset: Number of rows to skip for pagination.
-
         Returns:
             List of RefFact objects for the requested page.
         """
@@ -102,16 +96,13 @@ class FactQueries:
         page_size: int = 250,
     ) -> list[RefFact]:
         """Exhaustively list ALL references to a definition.
-
         Paginates internally to avoid unbounded single queries while
         guaranteeing completeness.  Use this for mutation operations
         (rename, delete) that **must** see every reference.
-
         Args:
             def_uid: Stable definition UID.
             tier: Optional tier filter.
             page_size: Internal page size (default 250).
-
         Returns:
             Complete list of RefFact objects.
         """
@@ -140,16 +131,13 @@ class FactQueries:
         limit: int = 100,
     ) -> list[DefFact]:
         """List definitions referenced (called/used) within a line range.
-
         Joins ref_facts → def_facts for refs whose scope falls within
         the given line range. This answers "what does this function call?"
-
         Args:
             file_id: File containing the scope.
             start_line: Start line of the scope (inclusive).
             end_line: End line of the scope (inclusive).
             limit: Maximum results.
-
         Returns:
             Deduplicated list of DefFact objects referenced in the scope.
         """
@@ -170,7 +158,6 @@ class FactQueries:
     def count_callers(self, def_uid: str) -> int:
         """Count distinct files that reference a definition (hub inbound score)."""
         from sqlalchemy import func
-
         stmt = select(func.count(func.distinct(RefFact.file_id))).where(
             RefFact.target_def_uid == def_uid
         )
@@ -178,14 +165,12 @@ class FactQueries:
         return int(result) if result else 0
     def batch_count_callers(self, def_uids: list[str]) -> dict[str, int]:
         """Count distinct caller files for multiple defs in a single query.
-
         Returns a dict mapping def_uid → caller count. UIDs with zero
         callers are included with count 0.
         """
         if not def_uids:
             return {}
         from sqlalchemy import func
-
         stmt = (
             select(
                 RefFact.target_def_uid,
@@ -209,7 +194,6 @@ class FactQueries:
             .limit(limit)
         )
         return list(self._session.exec(stmt).all())
-
     # Scope lookups
     def get_scope(self, scope_id: int) -> ScopeFact | None:
         """Get a scope by ID."""
@@ -218,7 +202,6 @@ class FactQueries:
         """List all scopes in a file (typically bounded by file size)."""
         stmt = select(ScopeFact).where(ScopeFact.file_id == file_id)
         return list(self._session.exec(stmt).all())
-
     # Binding lookups
     def get_local_bind(self, scope_id: int, name: str) -> LocalBindFact | None:
         """Get a local binding by scope and name."""
@@ -230,7 +213,6 @@ class FactQueries:
         """List all bindings in a scope."""
         stmt = select(LocalBindFact).where(LocalBindFact.scope_id == scope_id).limit(limit)
         return list(self._session.exec(stmt).all())
-
     # Import lookups
     def list_imports(self, file_id: int, *, limit: int = 100) -> list[ImportFact]:
         """List all imports in a file, ordered by source position."""
@@ -244,7 +226,6 @@ class FactQueries:
     def get_import(self, import_uid: str) -> ImportFact | None:
         """Get an import by its UID."""
         return self._session.get(ImportFact, import_uid)
-
     # Export lookups
     def get_export_surface(self, unit_id: int) -> ExportSurface | None:
         """Get the export surface for a build unit."""
@@ -254,7 +235,6 @@ class FactQueries:
         """List export entries for a surface."""
         stmt = select(ExportEntry).where(ExportEntry.surface_id == surface_id).limit(limit)
         return list(self._session.exec(stmt).all())
-
     # Anchor group lookups
     def get_anchor_group(
         self, unit_id: int, member_token: str, receiver_shape: str | None
@@ -273,14 +253,12 @@ class FactQueries:
         """List anchor groups in a build unit."""
         stmt = select(AnchorGroup).where(AnchorGroup.unit_id == unit_id).limit(limit)
         return list(self._session.exec(stmt).all())
-
     # File lookups
     def get_file(self, file_id: int) -> File | None:
         """Get a file by ID."""
         return self._session.get(File, file_id)
     def batch_get_files(self, file_ids: list[int]) -> dict[int, File]:
         """Get multiple files by ID in a single query.
-
         Returns a dict mapping file_id → File for found IDs.
         """
         if not file_ids:
@@ -294,7 +272,6 @@ class FactQueries:
         return self._session.exec(stmt).first()
     def batch_get_files_by_paths(self, paths: list[str]) -> dict[str, File]:
         """Get multiple files by path in a single query.
-
         Returns a dict mapping path → File for found paths.
         """
         if not paths:
@@ -306,7 +283,6 @@ class FactQueries:
         """List all indexed files."""
         stmt = select(File).limit(limit)
         return list(self._session.exec(stmt).all())
-
     # Seed finding (recon-dedicated)
     def find_defs_matching_term(
         self,
@@ -315,17 +291,13 @@ class FactQueries:
         limit: int = 200,
     ) -> list[DefFact]:
         """Find definitions whose name, qualified_name, or docstring contain a term.
-
         Uses SQL LIKE for case-insensitive substring matching directly on
         the structural index — no BM25, no Tantivy.
-
         Results are ordered by ``def_uid`` for deterministic output across
         index rebuilds.
-
         Args:
             term: Lowercase search term (minimum 2 chars).
             limit: Maximum results.
-
         Returns:
             List of DefFact objects matching the term.
         """
@@ -351,11 +323,9 @@ class FactQueries:
         limit: int = 100,
     ) -> list[File]:
         """Find files whose path contains a term.
-
         Args:
             term: Lowercase search term (minimum 2 chars).
             limit: Maximum results.
-
         Returns:
             List of File objects whose path matches.
         """
@@ -364,7 +334,6 @@ class FactQueries:
         pattern = f"%{term}%"
         stmt = select(File).where(col(File.path).ilike(pattern)).order_by(File.path).limit(limit)
         return list(self._session.exec(stmt).all())
-
     # Interface / type hierarchy lookups (Tier 2)
     def list_implementors(
         self, interface_name: str, *, limit: int = 100
@@ -390,7 +359,6 @@ class FactQueries:
         self, def_uid: str, *, limit: int = 100
     ) -> list[str]:
         """Find other types that implement the same interfaces as *def_uid*.
-
         Returns a list of implementor def_uids (deduplicated, excluding *def_uid*).
         """
         ifaces = self.list_interfaces_of(def_uid)
@@ -405,7 +373,6 @@ class FactQueries:
             .limit(limit)
         )
         return list(self._session.exec(stmt).all())
-
     # DocCrossRef lookups
     def list_doc_xrefs_from(
         self, source_def_uid: str, *, limit: int = 50
@@ -427,13 +394,11 @@ class FactQueries:
             .limit(limit)
         )
         return list(self._session.exec(stmt).all())
-
     # Endpoint lookups
     def batch_get_endpoints(
         self, handler_def_uids: list[str]
     ) -> dict[str, EndpointFact]:
         """Get endpoint facts for multiple handler def_uids in one query.
-
         Returns a dict mapping handler_def_uid → EndpointFact (first match).
         """
         if not handler_def_uids:
@@ -448,20 +413,17 @@ class FactQueries:
             if ep.handler_def_uid and ep.handler_def_uid not in out:
                 out[ep.handler_def_uid] = ep
         return out
-
     # Test coverage lookups
     def batch_count_test_coverage(
         self, def_uids: list[str]
     ) -> dict[str, int]:
         """Count distinct tests covering each def_uid.
-
         Returns a dict mapping def_uid → test count.  UIDs with zero
         coverage are included with count 0.
         """
         if not def_uids:
             return {}
         from sqlalchemy import func
-
         stmt = (
             select(
                 TestCoverageFact.target_def_uid,
@@ -482,7 +444,6 @@ class FactQueries:
         self, def_uids: list[str],
     ) -> set[str]:
         """Get test file paths that cover any of the given def_uids.
-
         Parses ``test_id`` (e.g. ``tests/test_auth.py::test_login``) to
         extract the file path.  Skips synthetic ``__suite__`` IDs.
         Returns the set of unique test file paths.
@@ -510,14 +471,12 @@ class FactQueries:
         self, test_file_paths: list[str],
     ) -> set[str]:
         """Get def_uids covered by tests in the given test files.
-
         Matches ``test_id`` values that start with any of the given file
         paths (prefix match against the ``test_id`` index).
         """
         if not test_file_paths:
             return set()
         from sqlalchemy import or_
-
         # Build prefix conditions: test_id LIKE 'path::%' OR test_id = 'path'
         conditions = []
         for path in test_file_paths:
