@@ -61,15 +61,6 @@ def _test_result_ok() -> MagicMock:
 # ---- Fixtures ---------------------------------------------------------------
 
 @pytest.fixture
-def mock_ctx() -> MagicMock:
-    ctx = MagicMock()
-    ctx.session_id = "test-session"
-    ctx.report_progress = AsyncMock()
-    ctx.info = AsyncMock()
-    ctx.warning = AsyncMock()
-    return ctx
-
-@pytest.fixture
 def checkpoint_tool(mock_context: MagicMock) -> Any:
     """Register checkpoint tool and return a wrapper that resolves Field defaults."""
     from fastmcp import FastMCP

@@ -53,15 +53,6 @@ class TestResolutionStats:
 class TestReferenceResolver:
     """Tests for ReferenceResolver class."""
 
-    @pytest.fixture
-    def mock_db(self) -> MagicMock:
-        """Create mock database."""
-        db = MagicMock()
-        session = MagicMock()
-        db.session.return_value.__enter__ = MagicMock(return_value=session)
-        db.session.return_value.__exit__ = MagicMock(return_value=False)
-        return db
-
     def test_init(self, mock_db: MagicMock) -> None:
         """Can create resolver."""
         resolver = ReferenceResolver(mock_db)

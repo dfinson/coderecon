@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from coderecon.catalog.db import CatalogDB
 from coderecon.catalog.registry import CatalogRegistry
 from coderecon.daemon.global_app import (
     GlobalDaemon,
@@ -18,11 +17,6 @@ from coderecon.daemon.global_app import (
     WorktreeSlot,
     _DEFAULT_WATCH_CEILING,
 )
-
-@pytest.fixture
-def registry(tmp_path: Path) -> CatalogRegistry:
-    catalog = CatalogDB(home=tmp_path / ".coderecon")
-    return CatalogRegistry(catalog)
 
 @pytest.fixture
 def daemon(registry: CatalogRegistry) -> GlobalDaemon:

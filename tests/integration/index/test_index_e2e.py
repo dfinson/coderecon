@@ -10,21 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from coderecon.index.ops import IndexCoordinatorEngine
+from tests.integration.conftest import make_coordinator, noop_progress
 
 pytestmark = pytest.mark.integration
-
-def _make_coordinator(repo_path: Path) -> IndexCoordinatorEngine:
-    """Create an IndexCoordinatorEngine with proper paths."""
-    coderecon_dir = repo_path / ".recon"
-    coderecon_dir.mkdir(exist_ok=True)
-    db_path = coderecon_dir / "index.db"
-    tantivy_path = coderecon_dir / "tantivy"
-    return IndexCoordinatorEngine(repo_path, db_path, tantivy_path)
-
-def _noop_progress(indexed: int, total: int, by_ext: dict[str, int], phase: str = "") -> None:
-    """No-op progress callback."""
-    pass
 
 class TestIndexInitialization:
     """Integration tests for index initialization."""
@@ -32,8 +20,8 @@ class TestIndexInitialization:
     @pytest.mark.asyncio
     async def test_init_creates_index_files(self, integration_repo: Path) -> None:
         """Index initialization creates necessary files."""
-        index = _make_coordinator(integration_repo)
-        result = await index.initialize(_noop_progress)
+        index = make_coordinator(integration_repo)
+        result = await index.initialize(noop_progress)
 
         # Init should complete without errors
         assert len(result.errors) == 0
@@ -44,10 +32,10 @@ class TestIndexInitialization:
     @pytest.mark.asyncio
     async def test_init_idempotent(self, integration_repo: Path) -> None:
         """Multiple init calls are safe."""
-        index = _make_coordinator(integration_repo)
+        index = make_coordinator(integration_repo)
 
-        result1 = await index.initialize(_noop_progress)
-        result2 = await index.initialize(_noop_progress)
+        result1 = await index.initialize(noop_progress)
+        result2 = await index.initialize(noop_progress)
 
         # Both should succeed without errors
         assert len(result1.errors) == 0
@@ -59,8 +47,8 @@ class TestIndexing:
     @pytest.mark.asyncio
     async def test_index_discovers_python_files(self, integration_repo: Path) -> None:
         """Indexing discovers and processes Python files."""
-        index = _make_coordinator(integration_repo)
-        result = await index.initialize(_noop_progress)
+        index = make_coordinator(integration_repo)
+        result = await index.initialize(noop_progress)
 
         # Should have discovered some contexts
         assert result.contexts_discovered >= 0
@@ -68,8 +56,8 @@ class TestIndexing:
     @pytest.mark.asyncio
     async def test_index_extracts_definitions(self, integration_repo: Path) -> None:
         """Indexing extracts function and class definitions."""
-        index = _make_coordinator(integration_repo)
-        await index.initialize(_noop_progress)
+        index = make_coordinator(integration_repo)
+        await index.initialize(noop_progress)
 
         # Query for definitions
         result = await index.search("def", mode="lexical")
@@ -83,8 +71,8 @@ class TestSearch:
     @pytest.mark.asyncio
     async def test_search_finds_function_by_name(self, integration_repo: Path) -> None:
         """Search finds function by name."""
-        index = _make_coordinator(integration_repo)
-        await index.initialize(_noop_progress)
+        index = make_coordinator(integration_repo)
+        await index.initialize(noop_progress)
 
         result = await index.search("greet", mode="lexical")
 
@@ -95,8 +83,8 @@ class TestSearch:
     @pytest.mark.asyncio
     async def test_search_finds_class_by_name(self, integration_repo: Path) -> None:
         """Search finds class by name."""
-        index = _make_coordinator(integration_repo)
-        await index.initialize(_noop_progress)
+        index = make_coordinator(integration_repo)
+        await index.initialize(noop_progress)
 
         result = await index.search("Calculator", mode="lexical")
 
@@ -106,8 +94,8 @@ class TestSearch:
     @pytest.mark.asyncio
     async def test_search_lexical_mode(self, integration_repo: Path) -> None:
         """Lexical search finds text matches."""
-        index = _make_coordinator(integration_repo)
-        await index.initialize(_noop_progress)
+        index = make_coordinator(integration_repo)
+        await index.initialize(noop_progress)
 
         result = await index.search("return", mode="lexical")
 
@@ -120,8 +108,8 @@ class TestMapRepo:
     @pytest.mark.asyncio
     async def test_map_repo_returns_structure(self, integration_repo: Path) -> None:
         """map_repo returns repository structure."""
-        index = _make_coordinator(integration_repo)
-        await index.initialize(_noop_progress)
+        index = make_coordinator(integration_repo)
+        await index.initialize(noop_progress)
 
         result = await index.map_repo()
 
@@ -134,8 +122,8 @@ class TestMapRepo:
     @pytest.mark.asyncio
     async def test_map_repo_file_tree(self, integration_repo: Path) -> None:
         """map_repo returns file tree."""
-        index = _make_coordinator(integration_repo)
-        await index.initialize(_noop_progress)
+        index = make_coordinator(integration_repo)
+        await index.initialize(noop_progress)
 
         result = await index.map_repo()
 

@@ -11,7 +11,7 @@ Covers:
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -73,15 +73,6 @@ def checkpoint_commit_tool(
         )
 
     return _wrapper
-
-@pytest.fixture
-def mock_ctx() -> MagicMock:
-    ctx = MagicMock()
-    ctx.session_id = "test-session"
-    ctx.report_progress = AsyncMock()
-    ctx.info = AsyncMock()
-    ctx.warning = AsyncMock()
-    return ctx
 
 class TestCheckpointCommitHookAutoRetry:
     """Tests for auto-restage and retry on pre-commit hook auto-fixes."""

@@ -7,13 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from coderecon.catalog.db import CatalogDB
 from coderecon.catalog.registry import CatalogRegistry
-
-@pytest.fixture
-def registry(tmp_path: Path) -> CatalogRegistry:
-    catalog = CatalogDB(home=tmp_path / ".coderecon")
-    return CatalogRegistry(catalog)
 
 @pytest.fixture
 def git_repo(tmp_path: Path) -> Path:

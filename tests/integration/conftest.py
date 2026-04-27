@@ -11,6 +11,21 @@ import pytest
 
 from coderecon.templates import get_reconignore_template
 
+from coderecon.index.ops import IndexCoordinatorEngine
+
+
+def make_coordinator(repo_path: Path) -> IndexCoordinatorEngine:
+    """Create an IndexCoordinatorEngine with proper paths."""
+    coderecon_dir = repo_path / ".recon"
+    coderecon_dir.mkdir(exist_ok=True)
+    db_path = coderecon_dir / "index.db"
+    tantivy_path = coderecon_dir / "tantivy"
+    return IndexCoordinatorEngine(repo_path, db_path, tantivy_path)
+
+
+def noop_progress(indexed: int, total: int, by_ext: dict[str, int], phase: str = "") -> None:
+    """No-op progress callback."""
+
 @pytest.fixture
 def integration_repo(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a fully initialized git repository for integration tests.

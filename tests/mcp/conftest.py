@@ -278,3 +278,14 @@ def mock_context(
     ctx.lint_ops = mock_lint_ops
     ctx.session_manager = mock_session_manager
     return ctx
+
+
+@pytest.fixture
+def mock_ctx() -> MagicMock:
+    """Create a lightweight mock MCP context for tool tests."""
+    ctx = MagicMock()
+    ctx.session_id = "test-session"
+    ctx.report_progress = AsyncMock()
+    ctx.info = AsyncMock()
+    ctx.warning = AsyncMock()
+    return ctx
