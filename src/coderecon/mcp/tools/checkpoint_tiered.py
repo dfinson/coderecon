@@ -199,7 +199,6 @@ async def _run_tiered_tests(
                 coverage=coverage,
                 coverage_dir=coverage_dir,
             )
-        import asyncio
         hop_batch_results: list[tuple[Any, Any]] = []
         if batch_groups:
             cov_dir_path = Path(coverage_dir) if coverage_dir else None

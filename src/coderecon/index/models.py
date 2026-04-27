@@ -8,7 +8,7 @@ import json
 from sqlalchemy import Column, ForeignKey, Integer, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
-from coderecon.index.models_enums import (
+from coderecon.index.models_enums import (  # noqa: F401 — re-exports
     BindReasonCode,
     BindTargetKind,
     Certainty,
@@ -24,7 +24,7 @@ from coderecon.index.models_enums import (
     Role,
     ScopeKind,
 )
-from coderecon.index.models_tables import (
+from coderecon.index.models_tables import (  # noqa: F401 — re-exports
     CandidateContext,
     DefSnapshotRecord,
     DocCodeEdgeFact,
