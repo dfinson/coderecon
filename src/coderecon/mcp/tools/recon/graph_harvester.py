@@ -135,6 +135,21 @@ async def _harvest_graph(
         if uid not in best_edges or edge[3] < best_edges[uid][3]:
             best_edges[uid] = edge
     # Track best ref_tier per uid across all caller edges
+    candidates = _build_graph_candidates(raw_edges, best_edges, merged)
+    log.debug(
+        "recon.harvest.graph",
+        count=len(candidates),
+        seeds_used=len(seeds_with_facts),
+    )
+    return candidates
+
+
+def _build_graph_candidates(
+    raw_edges: list[tuple[str, object, str, int, str, str | None]],
+    best_edges: dict[str, tuple[str, object, str, int, str, str | None]],
+    merged: dict[str, HarvestCandidate],
+) -> dict[str, HarvestCandidate]:
+    """Deduplicate edges and build HarvestCandidate dicts."""
     _TIER_ORDER = {"proven": 0, "strong": 1, "anchored": 2, "unknown": 3}
     best_ref_tier: dict[str, str | None] = {}
     for edge in raw_edges:
@@ -143,6 +158,8 @@ async def _harvest_graph(
             prev = best_ref_tier.get(uid)
             if prev is None or _TIER_ORDER.get(rtier, 99) < _TIER_ORDER.get(prev, 99):
                 best_ref_tier[uid] = rtier
+
+    candidates: dict[str, HarvestCandidate] = {}
     for uid, (_, def_fact, edge_type, seed_rank, detail, _ref_tier) in best_edges.items():
         caller_tier = best_ref_tier.get(uid)
         if uid in merged:
@@ -177,10 +194,4 @@ async def _harvest_graph(
             graph_caller_max_tier=caller_tier,
             evidence=[EvidenceRecord(category="graph", detail=detail, score=1.0)],
         )
-    log.debug(
-        "recon.harvest.graph",
-        count=len(candidates),
-        seeds_used=len(seeds_with_facts),
-    )
     return candidates
-

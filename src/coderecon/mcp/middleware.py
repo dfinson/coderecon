@@ -153,40 +153,7 @@ class ToolMiddleware(Middleware):
                 }
             )
         except ValidationError as e:
-            # User input error - return structured response with schema help
-            duration_ms = (time.perf_counter() - start_time) * MS_PER_SEC
-            errors = e.errors()
-            error_details = [
-                {
-                    "field": ".".join(str(p) for p in err.get("loc", [])),
-                    "message": err.get("msg", ""),
-                    "type": err.get("type", ""),
-                }
-                for err in errors
-            ]
-            log.warning(
-                "tool_validation_error",
-                tool=tool_name,
-                errors=error_details,
-                duration_ms=round(duration_ms, 1),
-            )
-            # Build schema info from FastMCP tool manager
-            tool_schema = self._get_tool_schema(context, tool_name)
-            return ToolResult(
-                structured_content={
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": f"Invalid parameters for '{tool_name}'",
-                        "details": error_details,
-                    },
-                    "tool_schema": tool_schema,
-                    "agentic_hint": (
-                        "Correct parameter schema is in tool_schema above. "
-                        "Fix the parameters and retry."
-                    ),
-                    "summary": f"error: validation failed for {tool_name}",
-                }
-            )
+            return self._handle_validation_error(e, tool_name, start_time, context)
         except MCPError as e:
             # Expected error - return structured response, not exception
             duration_ms = (time.perf_counter() - start_time) * MS_PER_SEC
@@ -256,6 +223,47 @@ class ToolMiddleware(Middleware):
                     "summary": f"error: internal error in {tool_name}",
                 }
             )
+    def _handle_validation_error(
+        self,
+        e: ValidationError,
+        tool_name: str,
+        start_time: float,
+        context: MiddlewareContext[Any],
+    ) -> ToolResult:
+        """Build a structured response for Pydantic validation failures."""
+        duration_ms = (time.perf_counter() - start_time) * MS_PER_SEC
+        errors = e.errors()
+        error_details = [
+            {
+                "field": ".".join(str(p) for p in err.get("loc", [])),
+                "message": err.get("msg", ""),
+                "type": err.get("type", ""),
+            }
+            for err in errors
+        ]
+        log.warning(
+            "tool_validation_error",
+            tool=tool_name,
+            errors=error_details,
+            duration_ms=round(duration_ms, 1),
+        )
+        tool_schema = self._get_tool_schema(context, tool_name)
+        return ToolResult(
+            structured_content={
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": f"Invalid parameters for '{tool_name}'",
+                    "details": error_details,
+                },
+                "tool_schema": tool_schema,
+                "agentic_hint": (
+                    "Correct parameter schema is in tool_schema above. "
+                    "Fix the parameters and retry."
+                ),
+                "summary": f"error: validation failed for {tool_name}",
+            }
+        )
+
     def _print_error_with_log_pointer(
         self,
         console: Console,

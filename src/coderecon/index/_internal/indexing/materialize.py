@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
 
@@ -29,6 +29,54 @@ if TYPE_CHECKING:
 
 # Hard cap on exemplar ref_ids per AnchorGroup (SPEC §7.3.9).
 _ANCHOR_EXEMPLAR_CAP = 10
+
+def _persist_surface_entries(
+    session: Any,
+    unit_id: int,
+    entries: list[dict[str, str | None]],
+    surface_hash: str,
+    existing: tuple[int, str] | None,
+) -> None:
+    """Upsert ExportSurface and its ExportEntry rows."""
+    if existing:
+        surface_id = existing[0]
+        session.execute(
+            text("DELETE FROM export_entries WHERE surface_id = :sid"),
+            {"sid": surface_id},
+        )
+        session.execute(
+            text(
+                "UPDATE export_surfaces SET surface_hash = :h WHERE surface_id = :sid"
+            ),
+            {"h": surface_hash, "sid": surface_id},
+        )
+    else:
+        session.execute(
+            text(
+                "INSERT INTO export_surfaces (unit_id, surface_hash) "
+                "VALUES (:uid, :h)"
+            ),
+            {"uid": unit_id, "h": surface_hash},
+        )
+        row = session.execute(text("SELECT last_insert_rowid()")).scalar()
+        surface_id = row
+
+    for entry in entries:
+        session.execute(
+            text(
+                "INSERT INTO export_entries "
+                "(surface_id, exported_name, def_uid, certainty, evidence_kind) "
+                "VALUES (:sid, :name, :duid, :cert, :ev)"
+            ),
+            {
+                "sid": surface_id,
+                "name": entry["exported_name"],
+                "duid": entry["def_uid"],
+                "cert": entry["certainty"],
+                "ev": entry["evidence_kind"],
+            },
+        )
+
 
 def materialize_exports(
     db: Database,
@@ -139,54 +187,67 @@ def materialize_exports(
                 surfaces_written += 1
                 continue  # unchanged
 
-            if existing:
-                surface_id = existing[0]
-                # Delete old entries
-                session.execute(
-                    text("DELETE FROM export_entries WHERE surface_id = :sid"),
-                    {"sid": surface_id},
-                )
-                # Update hash
-                session.execute(
-                    text(
-                        "UPDATE export_surfaces SET surface_hash = :h WHERE surface_id = :sid"
-                    ),
-                    {"h": surface_hash, "sid": surface_id},
-                )
-            else:
-                # Insert new surface
-                session.execute(
-                    text(
-                        "INSERT INTO export_surfaces (unit_id, surface_hash) "
-                        "VALUES (:uid, :h)"
-                    ),
-                    {"uid": unit_id, "h": surface_hash},
-                )
-                row = session.execute(text("SELECT last_insert_rowid()")).scalar()
-                surface_id = row
-
-            # Insert entries
-            for entry in entries:
-                session.execute(
-                    text(
-                        "INSERT INTO export_entries "
-                        "(surface_id, exported_name, def_uid, certainty, evidence_kind) "
-                        "VALUES (:sid, :name, :duid, :cert, :ev)"
-                    ),
-                    {
-                        "sid": surface_id,
-                        "name": entry["exported_name"],
-                        "duid": entry["def_uid"],
-                        "cert": entry["certainty"],
-                        "ev": entry["evidence_kind"],
-                    },
-                )
-
+            _persist_surface_entries(session, unit_id, entries, surface_hash, existing)
             surfaces_written += 1
 
         session.commit()
 
     return surfaces_written
+
+def _insert_thunk_row(
+    session: Any,
+    source_unit: int,
+    target_unit: int,
+    name_pairs: list[tuple[str, str | None]],
+) -> None:
+    """Insert a single ExportThunk row, choosing mode from name_pairs."""
+    has_wildcard = any(n == "*" and a is None for n, a in name_pairs)
+    explicit = [(n, a) for n, a in name_pairs if n != "*"]
+    has_aliases = any(a is not None and a != n for n, a in explicit)
+
+    if has_wildcard and not explicit:
+        mode = ExportThunkMode.REEXPORT_ALL.value
+        session.execute(
+            text(
+                "INSERT INTO export_thunks "
+                "(source_unit, target_unit, mode) "
+                "VALUES (:su, :tu, :m)"
+            ),
+            {"su": source_unit, "tu": target_unit, "m": mode},
+        )
+    elif has_aliases:
+        mode = ExportThunkMode.ALIAS_MAP.value
+        alias_map = {n: (a or n) for n, a in explicit}
+        session.execute(
+            text(
+                "INSERT INTO export_thunks "
+                "(source_unit, target_unit, mode, alias_map) "
+                "VALUES (:su, :tu, :m, :am)"
+            ),
+            {
+                "su": source_unit,
+                "tu": target_unit,
+                "m": mode,
+                "am": json.dumps(alias_map),
+            },
+        )
+    else:
+        mode = ExportThunkMode.EXPLICIT_NAMES.value
+        names = sorted({n for n, _a in explicit})
+        session.execute(
+            text(
+                "INSERT INTO export_thunks "
+                "(source_unit, target_unit, mode, explicit_names) "
+                "VALUES (:su, :tu, :m, :en)"
+            ),
+            {
+                "su": source_unit,
+                "tu": target_unit,
+                "m": mode,
+                "en": json.dumps(names),
+            },
+        )
+
 
 def materialize_thunks(
     db: Database,
@@ -290,52 +351,7 @@ def materialize_thunks(
 
         # Insert new thunks
         for (source_unit, target_unit), name_pairs in thunk_map.items():
-            has_wildcard = any(n == "*" and a is None for n, a in name_pairs)
-            explicit = [(n, a) for n, a in name_pairs if n != "*"]
-            has_aliases = any(a is not None and a != n for n, a in explicit)
-
-            if has_wildcard and not explicit:
-                mode = ExportThunkMode.REEXPORT_ALL.value
-                session.execute(
-                    text(
-                        "INSERT INTO export_thunks "
-                        "(source_unit, target_unit, mode) "
-                        "VALUES (:su, :tu, :m)"
-                    ),
-                    {"su": source_unit, "tu": target_unit, "m": mode},
-                )
-            elif has_aliases:
-                mode = ExportThunkMode.ALIAS_MAP.value
-                alias_map = {n: (a or n) for n, a in explicit}
-                session.execute(
-                    text(
-                        "INSERT INTO export_thunks "
-                        "(source_unit, target_unit, mode, alias_map) "
-                        "VALUES (:su, :tu, :m, :am)"
-                    ),
-                    {
-                        "su": source_unit,
-                        "tu": target_unit,
-                        "m": mode,
-                        "am": json.dumps(alias_map),
-                    },
-                )
-            else:
-                mode = ExportThunkMode.EXPLICIT_NAMES.value
-                names = sorted({n for n, _a in explicit})
-                session.execute(
-                    text(
-                        "INSERT INTO export_thunks "
-                        "(source_unit, target_unit, mode, explicit_names) "
-                        "VALUES (:su, :tu, :m, :en)"
-                    ),
-                    {
-                        "su": source_unit,
-                        "tu": target_unit,
-                        "m": mode,
-                        "en": json.dumps(names),
-                    },
-                )
+            _insert_thunk_row(session, source_unit, target_unit, name_pairs)
             thunks_written += 1
 
         session.commit()

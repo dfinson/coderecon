@@ -18,7 +18,7 @@ from __future__ import annotations
 import heapq
 import structlog
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlmodel import select
 
@@ -141,179 +141,225 @@ def compute_semantic_neighbors(
     MT = M.T.tocsc()  # CSC for efficient column slicing in matmul
 
     if changed_indices is not None:
-        # Incremental: only compute rows for changed defs
-        # M[changed_indices] @ MT → (k, n) similarity slice
-        changed_arr = np.array(changed_indices)
-        per_def: dict[int, list[tuple[float, int]]] = {i: [] for i in changed_indices}
-
-        for blk_start in range(0, len(changed_indices), block_size):
-            blk_end = min(blk_start + block_size, len(changed_indices))
-            blk_idxs = changed_arr[blk_start:blk_end]
-            sim = (M[blk_idxs] @ MT).tocsr()  # keep sparse (blk_size, n)
-
-            for local_i, global_i in enumerate(blk_idxs):
-                row_start = sim.indptr[local_i]
-                row_end = sim.indptr[local_i + 1]
-                cols = sim.indices[row_start:row_end]
-                vals = sim.data[row_start:row_end]
-
-                # Remove self-similarity
-                keep = cols != global_i
-                cols = cols[keep]
-                vals = vals[keep]
-
-                mask = vals >= sigma_floor
-                if not mask.any():
-                    continue
-
-                indices = cols[mask]
-                scores = vals[mask]
-
-                if len(indices) > max_per_def:
-                    top_k_idx = np.argpartition(scores, -max_per_def)[-max_per_def:]
-                    indices = indices[top_k_idx]
-                    scores = scores[top_k_idx]
-
-                heap = per_def[int(global_i)]
-                for j, score in zip(indices, scores):
-                    j_int = int(j)
-                    score_f = float(score)
-                    if len(heap) < max_per_def:
-                        heapq.heappush(heap, (score_f, j_int))
-                    elif score_f > heap[0][0]:
-                        heapq.heapreplace(heap, (score_f, j_int))
-
-        t_score = time.monotonic()
-        log.info("semantic_neighbors.scored",
-                 extra={"elapsed_s": round(t_score - t_build, 1)})
-
-        # Persist: delete old edges for changed defs, insert new ones
-        edges_written = 0
-        changed_uid_set = {uids[i] for i in changed_indices}
-        with db.session() as session:
-            # Delete edges where changed def is source OR neighbor
-            from sqlalchemy import or_
-            session.exec(  # type: ignore[call-overload]
-                SemanticNeighborFact.__table__.delete().where(  # type: ignore[union-attr]
-                    or_(
-                        SemanticNeighborFact.source_def_uid.in_(changed_uid_set),
-                        SemanticNeighborFact.neighbor_def_uid.in_(changed_uid_set),
-                    )
-                )
-            )
-            session.commit()
-
-            batch: list[SemanticNeighborFact] = []
-            _seen: set[tuple[str, str]] = set()
-            for i, heap in per_def.items():
-                for score, j in heap:
-                    # Write both directions for symmetric access
-                    for src_i, tgt_i in [(i, j), (j, i)]:
-                        _key = (uids[src_i], uids[tgt_i])
-                        if _key in _seen:
-                            continue
-                        _seen.add(_key)
-                        batch.append(SemanticNeighborFact(
-                            source_def_uid=uids[src_i],
-                            neighbor_def_uid=uids[tgt_i],
-                            score=round(score, 3),
-                            model_version=MODEL_VERSION,
-                        ))
-                        edges_written += 1
-
-                    if len(batch) >= DB_FLUSH_BATCH_SIZE:
-                        session.add_all(batch)
-                        session.commit()
-                        batch.clear()
-
-            if batch:
-                session.add_all(batch)
-                session.commit()
-
+        edges_written = _score_and_persist_incremental(
+            db, M, MT, changed_indices, uids, block_size,
+            sigma_floor, max_per_def, t_build,
+        )
     else:
-        # Full recompute: process ALL rows in blocks
-        per_def_full: list[list[tuple[float, int]]] = [[] for _ in range(n)]
-
-        for start in range(0, n, block_size):
-            end = min(start + block_size, n)
-            sim = (M[start:end] @ MT).tocsr()  # keep sparse (blk_size, n)
-
-            for local_i in range(end - start):
-                global_i = start + local_i
-                row_start = sim.indptr[local_i]
-                row_end = sim.indptr[local_i + 1]
-                cols = sim.indices[row_start:row_end]
-                vals = sim.data[row_start:row_end]
-
-                # Remove self-similarity
-                keep = cols != global_i
-                cols = cols[keep]
-                vals = vals[keep]
-
-                mask = vals >= sigma_floor
-                if not mask.any():
-                    continue
-
-                indices = cols[mask]
-                scores = vals[mask]
-
-                if len(indices) > max_per_def:
-                    top_k_idx = np.argpartition(scores, -max_per_def)[-max_per_def:]
-                    indices = indices[top_k_idx]
-                    scores = scores[top_k_idx]
-
-                for j, score in zip(indices, scores):
-                    j_int = int(j)
-                    score_f = float(score)
-                    for src, tgt in [(global_i, j_int), (j_int, global_i)]:
-                        heap = per_def_full[src]
-                        if len(heap) < max_per_def:
-                            heapq.heappush(heap, (score_f, tgt))
-                        elif score_f > heap[0][0]:
-                            heapq.heapreplace(heap, (score_f, tgt))
-
-            if start > 0:
-                log.info("semantic_neighbors.progress",
-                         extra={"done": end, "total": n})
-
-        t_score = time.monotonic()
-        log.info("semantic_neighbors.scored",
-                 extra={"elapsed_s": round(t_score - t_build, 1)})
-
-        # Persist: full clear + insert
-        edges_written = 0
-        with db.session() as session:
-            session.exec(  # type: ignore[call-overload]
-                SemanticNeighborFact.__table__.delete()  # type: ignore[union-attr]
-            )
-            session.commit()
-
-            batch = []
-            _seen_full: set[tuple[str, str]] = set()
-            for i, heap in enumerate(per_def_full):
-                for score, j in heap:
-                    _key = (uids[i], uids[j])
-                    if _key in _seen_full:
-                        continue
-                    _seen_full.add(_key)
-                    batch.append(SemanticNeighborFact(
-                        source_def_uid=uids[i],
-                        neighbor_def_uid=uids[j],
-                        score=round(score, 3),
-                        model_version=MODEL_VERSION,
-                    ))
-                    edges_written += 1
-
-                    if len(batch) >= DB_FLUSH_BATCH_SIZE:
-                        session.add_all(batch)
-                        session.commit()
-                        batch.clear()
-
-            if batch:
-                session.add_all(batch)
-                session.commit()
+        edges_written = _score_and_persist_full(
+            db, M, MT, n, uids, block_size,
+            sigma_floor, max_per_def, t_build,
+        )
 
     elapsed = time.monotonic() - t0
     log.info("semantic_neighbors.done", extra={"edges_written": edges_written,
              "elapsed_s": round(elapsed, 1)})
+    return edges_written
+
+
+def _score_and_persist_incremental(
+    db: Database,
+    M: Any,
+    MT: Any,
+    changed_indices: list[int],
+    uids: list[str],
+    block_size: int,
+    sigma_floor: float,
+    max_per_def: int,
+    t_build: float,
+) -> int:
+    """Score changed rows and persist incremental neighbor edges."""
+    import numpy as np
+
+    changed_arr = np.array(changed_indices)
+    per_def: dict[int, list[tuple[float, int]]] = {i: [] for i in changed_indices}
+
+    for blk_start in range(0, len(changed_indices), block_size):
+        blk_end = min(blk_start + block_size, len(changed_indices))
+        blk_idxs = changed_arr[blk_start:blk_end]
+        sim = (M[blk_idxs] @ MT).tocsr()
+
+        for local_i, global_i in enumerate(blk_idxs):
+            _collect_top_neighbors(
+                sim, local_i, int(global_i), per_def[int(global_i)],
+                sigma_floor, max_per_def,
+            )
+
+    t_score = time.monotonic()
+    log.info("semantic_neighbors.scored",
+             extra={"elapsed_s": round(t_score - t_build, 1)})
+
+    edges_written = 0
+    changed_uid_set = {uids[i] for i in changed_indices}
+    with db.session() as session:
+        from sqlalchemy import or_
+        session.exec(  # type: ignore[call-overload]
+            SemanticNeighborFact.__table__.delete().where(  # type: ignore[union-attr]
+                or_(
+                    SemanticNeighborFact.source_def_uid.in_(changed_uid_set),
+                    SemanticNeighborFact.neighbor_def_uid.in_(changed_uid_set),
+                )
+            )
+        )
+        session.commit()
+        edges_written = _flush_neighbor_edges(session, per_def.items(), uids)
+    return edges_written
+
+
+def _score_and_persist_full(
+    db: Database,
+    M: Any,
+    MT: Any,
+    n: int,
+    uids: list[str],
+    block_size: int,
+    sigma_floor: float,
+    max_per_def: int,
+    t_build: float,
+) -> int:
+    """Score all rows and persist full neighbor edges."""
+    per_def_full: list[list[tuple[float, int]]] = [[] for _ in range(n)]
+
+    for start in range(0, n, block_size):
+        end = min(start + block_size, n)
+        sim = (M[start:end] @ MT).tocsr()
+
+        for local_i in range(end - start):
+            global_i = start + local_i
+            _collect_top_neighbors_symmetric(
+                sim, local_i, global_i, per_def_full,
+                sigma_floor, max_per_def,
+            )
+
+        if start > 0:
+            log.info("semantic_neighbors.progress",
+                     extra={"done": end, "total": n})
+
+    t_score = time.monotonic()
+    log.info("semantic_neighbors.scored",
+             extra={"elapsed_s": round(t_score - t_build, 1)})
+
+    with db.session() as session:
+        session.exec(  # type: ignore[call-overload]
+            SemanticNeighborFact.__table__.delete()  # type: ignore[union-attr]
+        )
+        session.commit()
+        edges_written = _flush_neighbor_edges(session, enumerate(per_def_full), uids)
+    return edges_written
+
+
+def _collect_top_neighbors(
+    sim: Any,
+    local_i: int,
+    global_i: int,
+    heap: list[tuple[float, int]],
+    sigma_floor: float,
+    max_per_def: int,
+) -> None:
+    """Extract top-N neighbors from a sparse similarity row."""
+    import numpy as np
+    row_start = sim.indptr[local_i]
+    row_end = sim.indptr[local_i + 1]
+    cols = sim.indices[row_start:row_end]
+    vals = sim.data[row_start:row_end]
+
+    keep = cols != global_i
+    cols = cols[keep]
+    vals = vals[keep]
+
+    mask = vals >= sigma_floor
+    if not mask.any():
+        return
+
+    indices = cols[mask]
+    scores = vals[mask]
+
+    if len(indices) > max_per_def:
+        top_k_idx = np.argpartition(scores, -max_per_def)[-max_per_def:]
+        indices = indices[top_k_idx]
+        scores = scores[top_k_idx]
+
+    for j, score in zip(indices, scores):
+        j_int = int(j)
+        score_f = float(score)
+        if len(heap) < max_per_def:
+            heapq.heappush(heap, (score_f, j_int))
+        elif score_f > heap[0][0]:
+            heapq.heapreplace(heap, (score_f, j_int))
+
+
+def _collect_top_neighbors_symmetric(
+    sim: Any,
+    local_i: int,
+    global_i: int,
+    per_def: list[list[tuple[float, int]]],
+    sigma_floor: float,
+    max_per_def: int,
+) -> None:
+    """Extract top-N neighbors from a sparse similarity row, writing both directions."""
+    import numpy as np
+    row_start = sim.indptr[local_i]
+    row_end = sim.indptr[local_i + 1]
+    cols = sim.indices[row_start:row_end]
+    vals = sim.data[row_start:row_end]
+
+    keep = cols != global_i
+    cols = cols[keep]
+    vals = vals[keep]
+
+    mask = vals >= sigma_floor
+    if not mask.any():
+        return
+
+    indices = cols[mask]
+    scores = vals[mask]
+
+    if len(indices) > max_per_def:
+        top_k_idx = np.argpartition(scores, -max_per_def)[-max_per_def:]
+        indices = indices[top_k_idx]
+        scores = scores[top_k_idx]
+
+    for j, score in zip(indices, scores):
+        j_int = int(j)
+        score_f = float(score)
+        for src, tgt in [(global_i, j_int), (j_int, global_i)]:
+            heap = per_def[src]
+            if len(heap) < max_per_def:
+                heapq.heappush(heap, (score_f, tgt))
+            elif score_f > heap[0][0]:
+                heapq.heapreplace(heap, (score_f, tgt))
+
+
+def _flush_neighbor_edges(
+    session: Any,
+    heap_items: Any,
+    uids: list[str],
+) -> int:
+    """Write SemanticNeighborFact rows from scored heaps."""
+    edges_written = 0
+    batch: list[SemanticNeighborFact] = []
+    seen: set[tuple[str, str]] = set()
+    for i, heap in heap_items:
+        for score, j in heap:
+            for src_i, tgt_i in [(i, j), (j, i)]:
+                _key = (uids[src_i], uids[tgt_i])
+                if _key in seen:
+                    continue
+                seen.add(_key)
+                batch.append(SemanticNeighborFact(
+                    source_def_uid=uids[src_i],
+                    neighbor_def_uid=uids[tgt_i],
+                    score=round(score, 3),
+                    model_version=MODEL_VERSION,
+                ))
+                edges_written += 1
+
+            if len(batch) >= DB_FLUSH_BATCH_SIZE:
+                session.add_all(batch)
+                session.commit()
+                batch.clear()
+
+    if batch:
+        session.add_all(batch)
+        session.commit()
     return edges_written

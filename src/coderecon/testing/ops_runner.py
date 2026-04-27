@@ -348,20 +348,9 @@ async def _run_batch_targets(
             error_detail="Runner pack does not support batch execution",
         ), None
     # Coverage handling - always enabled when supported
-    cov_artifact: CoverageArtifact | None = None
-    emitter = get_emitter(first.runner_pack_id) if coverage_dir else None
-    coverage_available = False
-    if emitter:
-        coverage_tools = await coordinator.get_coverage_capability(
-            first.workspace_root, first.runner_pack_id
-        )
-        runtime = PackRuntime(
-            workspace_root=Path(first.workspace_root),
-            runner_available=True,
-            coverage_tools=coverage_tools,
-        )
-        capability = emitter.capability(runtime)
-        coverage_available = capability == CoverageCapability.AVAILABLE
+    cov_artifact, coverage_available, emitter = await _setup_batch_coverage(
+        coordinator, first, coverage_dir,
+    )
     safe_ctx = SafeExecutionContext(
         SafeExecutionConfig(
             artifact_dir=artifact_dir,
@@ -440,32 +429,70 @@ async def _run_batch_targets(
         return result, cov_artifact
     except TimeoutError:
         safe_ctx.cleanup()
-        selectors = ", ".join(t.selector for t in targets)
-        return ParsedTestSuite(
-            name="batch",
-            errors=len(targets),
-            error_type="timeout",
-            error_detail=f"Batch command timed out after {timeout_sec} seconds",
-            execution=ExecutionContext(
-                command=cmd,
-                working_directory=str(cwd),
-                raw_stdout=stdout if stdout else None,
-                raw_stderr=stderr if stderr else None,
-            ),
-            target_selector=selectors,
-            workspace_root=first.workspace_root,
+        return _batch_error_suite(
+            targets, "timeout",
+            f"Batch command timed out after {timeout_sec} seconds",
+            cmd, cwd, stdout, stderr,
         ), None
     except OSError as e:
         safe_ctx.cleanup()
-        selectors = ", ".join(t.selector for t in targets)
-        return ParsedTestSuite(
-            name="batch",
-            errors=len(targets),
-            error_type="command_failed",
-            error_detail=f"OS error executing batch command: {e}",
-            execution=ExecutionContext(command=cmd, working_directory=str(cwd)),
-            target_selector=selectors,
-            workspace_root=first.workspace_root,
+        return _batch_error_suite(
+            targets, "command_failed",
+            f"OS error executing batch command: {e}",
+            cmd, cwd,
         ), None
     finally:
         safe_ctx.cleanup()
+
+
+async def _setup_batch_coverage(
+    coordinator: "IndexCoordinatorEngine",
+    first: TestTarget,
+    coverage_dir: Path | None,
+) -> tuple[CoverageArtifact | None, bool, object | None]:
+    """Resolve coverage emitter/capability for a batch run.
+
+    Returns ``(cov_artifact, coverage_available, emitter)``.
+    """
+    cov_artifact: CoverageArtifact | None = None
+    emitter = get_emitter(first.runner_pack_id) if coverage_dir else None
+    coverage_available = False
+    if emitter:
+        coverage_tools = await coordinator.get_coverage_capability(
+            first.workspace_root, first.runner_pack_id
+        )
+        runtime = PackRuntime(
+            workspace_root=Path(first.workspace_root),
+            runner_available=True,
+            coverage_tools=coverage_tools,
+        )
+        capability = emitter.capability(runtime)
+        coverage_available = capability == CoverageCapability.AVAILABLE
+    return cov_artifact, coverage_available, emitter
+
+
+def _batch_error_suite(
+    targets: list[TestTarget],
+    error_type: str,
+    error_detail: str,
+    cmd: list[str],
+    cwd: str | Path,
+    stdout: str | None = None,
+    stderr: str | None = None,
+) -> ParsedTestSuite:
+    """Build a ``ParsedTestSuite`` for a batch execution error."""
+    selectors = ", ".join(t.selector for t in targets)
+    return ParsedTestSuite(
+        name="batch",
+        errors=len(targets),
+        error_type=error_type,
+        error_detail=error_detail,
+        execution=ExecutionContext(
+            command=cmd,
+            working_directory=str(cwd),
+            raw_stdout=stdout if stdout else None,
+            raw_stderr=stderr if stderr else None,
+        ),
+        target_selector=selectors,
+        workspace_root=targets[0].workspace_root if targets else "",
+    )

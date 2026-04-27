@@ -8,7 +8,7 @@ Open/Closed: New harvesters can be added without modifying existing ones.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -256,6 +256,63 @@ from coderecon.mcp.tools.recon.merge import (  # noqa: E402
 
 # Harvester F: Import-chain discovery (dependency + dependent tracing)
 
+
+def _harvest_barrel_and_test_files(
+    fq: Any,
+    seed_paths_set: set[str],
+    candidates: dict[str, HarvestCandidate],
+    merged: dict[str, HarvestCandidate],
+) -> None:
+    """Discover barrel (__init__.py / conftest.py) and test-pair files."""
+    import os
+    barrel_paths: list[str] = []
+    seen_dirs: set[str] = set()
+    for seed_path in seed_paths_set:
+        dir_path = os.path.dirname(seed_path)
+        if not dir_path or dir_path in seen_dirs:
+            continue
+        seen_dirs.add(dir_path)
+        for special_name in ("__init__.py", "conftest.py"):
+            barrel_path = f"{dir_path}/{special_name}"
+            if barrel_path not in seed_paths_set:
+                barrel_paths.append(barrel_path)
+
+    test_lookup_paths: list[str] = []
+    test_path_to_seed: dict[str, str] = {}
+    for seed_path in seed_paths_set:
+        test_paths = _infer_test_paths(seed_path)
+        for tp in test_paths:
+            test_lookup_paths.append(tp)
+            test_path_to_seed[tp] = seed_path
+
+    all_lookup_paths = barrel_paths + test_lookup_paths
+    if all_lookup_paths:
+        lookup_files = fq.batch_get_files_by_paths(all_lookup_paths)
+    else:
+        lookup_files = {}
+
+    for bp in barrel_paths:
+        barrel_file = lookup_files.get(bp)
+        if barrel_file is not None and barrel_file.id is not None:
+            dir_path = os.path.dirname(bp)
+            _add_file_defs_as_candidates(
+                fq, barrel_file, candidates, merged,
+                category="import_barrel",
+                detail=f"package init/conftest in {dir_path}",
+                score=1.0, import_direction="barrel",
+            )
+
+    for tp in test_lookup_paths:
+        tf = lookup_files.get(tp)
+        if tf is not None and tf.id is not None:
+            _add_file_defs_as_candidates(
+                fq, tf, candidates, merged,
+                category="import_test",
+                detail=f"test file for {test_path_to_seed[tp]}",
+                score=1.0, import_direction="test_pair",
+            )
+
+
 async def _harvest_imports(
     app_ctx: AppContext,
     merged: dict[str, HarvestCandidate],
@@ -364,64 +421,10 @@ async def _harvest_imports(
                         score=1.0,
                         import_direction="reverse",
                     )
-        # (c) __init__.py barrels + conftest.py in seed directories
-        # Collect all candidate barrel/conftest paths, then batch lookup
-        barrel_paths: list[str] = []
-        seen_dirs: set[str] = set()
-        for seed_path in seed_paths_set:
-            import os
-            dir_path = os.path.dirname(seed_path)
-            if not dir_path or dir_path in seen_dirs:
-                continue
-            seen_dirs.add(dir_path)
-            for special_name in ("__init__.py", "conftest.py"):
-                barrel_path = f"{dir_path}/{special_name}"
-                if barrel_path not in seed_paths_set:
-                    barrel_paths.append(barrel_path)
-        # (d) Test file pattern matching — collect all candidate paths
-        test_lookup_paths: list[str] = []
-        test_path_to_seed: dict[str, str] = {}
-        for seed_path in seed_paths_set:
-            test_paths = _infer_test_paths(seed_path)
-            for tp in test_paths:
-                test_lookup_paths.append(tp)
-                test_path_to_seed[tp] = seed_path
-        # Single batch lookup for all barrel + test paths
-        all_lookup_paths = barrel_paths + test_lookup_paths
-        if all_lookup_paths:
-            lookup_files = fq.batch_get_files_by_paths(all_lookup_paths)
-        else:
-            lookup_files = {}
-        # Process barrel files
-        for bp in barrel_paths:
-            barrel_file = lookup_files.get(bp)
-            if barrel_file is not None and barrel_file.id is not None:
-                import os
-                dir_path = os.path.dirname(bp)
-                _add_file_defs_as_candidates(
-                    fq,
-                    barrel_file,
-                    candidates,
-                    merged,
-                    category="import_barrel",
-                    detail=f"package init/conftest in {dir_path}",
-                    score=1.0,
-                    import_direction="barrel",
-                )
-        # Process test files
-        for tp in test_lookup_paths:
-            tf = lookup_files.get(tp)
-            if tf is not None and tf.id is not None:
-                _add_file_defs_as_candidates(
-                    fq,
-                    tf,
-                    candidates,
-                    merged,
-                    category="import_test",
-                    detail=f"test file for {test_path_to_seed[tp]}",
-                    score=1.0,
-                    import_direction="test_pair",
-                )
+        # (c)+(d) Barrel/conftest + test file pattern matching — batched lookup
+        _harvest_barrel_and_test_files(
+            fq, seed_paths_set, candidates, merged,
+        )
     log.debug(
         "recon.harvest.imports",
         count=len(candidates),

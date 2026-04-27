@@ -360,6 +360,88 @@ def _build_failure_snippets(
         snippets[path] = "\n".join(parts)
     return snippets
 
+
+def _render_scaffold(scaffold: dict[str, Any]) -> str:
+    """Render a scaffold dict into a compact text summary."""
+    parts: list[str] = []
+    summary = scaffold.get("summary", "")
+    if summary:
+        parts.append(summary)
+    imports = scaffold.get("imports", [])
+    if imports:
+        parts.append(f"imports: {', '.join(str(i) for i in imports)}")
+    for s in scaffold.get("symbols", []):
+        name = s.get("name", "?")
+        kind = s.get("kind", "")
+        line = s.get("line", "")
+        parts.append(f"  {kind} {name} (L{line})" if line else f"  {kind} {name}")
+    return "\n".join(parts)
+
+
+def _enrich_failure_result(
+    app_ctx: Any,
+    session: Any,
+    result: dict[str, Any],
+    changed_files: list[str],
+) -> None:
+    """Populate failure_snippets, failure_scaffolds, and file_manifest on result."""
+    try:
+        import hashlib
+        repo_root = app_ctx.coordinator.repo_root
+        refreshed: list[dict[str, Any]] = []
+        for cf in changed_files:
+            fp = repo_root / cf
+            if not fp.exists():
+                continue
+            try:
+                raw = fp.read_bytes()
+                if b"\x00" in raw[:512]:
+                    continue
+                content_str = raw.decode("utf-8", errors="replace")
+                sha = hashlib.sha256(raw).hexdigest()
+                entry: dict[str, Any] = {
+                    "path": cf,
+                    "content": content_str,
+                    "line_count": content_str.count("\n") + 1,
+                    "file_sha256": sha,
+                }
+                try:
+                    from coderecon.mcp.tools.files import _build_scaffold
+                    scaffold = _build_scaffold(app_ctx, cf, fp)
+                    entry["scaffold"] = scaffold
+                except (ImportError, OSError, ValueError):
+                    log.debug("checkpoint.scaffold.failed", path=cf, exc_info=True)
+                refreshed.append(entry)
+            except (OSError, UnicodeDecodeError, ValueError):
+                log.debug("checkpoint.file_refresh.failed", path=cf, exc_info=True)
+                continue
+        if refreshed:
+            session.mutation_ctx.clear()
+            app_ctx.refactor_ops.clear_pending()
+            file_contents = {r["path"]: r["content"] for r in refreshed}
+            tests_section = result.get("tests", {})
+            fl = (
+                tests_section.get("failure_list", [])
+                if isinstance(tests_section, dict)
+                else []
+            )
+            failure_snippets = _build_failure_snippets(fl, file_contents) if fl else {}
+            failure_scaffolds: dict[str, str] = {}
+            for r in refreshed:
+                raw_scaffold: object = r.get("scaffold")
+                if isinstance(raw_scaffold, dict):
+                    failure_scaffolds[r["path"]] = _render_scaffold(raw_scaffold)
+            file_manifest = [
+                {"path": r["path"], "sha256": r["file_sha256"], "lines": r["line_count"]}
+                for r in refreshed
+            ]
+            result["failure_snippets"] = failure_snippets
+            result["failure_scaffolds"] = failure_scaffolds
+            result["file_manifest"] = file_manifest
+    except (ImportError, OSError, RuntimeError, TypeError, ValueError, KeyError):  # noqa: BLE001
+        log.debug("checkpoint_failure_enrichment_failed", exc_info=True)
+
+
 def _serialize_test_result(
     result: "TestResult",
     coverage_filter_paths: set[str] | None = None,

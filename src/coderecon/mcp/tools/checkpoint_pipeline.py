@@ -9,7 +9,8 @@ if TYPE_CHECKING:
     from coderecon.mcp.session import SessionState
 from coderecon.mcp.tools.checkpoint import ProgressSink, _NullProgress, _DEFAULT_MAX_TEST_HOPS, _COMMIT_MAX_TEST_HOPS
 from coderecon.mcp.tools.checkpoint_helpers import (
-    _detect_test_debt, _ingest_checkpoint_coverage, _run_hook_with_retry,
+    _detect_test_debt, _enrich_failure_result, _ingest_checkpoint_coverage,
+    _run_hook_with_retry,
     _summarize_commit, _validate_commit_message, _validate_paths_exist,
 )
 from coderecon.mcp.tools.checkpoint_tiered import _run_tiered_tests, _summarize_verify
@@ -79,97 +80,15 @@ async def checkpoint_pipeline(
     test_failed = 0
     test_status = "skipped"
     if lint:
-        # Fast-path: read cached lint facts if background pipeline already ran
-        cached_lint = None
-        if not autofix and changed_files:
-            try:
-                from coderecon.mcp.tools._checkpoint_cache import try_read_lint_facts
-                cached_lint = try_read_lint_facts(
-                    engine=app_ctx.coordinator.db.engine,
-                    changed_files=changed_files,
-                    current_epoch=app_ctx.coordinator.get_current_epoch(),
-                )
-            except (ImportError, OSError, RuntimeError, ValueError):  # noqa: BLE001
-                cached_lint = None
-        if cached_lint is not None:
-            # Use cached facts — near-instant
-            lint_status = "clean" if cached_lint.clean else "dirty"
-            lint_diagnostics = cached_lint.total_errors + cached_lint.total_warnings
-            phase += 1
-            if cached_lint.clean:
-                await progress.info("Lint: clean (cached)")
-            else:
-                await progress.info(f"Lint: {lint_diagnostics} issue(s) (cached)")
-            result["lint"] = {
-                "status": lint_status,
-                "diagnostics": lint_diagnostics,
-                "fixed_files": 0,
-                "duration": 0.0,
-                "cached": True,
-            }
-            if cached_lint.issues:
-                result["lint"]["issues"] = [
-                    f"{i['file']} {i['tool']} E:{i['errors']} W:{i['warnings']}"
-                    for i in cached_lint.issues
-                ]
-            if lint_diagnostics > 0 and lint_status != "clean":
-                test_status = "skipped"
-                result["tests"] = {
-                    "status": "skipped",
-                    "reason": "lint failed — fix lint issues first",
-                }
-                tests = False
-        else:
-            # Live lint
-            mode = "auto-fix" if autofix else "check-only"
-            await progress.report_progress(phase, total_phases, f"Linting ({mode})")
-            lint_result = await app_ctx.lint_ops.check(
-                paths=changed_files or None,
-                tools=None,
-                categories=None,
-                dry_run=not autofix,
-            )
-            lint_status = lint_result.status
-            lint_diagnostics = lint_result.total_diagnostics
-            phase += 1
-            if lint_status == "clean":
-                await progress.info("Lint: clean")
-            else:
-                await progress.info(
-                    f"Lint: {lint_diagnostics} issue(s), "
-                    f"{lint_result.total_files_modified} file(s) modified"
-                )
-            # Build compact lint result: structured outer keys, text for issues
-            issue_lines: list[str] = []
-            for t in lint_result.tools_run:
-                for d in t.diagnostics:
-                    # Strip repo root prefix for brevity
-                    rel_path = d.path
-                    if "/" in rel_path:
-                        for prefix in (str(app_ctx.repo_root) + "/",):
-                            if rel_path.startswith(prefix):
-                                rel_path = rel_path[len(prefix) :]
-                                break
-                    sev = d.severity.value[0].upper()  # W/E/I
-                    issue_lines.append(f"{rel_path}:{d.line}:{d.column} {sev} {d.code} {d.message}")
-            result["lint"] = {
-                "status": lint_result.status,
-                "diagnostics": lint_result.total_diagnostics,
-                "fixed_files": lint_result.total_files_modified,
-                "duration": round(lint_result.duration_seconds, 2),
-            }
-            if issue_lines:
-                result["lint"]["issues"] = issue_lines
-            if lint_result.agentic_hint:
-                result["lint"]["agentic_hint"] = lint_result.agentic_hint
-            # Fail-fast: skip tests if lint has issues
-            if lint_diagnostics > 0 and lint_status != "clean":
-                test_status = "skipped"
-                result["tests"] = {
-                    "status": "skipped",
-                    "reason": "lint failed — fix lint issues first",
-                }
-                tests = False
+        lint_out = await _run_lint_phase(
+            app_ctx, changed_files, autofix, phase, total_phases, progress, result,
+        )
+        lint_status = lint_out["lint_status"]
+        lint_diagnostics = lint_out["lint_diagnostics"]
+        phase = lint_out["phase"]
+        if lint_out["skip_tests"]:
+            test_status = "skipped"
+            tests = False
     if tests:
         await progress.report_progress(phase, total_phases, "Discovering test targets")
         discover_result = await app_ctx.test_ops.discover(paths=None)
@@ -294,117 +213,13 @@ async def checkpoint_pipeline(
             "Fix ALL issues before proceeding."
         )
         # ── Build failure-focused enrichment ──
-        try:
-            import hashlib
-            repo_root = app_ctx.coordinator.repo_root
-            refreshed: list[dict[str, Any]] = []
-            for cf in changed_files:
-                fp = repo_root / cf
-                if not fp.exists():
-                    continue
-                try:
-                    raw = fp.read_bytes()
-                    if b"\x00" in raw[:512]:
-                        continue  # skip binary
-                    content_str = raw.decode("utf-8", errors="replace")
-                    sha = hashlib.sha256(raw).hexdigest()
-                    entry: dict[str, Any] = {
-                        "path": cf,
-                        "content": content_str,
-                        "line_count": content_str.count("\n") + 1,
-                        "file_sha256": sha,
-                    }
-                    try:
-                        from coderecon.mcp.tools.files import _build_scaffold
-                        scaffold = _build_scaffold(app_ctx, cf, fp)
-                        entry["scaffold"] = scaffold
-                    except (ImportError, OSError, ValueError):  # best-effort scaffold
-                        log.debug("checkpoint.scaffold.failed", path=cf, exc_info=True)
-                    refreshed.append(entry)
-                except (OSError, UnicodeDecodeError, ValueError):  # best-effort file read
-                    log.debug("checkpoint.file_refresh.failed", path=cf, exc_info=True)
-                    continue
-            if refreshed:
-                session.mutation_ctx.clear()
-                app_ctx.refactor_ops.clear_pending()
-                file_contents = {r["path"]: r["content"] for r in refreshed}
-                # Extract failure list from test results
-                tests_section = result.get("tests", {})
-                fl = (
-                    tests_section.get("failure_list", [])
-                    if isinstance(tests_section, dict)
-                    else []
-                )
-                # Build snippets around failure locations
-                failure_snippets = _build_failure_snippets(fl, file_contents) if fl else {}
-                # Build scaffolds (compact symbol index)
-                def _render_scaffold(scaffold: dict) -> str:
-                    parts: list[str] = []
-                    summary = scaffold.get("summary", "")
-                    if summary:
-                        parts.append(summary)
-                    imports = scaffold.get("imports", [])
-                    if imports:
-                        parts.append(f"imports: {', '.join(str(i) for i in imports)}")
-                    for s in scaffold.get("symbols", []):
-                        name = s.get("name", "?")
-                        kind = s.get("kind", "")
-                        line = s.get("line", "")
-                        parts.append(f"  {kind} {name} (L{line})" if line else f"  {kind} {name}")
-                    return "\n".join(parts)
-                failure_scaffolds: dict[str, str] = {}
-                for r in refreshed:
-                    raw_scaffold: object = r.get("scaffold")
-                    if isinstance(raw_scaffold, dict):
-                        failure_scaffolds[r["path"]] = _render_scaffold(raw_scaffold)
-                file_manifest = [
-                    {
-                        "path": r["path"],
-                        "sha256": r["file_sha256"],
-                        "lines": r["line_count"],
-                    }
-                    for r in refreshed
-                ]
-                result["failure_snippets"] = failure_snippets
-                result["failure_scaffolds"] = failure_scaffolds
-                result["file_manifest"] = file_manifest
-        except (ImportError, OSError, RuntimeError, TypeError, ValueError, KeyError):  # noqa: BLE001
-            log.debug("checkpoint_failure_enrichment_failed", exc_info=True)
+        _enrich_failure_result(app_ctx, session, result, changed_files)
         result["agentic_hint"] = " ".join(hints)
     else:
         result["passed"] = True
         await progress.report_progress(total_phases, total_phases, "Checks passed")
         # ── Governance gate evaluation ──
-        gate_hints: list[str] = []
-        try:
-            from coderecon.config.loader import load_config
-            from coderecon.index._internal.analysis.gate_engine import evaluate_gates
-            config = load_config(repo_root=app_ctx.repo_root)
-            gate_result = evaluate_gates(
-                governance=config.governance,
-                engine=app_ctx.coordinator.db.engine,
-                changed_files=changed_files,
-                lint_clean=lint_status == "clean",
-                lint_diagnostics=lint_diagnostics,
-                test_debt_info=_detect_test_debt(changed_files, app_ctx.repo_root)
-                if changed_files
-                else None,
-            )
-            if gate_result.violations:
-                result["governance"] = gate_result.to_dict()
-                for v in gate_result.errors:
-                    gate_hints.append(f"[GATE ERROR] {v.rule}: {v.message}")
-                for v in gate_result.warnings:
-                    gate_hints.append(f"[GATE WARNING] {v.rule}: {v.message}")
-                if not gate_result.passed:
-                    result["passed"] = False
-                    result["agentic_hint"] = " ".join(gate_hints)
-                    await progress.warning(
-                        f"Governance: {len(gate_result.errors)} error(s), "
-                        f"{len(gate_result.warnings)} warning(s)"
-                    )
-        except (ImportError, OSError, ValueError, AttributeError):  # best-effort governance
-            log.debug("checkpoint.governance.failed", exc_info=True)
+        await _evaluate_governance(app_ctx, result, changed_files, lint_status, lint_diagnostics, progress)
         # ── Reset mutation state ──
         try:
             session.mutation_ctx.clear()
@@ -412,70 +227,9 @@ async def checkpoint_pipeline(
         except (AttributeError, RuntimeError):  # best-effort reset
             log.debug("checkpoint.mutation_reset.failed", exc_info=True)
         if commit_message:
-            _validate_commit_message(commit_message)
-            repo_path = Path(app_ctx.git_ops.path)
-            await progress.report_progress(total_phases, total_phases + 2, "Staging changes")
-            if changed_files:
-                tracked = set(app_ctx.git_ops.tracked_files())
-                _validate_paths_exist(repo_path, changed_files, tracked_files=tracked)
-                app_ctx.git_ops.stage(changed_files)
-                staged_paths = list(changed_files)
-            else:
-                staged_paths = app_ctx.git_ops.stage_all()
-            await progress.report_progress(
-                total_phases + 1, total_phases + 2, "Running pre-commit hooks"
-            )
-            _hook_result, failure = _run_hook_with_retry(
-                repo_path, staged_paths, app_ctx.git_ops.stage
-            )
-            if failure:
-                await progress.warning("Pre-commit hooks failed — skipping commit")
-                result["commit"] = failure
-            else:
-                sha = app_ctx.git_ops.commit(commit_message)
-                commit_result: dict[str, Any] = {
-                    "oid": sha,
-                    "summary": _summarize_commit(sha, commit_message),
-                }
-                if _hook_result and not _hook_result.success:
-                    fixed = _hook_result.modified_files or []
-                    commit_result["hook_warning"] = f"HOOK_AUTO_FIXED: {', '.join(fixed)}"
-                if push:
-                    app_ctx.git_ops.push(remote="origin", force=False)
-                    commit_result["pushed"] = "origin"
-                    commit_result["summary"] += " → pushed to origin"
-                result["commit"] = commit_result
-                await progress.report_progress(
-                    total_phases + 2,
-                    total_phases + 2,
-                    f"Committed {sha[:7]}",
-                )
-                try:
-                    from coderecon.mcp.tools.diff import _run_git_diff
-                    from coderecon.mcp.tools.diff_formatting import (
-                        _result_to_dict,
-                    )
-                    diff_result = _run_git_diff(
-                        app_ctx, base="HEAD~1", target="HEAD", paths=None
-                    )
-                    minimal = _result_to_dict(diff_result, verbosity="minimal")
-                    diff_summary = minimal.get("summary", "")
-                    changes = minimal.get("structural_changes", [])
-                    if changes:
-                        change_lines = [
-                            f"{c.get('change', '?')} {c.get('kind', '?')} "
-                            f"{c.get('name', '?')} ({c.get('path', '?').split('/')[-1]})"
-                            for c in changes[:15]
-                        ]
-                        commit_result["diff"] = f"{diff_summary}: " + ", ".join(change_lines)
-                    elif diff_summary:
-                        commit_result["diff"] = diff_summary
-                except (ImportError, GitError, KeyError, ValueError, OSError, RuntimeError):
-                    log.debug("post-commit semantic diff skipped", exc_info=True)
-            result["agentic_hint"] = (
-                "All checks passed and changes committed."
-                if "oid" in result.get("commit", {})
-                else "All checks passed but commit failed — see commit section."
+            await _commit_and_push(
+                app_ctx, result, changed_files, commit_message, push,
+                progress, total_phases,
             )
         else:
             result["agentic_hint"] = (
@@ -496,4 +250,226 @@ async def checkpoint_pipeline(
     return wrap_response(
         result,
         resource_kind="checkpoint",
+    )
+
+
+async def _run_lint_phase(
+    app_ctx: "AppContext",
+    changed_files: list[str],
+    autofix: bool,
+    phase: int,
+    total_phases: int,
+    progress: ProgressSink,
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    """Execute lint (cached or live) and populate *result*. Returns state dict."""
+    lint_status = "skipped"
+    lint_diagnostics = 0
+    skip_tests = False
+    cached_lint = None
+    if not autofix and changed_files:
+        try:
+            from coderecon.mcp.tools._checkpoint_cache import try_read_lint_facts
+            cached_lint = try_read_lint_facts(
+                engine=app_ctx.coordinator.db.engine,
+                changed_files=changed_files,
+                current_epoch=app_ctx.coordinator.get_current_epoch(),
+            )
+        except (ImportError, OSError, RuntimeError, ValueError):  # noqa: BLE001
+            cached_lint = None
+    if cached_lint is not None:
+        lint_status = "clean" if cached_lint.clean else "dirty"
+        lint_diagnostics = cached_lint.total_errors + cached_lint.total_warnings
+        phase += 1
+        if cached_lint.clean:
+            await progress.info("Lint: clean (cached)")
+        else:
+            await progress.info(f"Lint: {lint_diagnostics} issue(s) (cached)")
+        result["lint"] = {
+            "status": lint_status,
+            "diagnostics": lint_diagnostics,
+            "fixed_files": 0,
+            "duration": 0.0,
+            "cached": True,
+        }
+        if cached_lint.issues:
+            result["lint"]["issues"] = [
+                f"{i['file']} {i['tool']} E:{i['errors']} W:{i['warnings']}"
+                for i in cached_lint.issues
+            ]
+        if lint_diagnostics > 0 and lint_status != "clean":
+            result["tests"] = {
+                "status": "skipped",
+                "reason": "lint failed — fix lint issues first",
+            }
+            skip_tests = True
+    else:
+        mode = "auto-fix" if autofix else "check-only"
+        await progress.report_progress(phase, total_phases, f"Linting ({mode})")
+        lint_result = await app_ctx.lint_ops.check(
+            paths=changed_files or None,
+            tools=None,
+            categories=None,
+            dry_run=not autofix,
+        )
+        lint_status = lint_result.status
+        lint_diagnostics = lint_result.total_diagnostics
+        phase += 1
+        if lint_status == "clean":
+            await progress.info("Lint: clean")
+        else:
+            await progress.info(
+                f"Lint: {lint_diagnostics} issue(s), "
+                f"{lint_result.total_files_modified} file(s) modified"
+            )
+        issue_lines: list[str] = []
+        for t in lint_result.tools_run:
+            for d in t.diagnostics:
+                rel_path = d.path
+                if "/" in rel_path:
+                    for prefix in (str(app_ctx.repo_root) + "/",):
+                        if rel_path.startswith(prefix):
+                            rel_path = rel_path[len(prefix) :]
+                            break
+                sev = d.severity.value[0].upper()
+                issue_lines.append(f"{rel_path}:{d.line}:{d.column} {sev} {d.code} {d.message}")
+        result["lint"] = {
+            "status": lint_result.status,
+            "diagnostics": lint_result.total_diagnostics,
+            "fixed_files": lint_result.total_files_modified,
+            "duration": round(lint_result.duration_seconds, 2),
+        }
+        if issue_lines:
+            result["lint"]["issues"] = issue_lines
+        if lint_result.agentic_hint:
+            result["lint"]["agentic_hint"] = lint_result.agentic_hint
+        if lint_diagnostics > 0 and lint_status != "clean":
+            result["tests"] = {
+                "status": "skipped",
+                "reason": "lint failed — fix lint issues first",
+            }
+            skip_tests = True
+    return {
+        "lint_status": lint_status,
+        "lint_diagnostics": lint_diagnostics,
+        "phase": phase,
+        "skip_tests": skip_tests,
+    }
+
+
+async def _evaluate_governance(
+    app_ctx: "AppContext",
+    result: dict[str, Any],
+    changed_files: list[str],
+    lint_status: str,
+    lint_diagnostics: int,
+    progress: ProgressSink,
+) -> None:
+    """Run governance gate evaluation, mutating *result* in place."""
+    gate_hints: list[str] = []
+    try:
+        from coderecon.config.loader import load_config
+        from coderecon.index._internal.analysis.gate_engine import evaluate_gates
+        config = load_config(repo_root=app_ctx.repo_root)
+        gate_result = evaluate_gates(
+            governance=config.governance,
+            engine=app_ctx.coordinator.db.engine,
+            changed_files=changed_files,
+            lint_clean=lint_status == "clean",
+            lint_diagnostics=lint_diagnostics,
+            test_debt_info=_detect_test_debt(changed_files, app_ctx.repo_root)
+            if changed_files
+            else None,
+        )
+        if gate_result.violations:
+            result["governance"] = gate_result.to_dict()
+            for v in gate_result.errors:
+                gate_hints.append(f"[GATE ERROR] {v.rule}: {v.message}")
+            for v in gate_result.warnings:
+                gate_hints.append(f"[GATE WARNING] {v.rule}: {v.message}")
+            if not gate_result.passed:
+                result["passed"] = False
+                result["agentic_hint"] = " ".join(gate_hints)
+                await progress.warning(
+                    f"Governance: {len(gate_result.errors)} error(s), "
+                    f"{len(gate_result.warnings)} warning(s)"
+                )
+    except (ImportError, OSError, ValueError, AttributeError):  # best-effort governance
+        log.debug("checkpoint.governance.failed", exc_info=True)
+
+
+async def _commit_and_push(
+    app_ctx: "AppContext",
+    result: dict[str, Any],
+    changed_files: list[str],
+    commit_message: str,
+    push: bool,
+    progress: ProgressSink,
+    total_phases: int,
+) -> None:
+    """Validate, stage, hook, commit, optionally push — mutates *result*."""
+    _validate_commit_message(commit_message)
+    repo_path = Path(app_ctx.git_ops.path)
+    await progress.report_progress(total_phases, total_phases + 2, "Staging changes")
+    if changed_files:
+        tracked = set(app_ctx.git_ops.tracked_files())
+        _validate_paths_exist(repo_path, changed_files, tracked_files=tracked)
+        app_ctx.git_ops.stage(changed_files)
+        staged_paths = list(changed_files)
+    else:
+        staged_paths = app_ctx.git_ops.stage_all()
+    await progress.report_progress(
+        total_phases + 1, total_phases + 2, "Running pre-commit hooks"
+    )
+    _hook_result, failure = _run_hook_with_retry(
+        repo_path, staged_paths, app_ctx.git_ops.stage
+    )
+    if failure:
+        await progress.warning("Pre-commit hooks failed — skipping commit")
+        result["commit"] = failure
+    else:
+        sha = app_ctx.git_ops.commit(commit_message)
+        commit_result: dict[str, Any] = {
+            "oid": sha,
+            "summary": _summarize_commit(sha, commit_message),
+        }
+        if _hook_result and not _hook_result.success:
+            fixed = _hook_result.modified_files or []
+            commit_result["hook_warning"] = f"HOOK_AUTO_FIXED: {', '.join(fixed)}"
+        if push:
+            app_ctx.git_ops.push(remote="origin", force=False)
+            commit_result["pushed"] = "origin"
+            commit_result["summary"] += " → pushed to origin"
+        result["commit"] = commit_result
+        await progress.report_progress(
+            total_phases + 2,
+            total_phases + 2,
+            f"Committed {sha[:7]}",
+        )
+        try:
+            from coderecon.mcp.tools.diff import _run_git_diff
+            from coderecon.mcp.tools.diff_formatting import (
+                _result_to_dict,
+            )
+            diff_result = _run_git_diff(
+                app_ctx, base="HEAD~1", target="HEAD", paths=None
+            )
+            minimal = _result_to_dict(diff_result, verbosity="minimal")
+            diff_summary = minimal.get("summary", "")
+            changes = minimal.get("structural_changes", [])
+            if changes:
+                change_lines = [
+                    f"{c.get('change', '?')} {c.get('kind', '?')} "
+                    f"{c.get('name', '?')} ({c.get('path', '?').split('/')[-1]})"
+                    for c in changes[:15]
+                ]
+                commit_result["diff"] = f"{diff_summary}: " + ", ".join(change_lines)
+            elif diff_summary:
+                commit_result["diff"] = diff_summary
+        except (ImportError, GitError, KeyError, ValueError, OSError, RuntimeError):
+            log.debug("post-commit semantic diff skipped", exc_info=True)
+    result["agentic_hint"] = (
+        "All checks passed and changes committed."
+        if "oid" in result.get("commit", {})
+        else "All checks passed but commit failed — see commit section."
     )

@@ -121,30 +121,7 @@ async def _reindex_for_reconignore_change(
             session.commit()
     # Update structural index for added files, grouped by context
     if to_add and engine._structural is not None:
-        by_context: dict[int, list[str]] = {}
-        for rel_path in to_add:
-            ctx_id = file_to_context.get(rel_path, 1)
-            if ctx_id not in by_context:
-                by_context[ctx_id] = []
-            by_context[ctx_id].append(rel_path)
-        _wt = engine._freshness_worktree or "main"
-        _root = engine._worktree_root_cache.get(_wt, engine.repo_root)
-        for ctx_id, paths in by_context.items():
-            extractions = engine._structural.extract_files(paths, ctx_id, repo_root=_root)
-            engine._structural.index_files(
-                paths,
-                context_id=ctx_id,
-                file_id_map=file_id_map,
-                worktree_id=engine._get_or_create_worktree_id(_wt),
-                is_main_worktree=engine._is_main_worktree(_wt),
-                _extractions=extractions,
-            )
-        from coderecon.index._internal.indexing.config_refs import (
-            resolve_config_file_refs,
-        )
-        resolve_config_file_refs(engine.db, engine.repo_root)
-        run_pass_1_5(engine.db, None)
-        resolve_references(engine.db)
+        _structural_index_added_files(engine, to_add, file_to_context, file_id_map)
         resolve_type_traced(engine.db)
     # Sweep orphaned edge rows after resolution
     engine._sweep_orphaned_edges()
@@ -182,6 +159,39 @@ async def _reindex_for_reconignore_change(
         symbols_indexed=0,
         duration_seconds=duration,
     )
+
+
+def _structural_index_added_files(
+    engine: IndexCoordinatorEngine,
+    to_add: set[str],
+    file_to_context: dict[str, int],
+    file_id_map: dict[str, int],
+) -> None:
+    """Extract and index structural facts for newly added files."""
+    by_context: dict[int, list[str]] = {}
+    for rel_path in to_add:
+        ctx_id = file_to_context.get(rel_path, 1)
+        if ctx_id not in by_context:
+            by_context[ctx_id] = []
+        by_context[ctx_id].append(rel_path)
+    _wt = engine._freshness_worktree or "main"
+    _root = engine._worktree_root_cache.get(_wt, engine.repo_root)
+    for ctx_id, paths in by_context.items():
+        extractions = engine._structural.extract_files(paths, ctx_id, repo_root=_root)
+        engine._structural.index_files(
+            paths,
+            context_id=ctx_id,
+            file_id_map=file_id_map,
+            worktree_id=engine._get_or_create_worktree_id(_wt),
+            is_main_worktree=engine._is_main_worktree(_wt),
+            _extractions=extractions,
+        )
+    from coderecon.index._internal.indexing.config_refs import (
+        resolve_config_file_refs,
+    )
+    resolve_config_file_refs(engine.db, engine.repo_root)
+    run_pass_1_5(engine.db, None)
+    resolve_references(engine.db)
 
 
 async def _reindex_full_impl(engine: IndexCoordinatorEngine) -> IndexStats:
@@ -238,19 +248,7 @@ async def _reindex_full_impl(engine: IndexCoordinatorEngine) -> IndexStats:
         to_remove = indexed_paths - should_index
         to_add = should_index - indexed_paths
         # Check existing files for content changes
-        to_update: set[str] = set()
-        common = indexed_paths & should_index
-        if common:
-            for rel_path in common:
-                full_path = engine.repo_root / rel_path
-                if full_path.exists():
-                    try:
-                        disk_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
-                    except OSError:
-                        log.debug("hash_read_failed", path=rel_path, exc_info=True)
-                        continue
-                    if disk_hash != indexed_hashes.get(rel_path):
-                        to_update.add(rel_path)
+        to_update = _detect_changed_files(engine, indexed_paths & should_index, indexed_hashes)
         # Combine new + modified for indexing
         to_index = to_add | to_update
         # Process removals + updates
@@ -286,67 +284,15 @@ async def _reindex_full_impl(engine: IndexCoordinatorEngine) -> IndexStats:
         if engine._lexical is not None:
             engine._lexical.reload()
         # Pre-create/update File records before structural indexing
-        file_id_map: dict[str, int] = {}
         _full_wt_id = engine._get_or_create_worktree_id(
             engine._freshness_worktree or "main"
         )
-        if to_index:
-            with engine.db.session() as session:
-                for rel_path in to_update:
-                    full_path = engine.repo_root / rel_path
-                    if not full_path.exists():
-                        continue
-                    content_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
-                    existing = session.exec(
-                        select(File).where(
-                            File.path == rel_path,
-                            File.worktree_id == _full_wt_id,
-                        )
-                    ).first()
-                    if existing and existing.id is not None:
-                        existing.content_hash = content_hash
-                        existing.indexed_at = time.time()
-                        session.flush()
-                        file_id_map[rel_path] = existing.id
-                for rel_path in to_add:
-                    full_path = engine.repo_root / rel_path
-                    if not full_path.exists():
-                        continue
-                    content_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
-                    lang = detect_language_family(full_path)
-                    file_record = File(
-                        path=rel_path,
-                        content_hash=content_hash,
-                        language_family=lang,
-                        indexed_at=time.time(),
-                        worktree_id=_full_wt_id,
-                    )
-                    session.add(file_record)
-                    session.flush()
-                    if file_record.id is not None:
-                        file_id_map[rel_path] = file_record.id
-                session.commit()
+        file_id_map = _upsert_file_records(
+            engine, to_add, to_update, _full_wt_id,
+        )
         # Structural indexing for added + modified files
         if to_index and engine._structural is not None:
-            by_context: dict[int, list[str]] = {}
-            for rel_path in to_index:
-                ctx_id = file_to_context.get(rel_path, 1)
-                by_context.setdefault(ctx_id, []).append(rel_path)
-            _wt2 = engine._freshness_worktree or "main"
-            _root2 = engine._worktree_root_cache.get(_wt2, engine.repo_root)
-            for ctx_id, paths in by_context.items():
-                extractions = engine._structural.extract_files(paths, ctx_id, repo_root=_root2)
-                engine._structural.index_files(
-                    paths,
-                    context_id=ctx_id,
-                    file_id_map=file_id_map,
-                    worktree_id=engine._get_or_create_worktree_id(_wt2),
-                    is_main_worktree=engine._is_main_worktree(_wt2),
-                    _extractions=extractions,
-                )
-            # Cross-file resolution passes
-            run_pass_1_5(engine.db, None)
-            resolve_references(engine.db)
+            _structural_index_added_files(engine, to_index, file_to_context, file_id_map)
             resolve_type_traced(engine.db)
         # Sweep orphaned edge rows after resolution
         engine._sweep_orphaned_edges()
@@ -387,3 +333,72 @@ async def _reindex_full_impl(engine: IndexCoordinatorEngine) -> IndexStats:
         symbols_indexed=symbols_indexed,
         duration_seconds=duration,
     )
+
+
+def _detect_changed_files(
+    engine: IndexCoordinatorEngine,
+    common: set[str],
+    indexed_hashes: dict[str, str | None],
+) -> set[str]:
+    """Return paths from *common* whose on-disk hash differs from the DB hash."""
+    to_update: set[str] = set()
+    for rel_path in common:
+        full_path = engine.repo_root / rel_path
+        if full_path.exists():
+            try:
+                disk_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
+            except OSError:
+                log.debug("hash_read_failed", path=rel_path, exc_info=True)
+                continue
+            if disk_hash != indexed_hashes.get(rel_path):
+                to_update.add(rel_path)
+    return to_update
+
+
+def _upsert_file_records(
+    engine: IndexCoordinatorEngine,
+    to_add: set[str],
+    to_update: set[str],
+    worktree_id: int,
+) -> dict[str, int]:
+    """Create File rows for new paths and update hashes for changed paths."""
+    file_id_map: dict[str, int] = {}
+    to_index = to_add | to_update
+    if not to_index:
+        return file_id_map
+    with engine.db.session() as session:
+        for rel_path in to_update:
+            full_path = engine.repo_root / rel_path
+            if not full_path.exists():
+                continue
+            content_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
+            existing = session.exec(
+                select(File).where(
+                    File.path == rel_path,
+                    File.worktree_id == worktree_id,
+                )
+            ).first()
+            if existing and existing.id is not None:
+                existing.content_hash = content_hash
+                existing.indexed_at = time.time()
+                session.flush()
+                file_id_map[rel_path] = existing.id
+        for rel_path in to_add:
+            full_path = engine.repo_root / rel_path
+            if not full_path.exists():
+                continue
+            content_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
+            lang = detect_language_family(full_path)
+            file_record = File(
+                path=rel_path,
+                content_hash=content_hash,
+                language_family=lang,
+                indexed_at=time.time(),
+                worktree_id=worktree_id,
+            )
+            session.add(file_record)
+            session.flush()
+            if file_record.id is not None:
+                file_id_map[rel_path] = file_record.id
+        session.commit()
+    return file_id_map

@@ -140,6 +140,38 @@ async def _execute_tests(
                     history.record(target.target_id, peak_rss)
             return (target, result, cov_artifact)
     all_tasks = [asyncio.create_task(run_target(t)) for t in targets]
+    coverage_artifacts, diagnostics = await _collect_results(
+        all_tasks, cancel_event, fail_fast, progress, failures,
+    )
+    duration = time.time() - start_time
+    status: Literal["running", "completed", "cancelled", "failed"] = (
+        "cancelled" if cancel_event.is_set() else "completed"
+    )
+    coverage_dicts = [
+        {"format": c.format, "path": str(c.path), "pack_id": c.pack_id}
+        for c in coverage_artifacts
+    ]
+    final_status = TestRunStatus(
+        run_id=run_id, status=status, progress=progress,
+        failures=failures, diagnostics=diagnostics,
+        duration_seconds=duration, artifact_dir=str(artifact_dir),
+        coverage=coverage_dicts,
+        target_selectors=[t.selector for t in targets],
+    )
+    persist_callback(artifact_dir, final_status)  # type: ignore[operator]
+    return final_status
+
+
+async def _collect_results(
+    all_tasks: list[asyncio.Task[tuple[TestTarget, ParsedTestSuite | None, CoverageArtifact | None]]],
+    cancel_event: asyncio.Event,
+    fail_fast: bool,
+    progress: TestProgress,
+    failures: list[TestFailure],
+) -> tuple[list[CoverageArtifact], list[ExecutionDiagnostic]]:
+    """Await completed tasks and aggregate results into *progress* and *failures*."""
+    coverage_artifacts: list[CoverageArtifact] = []
+    diagnostics: list[ExecutionDiagnostic] = []
     for coro in asyncio.as_completed(all_tasks):
         if cancel_event.is_set() or (fail_fast and progress.cases.failed > 0):
             for t in all_tasks:
@@ -199,20 +231,4 @@ async def _execute_tests(
                             duration_seconds=test.duration_seconds,
                         )
                     )
-    duration = time.time() - start_time
-    status: Literal["running", "completed", "cancelled", "failed"] = (
-        "cancelled" if cancel_event.is_set() else "completed"
-    )
-    coverage_dicts = [
-        {"format": c.format, "path": str(c.path), "pack_id": c.pack_id}
-        for c in coverage_artifacts
-    ]
-    final_status = TestRunStatus(
-        run_id=run_id, status=status, progress=progress,
-        failures=failures, diagnostics=diagnostics,
-        duration_seconds=duration, artifact_dir=str(artifact_dir),
-        coverage=coverage_dicts,
-        target_selectors=[t.selector for t in targets],
-    )
-    persist_callback(artifact_dir, final_status)  # type: ignore[operator]
-    return final_status
+    return coverage_artifacts, diagnostics

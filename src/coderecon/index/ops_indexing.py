@@ -151,33 +151,7 @@ async def _index_all_files(
             log.info("index.stage.extract_complete",
                      extra={"files": count, "elapsed_sec": round(_extract_elapsed, 1),
                      "workers": workers})
-            _resolve_start = time.time()
-            engine._structural.resolve_all_imports()
-            # Create synthetic import edges from config files
-            from coderecon.index._internal.indexing.config_refs import (
-                resolve_config_file_refs,
-            )
-            resolve_config_file_refs(engine.db, engine.repo_root)
-            # Pass 1.5: DB-backed cross-file resolution (all languages)
-            on_progress(0, 1, files_by_ext, "resolving_cross_file")
-            run_pass_1_5(engine.db, None)
-            # Pass 2: Resolve cross-file references
-            def pass2_progress(processed: int, total: int) -> None:
-                on_progress(processed, total, files_by_ext, "resolving_refs")
-            on_progress(0, 1, files_by_ext, "resolving_refs")
-            resolve_references(engine.db, on_progress=pass2_progress)
-            # Pass 3: Resolve type-traced accesses
-            def pass3_progress(processed: int, total: int) -> None:
-                on_progress(processed, total, files_by_ext, "resolving_types")
-            on_progress(0, 1, files_by_ext, "resolving_types")
-            resolve_type_traced(engine.db, on_progress=pass3_progress)
-            _resolve_elapsed = time.time() - _resolve_start
-            log.info("index.stage.resolve_complete",
-                     extra={"elapsed_sec": round(_resolve_elapsed, 1)})
-            # Sweep orphaned edge rows after resolution
-            engine._sweep_orphaned_edges()
-            # Materialize ExportSurface/ExportThunk/AnchorGroup tables
-            materialize_all(engine.db)
+            _run_resolution_passes(engine, on_progress, files_by_ext)
             # SPLADE sparse vector encoding
             _index_splade_vectors(engine, on_progress, files_by_ext)
             # Pass 4: Semantic resolution
@@ -187,6 +161,39 @@ async def _index_all_files(
             # Pass 6: Doc chunk linking
             _index_doc_chunks(engine, on_progress, files_by_ext)
     return count, indexed_paths, files_by_ext
+
+
+def _run_resolution_passes(
+    engine: IndexCoordinatorEngine,
+    on_progress: Callable[[int, int, dict[str, int], str], None],
+    files_by_ext: dict[str, int],
+) -> None:
+    """Run cross-file resolution passes (1.5 through 3), sweep, and materialize."""
+    _resolve_start = time.time()
+    engine._structural.resolve_all_imports()
+    from coderecon.index._internal.indexing.config_refs import (
+        resolve_config_file_refs,
+    )
+    resolve_config_file_refs(engine.db, engine.repo_root)
+    on_progress(0, 1, files_by_ext, "resolving_cross_file")
+    run_pass_1_5(engine.db, None)
+
+    def pass2_progress(processed: int, total: int) -> None:
+        on_progress(processed, total, files_by_ext, "resolving_refs")
+
+    on_progress(0, 1, files_by_ext, "resolving_refs")
+    resolve_references(engine.db, on_progress=pass2_progress)
+
+    def pass3_progress(processed: int, total: int) -> None:
+        on_progress(processed, total, files_by_ext, "resolving_types")
+
+    on_progress(0, 1, files_by_ext, "resolving_types")
+    resolve_type_traced(engine.db, on_progress=pass3_progress)
+    _resolve_elapsed = time.time() - _resolve_start
+    log.info("index.stage.resolve_complete",
+             extra={"elapsed_sec": round(_resolve_elapsed, 1)})
+    engine._sweep_orphaned_edges()
+    materialize_all(engine.db)
 
 
 def _index_splade_vectors(

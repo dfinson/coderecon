@@ -123,65 +123,10 @@ class _MoveMixin:
                     .where(or_(*conditions))
                 )
                 results = session.exec(stmt).all()
-                for imp, file_path in results:
-                    # Determine what to replace
-                    old_value = ""
-                    new_value = ""
-                    if imp.source_literal:
-                        # Check exact match first
-                        if imp.source_literal in replacement_map:
-                            old_value = imp.source_literal
-                            new_value = replacement_map[imp.source_literal]
-                        else:
-                            # Check prefix match (submodule import)
-                            for from_c, to_c in replacement_map.items():
-                                if imp.source_literal.startswith(from_c + sep):
-                                    old_value = imp.source_literal
-                                    new_value = imp.source_literal.replace(from_c, to_c, 1)
-                                    break
-                    # If source_literal didn't match, check imported_name
-                    if not old_value:
-                        if imp.imported_name in replacement_map:
-                            old_value = imp.imported_name
-                            new_value = replacement_map[imp.imported_name]
-                        elif imp.imported_name in bare_names:
-                            # Bare import like "import helper"
-                            to_bare = (
-                                to_canonical.rsplit(sep, 1)[-1]
-                                if sep in to_canonical
-                                else to_canonical
-                            )
-                            old_value = imp.imported_name
-                            new_value = to_bare
-                    if not old_value:
-                        continue
-                    # Read file to find exact line
-                    full_path = self._repo_root / file_path
-                    if not full_path.exists():
-                        continue
-                    try:
-                        content = full_path.read_text(encoding="utf-8")
-                        lines = content.splitlines()
-                        for i, line in enumerate(lines, 1):
-                            if old_value in line and "import" in line.lower():
-                                loc = (file_path, i)
-                                if loc not in seen_locations:
-                                    seen_locations.add(loc)
-                                    # Certainty based on match type
-                                    cert: Literal["high", "medium", "low"] = (
-                                        "high" if imp.source_literal else "medium"
-                                    )
-                                    edits_by_file.setdefault(file_path, []).append(
-                                        EditHunk(
-                                            old=old_value,
-                                            new=new_value,
-                                            line=i,
-                                            certainty=cert,
-                                        )
-                                    )
-                                break
-                    except (OSError, UnicodeDecodeError):
-                        log.debug("move_import_scan_skip", exc_info=True)
+                _match_import_facts(
+                    results, replacement_map, bare_names, to_canonical, sep,
+                    self._repo_root, seen_locations, edits_by_file,
+                )
         # Lexical fallback: search for module path strings in all files
         await self._add_move_lexical_fallback(
             from_candidates,
@@ -257,3 +202,69 @@ class _MoveMixin:
         if module.endswith(".py"):
             module = module[:-3]
         return module
+
+
+def _match_import_facts(
+    results: list[Any],
+    replacement_map: dict[str, str],
+    bare_names: list[str],
+    to_canonical: str,
+    sep: str,
+    repo_root: Any,
+    seen_locations: set[tuple[str, int]],
+    edits_by_file: dict[str, list[EditHunk]],
+) -> None:
+    """Match ImportFact query results and build edit hunks."""
+    from pathlib import Path
+    for imp, file_path in results:
+        old_value = ""
+        new_value = ""
+        if imp.source_literal:
+            if imp.source_literal in replacement_map:
+                old_value = imp.source_literal
+                new_value = replacement_map[imp.source_literal]
+            else:
+                for from_c, to_c in replacement_map.items():
+                    if imp.source_literal.startswith(from_c + sep):
+                        old_value = imp.source_literal
+                        new_value = imp.source_literal.replace(from_c, to_c, 1)
+                        break
+        if not old_value:
+            if imp.imported_name in replacement_map:
+                old_value = imp.imported_name
+                new_value = replacement_map[imp.imported_name]
+            elif imp.imported_name in bare_names:
+                to_bare = (
+                    to_canonical.rsplit(sep, 1)[-1]
+                    if sep in to_canonical
+                    else to_canonical
+                )
+                old_value = imp.imported_name
+                new_value = to_bare
+        if not old_value:
+            continue
+        full_path = Path(repo_root) / file_path
+        if not full_path.exists():
+            continue
+        try:
+            content = full_path.read_text(encoding="utf-8")
+            lines = content.splitlines()
+            for i, line in enumerate(lines, 1):
+                if old_value in line and "import" in line.lower():
+                    loc = (file_path, i)
+                    if loc not in seen_locations:
+                        seen_locations.add(loc)
+                        cert: Literal["high", "medium", "low"] = (
+                            "high" if imp.source_literal else "medium"
+                        )
+                        edits_by_file.setdefault(file_path, []).append(
+                            EditHunk(
+                                old=old_value,
+                                new=new_value,
+                                line=i,
+                                certainty=cert,
+                            )
+                        )
+                    break
+        except (OSError, UnicodeDecodeError):
+            log.debug("move_import_scan_skip", exc_info=True)
