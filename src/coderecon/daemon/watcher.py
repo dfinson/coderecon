@@ -18,7 +18,6 @@ import asyncio
 import contextlib
 import os
 import time
-from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,120 +25,14 @@ from pathlib import Path
 import structlog
 from watchfiles import Change, awatch
 
+from coderecon.daemon.watcher_utils import (
+    collect_watch_dirs as _collect_watch_dirs,
+    is_cross_filesystem as _is_cross_filesystem,
+    summarize_changes_by_type as _summarize_changes_by_type,
+)
 from coderecon.index._internal.ignore import IgnoreChecker
 
 log = structlog.get_logger(__name__)
-
-# Directories that are NEVER watched, regardless of other settings.
-# These are hardcoded because:
-# - .recon/logs causes inotify feedback loop (writes trigger more watches)
-# - VCS dirs (.git, .svn, etc.) have their own change detection
-HARDCODED_DIRS: frozenset[str] = frozenset({".git", ".svn", ".hg", ".bzr", ".recon"})
-
-
-def _collect_watch_dirs(
-    repo_root: Path,
-    ignore_checker: IgnoreChecker,
-) -> list[Path]:
-    """Walk the repo tree and collect all directories to watch.
-
-    Respects the directory pruning model implemented by IgnoreChecker:
-    - Tier 0 (HARDCODED_DIRS): Always pruned, never watched
-    - Tier 1 (DEFAULT_PRUNABLE_DIRS): Pruned unless negated in .reconignore at the repo root
-    - Path patterns from .reconignore (e.g. ``ranking/clones/``)
-
-    Returns a flat list of directories. The repo_root itself is always included.
-    Each directory gets a single non-recursive inotify watch.
-    """
-    dirs: list[Path] = [repo_root]
-    try:
-        for dirpath, dirnames, _filenames in os.walk(repo_root):
-            rel_base = os.path.relpath(dirpath, repo_root)
-            surviving: list[str] = []
-            for d in dirnames:
-                if ignore_checker.should_prune_dir(d):
-                    continue
-                rel_child = os.path.join(rel_base, d) if rel_base != "." else d
-                if ignore_checker.should_prune_dir_path(rel_child):
-                    continue
-                surviving.append(d)
-            dirnames[:] = surviving
-            for d in dirnames:
-                dirs.append(Path(dirpath) / d)
-    except OSError:
-        log.debug("dir_walk_failed", root=str(root), exc_info=True)
-    return dirs
-
-def _is_cross_filesystem(path: Path) -> bool:
-    """Detect if path is on a cross-filesystem mount (WSL /mnt/*, network drives, etc.)."""
-    resolved = path.resolve()
-    path_str = str(resolved)
-    # WSL accessing Windows filesystem: /mnt/c/, /mnt/d/, etc.
-    # Must be single letter followed by / (not /mnt/data/ which is a regular mount)
-    if (
-        path_str.startswith("/mnt/")
-        and len(path_str) > 6
-        and path_str[5].isalpha()
-        and path_str[6] == "/"
-    ):
-        return True
-    # Common network/remote mounts
-    return path_str.startswith(("/run/user/", "/media/", "/net/"))
-
-def _summarize_changes_by_type(paths: list[Path]) -> str:
-    """Summarize file changes by extension/type with grammatical correctness.
-
-    Returns a human-readable summary like:
-    - "1 Python file" (singular)
-    - "3 Python files" (plural)
-    - "2 Python files, 1 config file" (multiple types)
-    """
-    # Map extensions to human-readable names
-    ext_names: dict[str, str] = {
-        ".py": "Python",
-        ".pyi": "Python stub",
-        ".js": "JavaScript",
-        ".ts": "TypeScript",
-        ".jsx": "JSX",
-        ".tsx": "TSX",
-        ".json": "JSON",
-        ".yaml": "YAML",
-        ".yml": "YAML",
-        ".toml": "TOML",
-        ".md": "Markdown",
-        ".rs": "Rust",
-        ".go": "Go",
-        ".java": "Java",
-        ".kt": "Kotlin",
-        ".rb": "Ruby",
-        ".css": "CSS",
-        ".html": "HTML",
-        ".sql": "SQL",
-        ".sh": "shell",
-    }
-
-    # Count by extension
-    ext_counts: Counter[str] = Counter()
-    for p in paths:
-        ext = p.suffix.lower()
-        ext_counts[ext] += 1
-
-    # Build summary parts
-    parts: list[str] = []
-    for ext, count in ext_counts.most_common(3):  # Top 3 types
-        name = ext_names.get(ext, ext.lstrip(".").upper() if ext else "other")
-        word = "file" if count == 1 else "files"
-        parts.append(f"{count} {name} {word}")
-
-    # Handle remaining types if more than 3
-    shown_count = sum(ext_counts[ext] for ext, _ in ext_counts.most_common(3))
-    remaining = len(paths) - shown_count
-    if remaining > 0:
-        word = "other" if remaining == 1 else "others"
-        parts.append(f"{remaining} {word}")
-
-    return ", ".join(parts)
-
 
 # Debouncing configuration
 DEBOUNCE_WINDOW_SEC = 0.5  # Sliding window for batching rapid changes

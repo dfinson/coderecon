@@ -12,13 +12,19 @@ All queries use ``ImportFact.source_literal`` for module-level precision
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 from sqlalchemy import ColumnElement, or_
 from sqlmodel import col, select
 
 from coderecon.core.languages import is_test_file
+from coderecon.index._internal.indexing.import_graph_models import (
+    CoverageGap,
+    CoverageSourceResult,
+    ImpactConfidence,
+    ImpactMatch,
+    ImportGraphResult,
+)
 from coderecon.index._internal.indexing.module_mapping import (
     build_module_index,
     path_to_module,
@@ -30,76 +36,8 @@ if TYPE_CHECKING:
     from sqlmodel import Session
 
 
-# Result models
-
-
-@dataclass
-class ImpactMatch:
-    """A single test file matched by the import graph."""
-    test_file: str
-    source_modules: list[str]  # modules it imports that were in the changed set
-    confidence: Literal["high", "low"]
-    reason: str
-    hop: int = 0  # graph distance: 0 = direct import/changed test, 1+ = transitive
-@dataclass
-class ImpactConfidence:
-    """Confidence assessment for an import graph query."""
-    tier: Literal["complete", "partial"]
-    resolved_ratio: float  # 0.0–1.0
-    unresolved_files: list[str]  # changed files that couldn't map to modules
-    null_source_count: int  # ImportFacts with NULL source_literal in test scope
-    reasoning: str
-@dataclass
-class ImportGraphResult:
-    """Result of an affected_tests query."""
-    matches: list[ImpactMatch]
-    confidence: ImpactConfidence
-    changed_modules: list[str]  # dotted module names derived from changed files
-    @property
-    def test_files(self) -> list[str]:
-        """All test file paths (convenience)."""
-        return [m.test_file for m in self.matches]
-    @property
-    def high_confidence_tests(self) -> list[str]:
-        return [m.test_file for m in self.matches if m.confidence == "high"]
-    @property
-    def low_confidence_tests(self) -> list[str]:
-        return [m.test_file for m in self.matches if m.confidence == "low"]
-    @property
-    def max_hop(self) -> int:
-        """Highest hop distance among all matches."""
-        return max((m.hop for m in self.matches), default=0)
-    def tests_by_hop(self) -> dict[int, list[str]]:
-        """Group test file paths by hop distance.
-
-        Returns:
-            Dict mapping hop number to list of test file paths.
-            hop 0 = directly affected (changed test files + direct importers),
-            hop 1+ = transitively affected via re-export/barrel chains.
-        """
-        result: dict[int, list[str]] = {}
-        for m in self.matches:
-            result.setdefault(m.hop, []).append(m.test_file)
-        return result
-@dataclass
-class CoverageSourceResult:
-    """Result of an imported_sources query."""
-    source_dirs: list[str]  # deduplicated source directories for --cov=
-    source_modules: list[str]  # raw source_literal values
-    confidence: Literal["complete", "partial"]
-    null_import_count: int  # imports with no source_literal
-@dataclass
-class CoverageGap:
-    """A source module with no test imports."""
-    module: str  # dotted module name
-    file_path: str | None  # resolved file path, if available
-
-# ImportGraph
-
-
 class ImportGraph:
     """Reverse import graph queries over the structural index.
-
     All queries operate on ``ImportFact.source_literal`` for module-level
     precision.  The graph is built lazily on first query and cached.
     """
@@ -119,25 +57,20 @@ class ImportGraph:
         self._module_index = build_module_index(self._file_paths)
         self._test_file_paths = [fp for fp in self._file_paths if is_test_file(fp)]
         self._test_file_set = set(self._test_file_paths)
-
     # 1. affected_tests: changed files → test files
     def affected_tests(self, changed_files: list[str]) -> ImportGraphResult:
         """Find test files affected by changed files.
-
         Changed source files are traced through the import graph to find tests
         that import them.  Changed test files are included directly as
         high-confidence matches (a modified test is inherently affected).
-
         Args:
             changed_files: File paths that changed (relative to repo root).
-
         Returns:
             ImportGraphResult with matches and confidence.
         """
         self._ensure_caches()
         if self._module_index is None:
             raise RuntimeError("_ensure_caches did not populate _module_index")
-
         # Step 0: Partition — test files in changed_files are directly affected.
         # The import graph traces source→test imports but cannot discover that
         # a test file changed.  We include them as high-confidence matches at
@@ -149,7 +82,6 @@ class ImportGraph:
         direct_test_files = [f for f in changed_files if f in self._test_file_set]
         direct_test_set = set(direct_test_files)
         source_changed_files = [f for f in changed_files if f not in direct_test_set]
-
         # Step 1: Convert changed file paths to module names.
         # Strategy:
         #   a) Look up declared_module in the File table (covers Java, Kotlin,
@@ -158,7 +90,6 @@ class ImportGraph:
         #   c) Files that resolve via neither path land in unresolved.
         changed_modules: list[str] = []
         unresolved: list[str] = []
-
         # Batch-fetch declared_module for source files only (test files are
         # handled by Step 5b and don't need module resolution).
         declared_map: dict[str, str] = {}
@@ -170,7 +101,6 @@ class ImportGraph:
             for path, decl in self._session.exec(decl_stmt).all():
                 if decl:
                     declared_map[path] = decl
-
         for fp in source_changed_files:
             if fp in declared_map:
                 changed_modules.append(declared_map[fp])
@@ -181,7 +111,6 @@ class ImportGraph:
                     changed_modules.append(mod)
                 else:
                     unresolved.append(fp)
-
         if not changed_files:
             return ImportGraphResult(
                 matches=[],
@@ -194,7 +123,6 @@ class ImportGraph:
                 ),
                 changed_modules=[],
             )
-
         # Step 2: Also generate the "short" module forms
         # e.g. src.coderecon.refactor.ops -> also match coderecon.refactor.ops
         search_modules: set[str] = set()
@@ -203,16 +131,13 @@ class ImportGraph:
             # Strip src. prefix if present
             if mod.startswith("src."):
                 search_modules.add(mod[4:])
-
         if self._test_file_paths is None:
             raise RuntimeError("_ensure_caches did not populate _test_file_paths")
-
         matched_rows: list[tuple[str, str | None]] = []
         null_in_tests = 0
         # like_prefixes tracks child module patterns (e.g. "kotlinx.serialization.json.")
         # used both for the SQL query and for confidence determination in Step 5.
         like_prefixes: list[str] = []
-
         # Step 3: Module-name-based matching (Python, declaration-based langs)
         # Only runs if we have module names to search for.
         if changed_modules:
@@ -240,13 +165,11 @@ class ImportGraph:
                 parts = mod.split(sep)
                 for i in range(1, len(parts)):
                     exact_or_parent.add(sep.join(parts[:i]))
-
             match_conditions: list[ColumnElement[bool]] = [
                 col(ImportFact.source_literal).in_(list(exact_or_parent)),
             ]
             for prefix in like_prefixes:
                 match_conditions.append(col(ImportFact.source_literal).startswith(prefix))
-
             # Single query: only test files, only matching modules
             stmt = (
                 select(File.path, ImportFact.source_literal)
@@ -255,7 +178,6 @@ class ImportGraph:
                 .where(or_(*match_conditions))
             )
             matched_rows = list(self._session.exec(stmt).all())
-
         # Count NULL source_literals in test files for confidence.
         # Use DISTINCT to count unique test files, not duplicate rows.
         null_stmt = (
@@ -265,7 +187,6 @@ class ImportGraph:
             .where(ImportFact.source_literal == None)  # noqa: E711
         )
         null_in_tests = len(set(self._session.exec(null_stmt).all()))
-
         # Step 3b: Transitive resolved_path-based matching.
         # Walk the import graph outward from changed files. A test file
         # that imports a barrel (re-export) file which in turn imports the
@@ -280,7 +201,6 @@ class ImportGraph:
         all_rp_rows: list[tuple[str, str | None]] = []
         # Map test_file -> earliest hop at which it was discovered
         test_hop_distance: dict[str, int] = {}
-
         for hop in range(_MAX_HOPS):
             if not frontier:
                 break
@@ -292,7 +212,6 @@ class ImportGraph:
             rp_rows = list(self._session.exec(rp_stmt).all())
             if not rp_rows:
                 break
-
             next_frontier: set[str] = set()
             for importer_path, src_literal in rp_rows:
                 if importer_path in self._test_file_paths:
@@ -307,10 +226,8 @@ class ImportGraph:
                     next_frontier.add(importer_path)
                     # Also record it as a potential source_literal match
                     # (needed for non-test importers that get traced through)
-
             visited.update(next_frontier)
             frontier = next_frontier
-
         # Track test files matched via resolved_path — these are deterministic
         # file-path matches and should always be high confidence.
         resolved_path_tests: set[str] = set()
@@ -318,7 +235,6 @@ class ImportGraph:
             for test_path, _sl in all_rp_rows:
                 resolved_path_tests.add(test_path)
             matched_rows.extend(all_rp_rows)
-
         # Step 3c: Same-directory affinity for Go.
         # Go test files (*_test.go) in the same directory as a changed .go
         # file are part of the same package — they compile together and test
@@ -331,7 +247,6 @@ class ImportGraph:
                 if tp.endswith(".go"):
                     d = tp.rsplit("/", 1)[0] if "/" in tp else "."
                     go_test_by_dir.setdefault(d, []).append(tp)
-
             already_matched = {row[0] for row in matched_rows}
             for cf in go_changed:
                 d = cf.rsplit("/", 1)[0] if "/" in cf else "."
@@ -341,7 +256,6 @@ class ImportGraph:
                         matched_rows.append((tp, mod))
                         resolved_path_tests.add(tp)  # high confidence
                         already_matched.add(tp)
-
         # Step 3d: Swift module affinity.
         # Swift uses module-level imports ("import Algorithms").  The module
         # name corresponds to the directory under Sources/ in SwiftPM layout.
@@ -356,7 +270,6 @@ class ImportGraph:
                 parts = cf.split("/")
                 if len(parts) >= 3 and parts[0].lower() == "sources":
                     swift_modules.add(parts[1])
-
             if swift_modules:
                 # Find test files that import any of these modules
                 swift_test_stmt = (
@@ -372,13 +285,11 @@ class ImportGraph:
                         matched_rows.append((test_path, src_literal))
                         resolved_path_tests.add(test_path)  # high confidence
                         already_matched.add(test_path)
-
         # Step 4: Group matches by test file
         matches_by_file: dict[str, list[str]] = {}
         for file_path, source_literal in matched_rows:
             if source_literal is not None:
                 matches_by_file.setdefault(file_path, []).append(source_literal)
-
         # Step 5: Build results with confidence
         matches: list[ImpactMatch] = []
         for test_path, src_mods in sorted(matches_by_file.items()):
@@ -401,12 +312,10 @@ class ImportGraph:
                 reason = f"imports child of changed module: {', '.join(unique_mods)}"
             else:
                 reason = f"imports parent module {', '.join(unique_mods)}"
-
             # Hop distance: module-name matches (Step 3) are hop 0 (direct).
             # resolved_path matches use the BFS hop distance from Step 3b.
             # If a test was found by both paths, use the earliest (lowest hop).
             hop = test_hop_distance.get(test_path, 0)
-
             matches.append(
                 ImpactMatch(
                     test_file=test_path,
@@ -416,7 +325,6 @@ class ImportGraph:
                     hop=hop,
                 )
             )
-
         # Step 5b: Include directly-changed test files that weren't already
         # found through import tracing.  A changed test file is the strongest
         # possible signal — it *is* the affected test.
@@ -432,7 +340,6 @@ class ImportGraph:
                         hop=0,
                     )
                 )
-
         # Confidence: resolved_path covers ALL changed files regardless of
         # whether they have a declared_module or Python path_to_module mapping.
         # So module-name "unresolved" files are still searchable via
@@ -446,7 +353,6 @@ class ImportGraph:
         # query covers files that have no module name, so they're not truly
         # unresolved for matching purposes.
         tier: Literal["complete", "partial"] = "complete" if null_in_tests == 0 else "partial"
-
         reason_parts: list[str] = []
         if unresolved:
             reason_parts.append(
@@ -457,7 +363,6 @@ class ImportGraph:
         reasoning = (
             "; ".join(reason_parts) if reason_parts else "all files resolved, all imports traced"
         )
-
         return ImportGraphResult(
             matches=matches,
             confidence=ImpactConfidence(
@@ -469,23 +374,18 @@ class ImportGraph:
             ),
             changed_modules=sorted(search_modules),
         )
-
     # 2. imported_sources: test files → source modules (for --cov scoping)
     def imported_sources(self, test_files: list[str]) -> CoverageSourceResult:
         """Given test files, find source modules they import.
-
         Used to auto-scope ``--cov=`` arguments.
-
         Args:
             test_files: Test file paths.
-
         Returns:
             CoverageSourceResult with source directories.
         """
         self._ensure_caches()
         if self._module_index is None:
             raise RuntimeError("_ensure_caches did not populate _module_index")
-
         if not test_files:
             return CoverageSourceResult(
                 source_dirs=[],
@@ -493,7 +393,6 @@ class ImportGraph:
                 confidence="complete",
                 null_import_count=0,
             )
-
         # Query imports for these test files
         stmt = (
             select(File.path, ImportFact.source_literal)
@@ -501,7 +400,6 @@ class ImportGraph:
             .where(col(File.path).in_(test_files))
         )
         rows = list(self._session.exec(stmt).all())
-
         source_modules: set[str] = set()
         null_count = 0
         for _file_path, source_literal in rows:
@@ -512,7 +410,6 @@ class ImportGraph:
             resolved = resolve_module_to_path(source_literal, self._module_index)
             if resolved and not is_test_file(resolved):
                 source_modules.add(source_literal)
-
         # Convert modules to directories
         source_dirs: set[str] = set()
         for mod in source_modules:
@@ -521,20 +418,16 @@ class ImportGraph:
                 # Use parent directory, not the file itself
                 parts = resolved_path.rsplit("/", 1)
                 source_dirs.add(parts[0] if len(parts) > 1 else resolved_path)
-
         confidence: Literal["complete", "partial"] = "complete" if null_count == 0 else "partial"
-
         return CoverageSourceResult(
             source_dirs=sorted(source_dirs),
             source_modules=sorted(source_modules),
             confidence=confidence,
             null_import_count=null_count,
         )
-
     # 3. uncovered_modules: source modules with zero test imports
     def uncovered_modules(self) -> list[CoverageGap]:
         """Find source modules that no test file imports.
-
         Returns:
             List of CoverageGap for each uncovered module.
         """
@@ -543,7 +436,6 @@ class ImportGraph:
             raise RuntimeError("_ensure_caches did not populate _module_index")
         if self._file_paths is None:
             raise RuntimeError("_ensure_caches did not populate _file_paths")
-
         # All source modules: files not in test paths (use cached set for O(1) lookup)
         test_set = self._test_file_set
         if test_set is None:
@@ -554,7 +446,6 @@ class ImportGraph:
                 mod = path_to_module(fp)
                 if mod:
                     all_source_modules.add(mod)
-
         # Modules imported by test files — scope query to test files only
         test_file_paths = self._test_file_paths
         if test_file_paths is None:
@@ -566,14 +457,12 @@ class ImportGraph:
             .where(col(File.path).in_(test_file_paths))
         )
         covered_modules: set[str] = {s for s in self._session.exec(stmt).all() if s is not None}
-
         # Also consider short-form matches (src.X matches X)
         covered_short: set[str] = set()
         for mod in covered_modules:
             covered_short.add(mod)
             if mod.startswith("src."):
                 covered_short.add(mod[4:])
-
         # Find uncovered source modules
         gaps: list[CoverageGap] = []
         for mod in sorted(all_source_modules):
@@ -582,5 +471,4 @@ class ImportGraph:
                 file_path = resolve_module_to_path(mod, self._module_index)
                 display_module = short if short else mod
                 gaps.append(CoverageGap(module=display_module, file_path=file_path))
-
         return gaps

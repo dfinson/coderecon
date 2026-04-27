@@ -19,9 +19,9 @@ from typing import TYPE_CHECKING
 import pytest
 
 from coderecon.core.excludes import PRUNABLE_DIRS
+from coderecon.core.excludes import HARDCODED_DIRS
 from coderecon.daemon.watcher import (
     DEBOUNCE_WINDOW_SEC,
-    HARDCODED_DIRS,
     MAX_DEBOUNCE_WAIT_SEC,
     FileWatcher,
     _collect_watch_dirs,
