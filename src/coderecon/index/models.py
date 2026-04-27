@@ -4,9 +4,8 @@ Single source of truth for all table schemas. See SPEC.md §7 for architecture.
 """
 
 import json
-from enum import StrEnum
 
-from sqlalchemy import Column, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Column, ForeignKey, Integer, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 from coderecon.index.models_enums import (

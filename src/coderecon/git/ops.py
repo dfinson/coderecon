@@ -1,7 +1,6 @@
 """Git operations via subprocess - returns serializable data models."""
 from __future__ import annotations
 
-import subprocess
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
@@ -37,17 +36,9 @@ from coderecon.git._internal.constants import (
 )
 from coderecon.git.errors import (
     BranchExistsError,
-    BranchNotFoundError,
-    GitError,
     RefNotFoundError,
     StashNotFoundError,
-    SubmoduleError,
-    SubmoduleNotFoundError,
     UnmergedBranchError,
-    WorktreeError,
-    WorktreeExistsError,
-    WorktreeLockedError,
-    WorktreeNotFoundError,
 )
 from coderecon.git.models import (
     BlameInfo,
@@ -65,15 +56,8 @@ from coderecon.git.models import (
     RemoteInfo,
     Signature,
     StashEntry,
-    SubmoduleInfo,
-    SubmoduleState,
-    SubmoduleStatus,
-    SubmoduleUpdateResult,
     TagInfo,
-    WorktreeInfo,
 )
-
-from coderecon.files.ops import atomic_write_text
 
 log = structlog.get_logger(__name__)
 

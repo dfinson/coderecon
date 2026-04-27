@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import contextlib
-import re
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -21,16 +20,10 @@ from coderecon.git._internal.constants import (
     GIT_REPOSITORY_STATE_REBASE_MERGE,
     GIT_REPOSITORY_STATE_REVERT,
     GIT_REPOSITORY_STATE_REVERT_SEQUENCE,
-    STATUS_INDEX_DELETED,
-    STATUS_INDEX_MODIFIED,
-    STATUS_INDEX_NEW,
-    STATUS_WT_DELETED,
-    STATUS_WT_MODIFIED,
     STATUS_WT_NEW,
 )
 from coderecon.git._internal.runner import GitRunner
 from coderecon.git.errors import (
-    AuthenticationError,
     GitError,
     NotARepositoryError,
     RefNotFoundError,
@@ -39,7 +32,6 @@ from coderecon.git.errors import (
 from coderecon.git._internal.access_models import (
     GitBranchData,
     GitCommitData,
-    GitIndexEntry,
     GitReference,
     GitSignature,
     GitStashEntry,
@@ -50,7 +42,6 @@ from coderecon.git._internal.access_models import (
 from coderecon.git._internal.access_index import GitIndex
 from coderecon.git._internal.access_worktree import _WorktreeMixin
 from coderecon.git._internal.access_helpers import (
-    _BranchCategory,
     _BranchHelper,
     _ParseMixin,
     _ReferenceHelper,

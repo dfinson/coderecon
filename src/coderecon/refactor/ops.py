@@ -4,22 +4,19 @@ from __future__ import annotations
 
 import re
 import uuid
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 
 import structlog
 
 if TYPE_CHECKING:
     from coderecon.index.models import RefFact
     from coderecon.index.ops import IndexCoordinatorEngine
-    from coderecon.mutation.ops import Edit, MutationDelta, MutationOps
 
 from coderecon.refactor.ops_models import (
     EditHunk,
     FileEdit,
     InspectResult,
-    RefactorAction,
     RefactorDivergence,
     RefactorPreview,
     RefactorResult,

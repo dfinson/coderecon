@@ -17,7 +17,6 @@ from coderecon.files.ops import atomic_write_text
 
 # Import packs to trigger registration
 from coderecon.testing import packs as _packs  # noqa: F401
-from coderecon.testing.emitters import CoverageArtifact  # noqa: F401 — re-export
 from coderecon.testing.models import (
     ExecutionDiagnostic, TargetProgress, TestCaseProgress,
     TestFailure, TestProgress, TestResult, TestRunStatus, TestTarget,
@@ -27,7 +26,6 @@ from coderecon.testing.ops_executor import _execute_tests as _execute_tests_impl
 from coderecon.testing.ops_workspaces import (
     DetectedWorkspace, _os_script_path, detect_workspaces,
 )
-from coderecon.testing.resources import MemoryBudget, MemoryHistory, classify_oom  # noqa: F401 — re-export
 from coderecon.testing.runner_pack import runner_registry
 
 if TYPE_CHECKING:
@@ -41,10 +39,7 @@ from coderecon.testing.ops_environment import (  # noqa: E402, F401
     clear_coverage_tools_cache, detect_coverage_tools,
     detect_node_package_manager, detect_python_venv, get_python_executable,
 )
-from coderecon.testing.ops_workspaces import (  # noqa: E402, F401
-    _classify_result_error, _is_prunable_path,
-)
-from coderecon.testing.ops_runner import _run_batch_targets  # noqa: E402, F401
+from coderecon.testing.ops_workspaces import _is_prunable_path  # noqa: E402, F401
 
 
 class TestOps:
