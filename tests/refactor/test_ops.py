@@ -22,6 +22,24 @@ from coderecon.refactor.ops import (
     _word_boundary_match,
 )
 
+
+@pytest.fixture
+def refactor_ops(tmp_path: Path) -> RefactorOps:
+    coordinator = MagicMock()
+    return RefactorOps(tmp_path, coordinator)
+
+
+@pytest.fixture
+def mock_coordinator() -> MagicMock:
+    coordinator = MagicMock()
+    coordinator.db = MagicMock()
+    coordinator.db.session = MagicMock()
+    search_result = MagicMock()
+    search_result.results = []
+    coordinator.search = AsyncMock(return_value=search_result)
+    return coordinator
+
+
 class TestWordBoundaryMatch:
     """Test _word_boundary_match helper."""
     def test_exact_match(self) -> None:
@@ -41,10 +59,6 @@ class TestWordBoundaryMatch:
         assert _word_boundary_match("use foo$bar here", "foo$bar")
 class TestPathToModule:
     """Test _path_to_module conversion."""
-    @pytest.fixture
-    def refactor_ops(self, tmp_path: Path) -> RefactorOps:
-        coordinator = MagicMock()
-        return RefactorOps(tmp_path, coordinator)
     def test_simple_path(self, refactor_ops: RefactorOps) -> None:
         assert refactor_ops._path_to_module("src/utils/helper.py") == "src.utils.helper"
     def test_no_extension(self, refactor_ops: RefactorOps) -> None:
@@ -55,10 +69,6 @@ class TestPathToModule:
         assert refactor_ops._path_to_module("src\\utils\\helper.py") == "src.utils.helper"
 class TestBuildPreview:
     """Test _build_preview method."""
-    @pytest.fixture
-    def refactor_ops(self, tmp_path: Path) -> RefactorOps:
-        coordinator = MagicMock()
-        return RefactorOps(tmp_path, coordinator)
     def test_empty_edits(self, refactor_ops: RefactorOps) -> None:
         preview = refactor_ops._build_preview({})
         assert preview.files_affected == 0
@@ -117,16 +127,6 @@ class TestBuildDeletePreview:
 @pytest.mark.asyncio
 class TestRefactorMove:
     """Test refactor_move operation."""
-    @pytest.fixture
-    def mock_coordinator(self) -> MagicMock:
-        coordinator = MagicMock()
-        coordinator.db = MagicMock()
-        coordinator.db.session = MagicMock()
-        # search returns an object with .results attribute
-        search_result = MagicMock()
-        search_result.results = []
-        coordinator.search = AsyncMock(return_value=search_result)
-        return coordinator
     @pytest.fixture
     def temp_repo(self, tmp_path: Path) -> Path:
         # Create a simple repo structure
@@ -290,15 +290,6 @@ class TestRefactorMoveImportVariants:
     Issue #153: Files in src/ layout have source_literal WITHOUT 'src.' prefix
     but file paths WITH 'src/' prefix. The move operation must match both.
     """
-    @pytest.fixture
-    def mock_coordinator(self) -> MagicMock:
-        coordinator = MagicMock()
-        coordinator.db = MagicMock()
-        coordinator.db.session = MagicMock()
-        search_result = MagicMock()
-        search_result.results = []
-        coordinator.search = AsyncMock(return_value=search_result)
-        return coordinator
     @pytest.fixture
     def temp_repo(self, tmp_path: Path) -> Path:
         """Create a repo with src/ layout."""
