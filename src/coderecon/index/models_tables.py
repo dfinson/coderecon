@@ -1,21 +1,15 @@
 """Advanced index table models (type facts, coverage, endpoints, semantic)."""
 
 import json
-from enum import StrEnum
 
-from sqlalchemy import Column, ForeignKey, Integer, String, UniqueConstraint
-from sqlmodel import Field, Relationship, SQLModel
+from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlmodel import Field, SQLModel
 
 from coderecon.index.models_enums import (
     Certainty,
-    DynamicAccessPattern,
     Freshness,
-    ImportKind,
     LanguageFamily,
-    MarkerTier,
     ProbeStatus,
-    ResolutionMethod,
-    Role,
 )
 
 class TypeAnnotationFact(SQLModel, table=True):

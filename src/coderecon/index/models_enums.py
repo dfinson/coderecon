@@ -1,21 +1,9 @@
-"""SQLModel definitions for the Tier 0 + Tier 1 stacked index.
+"""Enum definitions for the index schema.
 
-Single source of truth for all table schemas. See SPEC.md §7 for architecture.
-
-Architecture:
-- Tier 0: Tantivy lexical index (always-on, candidate discovery)
-- Tier 1: Tree-sitter/SQLite structural facts (defs, refs, scopes, binds, imports, exports)
-
-This index provides syntactic facts only. No semantic resolution, no call graph,
-no type information. It enables a future refactor planner but provides no
-semantic guarantees itself.
+See SPEC.md §7 for architecture.
 """
 
-import json
 from enum import StrEnum
-
-from sqlalchemy import Column, ForeignKey, Integer, String, UniqueConstraint
-from sqlmodel import Field, Relationship, SQLModel
 
 # ENUMS
 

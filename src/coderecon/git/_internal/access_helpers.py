@@ -1,7 +1,6 @@
 """Helper classes and parse methods for RepoAccess."""
 from __future__ import annotations
 
-import re
 from collections.abc import Iterator
 
 import structlog
@@ -13,7 +12,7 @@ from coderecon.git._internal.access_models import (
     GitSignature,
 )
 from coderecon.git._internal.runner import GitRunner
-from coderecon.git.errors import GitError, RefNotFoundError
+from coderecon.git.errors import GitError
 
 log = structlog.get_logger(__name__)
 

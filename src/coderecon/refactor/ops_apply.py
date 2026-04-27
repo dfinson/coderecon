@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 import structlog
 
 if TYPE_CHECKING:
     from coderecon.mutation.ops import Edit, MutationOps
 
-from coderecon.refactor.ops_models import RefactorPreview, RefactorResult
+from coderecon.refactor.ops_models import RefactorResult
 
 log = structlog.get_logger(__name__)
 

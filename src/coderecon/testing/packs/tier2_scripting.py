@@ -5,11 +5,10 @@ Flutter, Bats (Bash), Pester (PowerShell), Busted (Lua), Mix (Elixir).
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
-from coderecon.testing.models import ParsedTestCase, ParsedTestSuite, TestTarget
+from coderecon.testing.models import ParsedTestSuite, TestTarget
 from coderecon.testing.runner_pack import (
     MarkerRule,
     OutputStrategy,
@@ -24,7 +23,6 @@ if TYPE_CHECKING:
 import structlog
 
 from coderecon.testing.packs import _is_prunable_path
-from coderecon.config.constants import MS_PER_SEC
 
 log = structlog.get_logger(__name__)
 

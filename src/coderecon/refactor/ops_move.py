@@ -10,7 +10,7 @@ import structlog
 if TYPE_CHECKING:
     pass
 
-from coderecon.refactor.ops_models import EditHunk, FileEdit, RefactorPreview, RefactorResult
+from coderecon.refactor.ops_models import EditHunk, RefactorResult
 
 log = structlog.get_logger(__name__)
 

@@ -1,6 +1,5 @@
 """Core checkpoint pipeline orchestration."""
 from __future__ import annotations
-import asyncio
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 import structlog
@@ -8,11 +7,10 @@ from coderecon.git.errors import GitError
 if TYPE_CHECKING:
     from coderecon.mcp.context import AppContext
     from coderecon.mcp.session import SessionState
-from fastmcp import Context
 from coderecon.mcp.tools.checkpoint import ProgressSink, _NullProgress
 from coderecon.mcp.tools.checkpoint_helpers import (
     _detect_test_debt, _ingest_checkpoint_coverage, _run_hook_with_retry,
-    _serialize_test_result, _summarize_commit, _validate_commit_message, _validate_paths_exist,
+    _summarize_commit, _validate_commit_message, _validate_paths_exist,
 )
 from coderecon.mcp.tools.checkpoint_tiered import _run_tiered_tests, _summarize_verify
 log = structlog.get_logger(__name__)

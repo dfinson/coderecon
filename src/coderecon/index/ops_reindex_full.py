@@ -6,13 +6,12 @@ Standalone functions extracted from IndexCoordinatorEngine.
 from __future__ import annotations
 
 import hashlib
-import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import structlog
-from sqlmodel import col, select
+from sqlmodel import select
 
 from coderecon.core.languages import detect_language_family
 from coderecon.index._internal.indexing import (
@@ -22,7 +21,6 @@ from coderecon.index._internal.indexing import (
     run_pass_1_5,
 )
 from coderecon.index.models import Context, File, ProbeStatus
-from coderecon.index.ops_glob import _matches_glob
 from coderecon.index.ops_types import IndexStats
 
 if TYPE_CHECKING:

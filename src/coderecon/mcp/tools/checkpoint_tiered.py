@@ -3,24 +3,19 @@
 from __future__ import annotations
 
 import asyncio
-import textwrap
 from typing import TYPE_CHECKING, Any
 
 import structlog
 
 from coderecon.mcp.tools.checkpoint_helpers import (
     _build_coverage_text,
-    _build_failure_snippets,
-    _extract_traceback_locations,
     _normalize_selector,
     _serialize_test_result,
-    _summarize_run,
-    _target_matches_affected_files,
 )
 
 if TYPE_CHECKING:
     from coderecon.mcp.tools.checkpoint import ProgressSink
-    from coderecon.testing.models import TestResult, TestTarget
+    from coderecon.testing.models import TestTarget
 
 log = structlog.get_logger(__name__)
 

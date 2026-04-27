@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-import logging
 import re
-import textwrap
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
 
 from coderecon.git._internal.hooks import run_hook
-from coderecon.git.errors import EmptyCommitMessageError, GitError, PathsNotFoundError
+from coderecon.git.errors import EmptyCommitMessageError, PathsNotFoundError
 
 if TYPE_CHECKING:
-    from coderecon.index._internal.indexing.import_graph import ImportGraphResult
     from coderecon.testing.models import TestResult, TestTarget
 
 log = structlog.get_logger(__name__)
