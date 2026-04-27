@@ -32,25 +32,19 @@ SCHEMA_VERSION = 2
 @dataclass
 class SearchResult:
     """A single search result."""
-
     file_path: str
     line: int
     column: int
     snippet: str
     score: float
     context_id: int | None = None
-
-
 @dataclass
 class SearchResults:
     """Collection of search results."""
-
     results: list[SearchResult] = field(default_factory=list)
     total_hits: int = 0
     query_time_ms: int = 0
     fallback_reason: str | None = None  # Set if query syntax error triggered literal fallback
-
-
 class LexicalIndex:
     """
     Full-text search index using Tantivy.
@@ -80,7 +74,6 @@ class LexicalIndex:
         # Search
         results = index.search("class MyClass", limit=10)
     """
-
     def __init__(self, index_path: Path | str) -> None:
         """
         Initialize the lexical index.
@@ -97,7 +90,6 @@ class LexicalIndex:
         self._staged_adds: list[dict[str, Any]] = []
         # Each entry is (worktree, path) — both needed for compound-key deletion.
         self._staged_removes: list[tuple[str, str]] = []
-
     def _ensure_initialized(self) -> None:
         """Lazily initialize the Tantivy index."""
         if self._initialized:
@@ -138,7 +130,6 @@ class LexicalIndex:
 
         # Persist the schema version so future startups detect upgrades.
         atomic_write_text(version_file, json.dumps({"version": SCHEMA_VERSION}))
-
     def add_file(
         self,
         file_path: str,
@@ -180,7 +171,6 @@ class LexicalIndex:
             writer.commit()
         finally:
             pass  # Writer is cleaned up automatically
-
     def add_files_batch(
         self,
         files: list[dict[str, Any]],
@@ -222,7 +212,6 @@ class LexicalIndex:
             pass
 
         return count
-
     def remove_file(self, file_path: str, worktree: str = "main") -> bool:
         """Remove a file from the index (immediate commit)."""
         self._ensure_initialized()
@@ -236,7 +225,6 @@ class LexicalIndex:
             pass
 
     # Staged Operations (for epoch atomicity)
-
     def stage_file(
         self,
         file_path: str,
@@ -271,7 +259,6 @@ class LexicalIndex:
                 "worktree": worktree,
             }
         )
-
     def stage_remove(self, file_path: str, worktree: str = "main") -> None:
         """
         Stage a file removal for later atomic commit.
@@ -284,15 +271,12 @@ class LexicalIndex:
             worktree: Worktree whose entry to remove (default "main")
         """
         self._staged_removes.append((worktree, file_path))
-
     def has_staged_changes(self) -> bool:
         """Return True if there are uncommitted staged changes."""
         return bool(self._staged_adds or self._staged_removes)
-
     def staged_count(self) -> tuple[int, int]:
         """Return (additions, removals) count of staged changes."""
         return len(self._staged_adds), len(self._staged_removes)
-
     def commit_staged(self) -> int:
         """
         Commit all staged changes atomically.
@@ -350,7 +334,6 @@ class LexicalIndex:
         self._staged_removes.clear()
 
         return count
-
     def discard_staged(self) -> int:
         """
         Discard all staged changes without committing.
@@ -362,7 +345,6 @@ class LexicalIndex:
         self._staged_adds.clear()
         self._staged_removes.clear()
         return count
-
     def _escape_query(self, query: str) -> str:
         r"""Escape special Tantivy query syntax characters for literal search.
 
@@ -376,7 +358,6 @@ class LexicalIndex:
             else:
                 escaped.append(char)
         return "".join(escaped)
-
     def _build_tantivy_query(self, query: str) -> str:
         """Build Tantivy query with AND semantics and phrase support.
 
@@ -396,7 +377,6 @@ class LexicalIndex:
 
         # Characters that are Tantivy query syntax operators
         _syntax_chars = set(r'+-&|!(){}[]^~*?\\/"')
-
         def _escape_token(token: str) -> str:
             """Escape Tantivy syntax chars in a plain token."""
             if not any(c in _syntax_chars for c in token):
@@ -428,7 +408,6 @@ class LexicalIndex:
             return " ".join(parts)
         # No explicit operators — join with AND so all terms must match
         return " AND ".join(parts)
-
     def search(
         self,
         query: str,
@@ -575,7 +554,6 @@ class LexicalIndex:
         results.query_time_ms = int((time.monotonic() - start) * MS_PER_SEC)
         results.fallback_reason = fallback_reason
         return results
-
     def search_symbols(
         self,
         query: str,
@@ -601,7 +579,6 @@ class LexicalIndex:
             symbol_query, limit, context_id, context_lines,
             content_query=query, worktrees=worktrees,
         )
-
     def search_path(
         self,
         pattern: str,
@@ -621,7 +598,6 @@ class LexicalIndex:
             path_query, limit, context_id, context_lines,
             content_query="", worktrees=worktrees,
         )
-
     def _extract_search_terms(
         self, query: str, *, literal: bool = False
     ) -> tuple[list[tuple[list[str], list[str]]], list[str], list[str]]:
@@ -736,7 +712,6 @@ class LexicalIndex:
             or_groups.append((current_phrases, current_terms))
 
         return or_groups, negative_terms, negative_phrases
-
     def _extract_all_snippets(
         self,
         content: str,
@@ -808,7 +783,6 @@ class LexicalIndex:
             matches.append((snippet, i + 1))  # 1-indexed
 
         return matches
-
     def _extract_snippet(
         self,
         content: str,
@@ -827,7 +801,6 @@ class LexicalIndex:
         if matches:
             return matches[0]
         return ("", 1)
-
     def score_files_bm25(
         self,
         query: str,
@@ -872,7 +845,6 @@ class LexicalIndex:
         # Tantivy query syntax characters (including : for field prefix,
         # . and , which commonly appear in natural language task text).
         _syntax_chars = set(r'+-&|!(){}[]^~*?:\\/".@,;')
-
         def _clean_token(tok: str) -> str:
             """Strip Tantivy syntax chars from a token entirely.
 
@@ -959,7 +931,6 @@ class LexicalIndex:
                 path_wt[file_path] = prio
 
         return scores
-
     def clear(self) -> None:
         """Clear all documents from the index."""
         self._ensure_initialized()
@@ -970,20 +941,16 @@ class LexicalIndex:
             writer.commit()
         finally:
             pass
-
     def reload(self) -> None:
         """Reload the index to see latest changes."""
         if self._index:
             self._index.reload()
-
     def doc_count(self) -> int:
         """Return number of documents in the index."""
         self._ensure_initialized()
 
         searcher = self._index.searcher()
         return int(searcher.num_docs)
-
-
 def create_index(index_path: Path | str) -> LexicalIndex:
     """Create a new lexical index."""
     return LexicalIndex(index_path)

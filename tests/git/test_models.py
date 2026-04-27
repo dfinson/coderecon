@@ -44,27 +44,21 @@ from coderecon.git.models import (
 
 class TestCountWords:
     """Tests for _count_words helper function."""
-
     def test_empty_string(self) -> None:
         """Empty string returns 0 words."""
         assert _count_words("") == 0
-
     def test_single_word(self) -> None:
         """Single word is counted."""
         assert _count_words("hello") == 1
-
     def test_multiple_words(self) -> None:
         """Multiple words are counted."""
         assert _count_words("hello world foo bar") == 4
-
     def test_whitespace_only(self) -> None:
         """Whitespace-only string returns 0."""
         assert _count_words("   \t\n  ") == 0
-
     def test_mixed_whitespace(self) -> None:
         """Mixed whitespace separators work."""
         assert _count_words("one\ttwo\nthree  four") == 4
-
 
 # =============================================================================
 # Tests for Signature
@@ -73,7 +67,6 @@ class TestCountWords:
 
 class TestSignature:
     """Tests for Signature dataclass."""
-
     def test_creation(self) -> None:
         """Signature can be created with all fields."""
         now = datetime.now(tz=UTC)
@@ -81,13 +74,11 @@ class TestSignature:
         assert sig.name == "John Doe"
         assert sig.email == "john@example.com"
         assert sig.time == now
-
     def test_immutable(self) -> None:
         """Signature is frozen/immutable."""
         sig = Signature(name="Test", email="test@test.com", time=datetime.now(tz=UTC))
         with pytest.raises(AttributeError):
             sig.name = "New Name"  # type: ignore[misc]
-
 
 # =============================================================================
 # Tests for CommitInfo
@@ -96,7 +87,6 @@ class TestSignature:
 
 class TestCommitInfo:
     """Tests for CommitInfo dataclass."""
-
     def test_creation(self) -> None:
         """CommitInfo can be created."""
         now = datetime.now(tz=UTC)
@@ -117,7 +107,6 @@ class TestCommitInfo:
         assert "test commit" in commit.message
         assert len(commit.parent_shas) == 2
 
-
 # =============================================================================
 # Tests for BranchInfo
 # =============================================================================
@@ -125,7 +114,6 @@ class TestCommitInfo:
 
 class TestBranchInfo:
     """Tests for BranchInfo dataclass."""
-
     def test_local_branch(self) -> None:
         """Local branch creation."""
         branch = BranchInfo(
@@ -138,7 +126,6 @@ class TestBranchInfo:
         assert branch.short_name == "main"
         assert not branch.is_remote
         assert branch.upstream == "origin/main"
-
     def test_remote_branch(self) -> None:
         """Remote branch creation."""
         branch = BranchInfo(
@@ -150,7 +137,6 @@ class TestBranchInfo:
         assert branch.is_remote
         assert branch.upstream is None
 
-
 # =============================================================================
 # Tests for TagInfo
 # =============================================================================
@@ -158,7 +144,6 @@ class TestBranchInfo:
 
 class TestTagInfo:
     """Tests for TagInfo dataclass."""
-
     def test_lightweight_tag(self) -> None:
         """Lightweight tag creation."""
         tag = TagInfo(
@@ -169,7 +154,6 @@ class TestTagInfo:
         assert tag.name == "v1.0.0"
         assert not tag.is_annotated
         assert tag.message is None
-
     def test_annotated_tag(self) -> None:
         """Annotated tag with message."""
         now = datetime.now(tz=UTC)
@@ -185,7 +169,6 @@ class TestTagInfo:
         assert tag.message == "Release 2.0.0"
         assert tag.tagger is not None
 
-
 # =============================================================================
 # Tests for DiffFile
 # =============================================================================
@@ -193,7 +176,6 @@ class TestTagInfo:
 
 class TestDiffFile:
     """Tests for DiffFile dataclass."""
-
     def test_added_file(self) -> None:
         """Added file has only new_path."""
         diff = DiffFile(
@@ -206,7 +188,6 @@ class TestDiffFile:
         assert diff.status == "added"
         assert diff.old_path is None
         assert diff.new_path == "new_file.py"
-
     def test_deleted_file(self) -> None:
         """Deleted file has only old_path."""
         diff = DiffFile(
@@ -218,7 +199,6 @@ class TestDiffFile:
         )
         assert diff.status == "deleted"
         assert diff.deletions == 50
-
     def test_modified_file(self) -> None:
         """Modified file has both paths."""
         diff = DiffFile(
@@ -230,7 +210,6 @@ class TestDiffFile:
         )
         assert diff.status == "modified"
         assert diff.old_path == diff.new_path
-
     def test_renamed_file(self) -> None:
         """Renamed file has different paths."""
         diff = DiffFile(
@@ -243,7 +222,6 @@ class TestDiffFile:
         assert diff.status == "renamed"
         assert diff.old_path != diff.new_path
 
-
 # =============================================================================
 # Tests for DiffInfo
 # =============================================================================
@@ -251,7 +229,6 @@ class TestDiffFile:
 
 class TestDiffInfo:
     """Tests for DiffInfo dataclass."""
-
     def test_creation(self) -> None:
         """DiffInfo aggregates file diffs."""
         files = (
@@ -267,7 +244,6 @@ class TestDiffInfo:
         assert len(diff.files) == 2
         assert diff.total_additions == 15
         assert diff.files_changed == 2
-
     def test_with_patch(self) -> None:
         """DiffInfo can include patch text."""
         diff = DiffInfo(
@@ -279,7 +255,6 @@ class TestDiffInfo:
         )
         assert diff.patch is not None
 
-
 # =============================================================================
 # Tests for FileDiffSummary
 # =============================================================================
@@ -287,7 +262,6 @@ class TestDiffInfo:
 
 class TestFileDiffSummary:
     """Tests for FileDiffSummary dataclass."""
-
     def test_creation(self) -> None:
         """FileDiffSummary captures per-file stats."""
         summary = FileDiffSummary(
@@ -298,7 +272,6 @@ class TestFileDiffSummary:
         )
         assert summary.path == "src/main.py"
         assert summary.word_count is None
-
     def test_with_word_count(self) -> None:
         """FileDiffSummary can include word count."""
         summary = FileDiffSummary(
@@ -310,7 +283,6 @@ class TestFileDiffSummary:
         )
         assert summary.word_count == 250
 
-
 # =============================================================================
 # Tests for DiffSummary
 # =============================================================================
@@ -318,7 +290,6 @@ class TestFileDiffSummary:
 
 class TestDiffSummary:
     """Tests for DiffSummary dataclass."""
-
     def test_basic_summary(self) -> None:
         """DiffSummary with basic stats."""
         summary = DiffSummary(
@@ -331,7 +302,6 @@ class TestDiffSummary:
         assert summary.total_lines == 70
         assert summary.per_file is None
         assert summary.total_word_count is None
-
     def test_with_per_file(self) -> None:
         """DiffSummary with per-file details."""
         per_file = (
@@ -347,7 +317,6 @@ class TestDiffSummary:
         )
         assert summary.per_file is not None
         assert len(summary.per_file) == 2
-
     def test_file_paths_property(self) -> None:
         """file_paths returns paths from per_file."""
         per_file = (
@@ -363,7 +332,6 @@ class TestDiffSummary:
         )
         paths = summary.file_paths
         assert paths == ("src/a.py", "src/b.py")
-
     def test_file_paths_empty_without_per_file(self) -> None:
         """file_paths returns empty tuple without per_file."""
         summary = DiffSummary(
@@ -373,7 +341,6 @@ class TestDiffSummary:
             total_lines=18,
         )
         assert summary.file_paths == ()
-
     def test_with_word_count(self) -> None:
         """DiffSummary with word count."""
         summary = DiffSummary(
@@ -385,7 +352,6 @@ class TestDiffSummary:
         )
         assert summary.total_word_count == 500
 
-
 # =============================================================================
 # Tests for BlameHunk and BlameInfo
 # =============================================================================
@@ -393,7 +359,6 @@ class TestDiffSummary:
 
 class TestBlameInfo:
     """Tests for blame-related dataclasses."""
-
     def test_blame_hunk(self) -> None:
         """BlameHunk captures blame information."""
         now = datetime.now(tz=UTC)
@@ -407,7 +372,6 @@ class TestBlameInfo:
         )
         assert hunk.commit_sha == "abc123"
         assert hunk.line_count == 10
-
     def test_blame_info(self) -> None:
         """BlameInfo aggregates hunks."""
         now = datetime.now(tz=UTC)
@@ -420,7 +384,6 @@ class TestBlameInfo:
         assert blame.path == "file.py"
         assert len(blame.hunks) == 2
 
-
 # =============================================================================
 # Tests for operation result types
 # =============================================================================
@@ -428,7 +391,6 @@ class TestBlameInfo:
 
 class TestOperationResults:
     """Tests for various operation result types."""
-
     def test_merge_result_success(self) -> None:
         """MergeResult for successful merge."""
         result = MergeResult(
@@ -437,7 +399,6 @@ class TestOperationResults:
         )
         assert result.success
         assert result.conflict_paths == ()
-
     def test_merge_result_conflict(self) -> None:
         """MergeResult with conflicts."""
         result = MergeResult(
@@ -447,7 +408,6 @@ class TestOperationResults:
         )
         assert not result.success
         assert len(result.conflict_paths) == 2
-
     def test_pull_result_up_to_date(self) -> None:
         """PullResult when already up to date."""
         result = PullResult(
@@ -456,7 +416,6 @@ class TestOperationResults:
             up_to_date=True,
         )
         assert result.up_to_date
-
     def test_merge_analysis(self) -> None:
         """MergeAnalysis fields."""
         analysis = MergeAnalysis(
@@ -465,13 +424,11 @@ class TestOperationResults:
             conflicts_likely=False,
         )
         assert analysis.fastforward_possible
-
     def test_operation_result(self) -> None:
         """OperationResult for cherrypick/revert."""
         result = OperationResult(success=True)
         assert result.success
         assert result.conflict_paths == ()
-
 
 # =============================================================================
 # Tests for rebase types
@@ -480,7 +437,6 @@ class TestOperationResults:
 
 class TestRebaseTypes:
     """Tests for rebase-related types."""
-
     def test_rebase_step(self) -> None:
         """RebaseStep captures a single step."""
         step = RebaseStep(
@@ -489,7 +445,6 @@ class TestRebaseTypes:
             message="Original message",
         )
         assert step.action == "pick"
-
     def test_rebase_plan(self) -> None:
         """RebasePlan contains steps."""
         steps = (
@@ -502,7 +457,6 @@ class TestRebaseTypes:
             steps=steps,
         )
         assert len(plan.steps) == 2
-
     def test_rebase_result(self) -> None:
         """RebaseResult captures outcome."""
         result = RebaseResult(
@@ -515,7 +469,6 @@ class TestRebaseTypes:
         assert result.state == "done"
         assert result.completed_steps == result.total_steps
 
-
 # =============================================================================
 # Tests for worktree and submodule types
 # =============================================================================
@@ -523,7 +476,6 @@ class TestRebaseTypes:
 
 class TestWorktreeSubmoduleTypes:
     """Tests for worktree and submodule types."""
-
     def test_worktree_info(self) -> None:
         """WorktreeInfo captures worktree state."""
         wt = WorktreeInfo(
@@ -539,7 +491,6 @@ class TestWorktreeSubmoduleTypes:
         )
         assert wt.name == "feature"
         assert not wt.is_main
-
     def test_submodule_info(self) -> None:
         """SubmoduleInfo captures submodule state."""
         sub = SubmoduleInfo(
@@ -551,7 +502,6 @@ class TestWorktreeSubmoduleTypes:
             status="clean",
         )
         assert sub.status == "clean"
-
     def test_submodule_update_result(self) -> None:
         """SubmoduleUpdateResult captures update outcomes."""
         result = SubmoduleUpdateResult(
@@ -562,7 +512,6 @@ class TestWorktreeSubmoduleTypes:
         assert len(result.updated) == 1
         assert len(result.failed) == 1
 
-
 # =============================================================================
 # Tests for RefInfo and other types
 # =============================================================================
@@ -570,7 +519,6 @@ class TestWorktreeSubmoduleTypes:
 
 class TestMiscTypes:
     """Tests for miscellaneous types."""
-
     def test_remote_info(self) -> None:
         """RemoteInfo captures remote configuration."""
         remote = RemoteInfo(
@@ -580,7 +528,6 @@ class TestMiscTypes:
         )
         assert remote.name == "origin"
         assert remote.push_url is not None
-
     def test_ref_info(self) -> None:
         """RefInfo captures reference state."""
         ref = RefInfo(
@@ -590,7 +537,6 @@ class TestMiscTypes:
             is_detached=False,
         )
         assert not ref.is_detached
-
     def test_stash_entry(self) -> None:
         """StashEntry captures stash information."""
         stash = StashEntry(
@@ -600,7 +546,6 @@ class TestMiscTypes:
         )
         assert stash.index == 0
 
-
 # =============================================================================
 # Tests for validate_branch_name
 # =============================================================================
@@ -608,35 +553,28 @@ class TestMiscTypes:
 
 class TestValidateBranchName:
     """Tests for validate_branch_name."""
-
     def test_valid_simple_name(self) -> None:
         """Valid simple branch name is returned cleaned."""
         assert validate_branch_name("main") == "main"
-
     def test_valid_name_with_slashes(self) -> None:
         """Valid name with slashes (e.g., feature/foo) is accepted."""
         assert validate_branch_name("feature/foo") == "feature/foo"
-
     def test_empty_string_raises(self) -> None:
         """Empty string raises ValueError."""
         with pytest.raises(ValueError, match="must not be empty"):
             validate_branch_name("")
-
     def test_whitespace_only_raises(self) -> None:
         """Whitespace-only string raises ValueError."""
         with pytest.raises(ValueError, match="must not be empty"):
             validate_branch_name("   ")
-
     def test_name_with_spaces_raises(self) -> None:
         """Name with spaces raises ValueError."""
         with pytest.raises(ValueError, match="must not contain spaces"):
             validate_branch_name("my branch")
-
     def test_name_starting_with_dash_raises(self) -> None:
         """Name starting with '-' raises ValueError."""
         with pytest.raises(ValueError, match="must not start with"):
             validate_branch_name("-bad-name")
-
     def test_name_with_double_dots_raises(self) -> None:
         """Name containing '..' raises ValueError."""
         with pytest.raises(ValueError, match="must not contain"):

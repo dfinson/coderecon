@@ -46,7 +46,6 @@ def _read_snippet(repo_root: Path, path: str, start_line: int, end_line: int) ->
         log.debug("read_lines_failed", exc_info=True)
         return None
 
-
 def _read_signature(repo_root: Path, path: str, start_line: int, end_line: int) -> str | None:
     """Read just the first line (signature) + docstring of a def."""
     full = repo_root / path
@@ -87,7 +86,6 @@ def _read_signature(repo_root: Path, path: str, start_line: int, end_line: int) 
         log.debug("read_signature_failed", exc_info=True)
         return None
 
-
 def _build_query_metrics(diagnostics: dict, candidates: list, seeds: list | None, pins: list | None) -> dict:
     """Build aggregate query metrics from diagnostics."""
     total = diagnostics.get("candidate_count", 0)
@@ -120,7 +118,6 @@ def _build_query_metrics(diagnostics: dict, candidates: list, seeds: list | None
         metrics["pin_hit_rate"] = round(pin_hits / len(pins), 2) if pins else 0
 
     return metrics
-
 
 def _build_hints(metrics: dict, gate_label: str) -> list[str]:
     """Generate actionable hints from query metrics."""
@@ -158,7 +155,6 @@ def _build_hints(metrics: dict, gate_label: str) -> list[str]:
         )
 
     return hints
-
 
 def _models_available() -> bool:
     """Return True if all four ranking models are present on disk."""
@@ -204,7 +200,6 @@ async def recon_pipeline(
         repo_root=repo_root, seeds=seeds, pins=pins, t0=t0,
     )
 
-
 def _fetch_scaffolds(
     candidates: list[dict[str, Any]],
     db: Database,
@@ -229,7 +224,6 @@ def _fetch_scaffolds(
         log.warning("cross_encoder.scaffold_lookup_failed", exc_info=True)
         return {}
 
-
 def _build_ce_documents(
     candidates: list[dict[str, Any]],
     scaffolds: dict[str, str],
@@ -244,7 +238,6 @@ def _build_ce_documents(
             parts = [c.get("path", ""), f"{c.get('kind', '')} {c.get('name', '')}"]
             documents.append("\n".join(parts))
     return documents
-
 
 def _score_cross_encoder_tiny(
     candidates: list[dict[str, Any]],
@@ -293,7 +286,6 @@ def _score_cross_encoder_tiny(
 
     return candidates
 
-
 def _score_cross_encoder(
     candidates: list[dict[str, Any]],
     task: str,
@@ -326,7 +318,6 @@ def _score_cross_encoder(
         log.warning("cross_encoder.scoring_failed", exc_info=True)
 
     return candidates
-
 
 def _pipeline_model(
     candidates: list[dict[str, Any]],
@@ -426,7 +417,6 @@ def _pipeline_model(
                        "defs_ranked": len(filtered_candidates)},
     )
 
-
 def _pipeline_heuristic(
     candidates: list[dict[str, Any]],
     diagnostics: dict[str, Any],
@@ -461,7 +451,6 @@ def _pipeline_heuristic(
         gate_label="OK", t0=t0,
         extra_metrics={"strategy": "heuristic"},
     )
-
 
 def _build_output(
     scored: list[tuple[dict[str, Any], float]],
@@ -580,16 +569,13 @@ async def recon_map_core(app_ctx: "AppContext") -> dict[str, Any]:
 
     return wrap_response(repo_map, resource_kind="repo_map")
 
-
 def register_tools(mcp: "FastMCP", app_ctx: "AppContext", *, dev_mode: bool = False) -> None:
     """Register recon tools with FastMCP server."""
-
     # Register raw signals endpoint only in dev mode (ranking training)
     if dev_mode:
         from coderecon.mcp.tools.recon.raw_signals import register_raw_signals_tool
 
         register_raw_signals_tool(mcp, app_ctx)
-
     @mcp.tool(
         annotations={
             "title": "Recon: task-aware context retrieval",
@@ -687,7 +673,6 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext", *, dev_mode: bool = Fa
             resource_kind="recon_result",
             session_id=ctx.session_id,
         )
-
     @mcp.tool(
         annotations={
             "title": "Recon: repository structure map",

@@ -30,25 +30,18 @@ RefactorAction = Literal["rename", "move", "delete", "preview", "apply", "cancel
 @dataclass
 class EditHunk:
     """A single edit hunk in a refactor preview."""
-
     old: str
     new: str
     line: int
     certainty: Literal["high", "medium", "low"]
-
-
 @dataclass
 class FileEdit:
     """Edits for a single file in refactor preview."""
-
     path: str
     hunks: list[EditHunk] = field(default_factory=list)
-
-
 @dataclass
 class RefactorPreview:
     """Preview of refactoring changes."""
-
     files_affected: int
     edits: list[FileEdit] = field(default_factory=list)
     contexts_used: list[str] = field(default_factory=list)
@@ -62,28 +55,19 @@ class RefactorPreview:
     # File move metadata (set by move(), consumed by apply())
     move_from: str | None = None
     move_to: str | None = None
-
-
 @dataclass
 class InspectResult:
     """Result of inspecting low-certainty matches in a file."""
-
     path: str
     matches: list[dict[str, str | int]]  # {line, snippet, context_before, context_after}
-
-
 @dataclass
 class RefactorDivergence:
     """Divergence detected during refactoring."""
-
     conflicting_hunks: list[dict[str, str | list[str]]] = field(default_factory=list)
     resolution_options: list[str] = field(default_factory=list)
-
-
 @dataclass
 class RefactorResult:
     """Result of refactor operation."""
-
     refactor_id: str
     status: Literal["previewed", "applied", "cancelled", "divergence"]
     preview: RefactorPreview | None = None
@@ -91,8 +75,6 @@ class RefactorResult:
     changed_paths: list[Path] = field(default_factory=list)
     divergence: RefactorDivergence | None = None
     warning: str | None = None  # Agent guidance (e.g., path:line:col format detected)
-
-
 def _scan_file_for_comment_occurrences(
     content: str,
     symbol: str,
@@ -172,12 +154,10 @@ def _scan_file_for_comment_occurrences(
 
     return occurrences
 
-
 def _word_boundary_match(text: str, symbol: str) -> bool:
     """Check if symbol appears in text as a whole word."""
     pattern = rf"\b{re.escape(symbol)}\b"
     return bool(re.search(pattern, text))
-
 
 def _compute_rename_certainty_from_ref(ref: RefFact) -> Literal["high", "medium", "low"]:
     """
@@ -209,14 +189,12 @@ def _compute_rename_certainty_from_ref(ref: RefFact) -> Literal["high", "medium"
 
     return "low"
 
-
 class RefactorOps:
     """Refactoring via index-based candidate discovery.
 
     Uses DefFact/RefFact to find rename candidates with certainty scores.
     Agent reviews low-certainty candidates before applying.
     """
-
     def __init__(
         self,
         repo_root: Path,
@@ -231,7 +209,6 @@ class RefactorOps:
         self._repo_root = repo_root
         self._coordinator = coordinator
         self._pending: dict[str, RefactorPreview] = {}
-
     def _compute_rename_certainty(self, ref: RefFact) -> Literal["high", "medium", "low"]:
         """Compute certainty for a rename candidate.
 
@@ -865,7 +842,6 @@ class RefactorOps:
                             certainty="low",
                         )
                     )
-
     def _path_to_module(self, path: str) -> str:
         """Convert file path to Python module path."""
         # Remove .py extension and convert / to .
@@ -873,7 +849,6 @@ class RefactorOps:
         if module.endswith(".py"):
             module = module[:-3]
         return module
-
     def _build_preview(self, edits_by_file: dict[str, list[EditHunk]]) -> RefactorPreview:
         """Build RefactorPreview from edits."""
         file_edits = [FileEdit(path=path, hunks=hunks) for path, hunks in edits_by_file.items()]
@@ -1173,7 +1148,6 @@ class RefactorOps:
                             certainty="low",
                         )
                     )
-
     def _build_impact_preview(
         self,
         target: str,
@@ -1312,7 +1286,6 @@ class RefactorOps:
             refactor_id=refactor_id,
             status="cancelled",
         )
-
     def clear_pending(self) -> None:
         """Discard all pending refactor previews.
 

@@ -1,5 +1,4 @@
 """Output parsers for lint tools."""
-
 from __future__ import annotations
 
 import json
@@ -87,7 +86,6 @@ def parse_ruff(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
         return ParseResult.error(f"Ruff JSON parse error: {e}")
     return ParseResult.ok(diagnostics)
 
-
 def parse_mypy(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse mypy JSON output."""
     diagnostics: list[Diagnostic] = []
@@ -110,7 +108,6 @@ def parse_mypy(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     except json.JSONDecodeError as e:
         return ParseResult.error(f"Mypy JSON parse error: {e}")
     return ParseResult.ok(diagnostics)
-
 
 def parse_pyright(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse pyright JSON output."""
@@ -138,7 +135,6 @@ def parse_pyright(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
         return ParseResult.error(f"Pyright JSON parse error: {e}")
     return ParseResult.ok(diagnostics)
 
-
 def parse_bandit(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse bandit JSON output."""
     diagnostics: list[Diagnostic] = []
@@ -159,7 +155,6 @@ def parse_bandit(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     except json.JSONDecodeError as e:
         return ParseResult.error(f"Bandit JSON parse error: {e}")
     return ParseResult.ok(diagnostics)
-
 
 def parse_black_check(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse black --check output."""
@@ -209,7 +204,6 @@ def parse_eslint(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
         return ParseResult.error(f"ESLint JSON parse error: {e}")
     return ParseResult.ok(diagnostics)
 
-
 def parse_tsc(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse tsc output (line-based format)."""
     diagnostics: list[Diagnostic] = []
@@ -231,7 +225,6 @@ def parse_tsc(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
             )
     return ParseResult.ok(diagnostics)
 
-
 def parse_prettier_check(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse prettier --check output."""
     diagnostics: list[Diagnostic] = []
@@ -249,7 +242,6 @@ def parse_prettier_check(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG0
                 )
             )
     return ParseResult.ok(diagnostics)
-
 
 def parse_biome(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse biome JSON output."""
@@ -300,7 +292,6 @@ def parse_go_vet(stdout: str, stderr: str) -> ParseResult:
             )
     return ParseResult.ok(diagnostics)
 
-
 def parse_staticcheck(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse staticcheck JSON output."""
     diagnostics: list[Diagnostic] = []
@@ -324,7 +315,6 @@ def parse_staticcheck(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
         return ParseResult.error(f"Staticcheck JSON parse error: {e}")
     return ParseResult.ok(diagnostics)
 
-
 def parse_golangci_lint(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse golangci-lint JSON output."""
     diagnostics: list[Diagnostic] = []
@@ -347,7 +337,6 @@ def parse_golangci_lint(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG00
         return ParseResult.error(f"golangci-lint JSON parse error: {e}")
     return ParseResult.ok(diagnostics)
 
-
 def parse_gofmt(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse gofmt -l output (list of files needing formatting)."""
     diagnostics: list[Diagnostic] = []
@@ -364,7 +353,6 @@ def parse_gofmt(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
                 )
             )
     return ParseResult.ok(diagnostics)
-
 
 def parse_ruff_format(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse ruff format output.
@@ -433,7 +421,6 @@ def parse_clippy(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
         return ParseResult.error(f"Clippy JSON parse error: {e}")
     return ParseResult.ok(diagnostics)
 
-
 def parse_rustfmt_check(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse rustfmt --check output."""
     diagnostics: list[Diagnostic] = []
@@ -452,7 +439,6 @@ def parse_rustfmt_check(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG00
                 )
             )
     return ParseResult.ok(diagnostics)
-
 
 def parse_cargo_audit(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse cargo audit JSON output."""
@@ -505,7 +491,6 @@ def parse_checkstyle(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     except ET.ParseError as e:
         return ParseResult.error(f"Checkstyle XML parse error: {e}")
     return ParseResult.ok(diagnostics)
-
 
 def parse_ktlint(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse ktlint JSON output."""
@@ -610,7 +595,6 @@ def parse_phpcs(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
         return ParseResult.error(f"phpcs JSON parse error: {e}")
     return ParseResult.ok(diagnostics)
 
-
 def parse_phpstan(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse phpstan JSON output."""
     diagnostics: list[Diagnostic] = []
@@ -660,7 +644,6 @@ def parse_shellcheck(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
         return ParseResult.error(f"shellcheck JSON parse error: {e}")
     return ParseResult.ok(diagnostics)
 
-
 def parse_shfmt(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse shfmt -l output."""
     diagnostics: list[Diagnostic] = []
@@ -703,7 +686,6 @@ def parse_hadolint(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
         return ParseResult.error(f"hadolint JSON parse error: {e}")
     return ParseResult.ok(diagnostics)
 
-
 def parse_yamllint(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse yamllint parsable output."""
     diagnostics: list[Diagnostic] = []
@@ -724,7 +706,6 @@ def parse_yamllint(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
             )
     return ParseResult.ok(diagnostics)
 
-
 def parse_markdownlint(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse markdownlint JSON output."""
     diagnostics: list[Diagnostic] = []
@@ -744,7 +725,6 @@ def parse_markdownlint(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     except json.JSONDecodeError as e:
         return ParseResult.error(f"markdownlint JSON parse error: {e}")
     return ParseResult.ok(diagnostics)
-
 
 def parse_sqlfluff(stdout: str, stderr: str) -> ParseResult:  # noqa: ARG001
     """Parse sqlfluff JSON output."""

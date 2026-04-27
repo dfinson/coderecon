@@ -1,5 +1,4 @@
 """Repository access layer - subprocess-based git operations."""
-
 from __future__ import annotations
 
 import contextlib
@@ -45,71 +44,51 @@ from coderecon.git.errors import (
 @dataclass(frozen=True, slots=True)
 class GitSignature:
     """Lightweight git signature (author/committer)."""
-
     name: str
     email: str
     time: int  # Unix timestamp
     offset: int  # UTC offset in minutes
-
-
 @dataclass(frozen=True, slots=True)
 class GitCommitData:
     """Parsed commit data from git CLI."""
-
     sha: str
     tree_sha: str
     parent_shas: tuple[str, ...]
     author: GitSignature
     committer: GitSignature
     message: str
-
-
 @dataclass(frozen=True, slots=True)
 class GitReference:
     """Lightweight reference info."""
-
     name: str
     target: str  # SHA hex
     shorthand: str
-
-
 @dataclass(frozen=True, slots=True)
 class GitBranchData:
     """Parsed branch data."""
-
     name: str
     shorthand: str
     target: str  # SHA hex
     upstream: str | None = None
-
-
 @dataclass(frozen=True, slots=True)
 class GitIndexEntry:
     """A single entry in the git index."""
-
     path: str
     sha: str
     mode: int
-
-
 @dataclass(frozen=True, slots=True)
 class GitStashEntry:
     """A stash entry."""
-
     message: str
     commit_id: str
-
-
 @dataclass(frozen=True, slots=True)
 class GitTagData:
     """Parsed tag data."""
-
     name: str
     target_sha: str
     is_annotated: bool
     message: str | None = None
     tagger: GitSignature | None = None
-
 
 # Status character → flag mapping for --porcelain=v1
 _INDEX_STATUS_MAP = {
@@ -129,34 +108,27 @@ _WT_STATUS_MAP = {
 
 class GitIndex:
     """Git index operations via subprocess."""
-
     def __init__(self, git: GitRunner, path: Path) -> None:
         self._git = git
         self._path = path
         self._conflicts: list[tuple[GitIndexEntry | None, GitIndexEntry | None, GitIndexEntry | None]] | None = None
-
     def add(self, path_or_entry: str | GitIndexEntry) -> None:
         """Stage a file."""
         p = path_or_entry if isinstance(path_or_entry, str) else path_or_entry.path
         self._git.run("add", "--", p)
         self._conflicts = None  # Invalidate
-
     def remove(self, path: str) -> None:
         """Remove a file from the index."""
         self._git.run("rm", "--cached", "--", path)
         self._conflicts = None
-
     def write(self) -> None:
         """No-op: subprocess git add/rm are immediate."""
-
     def read(self) -> None:
         """No-op: subprocess always reads current index."""
-
     def write_tree(self) -> str:
         """Write current index as a tree object. Returns tree SHA."""
         result = self._git.run("write-tree")
         return result.stdout.strip()
-
     @property
     def conflicts(self) -> list[tuple[GitIndexEntry | None, GitIndexEntry | None, GitIndexEntry | None]] | None:
         """Get conflict entries, or None if no conflicts."""
@@ -187,17 +159,14 @@ class GitIndex:
             (entries[0], entries[1], entries[2]) for entries in conflicts_by_path.values()
         ]
         return self._conflicts if self._conflicts else None
-
     def diff_to_tree(self, tree_sha: str) -> str:
         """Diff index against a tree. Returns raw diff text."""
         result = self._git.run("diff-index", "-p", "--no-color", tree_sha)
         return result.stdout
-
     def __contains__(self, path: str) -> bool:
         """Check if path is in the index."""
         rc, stdout, _ = self._git.run_raw("ls-files", "--error-unmatch", "--", path)
         return rc == 0
-
     def __getitem__(self, path: str) -> GitIndexEntry:
         """Get index entry by path."""
         result = self._git.run("ls-files", "-s", "--", path)
@@ -208,7 +177,6 @@ class GitIndex:
             if entry_path == path:
                 return GitIndexEntry(path, parts[1], int(parts[0], 8))
         raise KeyError(path)
-
     def __len__(self) -> int:
         """Count files in index."""
         result = self._git.run("ls-files")
@@ -216,7 +184,6 @@ class GitIndex:
         if not lines:
             return 0
         return len(lines) if lines[0] else 0
-
     def __iter__(self) -> Iterator[GitIndexEntry]:
         """Iterate all index entries."""
         result = self._git.run("ls-files", "-s")
@@ -226,11 +193,8 @@ class GitIndex:
             meta, path = line.split("\t", 1)
             parts = meta.split()
             yield GitIndexEntry(path, parts[1], int(parts[0], 8))
-
-
 class RepoAccess:
     """Owns subprocess git runner and provides normalized access to repo state."""
-
     def __init__(self, repo_path: Path | str) -> None:
         self._path = Path(repo_path)
         # Verify it's a git repo
@@ -242,37 +206,30 @@ class RepoAccess:
         if not self._git_dir.is_absolute():
             self._git_dir = self._path / self._git_dir
         self._index = GitIndex(self._git, self._path)
-
     @property
     def git(self) -> GitRunner:
         """Direct access to the git runner."""
         return self._git
-
     @property
     def path(self) -> Path:
         return self._path
-
     @property
     def git_dir(self) -> Path:
         """The .git directory path."""
         return self._git_dir
-
     @property
     def index(self) -> GitIndex:
         return self._index
 
     # Repository State Facts
-
     @property
     def is_unborn(self) -> bool:
         rc, _, _ = self._git.run_raw("rev-parse", "--verify", "HEAD")
         return rc != 0
-
     @property
     def is_detached(self) -> bool:
         rc, _, _ = self._git.run_raw("symbolic-ref", "-q", "HEAD")
         return rc != 0
-
     @property
     def head_ref(self) -> GitReference:
         """Get HEAD reference (branch or detached)."""
@@ -284,24 +241,20 @@ class RepoAccess:
         sha = self._git.run("rev-parse", "HEAD").stdout.strip()
         shorthand = refname.removeprefix("refs/heads/")
         return GitReference(name=refname, target=sha, shorthand=shorthand)
-
     @property
     def head_target(self) -> str:
         """Return HEAD target as SHA hex string."""
         return self._git.run("rev-parse", "HEAD").stdout.strip()
-
     def head_commit(self) -> GitCommitData | None:
         if self.is_unborn:
             return None
         return self._parse_commit("HEAD")
-
     def head_tree(self) -> str | None:
         """Return HEAD tree SHA, or None if unborn."""
         if self.is_unborn:
             return None
         result = self._git.run("rev-parse", "HEAD^{tree}")
         return result.stdout.strip()
-
     @property
     def default_signature(self) -> GitSignature:
         """Get configured user signature."""
@@ -314,7 +267,6 @@ class RepoAccess:
         local = time.localtime(ts)
         offset = local.tm_gmtoff // 60 if hasattr(local, "tm_gmtoff") else 0
         return GitSignature(name=name, email=email, time=ts, offset=offset)
-
     def current_branch_name(self) -> str | None:
         if self.is_unborn:
             # Check symbolic ref target
@@ -329,7 +281,6 @@ class RepoAccess:
         result = self._git.run("branch", "--show-current")
         name = result.stdout.strip()
         return name or None
-
     def state(self) -> int:
         """Determine repository state by checking state files in .git/."""
         git_dir = self._git_dir
@@ -358,14 +309,12 @@ class RepoAccess:
         return GIT_REPOSITORY_STATE_NONE
 
     # Resolution Helpers
-
     def resolve_ref_oid(self, ref: str) -> str:
         """Resolve any ref to a SHA hex string."""
         rc, stdout, _ = self._git.run_raw("rev-parse", "--verify", ref)
         if rc != 0:
             raise RefNotFoundError(ref)
         return stdout.strip()
-
     def resolve_commit(self, ref: str) -> GitCommitData:
         """Resolve a ref to commit data."""
         # Ensure it resolves to a commit
@@ -376,38 +325,32 @@ class RepoAccess:
         return self._parse_commit(sha)
 
     # Must Helpers
-
     def must_head_target(self) -> str:
         """Return HEAD target SHA, raising if unborn."""
         if self.is_unborn:
             raise GitError("HEAD has no target (unborn branch)")
         return self.head_target
-
     def must_head_commit(self) -> GitCommitData:
         commit = self.head_commit()
         if commit is None:
             raise GitError("HEAD has no commits (unborn branch)")
         return commit
-
     def must_head_tree(self) -> str:
         """Return HEAD tree SHA, raising if unborn."""
         tree = self.head_tree()
         if tree is None:
             raise GitError("HEAD has no tree (unborn branch)")
         return tree
-
     def must_local_branch(self, name: str) -> GitBranchData:
         if not self.has_local_branch(name):
             raise GitError(f"Branch {name!r} not found")
         return self._get_branch_data(name, remote=False)
-
     def must_remote_branch(self, name: str) -> GitBranchData:
         if not self.has_remote_branch(name):
             raise GitError(f"Remote branch {name!r} not found")
         return self._get_branch_data(name, remote=True)
 
     # Normalization Helpers
-
     def normalize_path(self, path: str | Path) -> str:
         p = Path(path)
         if p.is_absolute():
@@ -416,14 +359,12 @@ class RepoAccess:
         return str(p)
 
     # Remote Access
-
     def get_remote(self, name: str) -> str:
         """Get remote URL. Raises RemoteError if not found."""
         rc, stdout, _ = self._git.run_raw("remote", "get-url", name)
         if rc != 0:
             raise RemoteError(name, "Remote not found")
         return stdout.strip()
-
     @property
     def remotes(self) -> list[tuple[str, str, str | None]]:
         """List remotes as (name, fetch_url, push_url) tuples."""
@@ -446,15 +387,12 @@ class RepoAccess:
         ]
 
     # Branch Access
-
     def has_local_branch(self, name: str) -> bool:
         rc, _, _ = self._git.run_raw("rev-parse", "--verify", f"refs/heads/{name}")
         return rc == 0
-
     def has_remote_branch(self, name: str) -> bool:
         rc, _, _ = self._git.run_raw("rev-parse", "--verify", f"refs/remotes/{name}")
         return rc == 0
-
     def _get_branch_data(self, name: str, *, remote: bool) -> GitBranchData:
         """Get branch data by name."""
         prefix = "refs/remotes/" if remote else "refs/heads/"
@@ -482,22 +420,18 @@ class RepoAccess:
             target=sha,
             upstream=upstream,
         )
-
     def create_local_branch(self, name: str, target_sha: str) -> GitBranchData:
         """Create a local branch at target. Returns branch data."""
         self._git.run("branch", name, target_sha)
         return self._get_branch_data(name, remote=False)
-
     def set_branch_target(self, name: str, sha: str) -> None:
         """Move a branch to point to a new SHA."""
         self._git.run("branch", "-f", name, sha)
-
     def delete_branch(self, name: str) -> None:
         """Force delete a local branch."""
         self._git.run("branch", "-D", name)
 
     # Low-level Git Operations
-
     def status(self) -> dict[str, int]:
         """Get status flags by path, compatible with existing flag constants."""
         result = self._git.run("status", "--porcelain=v1", "-uall")
@@ -528,7 +462,6 @@ class RepoAccess:
                 status_dict[path] = flags
 
         return status_dict
-
     def blame(self, path: str, **kwargs: int) -> list[dict]:
         """Get blame data as list of hunk dicts."""
         cmd = ["blame", "--porcelain"]
@@ -541,7 +474,6 @@ class RepoAccess:
         cmd.append(path)
         result = self._git.run(*cmd)
         return self._parse_blame_output(result.stdout)
-
     def walk_commits(self, start_sha: str, limit: int = 10000) -> list[GitCommitData]:
         """Walk commits from start SHA."""
         result = self._git.run(
@@ -551,7 +483,6 @@ class RepoAccess:
             start_sha,
         )
         return self._parse_log_output(result.stdout)
-
     def walk_commits_excluding(
         self, include: str, exclude: str
     ) -> list[GitCommitData]:
@@ -564,41 +495,33 @@ class RepoAccess:
             f"{exclude}..{include}",
         )
         return self._parse_log_output(result.stdout)
-
     def diff_working_tree(self) -> str:
         """Diff working tree against index. Returns raw diff text."""
         return self._git.run("diff", "--no-color").stdout
-
     def diff_staged(self) -> str:
         """Diff staged changes against HEAD (or empty tree if unborn)."""
         if self.is_unborn:
             empty_tree = self._git.run("hash-object", "-t", "tree", "/dev/null").stdout.strip()
             return self._git.run("diff-index", "-p", "--no-color", "--cached", empty_tree).stdout
         return self._git.run("diff", "--cached", "--no-color").stdout
-
     def diff_refs(self, base_sha: str, target_sha: str | None = None) -> str:
         """Diff between refs. Returns raw diff text."""
         if target_sha is None:
             return self._git.run("diff", "--no-color", base_sha).stdout
         return self._git.run("diff", "--no-color", base_sha, target_sha).stdout
-
     def get_empty_tree_sha(self) -> str:
         """Get the SHA of an empty tree."""
         result = self._git.run("hash-object", "-t", "tree", "--stdin", input="")
         return result.stdout.strip()
-
     def checkout_branch(self, name: str) -> None:
         """Checkout a local branch."""
         self._git.run("checkout", name)
-
     def checkout_detached(self, sha: str) -> None:
         """Checkout a specific commit (detached HEAD)."""
         self._git.run("checkout", "--detach", sha)
-
     def set_head(self, refname: str) -> None:
         """Set HEAD to a ref name (e.g., 'refs/heads/main')."""
         self._git.run("symbolic-ref", "HEAD", refname)
-
     def merge_analysis(self, their_sha: str) -> int:
         """Analyze potential merge. Returns bitmask of MERGE_* flags."""
         from coderecon.git._internal.constants import (
@@ -621,27 +544,22 @@ class RepoAccess:
 
         # Normal merge needed
         return MERGE_NORMAL
-
     def merge(self, their_sha: str) -> None:
         """Merge without commit (--no-commit)."""
         self._git.run("merge", "--no-commit", "--no-ff", their_sha, check=False)
         self._index._conflicts = None  # Invalidate after merge
-
     def cherrypick(self, commit_sha: str) -> None:
         """Cherry-pick without commit."""
         self._git.run("cherry-pick", "--no-commit", commit_sha, check=False)
         self._index._conflicts = None  # Invalidate after cherry-pick
-
     def revert_commit(self, commit_sha: str) -> None:
         """Revert a commit without committing."""
         self._git.run("revert", "--no-commit", commit_sha, check=False)
         self._index._conflicts = None  # Invalidate after revert
-
     def reset(self, sha: str, mode: str) -> None:
         """Reset HEAD. mode: 'soft', 'mixed', or 'hard'."""
         self._git.run("reset", f"--{mode}", sha)
         self._index._conflicts = None  # Invalidate
-
     def state_cleanup(self) -> None:
         """Remove merge/cherrypick/revert state files."""
         git_dir = self._git_dir
@@ -649,7 +567,6 @@ class RepoAccess:
             f = git_dir / fname
             if f.exists():
                 f.unlink()
-
     def stash(
         self, message: str | None, *, include_untracked: bool
     ) -> str:
@@ -663,13 +580,10 @@ class RepoAccess:
         # Get the stash commit SHA
         result = self._git.run("rev-parse", "stash@{0}")
         return result.stdout.strip()
-
     def stash_apply(self, index: int) -> None:
         self._git.run("stash", "apply", f"stash@{{{index}}}")
-
     def stash_drop(self, index: int) -> None:
         self._git.run("stash", "drop", f"stash@{{{index}}}")
-
     def listall_stashes(self) -> list[GitStashEntry]:
         """List stash entries."""
         rc, stdout, _ = self._git.run_raw("stash", "list", "--format=%H %s")
@@ -682,7 +596,6 @@ class RepoAccess:
             msg = parts[1] if len(parts) > 1 else ""
             entries.append(GitStashEntry(message=msg, commit_id=sha))
         return entries
-
     def create_tag(
         self,
         name: str,
@@ -696,23 +609,18 @@ class RepoAccess:
             return result.stdout.strip()
         self._git.run("tag", name, target_sha)
         return target_sha
-
     def create_reference(self, name: str, target_sha: str) -> None:
         """Create or update a reference."""
         self._git.run("update-ref", name, target_sha)
-
     def delete_reference(self, name: str) -> None:
         """Delete a reference."""
         self._git.run("update-ref", "-d", name)
-
     def has_reference(self, name: str) -> bool:
         rc, _, _ = self._git.run_raw("rev-parse", "--verify", name)
         return rc == 0
-
     def get_reference_target(self, name: str) -> str:
         """Get target SHA of a reference."""
         return self._git.run("rev-parse", name).stdout.strip()
-
     def create_commit(
         self,
         ref: str | None,
@@ -762,29 +670,24 @@ class RepoAccess:
             self._git.run("update-ref", ref, oid)
 
         return oid
-
     def descendant_of(self, commit_sha: str, ancestor_sha: str) -> bool:
         """Check if commit is a descendant of ancestor."""
         rc, _, _ = self._git.run_raw("merge-base", "--is-ancestor", ancestor_sha, commit_sha)
         return rc == 0
-
     @property
     def references(self) -> _ReferenceHelper:
         """Reference helper for iteration."""
         return _ReferenceHelper(self._git)
-
     @property
     def branches(self) -> _BranchHelper:
         """Branch helper."""
         return _BranchHelper(self._git)
 
     # Index Helpers
-
     def best_effort_index_remove(self, paths: Iterator[str]) -> None:
         """Remove paths from index, suppressing errors for missing entries."""
         for p in paths:
             self._git.run_raw("rm", "--cached", "--ignore-unmatch", "--", p)
-
     def index_reset_entry(self, path: str, tree_sha: str) -> None:
         """Reset a single index entry to match tree, or remove if not in tree."""
         # Try to get the entry from the tree
@@ -807,7 +710,6 @@ class RepoAccess:
             self._git.run_raw("rm", "--cached", "--ignore-unmatch", "--", path)
 
     # Tag Iteration
-
     def iter_tags(self) -> Iterator[GitTagData]:
         """Iterate tags as GitTagData objects."""
         result = self._git.run(
@@ -854,7 +756,6 @@ class RepoAccess:
                 )
 
     # Remote Operations
-
     def run_remote_operation(
         self,
         remote_name: str,
@@ -875,7 +776,6 @@ class RepoAccess:
             raise RemoteError(remote_name, f"{op_name} failed: {e}") from e
 
     # Worktree Operations
-
     def list_worktrees(self) -> list[str]:
         """List worktree names (excluding main)."""
         result = self._git.run("worktree", "list", "--porcelain")
@@ -890,7 +790,6 @@ class RepoAccess:
                 wt_path = line[len("worktree "):]
                 names.append(Path(wt_path).name)
         return names
-
     def worktree_path(self, name: str) -> str:
         """Get worktree path by name."""
         result = self._git.run("worktree", "list", "--porcelain")
@@ -906,7 +805,6 @@ class RepoAccess:
                 if Path(current_path).name == name:
                     return current_path
         raise GitError(f"Worktree not found: {name}")
-
     def worktree_is_prunable(self, name: str) -> bool:
         """Check if worktree is prunable (directory missing)."""
         try:
@@ -914,7 +812,6 @@ class RepoAccess:
             return not Path(wt_path).exists()
         except GitError:
             return True
-
     def add_worktree(self, name: str, path: str, branch: str | None = None) -> None:
         """Add a new worktree."""
         cmd = ["worktree", "add"]
@@ -927,12 +824,10 @@ class RepoAccess:
         if branch:
             cmd.append(branch)
         self._git.run(*cmd)
-
     def is_worktree(self) -> bool:
         """True if this repository is a worktree (not the main working directory)."""
         git_path = self.path / ".git"
         return git_path.is_file()
-
     @property
     def workdir(self) -> str | None:
         """Working directory path."""
@@ -940,11 +835,9 @@ class RepoAccess:
         if rc == 0:
             return stdout.strip() + "/"
         return None
-
     def worktree_gitdir(self, name: str) -> Path:
         """Get the git admin directory for a worktree."""
         return self._git_dir / "worktrees" / name
-
     def remove_worktree(self, name: str, force: bool = False) -> None:
         """Remove worktree."""
         wt_path = self.worktree_path(name)
@@ -955,7 +848,6 @@ class RepoAccess:
         self._git.run(*cmd)
 
     # Submodule Operations
-
     def listall_submodules(self) -> list[str]:
         """List submodule names."""
         rc, stdout, _ = self._git.run_raw("config", "--file", ".gitmodules", "--get-regexp", r"^submodule\..*\.path$")
@@ -968,7 +860,6 @@ class RepoAccess:
             if match:
                 names.append(match.group(1))
         return names
-
     def lookup_submodule(self, name: str) -> dict[str, str | None]:
         """Get submodule info as dict."""
         rc, path_out, _ = self._git.run_raw("config", "--file", ".gitmodules", f"submodule.{name}.path")
@@ -989,12 +880,10 @@ class RepoAccess:
                 head_id = parts[2]
 
         return {"name": name, "path": path, "url": url, "branch": branch, "head_id": head_id}
-
     def init_submodule(self, name: str) -> None:
         """Initialize a submodule."""
         sm = self.lookup_submodule(name)
         self._git.run("submodule", "init", "--", sm["path"])
-
     def submodule_name_for_path(self, path: str) -> str | None:
         """Get submodule name for a given path."""
         for name in self.listall_submodules():
@@ -1006,7 +895,6 @@ class RepoAccess:
                 structlog.get_logger().debug("submodule_lookup_failed", name=name, exc_info=True)
                 continue
         return None
-
     def lookup_submodule_by_path(self, path: str) -> dict[str, str | None]:
         """Get submodule by path."""
         name = self.submodule_name_for_path(path)
@@ -1015,7 +903,6 @@ class RepoAccess:
         return self.lookup_submodule(name)
 
     # Merge Base
-
     def merge_base(self, sha1: str, sha2: str) -> str | None:
         """Find merge base of two commits. Returns None if unrelated."""
         rc, stdout, _ = self._git.run_raw("merge-base", sha1, sha2)
@@ -1024,7 +911,6 @@ class RepoAccess:
         return stdout.strip()
 
     # Diff Parsing
-
     def diff_numstat(self, *args: str) -> list[tuple[str, int, int, str]]:
         """Run diff with --numstat and return (status, additions, deletions, path) tuples."""
         result = self._git.run("diff", "--numstat", "--diff-filter=ACDMR", "--no-color", *args)
@@ -1055,7 +941,6 @@ class RepoAccess:
         return entries
 
     # Internal Parsing
-
     def _parse_commit(self, ref: str) -> GitCommitData:
         """Parse a commit into GitCommitData."""
         fmt = "%H%n%T%n%P%n%an%n%ae%n%at%n%cn%n%ce%n%ct%n%B"
@@ -1091,7 +976,6 @@ class RepoAccess:
             committer=committer,
             message=message,
         )
-
     def _parse_log_output(self, output: str) -> list[GitCommitData]:
         """Parse output from git log with NUL-separated entries."""
         commits: list[GitCommitData] = []
@@ -1125,7 +1009,6 @@ class RepoAccess:
                 )
             )
         return commits
-
     def _parse_blame_output(self, output: str) -> list[dict]:
         """Parse git blame --porcelain output."""
         hunks: list[dict] = []
@@ -1169,30 +1052,22 @@ class RepoAccess:
         if current:
             hunks.append(current)
         return hunks
-
-
 class _ReferenceHelper:
     """Helper for iterating references."""
-
     def __init__(self, git: GitRunner) -> None:
         self._git = git
-
     def __contains__(self, refname: str) -> bool:
         rc, _, _ = self._git.run_raw("rev-parse", "--verify", refname)
         return rc == 0
-
     def __iter__(self) -> Iterator[str]:
         result = self._git.run("for-each-ref", "--format=%(refname)")
         for line in result.stdout.strip().splitlines():
             if line:
                 yield line
-
     def create(self, name: str, target_sha: str) -> None:
         self._git.run("update-ref", name, target_sha)
-
     def delete(self, name: str) -> None:
         self._git.run("update-ref", "-d", name)
-
     def __getitem__(self, name: str) -> GitReference:
         rc, stdout, _ = self._git.run_raw("rev-parse", "--verify", name)
         if rc != 0:
@@ -1204,30 +1079,21 @@ class _ReferenceHelper:
         elif name.startswith("refs/tags/"):
             shorthand = name[len("refs/tags/"):]
         return GitReference(name=name, target=sha, shorthand=shorthand)
-
-
 class _BranchHelper:
     """Helper for branch iteration matching pygit2-like interface."""
-
     def __init__(self, git: GitRunner) -> None:
         self._git = git
-
     @property
     def local(self) -> _BranchCategory:
         return _BranchCategory(self._git, remote=False)
-
     @property
     def remote(self) -> _BranchCategory:
         return _BranchCategory(self._git, remote=True)
-
-
 class _BranchCategory:
     """Category of branches (local or remote)."""
-
     def __init__(self, git: GitRunner, *, remote: bool) -> None:
         self._git = git
         self._remote = remote
-
     def __iter__(self) -> Iterator[str]:
         flag = "-r" if self._remote else "--list"
         result = self._git.run("branch", flag, "--format=%(refname:short)")
@@ -1235,12 +1101,10 @@ class _BranchCategory:
             name = line.strip()
             if name:
                 yield name
-
     def __contains__(self, name: str) -> bool:
         prefix = "refs/remotes/" if self._remote else "refs/heads/"
         rc, _, _ = self._git.run_raw("rev-parse", "--verify", f"{prefix}{name}")
         return rc == 0
-
     def __getitem__(self, name: str) -> GitBranchData:
         prefix = "refs/remotes/" if self._remote else "refs/heads/"
         rc, stdout, _ = self._git.run_raw("rev-parse", "--verify", f"{prefix}{name}")

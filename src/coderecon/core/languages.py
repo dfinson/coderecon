@@ -34,12 +34,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from coderecon.index.models import LanguageFamily
 
-
 def _get_language_family() -> type[LanguageFamily]:
     from coderecon.index.models import LanguageFamily
 
     return LanguageFamily
-
 
 @dataclass(frozen=True, slots=True)
 class Language:
@@ -67,7 +65,6 @@ class Language:
     exportable_kinds: frozenset[str] = field(default_factory=lambda: frozenset({"function", "class"}))
     ambient: bool = False
     priority: int = 50
-
 
 # Language Definitions
 # RULES:
@@ -838,7 +835,6 @@ def exportable_kinds_for_language(language_name: str) -> frozenset[str]:
         return lang.exportable_kinds
     return _DEFAULT_EXPORTABLE_KINDS
 
-
 def is_name_exported(name: str, language_name: str) -> bool:
     """Check if a symbol name is exported according to language conventions.
 
@@ -907,7 +903,6 @@ def _build_extension_multimap() -> dict[str, tuple[str, ...]]:
         result[ext] = tuple(f for _, f in families)
     return result
 
-
 def _build_filename_map() -> dict[str, str]:
     """Build lowercase filename -> primary name mapping."""
     result: dict[str, str] = {}
@@ -970,11 +965,9 @@ def get_families_for_extension(ext: str) -> tuple[str, ...]:
     """
     return EXTENSION_TO_NAMES.get(ext.lower(), ())
 
-
 def is_ambiguous_extension(ext: str) -> bool:
     """Check if an extension maps to multiple language families."""
     return len(get_families_for_extension(ext)) > 1
-
 
 def detect_language_family(path: str | Path) -> str | None:
     """Detect the primary language name for a file path.
@@ -1010,7 +1003,6 @@ def detect_language_family(path: str | Path) -> str | None:
     # 3. Simple suffix match (returns highest priority name)
     _, ext = os.path.splitext(path_str)
     return EXTENSION_TO_NAME.get(ext.lower()) if ext else None
-
 
 def detect_language_family_enum(path: str | Path) -> LanguageFamily | None:
     """Detect language name and return as LanguageFamily enum.
@@ -1051,7 +1043,6 @@ def _generate_include_globs(lang: Language) -> tuple[str, ...]:
 
     return tuple(globs)
 
-
 def get_include_globs(name: str) -> tuple[str, ...]:
     """Get include globs for a language name.
 
@@ -1074,7 +1065,6 @@ def get_markers(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
         return (), ()
     return lang.markers_workspace, lang.markers_package
 
-
 def build_marker_definitions() -> dict[str, dict[str, tuple[str, ...]]]:
     """Build {name: {"workspace": (...), "package": (...)}} for scanner.
 
@@ -1088,7 +1078,6 @@ def build_marker_definitions() -> dict[str, dict[str, tuple[str, ...]]]:
                 "package": lang.markers_package,
             }
     return result
-
 
 def build_include_specs() -> dict[str, tuple[str, ...]]:
     """Build {name: globs} for scanner.
@@ -1109,7 +1098,6 @@ def build_include_specs() -> dict[str, tuple[str, ...]]:
 def get_test_patterns(name: str) -> tuple[str, ...]:
     """Get test file patterns for a name."""
     return LANGUAGES_BY_NAME[name].test_patterns if name in LANGUAGES_BY_NAME else ()
-
 
 def is_test_file(path: str | Path) -> bool:
     """Check if a file path matches any known test file pattern.
@@ -1244,7 +1232,6 @@ def find_test_pairs(source_path: str) -> list[str]:
             unique.append(c)
     return unique
 
-
 def _swap_src_dir(parent: str, test_dir_name: str) -> str | None:
     """Swap a source directory prefix with a test directory prefix.
 
@@ -1262,7 +1249,6 @@ def _swap_src_dir(parent: str, test_dir_name: str) -> str | None:
             return test_dir_name + rest
     return None
 
-
 def _add_python_test_pairs(
     out: list[str],
     parent: str,
@@ -1278,7 +1264,6 @@ def _add_python_test_pairs(
     if swapped:
         out.append(f"{swapped}/test_{stem}{ext}")
         out.append(f"{swapped}/{stem}_test{ext}")
-
 
 def _add_js_ts_test_pairs(
     out: list[str],
@@ -1299,7 +1284,6 @@ def _add_js_ts_test_pairs(
         out.append(f"{swapped}/{stem}.test{ext}")
         out.append(f"{swapped}/{stem}.spec{ext}")
 
-
 def _add_go_test_pairs(
     out: list[str],
     parent: str,
@@ -1308,7 +1292,6 @@ def _add_go_test_pairs(
 ) -> None:
     """Go: <stem>_test.go in the same directory."""
     out.append(f"{parent}/{stem}_test{ext}")
-
 
 def _add_ruby_test_pairs(
     out: list[str],
@@ -1327,7 +1310,6 @@ def _add_ruby_test_pairs(
             out.append(f"test/{rest}/{stem}_test{ext}")
             break
 
-
 def _add_rust_test_pairs(
     out: list[str],
     parent: str,
@@ -1342,7 +1324,6 @@ def _add_rust_test_pairs(
     if parent.startswith("src"):
         out.append(f"tests/{stem}{ext}")
 
-
 def _add_java_test_pairs(
     out: list[str],
     parent: str,
@@ -1356,7 +1337,6 @@ def _add_java_test_pairs(
         test_parent = parent.replace("src/main/", "src/test/", 1)
         out.append(f"{test_parent}/{stem}Test{ext}")
 
-
 def _add_dotnet_test_pairs(
     out: list[str],
     parent: str,
@@ -1366,7 +1346,6 @@ def _add_dotnet_test_pairs(
     """.NET: <Stem>Tests.{cs,fs}, <Stem>Test.{cs,fs}."""
     out.append(f"{parent}/{stem}Tests{ext}")
     out.append(f"{parent}/{stem}Test{ext}")
-
 
 def _add_php_test_pairs(
     out: list[str],
@@ -1380,7 +1359,6 @@ def _add_php_test_pairs(
     if swapped:
         out.append(f"{swapped}/{stem}Test{ext}")
 
-
 def _add_elixir_test_pairs(
     out: list[str],
     parent: str,
@@ -1391,7 +1369,6 @@ def _add_elixir_test_pairs(
     if parent.startswith("lib/"):
         test_parent = "test/" + parent[len("lib/") :]
         out.append(f"{test_parent}/{stem}_test.exs")
-
 
 def _add_generic_test_pairs(
     out: list[str],
@@ -1407,7 +1384,6 @@ def _add_generic_test_pairs(
         out.append(f"{swapped}/test_{stem}{ext}")
         out.append(f"{swapped}/{stem}_test{ext}")
 
-
 def get_grammar_name(name: str) -> str | None:
     """Get tree-sitter grammar name for a name.
 
@@ -1415,16 +1391,13 @@ def get_grammar_name(name: str) -> str | None:
     """
     return LANGUAGES_BY_NAME[name].grammar if name in LANGUAGES_BY_NAME else None
 
-
 def has_grammar(name: str) -> bool:
     """Check if name has a usable tree-sitter grammar."""
     return get_grammar_name(name) is not None
 
-
 def get_all_indexable_extensions() -> set[str]:
     """Get all known file extensions."""
     return set(EXTENSION_TO_NAME.keys())
-
 
 def get_all_indexable_filenames() -> set[str]:
     """Get all known special filenames."""
@@ -1456,7 +1429,6 @@ def validate_language_families() -> list[str]:
         errors.append(f"Could not import LanguageFamily: {e}")
 
     return errors
-
 
 def validate_markers_are_exact_filenames() -> list[str]:
     """Validate that all markers are exact filenames (no wildcards/globs).

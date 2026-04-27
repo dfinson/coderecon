@@ -40,7 +40,6 @@ def _timestamp() -> str:
     """Return current time as HH:MM:SS for log prefix."""
     return time.strftime("%H:%M:%S")
 
-
 class ToolMiddleware(Middleware):
     """Middleware that handles tool calls with structured errors and UX.
 
@@ -51,7 +50,6 @@ class ToolMiddleware(Middleware):
     - Two-phase logging (tool_start + tool_completed)
     - No tracebacks printed to console
     """
-
     def __init__(self, session_manager: SessionManager | None = None) -> None:
         """Initialize with optional session manager for gate/pattern tracking."""
         super().__init__()
@@ -127,7 +125,6 @@ class ToolMiddleware(Middleware):
         console: Console,
     ) -> Any:
         """Execute a tool call with structured error handling and UX."""
-
         try:
             result = await call_next(context)
 
@@ -285,7 +282,6 @@ class ToolMiddleware(Middleware):
                     "summary": f"error: internal error in {tool_name}",
                 }
             )
-
     def _print_error_with_log_pointer(
         self,
         console: Console,
@@ -318,7 +314,6 @@ class ToolMiddleware(Middleware):
                 style="red",
                 highlight=False,
             )
-
     def _get_tool_schema(
         self,
         context: MiddlewareContext[Any],
@@ -385,7 +380,6 @@ class ToolMiddleware(Middleware):
         except Exception:
             log.debug("tool_schema_extraction_failed", exc_info=True)
             return None
-
     def _extract_log_params(self, _tool_name: str, kwargs: dict[str, Any]) -> dict[str, Any]:
         """Extract relevant parameters for logging.
 
@@ -408,7 +402,6 @@ class ToolMiddleware(Middleware):
                 params[key] = value
 
         return params
-
     @staticmethod
     def _extract_result_dict(result: Any) -> dict[str, Any] | None:
         """Extract the JSON dict from an MCP result.
@@ -437,7 +430,6 @@ class ToolMiddleware(Middleware):
         elif isinstance(result, dict):
             return dict(result)
         return None
-
     def _extract_result_summary(self, tool_name: str, result: Any) -> dict[str, Any]:
         """Extract summary metrics from tool result for logging.
 
@@ -467,7 +459,6 @@ class ToolMiddleware(Middleware):
             return self._extract_from_dict(tool_name, result)
 
         return summary
-
     def _extract_from_dict(self, tool_name: str, result: dict[str, Any]) -> dict[str, Any]:
         """Extract summary from a dict result."""
         summary: dict[str, Any] = {}
@@ -509,7 +500,6 @@ class ToolMiddleware(Middleware):
                 summary["failed"] = tests.get("failed", 0)
 
         return summary
-
     def _format_tool_summary(self, tool_name: str, result: Any) -> str:
         """Format a human-readable summary for console output.
 

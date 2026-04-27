@@ -72,7 +72,6 @@ def semantic_diff_core(
 
 def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
     """Register semantic_diff MCP tool."""
-
     @mcp.tool(
         annotations={
             "title": "Diff: structural change summary",
@@ -94,7 +93,6 @@ def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
         return semantic_diff_core(
             app_ctx, base=base, target=target, paths=paths, scope_id=scope_id,
         )
-
 
 def _run_git_diff(
     app_ctx: "AppContext",
@@ -208,7 +206,6 @@ def _run_git_diff(
 
     return result
 
-
 def _parse_epoch_ref(ref: str) -> int:
     """Parse an epoch reference like 'epoch:3' into a non-negative integer.
 
@@ -234,7 +231,6 @@ def _parse_epoch_ref(ref: str) -> int:
         msg = f"Epoch ID must be non-negative, got {value}."
         raise ValueError(msg)
     return value
-
 
 def _run_epoch_diff(
     app_ctx: "AppContext",
@@ -378,7 +374,6 @@ def _extract_patch_lines(
                 new_lineno += 1
     return result
 
-
 def _annotate_change_previews(
     result: SemanticDiffResult,
     diff_text: str,
@@ -447,7 +442,6 @@ def _domain_key(path: str) -> str:
         return "/".join(parts[:-1]) if len(parts) > 1 else "(root)"
     return "/".join(parts[:_DOMAIN_PREFIX_DEPTH])
 
-
 def _classify_domains(
     changes: list[StructuralChange],
     non_structural: list[Any] | None = None,
@@ -513,7 +507,6 @@ def _classify_domains(
         d["review_priority"] = i
 
     return domains
-
 
 def _detect_cross_domain_edges(
     changes: list[StructuralChange],
@@ -643,7 +636,6 @@ def _build_agentic_hint(
 
     return "\n".join(lines)
 
-
 def _result_to_text(result: SemanticDiffResult) -> dict[str, Any]:
     """Convert SemanticDiffResult to losslessly-compressed text format.
 
@@ -744,7 +736,6 @@ def _result_to_text(result: SemanticDiffResult) -> dict[str, Any]:
 
     return response
 
-
 def _result_to_dict(
     result: SemanticDiffResult,
     *,
@@ -757,7 +748,6 @@ def _result_to_dict(
     - standard: Omit change_preview
     - minimal: Just path/kind/name/change (no impact, nested_changes, signatures, etc.)
     """
-
     def _change_to_dict(c: StructuralChange) -> dict[str, Any]:
         # Minimal: just essential fields
         if verbosity == "minimal":

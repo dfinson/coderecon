@@ -70,7 +70,6 @@ def _collect_watch_dirs(
         log.debug("dir_walk_failed", root=str(root), exc_info=True)
     return dirs
 
-
 def _is_cross_filesystem(path: Path) -> bool:
     """Detect if path is on a cross-filesystem mount (WSL /mnt/*, network drives, etc.)."""
     resolved = path.resolve()
@@ -86,7 +85,6 @@ def _is_cross_filesystem(path: Path) -> bool:
         return True
     # Common network/remote mounts
     return path_str.startswith(("/run/user/", "/media/", "/net/"))
-
 
 def _summarize_changes_by_type(paths: list[Path]) -> str:
     """Summarize file changes by extension/type with grammatical correctness.
@@ -192,12 +190,10 @@ class FileWatcher:
     _watched_dirs: set[Path] = field(default_factory=set, init=False)
     # Whether this watcher degraded to poll mode due to inotify capacity.
     _degraded_to_poll: bool = field(default=False, init=False)
-
     @property
     def watch_count(self) -> int:
         """Number of directories currently being watched via inotify."""
         return len(self._watched_dirs)
-
     @staticmethod
     def estimate_watch_count(repo_root: Path) -> int:
         """Estimate how many inotify watches a repo would need.
@@ -207,7 +203,6 @@ class FileWatcher:
         """
         ignore_checker = IgnoreChecker(repo_root, respect_gitignore=False)
         return len(_collect_watch_dirs(repo_root, ignore_checker))
-
     def __post_init__(self) -> None:
         """Initialize ignore checker and detect cross-filesystem."""
         self._ignore_checker = IgnoreChecker(self.repo_root, respect_gitignore=False)
@@ -273,7 +268,6 @@ class FileWatcher:
             self._watch_task = None
 
         log.info("file_watcher_stopped")
-
     def _queue_change(self, path: Path) -> None:
         """Queue a change for debounced delivery."""
         now = time.monotonic()
@@ -283,7 +277,6 @@ class FileWatcher:
 
         self._pending_changes.add(path)
         self._last_change_time = now
-
     def _should_flush(self) -> bool:
         """Check if we should flush pending changes."""
         if not self._pending_changes:
@@ -295,7 +288,6 @@ class FileWatcher:
 
         # Flush if quiet window elapsed OR max wait exceeded
         return time_since_last >= self.debounce_window or time_since_first >= self.max_debounce_wait
-
     def _flush_pending(self) -> None:
         """Flush pending changes to callback."""
         if not self._pending_changes:
@@ -486,7 +478,6 @@ class FileWatcher:
         finally:
             if self._debounce_task:
                 self._debounce_task.cancel()
-
     def _scan_mtimes(self) -> dict[Path, float]:
         """Scan filesystem for file mtimes, respecting prunable dirs."""
         mtimes: dict[Path, float] = {}
@@ -500,7 +491,6 @@ class FileWatcher:
                     mtimes[file_path] = file_path.stat().st_mtime
 
         return mtimes
-
     def _handle_reconignore_change(self, rel_path: Path) -> None:
         """Handle .reconignore change with detailed logging (Issue #6)."""
         reconignore_path = self.repo_root / rel_path

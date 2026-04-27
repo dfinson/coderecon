@@ -1,5 +1,4 @@
 """Git operations via subprocess - returns serializable data models."""
-
 from __future__ import annotations
 
 import subprocess
@@ -81,7 +80,6 @@ log = structlog.get_logger(__name__)
 
 class GitOps:
     """Git operations via subprocess with serializable data models."""
-
     def __init__(self, repo_path: Path | str) -> None:
         self._access = RepoAccess(repo_path)
         self._flows = WriteFlows(self._access)
@@ -89,22 +87,18 @@ class GitOps:
         self._checkout_planner = CheckoutPlanner(self._access)
         self._rebase_planner = RebasePlanner(self._access)
         self._rebase_flow = RebaseFlow(self._access)
-
     def _head_sha(self) -> str:
         """Get HEAD target SHA, raising if unborn."""
         return self._access.must_head_target()
-
     @property
     def path(self) -> Path:
         """Repository root path."""
         return self._access.path
 
     # Read Operations
-
     def status(self) -> dict[str, int]:
         """Get status flags by path. Use STATUS_* constants to interpret."""
         return self._access.status()
-
     def head(self) -> RefInfo:
         """Get HEAD reference info."""
         ref = self._access.head_ref
@@ -114,12 +108,10 @@ class GitOps:
             shorthand=ref.shorthand,
             is_detached=self._access.is_detached,
         )
-
     def head_commit(self) -> CommitInfo | None:
         """Get HEAD commit, or None if unborn."""
         commit = self._access.head_commit()
         return CommitInfo.from_git(commit) if commit else None
-
     def diff(
         self,
         base: str | None = None,
@@ -131,7 +123,6 @@ class GitOps:
         plan = self._diff_planner.plan(base, target, staged)
         result = self._diff_planner.execute(plan)
         return DiffInfo.from_diff_text(result.diff_text, result.numstat, include_patch=include_patch)
-
     def files_changed_vs(self, base_ref: str) -> list[str]:
         """Return repo-relative paths that differ between *base_ref* and HEAD.
 
@@ -155,7 +146,6 @@ class GitOps:
             return [line for line in result.stdout.splitlines() if line]
         except (OSError, subprocess.SubprocessError):  # noqa: BLE001
             return []
-
     def diff_summary(
         self,
         base: str | None = None,
@@ -172,7 +162,6 @@ class GitOps:
             result.diff_text, result.numstat,
             include_per_file=include_per_file, include_word_count=include_word_count,
         )
-
     def blame(
         self, path: str, min_line: int | None = None, max_line: int | None = None
     ) -> BlameInfo:
@@ -184,7 +173,6 @@ class GitOps:
             kwargs["max_line"] = max_line
         blame_hunks = self._access.blame(path, **kwargs)
         return BlameInfo.from_blame_data(path, blame_hunks)
-
     def log(
         self,
         ref: str = "HEAD",
@@ -213,11 +201,9 @@ class GitOps:
         result = self._access.git.run(*cmd)
         commits_data = self._access._parse_log_output(result.stdout)
         return [CommitInfo.from_git(c) for c in commits_data]
-
     def show(self, ref: str = "HEAD") -> CommitInfo:
         """Get commit info."""
         return CommitInfo.from_git(self._access.resolve_commit(ref))
-
     def branches(self, include_remote: bool = True) -> list[BranchInfo]:
         """List branches."""
         result: list[BranchInfo] = []
@@ -232,7 +218,6 @@ class GitOps:
                     continue
                 result.append(BranchInfo.from_git(branch_data))
         return result
-
     def tags(self) -> list[TagInfo]:
         """List tags."""
         result: list[TagInfo] = []
@@ -251,22 +236,18 @@ class GitOps:
             else:
                 result.append(TagInfo(tag_data.name, tag_data.target_sha, False))
         return result
-
     def remotes(self) -> list[RemoteInfo]:
         """List remotes."""
         return [
             RemoteInfo(name, url, push_url)
             for name, url, push_url in self._access.remotes
         ]
-
     def state(self) -> int:
         """Repository state."""
         return self._access.state()
-
     def current_branch(self) -> str | None:
         """Current branch name, or None if detached or unborn."""
         return self._access.current_branch_name()
-
     def default_branch(self) -> str:
         """Resolve the repo's default branch name.
 
@@ -310,14 +291,12 @@ class GitOps:
                 continue  # try next candidate branch name
 
         return "main"
-
     def tracked_files(self) -> list[str]:
         """List all files tracked in the git index."""
         result = self._access.git.run("ls-files")
         return [line for line in result.stdout.strip().splitlines() if line]
 
     # Write Operations
-
     def stage(self, paths: Sequence[str | Path]) -> None:
         """Stage files."""
         status = self._access.status()
@@ -328,7 +307,6 @@ class GitOps:
                 self._access.index.add(p)
             elif flags & STATUS_WT_DELETED:
                 self._access.index.remove(p)
-
     def stage_all(self) -> list[str]:
         """Stage all changed files. Returns list of staged paths."""
         status = self._access.status()
@@ -341,7 +319,6 @@ class GitOps:
                 self._access.index.remove(path)
                 staged.append(path)
         return staged
-
     def unstage(self, paths: Sequence[str | Path]) -> None:
         """Unstage files (keeps working tree changes)."""
         if self._access.is_unborn:
@@ -352,7 +329,6 @@ class GitOps:
         head_tree_sha = self._access.must_head_tree()
         for p in paths:
             self._access.index_reset_entry(self._access.normalize_path(p), head_tree_sha)
-
     def discard(self, paths: Sequence[str | Path]) -> None:
         """Discard working tree changes, restoring files to index state."""
         for p in paths:
@@ -364,12 +340,10 @@ class GitOps:
             elif full_path.exists():
                 # Untracked file not in index - delete it
                 full_path.unlink()
-
     def commit(self, message: str, allow_empty: bool = False) -> str:
         """Create commit from staged changes. Returns commit sha."""
         check_nothing_to_commit(self._access, allow_empty)
         return self._flows.commit_from_index(message)
-
     def amend(self, message: str | None = None) -> str:
         """Amend the most recent commit. Returns commit sha."""
         require_not_unborn(self._access, "amend")
@@ -387,7 +361,6 @@ class GitOps:
         )
         self._access.reset(oid, RESET_SOFT)
         return oid
-
     def create_branch(self, name: str, ref: str = "HEAD") -> BranchInfo:
         """Create branch."""
         if self._access.has_local_branch(name):
@@ -395,14 +368,12 @@ class GitOps:
         target_sha = self._access.resolve_ref_oid(ref)
         branch_data = self._access.create_local_branch(name, target_sha)
         return BranchInfo.from_git(branch_data)
-
     def checkout(self, ref: str, create: bool = False) -> None:
         """Checkout branch or ref."""
         if create:
             self.create_branch(ref)
         plan = self._checkout_planner.plan(ref)
         self._checkout_planner.execute(plan)
-
     def delete_branch(self, name: str, force: bool = False) -> None:
         """Delete branch."""
         require_branch_exists(self._access, name)
@@ -412,7 +383,6 @@ class GitOps:
         if not force and not self._access.descendant_of(self._head_sha(), branch_sha):
             raise UnmergedBranchError(name)
         self._access.delete_branch(name)
-
     def rename_branch(self, old_name: str, new_name: str) -> BranchInfo:
         """Rename a branch."""
         require_branch_exists(self._access, old_name)
@@ -422,7 +392,6 @@ class GitOps:
         self._access.git.run("branch", "-m", old_name, new_name)
         branch_data = self._access.must_local_branch(new_name)
         return BranchInfo.from_git(branch_data)
-
     def reset(self, ref: str, mode: str = "mixed") -> None:
         """Reset HEAD. mode: 'soft', 'mixed', or 'hard'."""
         modes = {"soft": RESET_SOFT, "mixed": RESET_MIXED, "hard": RESET_HARD}
@@ -432,7 +401,6 @@ class GitOps:
             )
         sha = self._access.resolve_ref_oid(ref)
         self._access.reset(sha, modes[mode])
-
     def merge(self, ref: str) -> MergeResult:
         """Merge ref. Returns MergeResult with success, commit_sha, conflict_paths."""
         their_sha = self._access.resolve_ref_oid(ref)
@@ -459,12 +427,10 @@ class GitOps:
 
             sha = self._flows.write_tree_and_commit(f"Merge {ref}", [head_sha, their_sha])
             return MergeResult(True, sha)
-
     def abort_merge(self) -> None:
         """Abort in-progress merge."""
         self._access.state_cleanup()
         self._access.reset(self._head_sha(), RESET_HARD)
-
     def merge_analysis(self, ref: str) -> MergeAnalysis:
         """Analyze potential merge."""
         their_sha = self._access.resolve_ref_oid(ref)
@@ -474,7 +440,6 @@ class GitOps:
             fastforward_possible=bool(analysis & MERGE_FASTFORWARD),
             conflicts_likely=bool(analysis & MERGE_NORMAL),
         )
-
     def cherrypick(self, ref: str) -> OperationResult:
         """Cherry-pick a commit."""
         commit = self._access.resolve_commit(ref)
@@ -488,7 +453,6 @@ class GitOps:
 
             self._flows.write_tree_and_commit(commit.message, [head_sha], author=commit.author)
             return OperationResult(True)
-
     def revert(self, ref: str) -> OperationResult:
         """Revert a commit."""
         commit = self._access.resolve_commit(ref)
@@ -503,11 +467,9 @@ class GitOps:
             message = f'Revert "{first_line(commit.message)}"'
             self._flows.write_tree_and_commit(message, [head_sha])
             return OperationResult(True)
-
     def stash_push(self, message: str | None = None, include_untracked: bool = False) -> str:
         """Stash changes. Returns stash commit sha."""
         return self._access.stash(message, include_untracked=include_untracked)
-
     def stash_pop(self, index: int = 0) -> None:
         """Pop stash entry."""
         stashes = self._access.listall_stashes()
@@ -515,14 +477,12 @@ class GitOps:
             raise StashNotFoundError(index)
         self._access.stash_apply(index)
         self._access.stash_drop(index)
-
     def stash_list(self) -> list[StashEntry]:
         """List stash entries."""
         return [
             StashEntry(i, s.message, s.commit_id)
             for i, s in enumerate(self._access.listall_stashes())
         ]
-
     def create_tag(self, name: str, ref: str = "HEAD", message: str | None = None) -> str:
         """Create tag. Returns target sha."""
         target_sha = self._access.resolve_ref_oid(ref)
@@ -531,18 +491,15 @@ class GitOps:
             return target_sha
         self._access.create_reference(make_tag_ref(name), target_sha)
         return target_sha
-
     def delete_tag(self, name: str) -> None:
         """Delete tag."""
         ref = make_tag_ref(name)
         if not self._access.has_reference(ref):
             raise RefNotFoundError(name)
         self._access.delete_reference(ref)
-
     def fetch(self, remote: str = "origin", callbacks: object | None = None) -> None:
         """Fetch from remote with retry for transient network failures."""
         self._fetch_with_retry(remote)
-
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
@@ -553,7 +510,6 @@ class GitOps:
         self._access.run_remote_operation(
             remote, "fetch", ["fetch", remote], timeout=300
         )
-
     def push(
         self,
         remote: str = "origin",
@@ -563,7 +519,6 @@ class GitOps:
         """Push current branch to remote with retry."""
         branch = require_current_branch(self._access, "push")
         self._push_with_retry(remote, branch, force)
-
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
@@ -575,7 +530,6 @@ class GitOps:
         if force:
             cmd.insert(1, "--force")
         self._access.run_remote_operation(remote, "push", cmd, timeout=300)
-
     def pull(
         self,
         remote: str = "origin",
@@ -605,7 +559,6 @@ class GitOps:
         )
 
     # Worktree Operations
-
     def worktrees(self) -> list[WorktreeInfo]:
         """List all worktrees including main working directory."""
         result: list[WorktreeInfo] = []
@@ -676,7 +629,6 @@ class GitOps:
             )
 
         return result
-
     def worktree_add(self, path: Path, ref: str, checkout: bool = True) -> GitOps:  # noqa: ARG002
         """Add worktree at path for ref. Returns GitOps for new worktree."""
         if not self._access.has_local_branch(ref):
@@ -699,14 +651,12 @@ class GitOps:
 
         self._access.add_worktree(name, str(path), ref)
         return GitOps(path)
-
     def worktree_open(self, name: str) -> GitOps:
         """Get GitOps instance for existing worktree by name."""
         if name not in self._access.list_worktrees():
             raise WorktreeNotFoundError(name)
         wt_path = self._access.worktree_path(name)
         return GitOps(wt_path)
-
     def worktree_remove(self, name: str, force: bool = False) -> None:
         """Remove worktree."""
         if name not in self._access.list_worktrees():
@@ -720,7 +670,6 @@ class GitOps:
             self._access.remove_worktree(name, force)
         except (OSError, subprocess.SubprocessError) as e:
             raise WorktreeError(f"Failed to remove worktree '{name}': {e}") from e
-
     def worktree_lock(self, name: str, reason: str | None = None) -> None:
         """Lock worktree to prevent pruning."""
         if name not in self._access.list_worktrees():
@@ -738,7 +687,6 @@ class GitOps:
             atomic_write_text(lock_file, reason or "")
         except OSError as e:
             raise WorktreeError(f"Failed to lock worktree {name}: {e}") from e
-
     def worktree_unlock(self, name: str) -> None:
         """Unlock worktree."""
         if name not in self._access.list_worktrees():
@@ -747,7 +695,6 @@ class GitOps:
         lock_file = self._access.worktree_gitdir(name) / "locked"
         if lock_file.exists():
             lock_file.unlink()
-
     def worktree_prune(self) -> list[str]:
         """Remove stale worktree entries. Returns pruned names."""
         pruned = []
@@ -757,11 +704,9 @@ class GitOps:
                 pruned.append(name)
                 break  # Prune removes all stale at once
         return pruned
-
     def is_worktree(self) -> bool:
         """True if this GitOps is for a worktree (not main working directory)."""
         return self._access.is_worktree()
-
     def worktree_info(self) -> WorktreeInfo | None:
         """Get info about this worktree, or None if main working directory."""
         if not self.is_worktree():
@@ -781,7 +726,6 @@ class GitOps:
         )
 
     # Submodule Operations
-
     def submodules(self) -> list[SubmoduleInfo]:
         """List all submodules with status."""
         result = []
@@ -811,7 +755,6 @@ class GitOps:
                     )
                 )
         return result
-
     def _determine_submodule_status(self, sm: dict) -> SubmoduleState:
         """Determine submodule status."""
         sm_path = self._access.path / sm["path"]
@@ -842,7 +785,6 @@ class GitOps:
             return "clean"
         except (subprocess.SubprocessError, OSError):
             return "missing"
-
     def submodule_status(self, path: str) -> SubmoduleStatus:
         """Detailed status for one submodule."""
         try:
@@ -900,7 +842,6 @@ class GitOps:
             recorded_sha=sm.get("head_id", ""),
             actual_sha=actual_sha,
         )
-
     def submodule_init(self, paths: Sequence[str] | None = None) -> list[str]:
         """Initialize submodules."""
         initialized = []
@@ -925,7 +866,6 @@ class GitOps:
                     log.debug("submodule_init_failed", path=path, exc_info=True)
 
         return initialized
-
     def submodule_update(
         self,
         paths: Sequence[str] | None = None,
@@ -975,7 +915,6 @@ class GitOps:
                 failed=(("*", "Operation timed out"),),
                 already_current=(),
             )
-
     def submodule_sync(self, paths: Sequence[str] | None = None) -> None:
         """Sync submodule URLs from .gitmodules to .git/config."""
         cmd = ["git", "submodule", "sync"]
@@ -995,7 +934,6 @@ class GitOps:
         except subprocess.CalledProcessError as exc:
             stderr = exc.stderr or ""
             raise SubmoduleError(f"Failed to sync submodules: {stderr.strip()}") from exc
-
     def submodule_add(self, url: str, path: str, branch: str | None = None) -> SubmoduleInfo:
         """Add new submodule."""
         cmd = ["git", "submodule", "add"]
@@ -1023,7 +961,6 @@ class GitOps:
             head_sha=sm.get("head_id"),
             status="clean",
         )
-
     def submodule_deinit(self, path: str, force: bool = False) -> None:
         """Deinitialize submodule."""
         cmd = ["git", "submodule", "deinit"]
@@ -1041,7 +978,6 @@ class GitOps:
 
         if result.returncode != 0:
             raise SubmoduleError(f"Failed to deinit submodule: {result.stderr.strip()}")
-
     def submodule_remove(self, path: str) -> None:
         """Fully remove submodule."""
         import shutil
@@ -1092,27 +1028,21 @@ class GitOps:
             shutil.rmtree(modules_path)
 
     # Rebase Operations
-
     def rebase_plan(self, upstream: str, onto: str | None = None) -> RebasePlan:
         """Generate default rebase plan."""
         return self._rebase_planner.plan(upstream, onto)
-
     def rebase_execute(self, plan: RebasePlan) -> RebaseResult:
         """Execute rebase plan."""
         return self._rebase_flow.execute(plan)
-
     def rebase_continue(self) -> RebaseResult:
         """Resume after conflict resolution or edit completion."""
         return self._rebase_flow.continue_rebase()
-
     def rebase_abort(self) -> None:
         """Abort and restore original state."""
         self._rebase_flow.abort()
-
     def rebase_skip(self) -> RebaseResult:
         """Skip current commit and continue."""
         return self._rebase_flow.skip()
-
     def rebase_in_progress(self) -> bool:
         """Check if a rebase is in progress."""
         return self._rebase_flow.has_rebase_in_progress()

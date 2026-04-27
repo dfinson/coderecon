@@ -84,7 +84,6 @@ def detect_python_venv(workspace_root: Path) -> Path | None:
                 return venv_path
     return None
 
-
 def get_python_executable(workspace_root: Path) -> str:
     """Get Python executable, preferring venv if present."""
     venv = detect_python_venv(workspace_root)
@@ -107,7 +106,6 @@ _coverage_tools_cache: dict[tuple[Path, str], dict[str, bool]] = {}
 def clear_coverage_tools_cache() -> None:
     """Clear the coverage tools cache. Useful for testing."""
     _coverage_tools_cache.clear()
-
 
 def detect_coverage_tools(
     workspace_root: Path,
@@ -182,7 +180,6 @@ def detect_coverage_tools(
     _coverage_tools_cache[cache_key] = tools
     return tools
 
-
 def detect_node_package_manager(workspace_root: Path) -> str:
     """Detect which Node package manager to use."""
     if (workspace_root / "pnpm-lock.yaml").exists():
@@ -192,7 +189,6 @@ def detect_node_package_manager(workspace_root: Path) -> str:
     if (workspace_root / "bun.lockb").exists():
         return "bun"
     return "npm"
-
 
 def _default_parallelism() -> int:
     """Compute default parallelism based on CPU count."""
@@ -207,12 +203,9 @@ def _default_parallelism() -> int:
 @dataclass
 class DetectedWorkspace:
     """A detected workspace with its runner pack."""
-
     root: Path
     pack: RunnerPack
     confidence: float
-
-
 def _is_prunable_path(rel_path: Path) -> bool:
     """Check if relative path contains any prunable directory components.
 
@@ -228,7 +221,6 @@ def _is_prunable_path(rel_path: Path) -> bool:
         if part in PRUNABLE_DIRS:
             return True
     return False
-
 
 def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
     """Detect all workspaces and their runners in a repo.
@@ -399,7 +391,6 @@ def _os_script_path(unix_path: str) -> str:
         return base.replace("/", "\\")
     return unix_path
 
-
 def _classify_result_error(
     result: ParsedTestSuite,
     output_path: Path,
@@ -419,14 +410,12 @@ def _classify_result_error(
         result.error_detail = f"Command exited with code {exit_code}"
         result.errors = 1
 
-
 class TestOps:
     """Test discovery and execution operations.
 
     Uses runner packs for detection-driven execution.
     Leverages the index for context-aware workspace detection.
     """
-
     def __init__(
         self,
         repo_root: Path,
@@ -1582,7 +1571,6 @@ class TestOps:
             ), None
         finally:
             safe_ctx.cleanup()
-
     def _persist_result(self, artifact_dir: Path, status: TestRunStatus) -> None:
         """Persist test run result to artifact directory."""
         result_path = artifact_dir / "result.json"
@@ -1638,7 +1626,6 @@ class TestOps:
             "target_selectors": status.target_selectors,
         }
         atomic_write_text(result_path, json.dumps(result_data, indent=2))
-
     def _load_result(self, artifact_dir: Path) -> TestRunStatus | None:
         """Load test run result from artifact directory."""
         result_path = artifact_dir / "result.json"

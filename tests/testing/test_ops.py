@@ -1,5 +1,4 @@
 """Comprehensive tests for TestOps operations."""
-
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -43,26 +42,20 @@ def create_mock_coordinator() -> MagicMock:
 
 class TestIsPrunablePath:
     """Tests for the prunable path checker."""
-
     def test_node_modules_is_prunable(self) -> None:
         assert _is_prunable_path(Path("src/node_modules/lib")) is True
-
     def test_venv_is_prunable(self) -> None:
         assert _is_prunable_path(Path(".venv/lib")) is True
         assert _is_prunable_path(Path("venv/lib")) is True
-
     def test_packages_at_root_not_prunable(self) -> None:
         # packages at root level is a common JS monorepo pattern
         assert _is_prunable_path(Path("packages/app")) is False
-
     def test_nested_packages_prunable(self) -> None:
         # packages nested in prunable dir is prunable
         assert _is_prunable_path(Path("node_modules/packages")) is True
-
     def test_normal_path_not_prunable(self) -> None:
         assert _is_prunable_path(Path("src/app")) is False
         assert _is_prunable_path(Path("tests/unit")) is False
-
 
 # =============================================================================
 # detect_workspaces()
@@ -71,7 +64,6 @@ class TestIsPrunablePath:
 
 class TestDetectWorkspaces:
     """Tests for workspace detection."""
-
     def test_single_workspace(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -84,7 +76,6 @@ class TestDetectWorkspaces:
             assert isinstance(ws, DetectedWorkspace)
             assert ws.root == root
             assert ws.pack.pack_id == "python.pytest"
-
     def test_detects_js_packages_monorepo(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -101,7 +92,6 @@ class TestDetectWorkspaces:
             assert len(workspaces) >= 1
             pack_ids = {ws.pack.pack_id for ws in workspaces}
             assert "js.jest" in pack_ids
-
     def test_ignores_node_modules(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -115,7 +105,6 @@ class TestDetectWorkspaces:
             # Should only find root, not node_modules
             paths = [ws.root for ws in workspaces]
             assert all("node_modules" not in str(p) for p in paths)
-
     def test_returns_detected_workspace_objects(self) -> None:
         """Workspaces should be DetectedWorkspace objects."""
         with TemporaryDirectory() as tmpdir:
@@ -130,13 +119,11 @@ class TestDetectWorkspaces:
                 assert hasattr(ws, "root")
                 assert hasattr(ws, "pack")
                 assert hasattr(ws, "confidence")
-
     def test_empty_directory(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             workspaces = detect_workspaces(root)
             assert workspaces == []
-
     def test_deduplicates_by_root_and_pack(self) -> None:
         """Same root/pack should not appear twice."""
         with TemporaryDirectory() as tmpdir:
@@ -150,7 +137,6 @@ class TestDetectWorkspaces:
             # Should deduplicate
             keys = [(ws.root, ws.pack.pack_id) for ws in workspaces]
             assert len(keys) == len(set(keys))
-
     def test_npm_workspaces_array_format(self) -> None:
         """Test npm workspaces with array format."""
         with TemporaryDirectory() as tmpdir:
@@ -166,7 +152,6 @@ class TestDetectWorkspaces:
 
             pack_ids = {ws.pack.pack_id for ws in workspaces}
             assert "js.jest" in pack_ids
-
     def test_npm_workspaces_object_format(self) -> None:
         """Test npm workspaces with object format."""
         with TemporaryDirectory() as tmpdir:
@@ -185,7 +170,6 @@ class TestDetectWorkspaces:
             pack_ids = {ws.pack.pack_id for ws in workspaces}
             assert "js.vitest" in pack_ids
 
-
 # =============================================================================
 # DetectedWorkspace
 # =============================================================================
@@ -193,7 +177,6 @@ class TestDetectWorkspaces:
 
 class TestDetectedWorkspace:
     """Tests for DetectedWorkspace dataclass."""
-
     def test_create(self) -> None:
         pack_class = runner_registry.get("python.pytest")
         assert pack_class is not None
@@ -209,7 +192,6 @@ class TestDetectedWorkspace:
         assert ws.pack.pack_id == "python.pytest"
         assert ws.confidence == 0.95
 
-
 # =============================================================================
 # TestOps.discover()
 # =============================================================================
@@ -221,7 +203,6 @@ class TestTestOpsDiscover:
     Note: discover() is now index-first. Tests mock the coordinator to return
     indexed test targets rather than expecting filesystem discovery.
     """
-
     @pytest.mark.asyncio
     async def test_discover_returns_test_result(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -249,7 +230,6 @@ class TestTestOpsDiscover:
             assert result.action == "discover"
             assert result.targets is not None
             assert len(result.targets) == 1
-
     @pytest.mark.asyncio
     async def test_discover_with_paths_filter(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -285,7 +265,6 @@ class TestTestOpsDiscover:
             # Should filter to just test_a
             assert len(result.targets) == 1  # type: ignore
             assert result.targets[0].selector == "tests/test_a.py"  # type: ignore
-
     @pytest.mark.asyncio
     async def test_discover_empty_repo_provides_agentic_hint(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -302,7 +281,6 @@ class TestTestOpsDiscover:
             # With no indexed targets, should have agentic hint
             assert result.agentic_hint is not None
             assert result.targets == []
-
     @pytest.mark.asyncio
     async def test_discover_queries_index(self) -> None:
         """Test that discover queries the index for test targets."""
@@ -317,7 +295,6 @@ class TestTestOpsDiscover:
             assert result.action == "discover"
             # Should have called get_test_targets
             coordinator.get_test_targets.assert_called_once()
-
     @pytest.mark.asyncio
     async def test_discover_index_first_no_filesystem_fallback(self) -> None:
         """Test that discover does not fall back to filesystem - index is authoritative."""
@@ -342,7 +319,6 @@ class TestTestOpsDiscover:
             # Should provide agentic hint when no targets found
             assert result.agentic_hint is not None
 
-
 # =============================================================================
 # TestOps._generate_agentic_hint()
 # =============================================================================
@@ -350,7 +326,6 @@ class TestTestOpsDiscover:
 
 class TestAgenticHint:
     """Tests for agentic hint generation."""
-
     @pytest.mark.asyncio
     async def test_hint_includes_python(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -362,7 +337,6 @@ class TestAgenticHint:
             hint = await ops._generate_agentic_hint()
 
             assert "pytest" in hint.lower()
-
     @pytest.mark.asyncio
     async def test_hint_includes_javascript(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -374,7 +348,6 @@ class TestAgenticHint:
             hint = await ops._generate_agentic_hint()
 
             assert "npm test" in hint.lower() or "jest" in hint.lower()
-
     @pytest.mark.asyncio
     async def test_hint_includes_go(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -386,7 +359,6 @@ class TestAgenticHint:
             hint = await ops._generate_agentic_hint()
 
             assert "go test" in hint.lower()
-
     @pytest.mark.asyncio
     async def test_hint_includes_rust(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -398,7 +370,6 @@ class TestAgenticHint:
             hint = await ops._generate_agentic_hint()
 
             assert "cargo test" in hint.lower()
-
     @pytest.mark.asyncio
     async def test_hint_multiple_languages(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -411,7 +382,6 @@ class TestAgenticHint:
 
             assert "pytest" in hint.lower()
             assert "go test" in hint.lower()
-
     @pytest.mark.asyncio
     async def test_hint_no_languages(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -423,7 +393,6 @@ class TestAgenticHint:
             hint = await ops._generate_agentic_hint()
 
             assert "no test framework detected" in hint.lower()
-
     @pytest.mark.asyncio
     async def test_hint_handles_index_error(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -438,7 +407,6 @@ class TestAgenticHint:
             assert hint is not None
             assert "no test framework detected" in hint.lower()
 
-
 # =============================================================================
 # TestOps.run()
 # =============================================================================
@@ -450,7 +418,6 @@ class TestTestOpsRun:
     Note: run() is now blocking and index-first. Tests mock the coordinator
     to return indexed test targets. run() always awaits test completion.
     """
-
     @pytest.mark.asyncio
     async def test_run_returns_completed_status(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -479,7 +446,6 @@ class TestTestOpsRun:
             # Blocking run returns terminal status
             assert result.run_status.status in ("completed", "failed")
             assert result.run_status.run_id is not None
-
     @pytest.mark.asyncio
     async def test_run_creates_artifact_directory(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -505,7 +471,6 @@ class TestTestOpsRun:
             artifact_dir = result.run_status.artifact_dir
             assert artifact_dir is not None
             assert Path(artifact_dir).exists()
-
     @pytest.mark.asyncio
     async def test_run_with_specific_targets(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -532,7 +497,6 @@ class TestTestOpsRun:
             assert result.action == "run"
             assert result.run_status is not None
 
-
 # =============================================================================
 # TestOps._persist_result() and _load_result()
 # =============================================================================
@@ -540,7 +504,6 @@ class TestTestOpsRun:
 
 class TestPersistAndLoadResult:
     """Tests for result persistence."""
-
     def test_persist_and_load_roundtrip(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -573,7 +536,6 @@ class TestPersistAndLoadResult:
             assert loaded.progress is not None
             assert loaded.progress.targets.total == 3
             assert loaded.progress.cases.passed == 8
-
     def test_load_result_returns_none_for_missing_file(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -585,7 +547,6 @@ class TestPersistAndLoadResult:
             loaded = ops._load_result(artifact_dir)
 
             assert loaded is None
-
     def test_load_result_returns_none_for_invalid_json(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -600,7 +561,6 @@ class TestPersistAndLoadResult:
 
             assert loaded is None
 
-
 # =============================================================================
 # Integration-style tests for detect_workspaces
 # =============================================================================
@@ -608,7 +568,6 @@ class TestPersistAndLoadResult:
 
 class TestDetectWorkspacesIntegration:
     """Integration-style tests for workspace detection."""
-
     def test_detect_multiple_languages(self) -> None:
         """Detect workspaces across multiple languages."""
         with TemporaryDirectory() as tmpdir:
@@ -625,7 +584,6 @@ class TestDetectWorkspacesIntegration:
             pack_ids = {ws.pack.pack_id for ws in workspaces}
             assert "python.pytest" in pack_ids
             assert "go.gotest" in pack_ids
-
     def test_detect_pnpm_workspaces(self) -> None:
         """Detect pnpm workspace packages."""
         with TemporaryDirectory() as tmpdir:
@@ -642,7 +600,6 @@ class TestDetectWorkspacesIntegration:
             # Should detect vitest in apps/web
             pack_ids = {ws.pack.pack_id for ws in workspaces}
             assert "js.vitest" in pack_ids
-
     def test_confidence_preserved(self) -> None:
         """Confidence scores should be preserved."""
         with TemporaryDirectory() as tmpdir:

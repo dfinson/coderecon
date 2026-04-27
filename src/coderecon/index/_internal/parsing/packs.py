@@ -25,11 +25,8 @@ from dataclasses import dataclass, field
 @dataclass(frozen=True)
 class SymbolPattern:
     """Maps a query pattern index to symbol extraction metadata."""
-
     kind: str
     nested_kind: str | None = None  # Kind when inside a container
-
-
 @dataclass(frozen=True)
 class SymbolQueryConfig:
     """Query configuration for symbol extraction in a language.
@@ -43,8 +40,6 @@ class SymbolQueryConfig:
     container_name_field: str = "name"
     params_from_children: bool = False
     body_node_types: frozenset[str] = frozenset({"block", "body", "class_body"})
-
-
 @dataclass(frozen=True)
 class TypeExtractionConfig:
     """Configuration for query-based type extraction.
@@ -82,7 +77,6 @@ class TypeExtractionConfig:
     array_patterns: tuple[str, ...] = ()
     generic_indicator: str = "<"
     reference_indicator: str = ""
-
 
 # Declarative extraction configs (replace per-language Python handlers)
 
@@ -126,8 +120,6 @@ class ImportQueryConfig:
     kind_from_capture_map: dict[str, str] = field(default_factory=dict)
     # For languages where @node.text IS the import text (Scala flat AST)
     source_from_node_text: bool = False
-
-
 @dataclass(frozen=True)
 class DeclaredModuleQueryConfig:
     """Declarative module/package declaration extraction.
@@ -140,8 +132,6 @@ class DeclaredModuleQueryConfig:
     query: str = ""
     module_capture: str = "module_name"
     use_file_path: bool = False
-
-
 @dataclass(frozen=True)
 class DynamicQueryConfig:
     """Declarative dynamic-access-pattern extraction.
@@ -157,12 +147,9 @@ class DynamicQueryConfig:
     query: str
     pattern_types: dict[int, str]
     literal_capture: str = "literal"
-
-
 @dataclass(frozen=True)
 class LanguagePack:
     """Complete tree-sitter configuration for a single language."""
-
     # -- Identity --
     name: str  # Canonical language name ("python", "typescript", ...)
     grammar_name: str  # tree-sitter grammar module key ("c_sharp", "tsx", ...)
@@ -206,7 +193,6 @@ class LanguagePack:
 
     # -- Declarative dynamic detection (replaces dynamic_query + handler) --
     dynamic_config: DynamicQueryConfig | None = None
-
 
 # Scope type mappings
 
@@ -3241,7 +3227,6 @@ def get_pack_for_ext(ext: str) -> LanguagePack | None:
     """Get a LanguagePack for a file extension (without leading dot)."""
     return _EXT_TO_PACK.get(ext.lower())
 
-
 def get_pack_for_filename(filename: str) -> LanguagePack | None:
     """Get a LanguagePack for a filename (case-insensitive)."""
     name_lower = filename.lower()
@@ -3251,7 +3236,6 @@ def get_pack_for_filename(filename: str) -> LanguagePack | None:
     if name_lower.startswith("dockerfile"):
         return DOCKERFILE_PACK
     return None
-
 
 def get_pack(name: str) -> LanguagePack | None:
     """Get a LanguagePack by language name."""

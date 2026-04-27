@@ -33,7 +33,6 @@ def rel(path: Path, root: Path) -> str:
     """Get relative path string for index_files."""
     return str(path.relative_to(root))
 
-
 @pytest.fixture
 def test_db(tmp_path: Path) -> Generator[Database, None, None]:
     """Create a test database with schema and context."""
@@ -55,10 +54,8 @@ def test_db(tmp_path: Path) -> Generator[Database, None, None]:
 
     yield db
 
-
 class TestFullIndexingPipeline:
     """Integration tests for the complete indexing flow."""
-
     def test_index_simple_python_file(
         self,
         test_db: Database,
@@ -70,18 +67,14 @@ class TestFullIndexingPipeline:
         src_dir.mkdir()
         main_py = src_dir / "main.py"
         main_py.write_text('''"""Main module."""
-
 def greet(name: str) -> str:
     """Return a greeting."""
     message = f"Hello, {name}!"
     return message
-
 class Greeter:
     """A greeter class."""
-
     def __init__(self, prefix: str) -> None:
         self.prefix = prefix
-
     def greet(self, name: str) -> str:
         return f"{self.prefix} {name}"
 
@@ -111,7 +104,6 @@ if __name__ == "__main__":
             # Should have class definition
             class_defs = facts.list_defs_by_name(unit_id=1, name="Greeter", limit=10)
             assert len(class_defs) >= 1
-
     def test_index_multi_file_project(
         self,
         test_db: Database,
@@ -129,13 +121,10 @@ if __name__ == "__main__":
         # core.py
         core_py = pkg_dir / "core.py"
         core_py.write_text('''"""Core module."""
-
 class Calculator:
     """A simple calculator."""
-
     def add(self, a: int, b: int) -> int:
         return a + b
-
     def subtract(self, a: int, b: int) -> int:
         return a - b
 ''')
@@ -175,7 +164,6 @@ if __name__ == "__main__":
             # Should have import facts
             imports = session.exec(select(ImportFact)).all()
             assert len(imports) >= 1
-
     def test_incremental_index_update(
         self,
         test_db: Database,
@@ -201,7 +189,6 @@ if __name__ == "__main__":
         # Modify file
         test_py.write_text("""def modified_func():
     pass
-
 def new_func():
     return 42
 """)
@@ -214,7 +201,6 @@ def new_func():
             # Should have new function
             new_defs = session.exec(select(DefFact).where(DefFact.name == "new_func")).all()
             assert len(new_defs) >= 1
-
     def test_scope_extraction(
         self,
         test_db: Database,
@@ -226,7 +212,6 @@ def new_func():
     class Inner:
         def method(self):
             x = 1
-
             def nested():
                 y = 2
                 return y
@@ -242,7 +227,6 @@ def new_func():
         with test_db.session() as session:
             scopes = session.exec(select(ScopeFact)).all()
             assert len(scopes) >= 3
-
     def test_reference_extraction(
         self,
         test_db: Database,
@@ -254,7 +238,6 @@ def new_func():
     x = 1
     y = x + 1
     return y
-
 class MyClass:
     def method(self):
         self.value = 10
@@ -266,10 +249,8 @@ class MyClass:
 
         assert result.refs_extracted >= 1
 
-
 class TestLexicalIndex:
     """Integration tests for Tantivy lexical index."""
-
     def test_index_and_search(
         self,
         test_db: Database,
@@ -284,14 +265,12 @@ class TestLexicalIndex:
 
         file1 = src_dir / "module_a.py"
         file1.write_text('''"""Module A with unique_identifier_abc."""
-
 def unique_identifier_abc():
     return "hello"
 ''')
 
         file2 = src_dir / "module_b.py"
         file2.write_text('''"""Module B with different content."""
-
 def another_function():
     return "world"
 ''')
@@ -335,7 +314,6 @@ def another_function():
         search_results = lexical_index.search("unique_identifier_abc", limit=10)
         assert len(search_results.results) >= 1
         assert any("module_a" in r.file_path for r in search_results.results)
-
     def test_delete_and_reindex(
         self,
         test_db: Database,
@@ -388,10 +366,8 @@ def another_function():
         new_results = lexical_index.search("new_function", limit=10)
         assert len(new_results.results) >= 1
 
-
 class TestFactQueries:
     """Integration tests for bounded fact queries."""
-
     def test_list_defs_respects_limit(
         self,
         test_db: Database,
@@ -412,7 +388,6 @@ class TestFactQueries:
 
             assert len(limited_defs) <= 5
             assert len(all_defs) >= 20
-
     def test_get_def_by_uid(
         self,
         test_db: Database,
@@ -434,11 +409,8 @@ class TestFactQueries:
             def_fact = facts.get_def(defs[0].def_uid)
             assert def_fact is not None
             assert def_fact.name == "my_function"
-
-
 class TestRealWorldPatterns:
     """Tests for common real-world code patterns."""
-
     def test_decorator_functions(
         self,
         test_db: Database,
@@ -447,13 +419,11 @@ class TestRealWorldPatterns:
         """Test indexing decorated functions."""
         test_py = tmp_path / "decorators.py"
         test_py.write_text("""from functools import wraps
-
 def my_decorator(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
     return wrapper
-
 @my_decorator
 def decorated_function():
     return "decorated"
@@ -463,7 +433,6 @@ def decorated_function():
         result = indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
 
         assert result.defs_extracted >= 3  # decorator, wrapper, decorated
-
     def test_async_functions(
         self,
         test_db: Database,
@@ -491,7 +460,6 @@ async def main():
             facts = FactQueries(session)
             async_defs = facts.list_defs_by_name(unit_id=1, name="fetch_data", limit=10)
             assert len(async_defs) >= 1
-
     def test_dataclass_patterns(
         self,
         test_db: Database,
@@ -507,10 +475,8 @@ class Person:
     name: str
     age: int
     tags: List[str] = field(default_factory=list)
-
     def greet(self) -> str:
         return f"Hello, I am {self.name}"
-
 @dataclass(frozen=True)
 class Point:
     x: float
@@ -529,7 +495,6 @@ class Point:
 
             point = facts.list_defs_by_name(unit_id=1, name="Point", limit=1)
             assert len(point) >= 1
-
     def test_type_hints_and_generics(
         self,
         test_db: Database,
@@ -546,10 +511,8 @@ V = TypeVar("V")
 class Container(Generic[T]):
     def __init__(self, value: T) -> None:
         self.value = value
-
     def get(self) -> T:
         return self.value
-
 def process(
     items: list[int],
     callback: Callable[[int], str],
@@ -564,7 +527,6 @@ def process(
         result = indexer.index_files([rel(test_py, tmp_path)], context_id=1, worktree_id=1)
 
         assert result.defs_extracted >= 2
-
     def test_context_managers(
         self,
         test_db: Database,
@@ -582,15 +544,12 @@ def managed_resource(name: str) -> Generator[str, None, None]:
         yield name
     finally:
         print(f"Releasing {name}")
-
 class FileManager:
     def __init__(self, path: str) -> None:
         self.path = path
-
     def __enter__(self):
         print(f"Opening {self.path}")
         return self
-
     def __exit__(self, exc_type, exc_val, exc_tb):
         print(f"Closing {self.path}")
         return False
@@ -609,7 +568,6 @@ class FileManager:
             # Should find class-based context manager
             fm = facts.list_defs_by_name(unit_id=1, name="FileManager", limit=1)
             assert len(fm) >= 1
-
     def test_module_level_code(
         self,
         test_db: Database,

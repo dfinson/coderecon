@@ -45,7 +45,6 @@ log = structlog.get_logger(__name__)
 @runner_registry.register
 class PytestPack(RunnerPack):
     """Python pytest runner."""
-
     pack_id = "python.pytest"
     language = "python"
     runner_name = "pytest"
@@ -63,7 +62,6 @@ class PytestPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=True,
     )
-
     def detect(self, workspace_root: Path) -> float:
         if (workspace_root / "pytest.ini").exists():
             return 1.0
@@ -115,7 +113,6 @@ class PytestPack(RunnerPack):
                     )
                 )
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -144,7 +141,6 @@ class PytestPack(RunnerPack):
         if tags:
             cmd.extend(["-m", " or ".join(tags)])
         return cmd
-
     def build_batch_command(
         self,
         targets: list[TestTarget],
@@ -178,7 +174,6 @@ class PytestPack(RunnerPack):
         if tags:
             cmd.extend(["-m", " or ".join(tags)])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
 
@@ -186,14 +181,12 @@ class PytestPack(RunnerPack):
             return parse_junit_xml(output_path.read_text())
         return ParsedTestSuite(name="pytest", errors=1)
 
-
 # JavaScript/TypeScript - Jest
 
 
 @runner_registry.register
 class JestPack(RunnerPack):
     """JavaScript/TypeScript Jest runner."""
-
     pack_id = "js.jest"
     language = "javascript"
     runner_name = "jest"
@@ -212,7 +205,6 @@ class JestPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=True,  # Via jest-junit reporter
     )
-
     def detect(self, workspace_root: Path) -> float:
         for config in ["jest.config.js", "jest.config.ts", "jest.config.json", "jest.config.mjs"]:
             if (workspace_root / config).exists():
@@ -262,7 +254,6 @@ class JestPack(RunnerPack):
                     )
                 )
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -287,7 +278,6 @@ class JestPack(RunnerPack):
         if pattern:
             cmd.extend(["--testNamePattern", pattern])
         return cmd
-
     def _detect_package_manager(self, root: Path) -> str:
         if (root / "pnpm-lock.yaml").exists():
             return "pnpm"
@@ -296,12 +286,10 @@ class JestPack(RunnerPack):
         if (root / "bun.lockb").exists():
             return "bun"
         return "npx"
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         if output_path.exists():
             return self._parse_jest_json(output_path.read_text())
         return ParsedTestSuite(name="jest", errors=1)
-
     def _parse_jest_json(self, content: str) -> ParsedTestSuite:
         try:
             data = json.loads(content)
@@ -341,14 +329,12 @@ class JestPack(RunnerPack):
             else 0,
         )
 
-
 # JavaScript/TypeScript - Vitest
 
 
 @runner_registry.register
 class VitestPack(RunnerPack):
     """JavaScript/TypeScript Vitest runner."""
-
     pack_id = "js.vitest"
     language = "javascript"
     runner_name = "vitest"
@@ -366,7 +352,6 @@ class VitestPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=True,
     )
-
     def detect(self, workspace_root: Path) -> float:
         for config in ["vitest.config.js", "vitest.config.ts"]:
             if (workspace_root / config).exists():
@@ -415,7 +400,6 @@ class VitestPack(RunnerPack):
                     )
                 )
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -444,7 +428,6 @@ class VitestPack(RunnerPack):
         if pattern:
             cmd.extend(["--testNamePattern", pattern])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
 
@@ -452,14 +435,12 @@ class VitestPack(RunnerPack):
             return parse_junit_xml(output_path.read_text())
         return ParsedTestSuite(name="vitest", errors=1)
 
-
 # Go - go test
 
 
 @runner_registry.register
 class GoTestPack(RunnerPack):
     """Go test runner."""
-
     pack_id = "go.gotest"
     language = "go"
     runner_name = "go test"
@@ -477,7 +458,6 @@ class GoTestPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=False,  # Requires external tool like gotestsum
     )
-
     def detect(self, workspace_root: Path) -> float:
         if (workspace_root / "go.mod").exists():
             return 1.0
@@ -514,7 +494,6 @@ class GoTestPack(RunnerPack):
                 )
             )
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -539,12 +518,10 @@ class GoTestPack(RunnerPack):
         if tags:
             cmd.extend(["-tags", ",".join(tags)])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_go_test_json
 
         return parse_go_test_json(stdout)
-
 
 # Rust - cargo-nextest (preferred) or cargo test
 
@@ -552,7 +529,6 @@ class GoTestPack(RunnerPack):
 @runner_registry.register
 class CargoNextestPack(RunnerPack):
     """Rust cargo-nextest runner (preferred for JUnit output)."""
-
     pack_id = "rust.nextest"
     language = "rust"
     runner_name = "cargo-nextest"
@@ -568,7 +544,6 @@ class CargoNextestPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=True,
     )
-
     def detect(self, workspace_root: Path) -> float:
         if not (workspace_root / "Cargo.toml").exists():
             return 0.0
@@ -632,7 +607,6 @@ class CargoNextestPack(RunnerPack):
         except OSError:
             log.debug("rust_test_discovery_failed", exc_info=True)
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -663,19 +637,15 @@ class CargoNextestPack(RunnerPack):
         if pattern:
             cmd.extend(["--", pattern])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
 
         if output_path.exists():
             return parse_junit_xml(output_path.read_text())
         return ParsedTestSuite(name="cargo-nextest", errors=1)
-
-
 @runner_registry.register
 class CargoTestPack(RunnerPack):
     """Rust cargo test runner (fallback, limited output format)."""
-
     pack_id = "rust.cargo_test"
     language = "rust"
     runner_name = "cargo test"
@@ -692,7 +662,6 @@ class CargoTestPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=False,  # This is why nextest is preferred
     )
-
     def detect(self, workspace_root: Path) -> float:
         if not (workspace_root / "Cargo.toml").exists():
             return 0.0
@@ -709,7 +678,6 @@ class CargoTestPack(RunnerPack):
         for t in targets:
             t.runner_pack_id = self.pack_id
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -733,7 +701,6 @@ class CargoTestPack(RunnerPack):
         if pattern:
             cmd.extend(["--", pattern])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         # Parse coarse output - just count pass/fail from stdout
         lines = stdout.split("\n")
@@ -757,14 +724,12 @@ class CargoTestPack(RunnerPack):
             failed=failed,
         )
 
-
 # Java - Maven Surefire
 
 
 @runner_registry.register
 class MavenSurefirePack(RunnerPack):
     """Java Maven Surefire runner."""
-
     pack_id = "java.maven"
     language = "java"
     runner_name = "mvn test"
@@ -782,7 +747,6 @@ class MavenSurefirePack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=True,  # Native surefire output
     )
-
     def detect(self, workspace_root: Path) -> float:
         if (workspace_root / "pom.xml").exists():
             return 1.0
@@ -831,7 +795,6 @@ class MavenSurefirePack(RunnerPack):
         except OSError:
             log.debug("java_test_discovery_failed", exc_info=True)
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -857,7 +820,6 @@ class MavenSurefirePack(RunnerPack):
         if pattern:
             cmd.extend(["-Dtest=" + pattern])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
 
@@ -885,14 +847,12 @@ class MavenSurefirePack(RunnerPack):
             duration_seconds=total_duration,
         )
 
-
 # Java - Gradle
 
 
 @runner_registry.register
 class GradlePack(RunnerPack):
     """Java Gradle runner."""
-
     pack_id = "java.gradle"
     language = "java"
     runner_name = "gradle test"
@@ -911,7 +871,6 @@ class GradlePack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=True,
     )
-
     def detect(self, workspace_root: Path) -> float:
         if (workspace_root / "build.gradle").exists():
             return 1.0
@@ -967,7 +926,6 @@ class GradlePack(RunnerPack):
                     )
                 )
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -1002,7 +960,6 @@ class GradlePack(RunnerPack):
         if pattern:
             cmd.extend(["--tests", pattern])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
 
@@ -1030,14 +987,12 @@ class GradlePack(RunnerPack):
             duration_seconds=total_duration,
         )
 
-
 # C# - dotnet test
 
 
 @runner_registry.register
 class DotnetTestPack(RunnerPack):
     """C# dotnet test runner."""
-
     pack_id = "csharp.dotnet"
     language = "csharp"
     runner_name = "dotnet test"
@@ -1056,7 +1011,6 @@ class DotnetTestPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=True,  # Via JunitXml.TestLogger nuget
     )
-
     def detect(self, workspace_root: Path) -> float:
         if list(workspace_root.glob("*.sln")):
             return 1.0
@@ -1094,7 +1048,6 @@ class DotnetTestPack(RunnerPack):
             except OSError:
                 log.debug("dotnet_test_discovery_failed", exc_info=True)
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -1125,7 +1078,6 @@ class DotnetTestPack(RunnerPack):
         if tags:
             cmd.extend(["--filter", " | ".join(f"Category={t}" for t in tags)])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
 
@@ -1133,14 +1085,12 @@ class DotnetTestPack(RunnerPack):
             return parse_junit_xml(output_path.read_text())
         return ParsedTestSuite(name="dotnet", errors=1)
 
-
 # C/C++ - CTest
 
 
 @runner_registry.register
 class CTestPack(RunnerPack):
     """C/C++ CTest runner."""
-
     pack_id = "cpp.ctest"
     language = "cpp"
     runner_name = "ctest"
@@ -1156,7 +1106,6 @@ class CTestPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=False,  # Limited support
     )
-
     def detect(self, workspace_root: Path) -> float:
         cmake = workspace_root / "CMakeLists.txt"
         if cmake.exists():
@@ -1184,7 +1133,6 @@ class CTestPack(RunnerPack):
                 )
             )
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -1201,7 +1149,6 @@ class CTestPack(RunnerPack):
         if tags:
             cmd.extend(["-L", "|".join(tags)])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         # Parse coarse CTest output
         lines = stdout.split("\n")
@@ -1228,14 +1175,12 @@ class CTestPack(RunnerPack):
             failed=failed,
         )
 
-
 # Ruby - RSpec
 
 
 @runner_registry.register
 class RSpecPack(RunnerPack):
     """Ruby RSpec runner."""
-
     pack_id = "ruby.rspec"
     language = "ruby"
     runner_name = "rspec"
@@ -1252,7 +1197,6 @@ class RSpecPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=True,  # Via rspec_junit_formatter
     )
-
     def detect(self, workspace_root: Path) -> float:
         if (workspace_root / ".rspec").exists():
             return 1.0
@@ -1284,7 +1228,6 @@ class RSpecPack(RunnerPack):
                 )
             )
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -1318,19 +1261,15 @@ class RSpecPack(RunnerPack):
             for tag in tags:
                 cmd.extend(["--tag", tag])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
 
         if output_path.exists():
             return parse_junit_xml(output_path.read_text())
         return ParsedTestSuite(name="rspec", errors=1)
-
-
 @runner_registry.register
 class MinitestPack(RunnerPack):
     """Ruby Minitest runner."""
-
     pack_id = "ruby.minitest"
     language = "ruby"
     runner_name = "minitest"
@@ -1349,7 +1288,6 @@ class MinitestPack(RunnerPack):
         supports_parallel=False,
         supports_junit_output=True,  # Via minitest-reporters
     )
-
     def detect(self, workspace_root: Path) -> float:
         # High confidence: Rakefile with Rake::TestTask
         rakefile = workspace_root / "Rakefile"
@@ -1402,7 +1340,6 @@ class MinitestPack(RunnerPack):
                     )
                 )
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -1424,7 +1361,6 @@ class MinitestPack(RunnerPack):
         if pattern:
             cmd.extend(["-n", pattern])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
 
@@ -1432,14 +1368,12 @@ class MinitestPack(RunnerPack):
             return parse_junit_xml(output_path.read_text())
         return ParsedTestSuite(name="minitest", errors=1)
 
-
 # PHP - PHPUnit
 
 
 @runner_registry.register
 class PHPUnitPack(RunnerPack):
     """PHP PHPUnit runner."""
-
     pack_id = "php.phpunit"
     language = "php"
     runner_name = "phpunit"
@@ -1456,7 +1390,6 @@ class PHPUnitPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=True,
     )
-
     def detect(self, workspace_root: Path) -> float:
         if (workspace_root / "phpunit.xml").exists():
             return 1.0
@@ -1490,7 +1423,6 @@ class PHPUnitPack(RunnerPack):
                 )
             )
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -1506,7 +1438,6 @@ class PHPUnitPack(RunnerPack):
         if tags:
             cmd.extend(["--group", ",".join(tags)])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
 

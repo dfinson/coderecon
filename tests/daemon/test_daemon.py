@@ -1,5 +1,4 @@
 """Tests for daemon components."""
-
 import asyncio
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -13,7 +12,6 @@ from coderecon.daemon.indexer import BackgroundIndexer, IndexerState
 
 class TestBackgroundIndexer:
     """Tests for BackgroundIndexer."""
-
     def test_given_indexer_when_start_then_state_is_idle(self) -> None:
         """Indexer starts in idle state."""
         # Given
@@ -29,7 +27,6 @@ class TestBackgroundIndexer:
 
         # Cleanup
         indexer._executor.shutdown(wait=False)
-
     @pytest.mark.asyncio
     async def test_given_started_indexer_when_queue_paths_then_paths_are_queued(
         self,
@@ -52,7 +49,6 @@ class TestBackgroundIndexer:
 
         # Cleanup
         await indexer.stop()
-
     def test_given_indexer_when_status_then_returns_current_state(self) -> None:
         """Status returns current indexer state."""
         # Given
@@ -67,7 +63,6 @@ class TestBackgroundIndexer:
         assert status.queue_size == 0
         assert status.last_stats is None
         assert status.last_error is None
-
     @pytest.mark.asyncio
     async def test_given_started_indexer_when_stop_then_state_is_stopped(self) -> None:
         """Stopping indexer transitions to stopped state."""
@@ -82,7 +77,6 @@ class TestBackgroundIndexer:
         # Then
         assert indexer.status.state == IndexerState.STOPPED
         assert indexer._executor is None
-
     def test_given_indexer_when_start_twice_then_noop(self) -> None:
         """Starting indexer twice is a no-op."""
         coordinator = MagicMock()
@@ -98,7 +92,6 @@ class TestBackgroundIndexer:
 
         if indexer._executor is not None:
             indexer._executor.shutdown(wait=False)
-
     @pytest.mark.asyncio
     async def test_given_stopped_indexer_when_stop_again_then_noop(self) -> None:
         """Stopping stopped indexer is a no-op."""
@@ -111,7 +104,6 @@ class TestBackgroundIndexer:
         await indexer.stop()
 
         assert indexer.status.state == IndexerState.STOPPED
-
     def test_given_indexer_when_add_on_complete_then_callback_stored(self) -> None:
         """add_on_complete appends the callback to the list."""
         coordinator = MagicMock()
@@ -123,7 +115,6 @@ class TestBackgroundIndexer:
         indexer.add_on_complete(callback)
 
         assert callback in indexer._on_complete_callbacks
-
     @pytest.mark.asyncio
     async def test_given_empty_queue_when_flush_then_noop(self) -> None:
         """Flushing empty queue does nothing."""
@@ -137,7 +128,6 @@ class TestBackgroundIndexer:
         coordinator.reindex_incremental.assert_not_called()
 
         await indexer.stop()
-
     @pytest.mark.asyncio
     async def test_given_no_changes_when_flush_then_no_status_output(self) -> None:
         """Flushing with no actual changes should not print status."""
@@ -168,7 +158,6 @@ class TestBackgroundIndexer:
             mock_status.assert_not_called()
 
         await indexer.stop()
-
     @pytest.mark.asyncio
     async def test_given_changes_when_flush_then_status_output(self) -> None:
         """Flushing with actual changes should print status."""
@@ -200,7 +189,6 @@ class TestBackgroundIndexer:
             assert "3 files updated" in call_args[0][0]
 
         await indexer.stop()
-
     @pytest.mark.asyncio
     async def test_given_stopping_indexer_when_flush_then_noop(self) -> None:
         """Flushing during stop does nothing."""
@@ -217,11 +205,8 @@ class TestBackgroundIndexer:
 
         indexer._state = IndexerState.IDLE
         await indexer.stop()
-
-
 class TestFileWatcher:
     """Tests for FileWatcher."""
-
     @pytest.mark.asyncio
     async def test_given_watcher_when_start_then_watch_task_created(self, tmp_path: Path) -> None:
         """Starting watcher creates watch task."""
@@ -243,7 +228,6 @@ class TestFileWatcher:
 
         # Cleanup
         await watcher.stop()
-
     @pytest.mark.asyncio
     async def test_given_running_watcher_when_stop_then_task_cancelled(
         self, tmp_path: Path
@@ -265,7 +249,6 @@ class TestFileWatcher:
 
         # Then
         assert watcher._watch_task is None
-
     @pytest.mark.asyncio
     async def test_given_watcher_when_start_twice_then_noop(self, tmp_path: Path) -> None:
         """Starting watcher twice is a no-op."""
@@ -288,7 +271,6 @@ class TestFileWatcher:
         assert watcher._watch_task is task
 
         await watcher.stop()
-
     @pytest.mark.asyncio
     async def test_given_file_change_when_detected_then_callback_called(
         self, tmp_path: Path
@@ -317,7 +299,6 @@ class TestFileWatcher:
         if callback.called:
             call_args = callback.call_args[0][0]
             assert any("new_file.py" in str(p) for p in call_args)
-
     @pytest.mark.asyncio
     async def test_given_git_file_change_when_detected_then_ignored(self, tmp_path: Path) -> None:
         """Changes in .git directory should be ignored."""
@@ -347,7 +328,6 @@ class TestFileWatcher:
             paths = call[0][0]
             for p in paths:
                 assert ".git" not in str(p)
-
     @pytest.mark.asyncio
     async def test_handle_changes_filters_ignored_paths(self, tmp_path: Path) -> None:
         """_handle_changes should filter paths through .reconignore."""
@@ -378,7 +358,6 @@ class TestFileWatcher:
         path_strs = [str(p) for p in call_paths]
         assert any("good.py" in p for p in path_strs)
         assert not any(".pyc" in p for p in path_strs)
-
     @pytest.mark.asyncio
     async def test_handle_changes_filters_git_directory(self, tmp_path: Path) -> None:
         """_handle_changes should filter .git directory paths."""
@@ -405,7 +384,6 @@ class TestFileWatcher:
         path_strs = [str(p) for p in call_paths]
         assert any("code.py" in p for p in path_strs)
         assert not any(".git" in p for p in path_strs)
-
     @pytest.mark.asyncio
     async def test_handle_changes_includes_reconignore_changes(self, tmp_path: Path) -> None:
         """_handle_changes should always include .reconignore changes."""
@@ -429,7 +407,6 @@ class TestFileWatcher:
 
         call_paths = callback.call_args[0][0]
         assert any(".reconignore" in str(p) for p in call_paths)
-
     @pytest.mark.asyncio
     async def test_handle_changes_no_callback_when_all_filtered(self, tmp_path: Path) -> None:
         """_handle_changes should not call callback when all paths filtered."""
@@ -452,7 +429,6 @@ class TestFileWatcher:
 
         # Callback should not be called when all paths filtered
         assert not callback.called
-
     @pytest.mark.asyncio
     async def test_handle_changes_path_outside_repo_ignored(self, tmp_path: Path) -> None:
         """_handle_changes should ignore paths outside repo root."""
@@ -485,11 +461,8 @@ class TestFileWatcher:
 
         # Then
         assert watcher._watch_task is None
-
-
 class TestSummarizeChangesByType:
     """Tests for _summarize_changes_by_type function (Issue #4)."""
-
     def test_single_python_file(self) -> None:
         """Single Python file uses singular form."""
         from coderecon.daemon.watcher import _summarize_changes_by_type
@@ -497,7 +470,6 @@ class TestSummarizeChangesByType:
         paths = [Path("test.py")]
         result = _summarize_changes_by_type(paths)
         assert result == "1 Python file"
-
     def test_multiple_python_files(self) -> None:
         """Multiple Python files use plural form."""
         from coderecon.daemon.watcher import _summarize_changes_by_type
@@ -505,7 +477,6 @@ class TestSummarizeChangesByType:
         paths = [Path("a.py"), Path("b.py"), Path("c.py")]
         result = _summarize_changes_by_type(paths)
         assert result == "3 Python files"
-
     def test_mixed_file_types(self) -> None:
         """Mixed file types are summarized separately."""
         from coderecon.daemon.watcher import _summarize_changes_by_type
@@ -514,7 +485,6 @@ class TestSummarizeChangesByType:
         result = _summarize_changes_by_type(paths)
         assert "2 Python files" in result
         assert "1 JSON file" in result
-
     def test_top_three_types_shown(self) -> None:
         """Only top 3 file types are shown with 'others' for remainder."""
         from coderecon.daemon.watcher import _summarize_changes_by_type
@@ -531,7 +501,6 @@ class TestSummarizeChangesByType:
         # Should show top 3 types + "others"
         parts = result.split(", ")
         assert len(parts) <= 4
-
     def test_unknown_extension(self) -> None:
         """Unknown extensions show uppercased extension."""
         from coderecon.daemon.watcher import _summarize_changes_by_type
@@ -539,7 +508,6 @@ class TestSummarizeChangesByType:
         paths = [Path("file.xyz")]
         result = _summarize_changes_by_type(paths)
         assert "XYZ" in result
-
     def test_no_extension(self) -> None:
         """Files without extension show 'other'."""
         from coderecon.daemon.watcher import _summarize_changes_by_type
@@ -547,7 +515,6 @@ class TestSummarizeChangesByType:
         paths = [Path("Makefile")]
         result = _summarize_changes_by_type(paths)
         assert "other" in result.lower()
-
     def test_yaml_yml_counted_separately(self) -> None:
         """Both .yaml and .yml are categorized as YAML but counted separately."""
         from coderecon.daemon.watcher import _summarize_changes_by_type
@@ -558,7 +525,6 @@ class TestSummarizeChangesByType:
         assert "YAML" in result
         # Total should be 2 files mentioned
         assert "1 YAML file" in result
-
     def test_empty_list(self) -> None:
         """Empty list returns empty string."""
         from coderecon.daemon.watcher import _summarize_changes_by_type
@@ -566,11 +532,8 @@ class TestSummarizeChangesByType:
         paths: list[Path] = []
         result = _summarize_changes_by_type(paths)
         assert result == ""
-
-
 class TestHandleCplignoreChange:
     """Tests for _handle_reconignore_change function (Issue #6)."""
-
     @pytest.mark.asyncio
     async def test_logs_added_patterns(self, tmp_path: Path) -> None:
         """Logs newly added patterns."""
@@ -595,7 +558,6 @@ class TestHandleCplignoreChange:
             # Check that added patterns were logged
             calls = mock_logger.info.call_args_list
             assert any("reconignore_changed" in str(c) for c in calls)
-
     @pytest.mark.asyncio
     async def test_logs_removed_patterns(self, tmp_path: Path) -> None:
         """Logs removed patterns."""
@@ -617,7 +579,6 @@ class TestHandleCplignoreChange:
 
             # Check logging occurred
             assert mock_logger.info.called
-
     @pytest.mark.asyncio
     async def test_tracks_pattern_diff(self, tmp_path: Path) -> None:
         """Correctly tracks added and removed patterns."""
@@ -640,7 +601,6 @@ class TestHandleCplignoreChange:
 
         # Verify content updated
         assert watcher._last_reconignore_content == "*.log\n"
-
     @pytest.mark.asyncio
     async def test_ignores_comments(self, tmp_path: Path) -> None:
         """Comments are not treated as patterns."""
@@ -665,11 +625,8 @@ class TestHandleCplignoreChange:
             # Find the reconignore_changed call
             reconignore_call = next((c for c in calls if "reconignore_changed" in str(c)), None)
             assert reconignore_call is not None
-
-
 class TestDebouncing:
     """Tests for watcher debouncing behavior."""
-
     @pytest.mark.asyncio
     async def test_queue_change_adds_to_pending(self, tmp_path: Path) -> None:
         """_queue_change adds paths to pending set."""
@@ -685,7 +642,6 @@ class TestDebouncing:
         watcher._queue_change(Path("test.py"))
 
         assert Path("test.py") in watcher._pending_changes
-
     @pytest.mark.asyncio
     async def test_flush_pending_calls_callback(self, tmp_path: Path) -> None:
         """_flush_pending calls callback with pending paths."""
@@ -704,7 +660,6 @@ class TestDebouncing:
         assert callback.called
         paths = callback.call_args[0][0]
         assert Path("test.py") in paths
-
     @pytest.mark.asyncio
     async def test_flush_clears_pending(self, tmp_path: Path) -> None:
         """_flush_pending clears the pending set."""
@@ -721,7 +676,6 @@ class TestDebouncing:
         watcher._flush_pending()
 
         assert len(watcher._pending_changes) == 0
-
     @pytest.mark.asyncio
     async def test_should_flush_false_when_empty(self, tmp_path: Path) -> None:
         """_should_flush returns False for empty pending set."""
@@ -735,11 +689,8 @@ class TestDebouncing:
         watcher = FileWatcher(repo_root=tmp_path, on_change=callback)
 
         assert watcher._should_flush() is False
-
-
 class TestDaemonLifecycle:
     """Tests for daemon lifecycle management."""
-
     def test_given_no_pid_file_when_is_running_then_false(self, tmp_path: Path) -> None:
         """No PID file means daemon is not running."""
         from coderecon.daemon.lifecycle import is_server_running
@@ -753,7 +704,6 @@ class TestDaemonLifecycle:
 
         # Then
         assert result is False
-
     def test_given_pid_file_with_dead_process_when_is_running_then_false(
         self, tmp_path: Path
     ) -> None:
@@ -773,7 +723,6 @@ class TestDaemonLifecycle:
         assert result is False
         # Stale files should be cleaned up
         assert not (coderecon_dir / "daemon.pid").exists()
-
     def test_given_valid_info_when_write_pid_file_then_files_created(self, tmp_path: Path) -> None:
         """Writing PID file creates both pid and port files."""
         from coderecon.daemon.lifecycle import read_server_info, write_pid_file
@@ -791,7 +740,6 @@ class TestDaemonLifecycle:
         pid, port = info
         assert pid > 0  # Current process PID
         assert port == 8080
-
     def test_given_pid_files_when_remove_then_files_deleted(self, tmp_path: Path) -> None:
         """Removing PID files deletes both files."""
         from coderecon.daemon.lifecycle import remove_pid_file, write_pid_file
@@ -807,7 +755,6 @@ class TestDaemonLifecycle:
         # Then
         assert not (coderecon_dir / "daemon.pid").exists()
         assert not (coderecon_dir / "daemon.port").exists()
-
     def test_given_no_files_when_read_server_info_then_none(self, tmp_path: Path) -> None:
         """Missing files return None for daemon info."""
         from coderecon.daemon.lifecycle import read_server_info
@@ -818,7 +765,6 @@ class TestDaemonLifecycle:
         result = read_server_info(coderecon_dir)
 
         assert result is None
-
     def test_given_invalid_pid_content_when_read_server_info_then_none(
         self, tmp_path: Path
     ) -> None:
@@ -833,7 +779,6 @@ class TestDaemonLifecycle:
         result = read_server_info(coderecon_dir)
 
         assert result is None
-
     def test_given_dead_process_when_stop_daemon_then_false(self, tmp_path: Path) -> None:
         """Stopping dead process returns False."""
         from coderecon.daemon.lifecycle import stop_daemon
@@ -848,7 +793,6 @@ class TestDaemonLifecycle:
         # Dead process - returns False and cleans up
         assert result is False
         assert not (coderecon_dir / "daemon.pid").exists()
-
     def test_given_no_daemon_when_stop_daemon_then_false(self, tmp_path: Path) -> None:
         """Stopping non-existent daemon returns False."""
         from coderecon.daemon.lifecycle import stop_daemon
@@ -859,11 +803,8 @@ class TestDaemonLifecycle:
         result = stop_daemon(coderecon_dir)
 
         assert result is False
-
-
 class TestServerController:
     """Tests for ServerController."""
-
     def test_given_coordinator_when_create_controller_then_components_initialized(
         self, tmp_path: Path
     ) -> None:
@@ -882,7 +823,6 @@ class TestServerController:
 
         assert controller.indexer is not None
         assert controller.watcher is not None
-
     @pytest.mark.asyncio
     async def test_given_controller_when_start_then_components_started(
         self, tmp_path: Path
@@ -910,7 +850,6 @@ class TestServerController:
         assert controller.watcher._watch_task is not None
 
         await controller.stop()
-
     @pytest.mark.asyncio
     async def test_given_running_controller_when_stop_then_shutdown_event_set(
         self, tmp_path: Path
@@ -936,11 +875,8 @@ class TestServerController:
         await controller.stop()
 
         assert controller.wait_for_shutdown().is_set()
-
-
 class TestRepoHeaderMiddleware:
     """Tests for RepoHeaderMiddleware."""
-
     def test_given_request_when_response_then_includes_repo_header(self, tmp_path: Path) -> None:
         """All responses include X-CodeRecon-Repo header."""
         from starlette.applications import Starlette
@@ -963,7 +899,6 @@ class TestRepoHeaderMiddleware:
         response = client.get("/status")
         assert response.status_code == 200
         assert response.headers[REPO_HEADER] == str(tmp_path)
-
     def test_given_health_endpoint_when_request_then_includes_repo_header(
         self, tmp_path: Path
     ) -> None:
@@ -988,11 +923,8 @@ class TestRepoHeaderMiddleware:
         response = client.get("/health")
         assert response.status_code == 200
         assert response.headers[REPO_HEADER] == str(tmp_path)
-
-
 class TestDaemonRoutes:
     """Tests for daemon HTTP routes."""
-
     def test_given_controller_when_create_routes_then_returns_routes(self, tmp_path: Path) -> None:
         """create_routes returns health and status routes."""
         from coderecon.daemon.routes import create_routes
@@ -1007,7 +939,6 @@ class TestDaemonRoutes:
         assert "/health" in paths
         assert "/status" in paths
         assert "/reindex" in paths
-
     def test_given_routes_when_health_called_then_returns_status(self, tmp_path: Path) -> None:
         """Health endpoint returns daemon info."""
         from starlette.applications import Starlette
@@ -1029,7 +960,6 @@ class TestDaemonRoutes:
         assert data["status"] == "healthy"
         assert data["repo_root"] == str(tmp_path)
         assert "version" in data
-
     def test_given_routes_when_status_called_then_returns_indexer_info(
         self, tmp_path: Path
     ) -> None:
@@ -1067,11 +997,8 @@ class TestDaemonRoutes:
         assert data["indexer"]["state"] == "idle"
         assert data["indexer"]["queue_size"] == 5
         assert data["watcher"]["running"] is True
-
-
 class TestDaemonApp:
     """Tests for daemon application factory."""
-
     def test_given_controller_when_create_app_then_returns_starlette(self, tmp_path: Path) -> None:
         """create_app returns configured Starlette application."""
         import subprocess
@@ -1093,7 +1020,6 @@ class TestDaemonApp:
         assert isinstance(app, Starlette)
         # 3 routes (health, status, reindex) + MCP mount
         assert len(app.routes) == 4
-
     def test_given_app_when_startup_then_controller_started(self, tmp_path: Path) -> None:
         """App startup triggers MCP lifespan (controller start/stop handled separately)."""
         import subprocess

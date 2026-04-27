@@ -1,5 +1,4 @@
 """Tests for rebase operations."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -16,7 +15,6 @@ from coderecon.git import (
 
 class TestRebasePlan:
     """Tests for rebase_plan() method."""
-
     def test_given_linear_history_when_plan_then_returns_picks(
         self, git_repo_with_commits: tuple[Path, GitOps, list[str]]
     ) -> None:
@@ -38,7 +36,6 @@ class TestRebasePlan:
         assert len(plan.steps) > 0
         for step in plan.steps:
             assert step.action == "pick"
-
     def test_given_no_commits_to_rebase_when_plan_then_empty_steps(
         self, git_repo_with_commit: tuple[Path, GitOps]
     ) -> None:
@@ -48,11 +45,8 @@ class TestRebasePlan:
         plan = ops.rebase_plan("HEAD")
 
         assert len(plan.steps) == 0
-
-
 class TestRebaseExecute:
     """Tests for rebase_execute() method."""
-
     def test_given_simple_rebase_when_execute_then_succeeds(
         self, git_repo_with_branch: tuple[Path, GitOps, str]
     ) -> None:
@@ -68,7 +62,6 @@ class TestRebaseExecute:
 
         assert result.success is True
         assert result.state == "done"
-
     def test_given_rebase_in_progress_when_execute_then_raises(
         self, git_repo_with_branch: tuple[Path, GitOps, str]
     ) -> None:
@@ -99,11 +92,8 @@ class TestRebaseExecute:
 
             # Clean up
             ops.rebase_abort()
-
-
 class TestRebaseAbort:
     """Tests for rebase_abort() method."""
-
     def test_given_rebase_in_progress_when_abort_then_restores_state(
         self, git_repo_with_branch: tuple[Path, GitOps, str]
     ) -> None:
@@ -132,7 +122,6 @@ class TestRebaseAbort:
 
             # HEAD should be restored
             assert ops.rebase_in_progress() is False
-
     def test_given_no_rebase_when_abort_then_raises(
         self, git_repo_with_commit: tuple[Path, GitOps]
     ) -> None:
@@ -141,11 +130,8 @@ class TestRebaseAbort:
 
         with pytest.raises(NoRebaseInProgressError):
             ops.rebase_abort()
-
-
 class TestRebaseContinue:
     """Tests for rebase_continue() method."""
-
     def test_given_no_rebase_when_continue_then_raises(
         self, git_repo_with_commit: tuple[Path, GitOps]
     ) -> None:
@@ -154,7 +140,6 @@ class TestRebaseContinue:
 
         with pytest.raises(NoRebaseInProgressError):
             ops.rebase_continue()
-
     def test_given_conflict_resolved_when_continue_then_proceeds(
         self, git_repo_with_branch: tuple[Path, GitOps, str]
     ) -> None:
@@ -196,11 +181,8 @@ class TestRebaseContinue:
                 # Clean up if still in progress
                 if ops.rebase_in_progress():
                     ops.rebase_abort()
-
-
 class TestRebaseSkip:
     """Tests for rebase_skip() method."""
-
     def test_given_no_rebase_when_skip_then_raises(
         self, git_repo_with_commit: tuple[Path, GitOps]
     ) -> None:
@@ -209,7 +191,6 @@ class TestRebaseSkip:
 
         with pytest.raises(NoRebaseInProgressError):
             ops.rebase_skip()
-
     def test_given_conflict_when_skip_then_skips_commit(
         self, git_repo_with_branch: tuple[Path, GitOps, str]
     ) -> None:
@@ -241,11 +222,8 @@ class TestRebaseSkip:
             # Clean up if still in conflict state
             if result.state == "conflict":
                 ops.rebase_abort()
-
-
 class TestRebaseInProgress:
     """Tests for rebase_in_progress() method."""
-
     def test_given_no_rebase_when_check_then_false(
         self, git_repo_with_commit: tuple[Path, GitOps]
     ) -> None:
@@ -253,11 +231,8 @@ class TestRebaseInProgress:
         _, ops = git_repo_with_commit
 
         assert ops.rebase_in_progress() is False
-
-
 class TestRebaseActions:
     """Tests for rebase with different action types."""
-
     def test_rebase_with_drop_action(
         self, git_repo_with_commits: tuple[Path, GitOps, list[str]]
     ) -> None:
@@ -292,7 +267,6 @@ class TestRebaseActions:
 
         if result.state == "conflict":
             ops.rebase_abort()
-
     def test_rebase_with_reword_action(
         self, git_repo_with_commits: tuple[Path, GitOps, list[str]]
     ) -> None:
@@ -335,7 +309,6 @@ class TestRebaseActions:
             assert any("New reworded message" in c.message for c in log)
         elif result.state == "conflict":
             ops.rebase_abort()
-
     def test_rebase_with_squash_action(
         self, git_repo_with_commits: tuple[Path, GitOps, list[str]]
     ) -> None:
@@ -373,7 +346,6 @@ class TestRebaseActions:
             assert result.state == "done"
         elif result.state == "conflict":
             ops.rebase_abort()
-
     def test_rebase_with_fixup_action(
         self, git_repo_with_commits: tuple[Path, GitOps, list[str]]
     ) -> None:
@@ -410,7 +382,6 @@ class TestRebaseActions:
             assert result.state == "done"
         elif result.state == "conflict":
             ops.rebase_abort()
-
     def test_rebase_with_edit_action(
         self, git_repo_with_commits: tuple[Path, GitOps, list[str]]
     ) -> None:
@@ -451,11 +422,8 @@ class TestRebaseActions:
         # Clean up if still in progress
         if ops.rebase_in_progress():
             ops.rebase_abort()
-
-
 class TestRebaseBranchRestoration:
     """Tests verifying rebase properly restores/updates branch refs (fixes #119)."""
-
     def test_given_successful_rebase_when_finalize_then_branch_updated_and_reattached(
         self, git_repo_with_branch: tuple[Path, GitOps, str]
     ) -> None:
@@ -485,7 +453,6 @@ class TestRebaseBranchRestoration:
         # Branch should point to new commit (not original)
         assert ops.head().target_sha == result.new_head
         assert ops.head().target_sha != original_feature_sha
-
     def test_given_rebase_with_conflict_when_abort_then_branch_restored(
         self, git_repo_with_branch: tuple[Path, GitOps, str]
     ) -> None:

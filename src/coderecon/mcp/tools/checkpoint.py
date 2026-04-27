@@ -41,7 +41,6 @@ class ProgressSink(Protocol):
     async def info(self, message: str) -> None: ...
     async def warning(self, message: str) -> None: ...
 
-
 # Test Debt Detection
 
 
@@ -119,7 +118,6 @@ def _validate_commit_message(message: str) -> None:
     if not message or not message.strip():
         raise EmptyCommitMessageError()
 
-
 def _validate_paths_exist(
     repo_path: Path, paths: list[str], *, tracked_files: set[str] | None = None
 ) -> None:
@@ -142,7 +140,6 @@ def _validate_paths_exist(
 
     if unknown:
         raise PathsNotFoundError(unknown)
-
 
 def _run_hook_with_retry(
     repo_path: Path,
@@ -217,7 +214,6 @@ def _run_hook_with_retry(
 
     return hook_result, None
 
-
 def _summarize_commit(sha: str, message: str) -> str:
     from coderecon.core.formatting import truncate_at_word
 
@@ -241,7 +237,6 @@ def _normalize_selector(selector: str) -> str:
     if selector.startswith("./"):
         return selector[2:]
     return selector
-
 
 def _target_matches_affected_files(
     target: TestTarget,
@@ -309,7 +304,6 @@ def _summarize_run(result: "TestResult") -> str:
         return ", ".join(status_parts)
 
     return status.status
-
 
 def _build_coverage_text(
     coverage_artifacts: list[dict[str, str]],
@@ -390,7 +384,6 @@ def _extract_traceback_locations(traceback: str | None) -> list[tuple[str, int]]
         locations.append((path, line))
     return locations
 
-
 def _build_failure_snippets(
     failure_list: list[dict[str, Any]],
     file_contents: dict[str, str],
@@ -448,7 +441,6 @@ def _build_failure_snippets(
         snippets[path] = "\n".join(parts)
 
     return snippets
-
 
 def _serialize_test_result(
     result: "TestResult",
@@ -678,7 +670,6 @@ def _assign_target_hops(
         hop_targets.setdefault(hop, []).append(target)
 
     return hop_targets
-
 
 def _partition_for_batching(
     targets: list[Any],
@@ -1047,7 +1038,6 @@ async def _run_tiered_tests(
 
 class _NullProgress:
     """No-op progress sink for callers that don't need progress."""
-
     async def report_progress(self, current: int, total: int, message: str) -> None:
         """No-op: progress discarded when no listener is attached."""
         return None
@@ -1059,7 +1049,6 @@ class _NullProgress:
     async def warning(self, message: str) -> None:
         """No-op: warning discarded when no listener is attached."""
         return None
-
 
 _DEFAULT_MAX_TEST_HOPS = 0
 _COMMIT_MAX_TEST_HOPS = 2
@@ -1617,7 +1606,6 @@ async def checkpoint_pipeline(
 
 def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
     """Register checkpoint tool with FastMCP server."""
-
     @mcp.tool(
         annotations={
             "title": "Checkpoint: lint, test, commit, push",

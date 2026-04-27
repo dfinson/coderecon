@@ -84,11 +84,9 @@ def _timestamp() -> str:
     """Return current time as HH:MM:SS for log prefix."""
     return time.strftime("%H:%M:%S")
 
-
 def is_console_suppressed() -> bool:
     """Check if console logging is currently suppressed."""
     return getattr(_suppress_console_logs, "active", False)
-
 
 @contextmanager
 def suppress_console_logs() -> Iterator[None]:
@@ -103,36 +101,29 @@ def suppress_console_logs() -> Iterator[None]:
     finally:
         _suppress_console_logs.active = False
 
-
 class ConsoleSuppressingFilter(logging.Filter):
     """Filter that blocks console output when suppression is active.
 
     Allows file handlers to continue receiving logs while console
     output is paused during Rich live displays.
     """
-
     def filter(self, record: logging.LogRecord) -> bool:  # noqa: ARG002
         # Only filter if suppression is active AND this is a console handler
         # File handlers should still receive logs
         return not is_console_suppressed()
-
-
 def _get_logger() -> BoundLogger:
     """Get logger lazily to respect runtime config."""
     from coderecon.core.logging import get_logger
 
     return get_logger("progress")
 
-
 def _is_tty() -> bool:
     """Check if stderr is a TTY."""
     return hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
 
-
 def get_console() -> Console:
     """Get the shared Rich console instance."""
     return _console
-
 
 def status(
     message: str,
@@ -168,7 +159,6 @@ def status(
 
     # Log at DEBUG for observability (lazy to respect runtime config)
     _get_logger().debug("status", message=message, style=style, source=source)
-
 
 def progress[T](
     iterable: Iterable[T],
@@ -215,7 +205,6 @@ def progress[T](
         if desc and total:
             log.debug("progress_done", desc=desc, total=total)
 
-
 @contextmanager
 def spinner(message: str, *, indent: int = 0) -> Iterator[None]:
     """Context manager for a spinner with log suppression.
@@ -239,7 +228,6 @@ def spinner(message: str, *, indent: int = 0) -> Iterator[None]:
         # Non-TTY: just print the message
         _console.print(f"{padding}{message}...")
         yield
-
 
 @contextmanager
 def task(name: str) -> Iterator[None]:
@@ -269,7 +257,6 @@ def task(name: str) -> Iterator[None]:
         log.error("task_failed", task=name, elapsed_s=elapsed, error=str(e))
         raise
 
-
 def animate_text(text: str, delay: float = 0.02) -> None:
     """Print text line-by-line with a small delay for dramatic effect.
 
@@ -283,7 +270,6 @@ def animate_text(text: str, delay: float = 0.02) -> None:
         _console.print(line, highlight=False)
         if delay > 0 and _is_tty():
             time.sleep(delay)
-
 
 class PhaseBox:
     """Dynamic boxed phase with Live + Panel for real-time updating content.
@@ -303,7 +289,6 @@ class PhaseBox:
                 phase.advance(task_id)
             phase.complete("3 grammars installed")
     """
-
     def __init__(self, title: str, *, width: int = 60, console: Console | None = None) -> None:
         self._title = title
         self._width = width
@@ -313,7 +298,6 @@ class PhaseBox:
         self._live: Live | None = None
         self._suppress_token: object | None = None
         self._live_table: Table | None = None  # Dynamically updated table
-
     def _render(self) -> Panel:
         """Render the current phase state as a Panel."""
         items_to_render: list[RenderableType] = []
@@ -333,13 +317,11 @@ class PhaseBox:
             width=self._width,
             padding=(0, 1),
         )
-
     def _update(self) -> None:
         """Update the live display."""
         if self._live:
             self._live.update(self._render())
             self._live.refresh()
-
     def add_progress(self, description: str, total: int) -> TaskID:
         """Add a progress bar and return its task ID."""
         if self._progress is None:
@@ -353,13 +335,11 @@ class PhaseBox:
         task_id = self._progress.add_task(description, total=total)
         self._update()
         return task_id
-
     def advance(self, task_id: TaskID, advance: int = 1) -> None:
         """Advance a progress bar."""
         if self._progress:
             self._progress.advance(task_id, advance)
             self._update()
-
     def complete(self, summary: str, *, style: str = "green") -> None:
         """Mark a step complete with a status symbol and summary.
 
@@ -383,7 +363,6 @@ class PhaseBox:
         # Add completion line
         self._items.append(Text(f"{symbol}{summary}", style=style))
         self._update()
-
     def add_text(self, text: str, *, style: str = "") -> None:
         """Add a plain text line."""
         if style:
@@ -391,12 +370,10 @@ class PhaseBox:
         else:
             self._items.append(Text(text))
         self._update()
-
     def add_table(self, table: Table) -> None:
         """Add a Rich Table to the phase content."""
         self._items.append(table)
         self._update()
-
     def set_live_table(self, table: Table | None) -> None:
         """Set or update the live table that appears below the progress bar.
 
@@ -408,7 +385,6 @@ class PhaseBox:
         """
         self._live_table = table
         self._update()
-
     def __enter__(self) -> PhaseBox:
         # Suppress logs during Live display
         _suppress_console_logs.active = True
@@ -420,7 +396,6 @@ class PhaseBox:
         )
         self._live.__enter__()
         return self
-
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
@@ -433,8 +408,6 @@ class PhaseBox:
             self._live.refresh()
             self._live.__exit__(exc_type, exc_val, exc_tb)
         _suppress_console_logs.active = False
-
-
 def phase_box(title: str, *, width: int = 60, console: Console | None = None) -> PhaseBox:
     """Create a dynamic boxed phase with Live + Panel.
 
@@ -449,7 +422,6 @@ def phase_box(title: str, *, width: int = 60, console: Console | None = None) ->
             phase.complete("4 languages detected")
     """
     return PhaseBox(title, width=width, console=console)
-
 
 class SummaryStream:
     """Sequential progress bar → checkmark summary transitions.
@@ -469,13 +441,11 @@ class SummaryStream:
                 pass
             stream.done("3 new, 1 modified")
     """
-
     def __init__(self, console: Console | None = None) -> None:
         self._console = console or _console
         self._current_progress: Progress | None = None
         self._current_task_id: TaskID | None = None
         self._current_live: Live | None = None
-
     @contextmanager
     def step(self, description: str, total: int, *, bar_width: int = 40) -> Iterator[SummaryStream]:
         """Start a step with a progress bar.
@@ -508,24 +478,19 @@ class SummaryStream:
             self._current_progress = None
             self._current_task_id = None
             self._current_live = None
-
     def advance(self, amount: int = 1) -> None:
         """Advance the current progress bar."""
         if self._current_progress and self._current_task_id is not None:
             self._current_progress.advance(self._current_task_id, amount)
-
     def done(self, summary: str, *, style: str = "success") -> None:
         """Print a completion summary for the step."""
         prefix = _STYLES.get(style, _STYLES["success"])
         self._console.print(f"  {prefix}{summary}", highlight=False)
-
     def info(self, message: str) -> None:
         """Print an info message (no checkmark)."""
         self._console.print(f"  {message}", highlight=False)
-
     def __enter__(self) -> SummaryStream:
         return self
-
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
@@ -534,8 +499,6 @@ class SummaryStream:
     ) -> None:
         """No-op: SummaryStream requires no teardown."""
         return None
-
-
 def summary_stream(console: Console | None = None) -> SummaryStream:
     """Create a summary stream for sequential progress → summary transitions.
 
@@ -550,13 +513,11 @@ def summary_stream(console: Console | None = None) -> SummaryStream:
     """
     return SummaryStream(console=console)
 
-
 def print_centered(text: str, *, style: str | None = None, console: Console | None = None) -> None:
     """Print centered text (for logos, banners)."""
     c = console or _console
     t = Text(text, style=style) if style else Text(text)
     c.print(Align.center(t), highlight=False)
-
 
 def print_rule(
     *, style: str = "dim", width: int | None = None, console: Console | None = None
@@ -575,7 +536,6 @@ def print_rule(
         c.print(Align.center(Text(rule_text, style=style)), highlight=False)
     else:
         c.print(Rule(style=style))
-
 
 def make_extension_table(extensions: dict[str, int], *, max_bar_width: int = 20) -> Table:
     """Create a Rich Table for file extension breakdown.

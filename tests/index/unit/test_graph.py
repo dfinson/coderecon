@@ -55,7 +55,6 @@ def db(temp_dir: Path) -> Database:
     create_additional_indexes(db.engine)
     return db
 
-
 @pytest.fixture
 def seeded_db(db: Database) -> Database:
     """Create a database with test data."""
@@ -275,10 +274,8 @@ def seeded_db(db: Database) -> Database:
 
     return db
 
-
 class TestDefinitionLookups:
     """Tests for definition lookup methods."""
-
     def test_get_def_existing(self, seeded_db: Database) -> None:
         """Should get an existing definition by UID."""
         with seeded_db.session() as session:
@@ -289,7 +286,6 @@ class TestDefinitionLookups:
             assert result.def_uid == "def_foo_123"
             assert result.name == "foo"
             assert result.kind == "function"
-
     def test_get_def_nonexistent(self, seeded_db: Database) -> None:
         """Should return None for nonexistent definition."""
         with seeded_db.session() as session:
@@ -297,7 +293,6 @@ class TestDefinitionLookups:
             result = queries.get_def("nonexistent_uid")
 
             assert result is None
-
     def test_list_defs_by_name(self, seeded_db: Database) -> None:
         """Should list definitions by name within a unit."""
         with seeded_db.session() as session:
@@ -312,7 +307,6 @@ class TestDefinitionLookups:
             assert len(results) == 2  # foo in main.py and utils.py
             names = [d.name for d in results]
             assert all(n == "foo" for n in names)
-
     def test_list_defs_by_name_with_limit(self, seeded_db: Database) -> None:
         """Should respect limit parameter."""
         with seeded_db.session() as session:
@@ -324,7 +318,6 @@ class TestDefinitionLookups:
             results = queries.list_defs_by_name(ctx.id, "foo", limit=1)
 
             assert len(results) == 1
-
     def test_list_defs_in_file(self, seeded_db: Database) -> None:
         """Should list all definitions in a file."""
         with seeded_db.session() as session:
@@ -338,11 +331,8 @@ class TestDefinitionLookups:
             assert len(results) == 2  # foo and bar
             names = {d.name for d in results}
             assert names == {"foo", "bar"}
-
-
 class TestReferenceLookups:
     """Tests for reference lookup methods."""
-
     def test_list_refs_by_def_uid(self, seeded_db: Database) -> None:
         """Should list references to a definition."""
         with seeded_db.session() as session:
@@ -351,7 +341,6 @@ class TestReferenceLookups:
 
             assert len(results) == 2  # definition ref + usage ref
             assert all(r.target_def_uid == "def_foo_123" for r in results)
-
     def test_list_refs_by_def_uid_with_tier_filter(self, seeded_db: Database) -> None:
         """Should filter references by tier."""
         with seeded_db.session() as session:
@@ -360,7 +349,6 @@ class TestReferenceLookups:
 
             assert len(results) == 2
             assert all(r.ref_tier == RefTier.PROVEN.value for r in results)
-
     def test_list_proven_refs(self, seeded_db: Database) -> None:
         """Should list only PROVEN references."""
         with seeded_db.session() as session:
@@ -369,7 +357,6 @@ class TestReferenceLookups:
 
             assert len(results) == 2
             assert all(r.ref_tier == RefTier.PROVEN.value for r in results)
-
     def test_list_refs_in_file(self, seeded_db: Database) -> None:
         """Should list all references in a file."""
         with seeded_db.session() as session:
@@ -381,7 +368,6 @@ class TestReferenceLookups:
             results = queries.list_refs_in_file(file.id)
 
             assert len(results) == 3  # Two foo refs + one bar ref
-
     def test_list_refs_by_token(self, seeded_db: Database) -> None:
         """Should list references by token text."""
         with seeded_db.session() as session:
@@ -393,11 +379,8 @@ class TestReferenceLookups:
             results = queries.list_refs_by_token(ctx.id, "foo")
 
             assert len(results) == 3  # Two in main.py, one in utils.py
-
-
 class TestScopeLookups:
     """Tests for scope lookup methods."""
-
     def test_get_scope(self, seeded_db: Database) -> None:
         """Should get a scope by ID."""
         with seeded_db.session() as session:
@@ -414,7 +397,6 @@ class TestScopeLookups:
 
             assert result is not None
             assert result.file_id == file.id
-
     def test_get_scope_nonexistent(self, seeded_db: Database) -> None:
         """Should return None for nonexistent scope."""
         with seeded_db.session() as session:
@@ -422,7 +404,6 @@ class TestScopeLookups:
             result = queries.get_scope(99999)
 
             assert result is None
-
     def test_list_scopes_in_file(self, seeded_db: Database) -> None:
         """Should list all scopes in a file."""
         with seeded_db.session() as session:
@@ -434,11 +415,8 @@ class TestScopeLookups:
             results = queries.list_scopes_in_file(file.id)
 
             assert len(results) == 2  # file scope + function scope
-
-
 class TestBindingLookups:
     """Tests for binding lookup methods."""
-
     def test_get_local_bind(self, seeded_db: Database) -> None:
         """Should get a local binding by scope and name."""
         with seeded_db.session() as session:
@@ -455,7 +433,6 @@ class TestBindingLookups:
             assert result is not None
             assert result.name == "foo"
             assert result.target_uid == "def_foo_123"
-
     def test_get_local_bind_nonexistent(self, seeded_db: Database) -> None:
         """Should return None for nonexistent binding."""
         with seeded_db.session() as session:
@@ -470,7 +447,6 @@ class TestBindingLookups:
             result = queries.get_local_bind(file_scope.scope_id, "nonexistent")
 
             assert result is None
-
     def test_list_binds_in_scope(self, seeded_db: Database) -> None:
         """Should list all bindings in a scope."""
         with seeded_db.session() as session:
@@ -486,11 +462,8 @@ class TestBindingLookups:
 
             assert len(results) == 1
             assert results[0].name == "foo"
-
-
 class TestImportLookups:
     """Tests for import lookup methods."""
-
     def test_list_imports(self, seeded_db: Database) -> None:
         """Should list all imports in a file."""
         with seeded_db.session() as session:
@@ -504,7 +477,6 @@ class TestImportLookups:
             assert len(results) == 2
             names = {i.imported_name for i in results}
             assert names == {"os", "Path"}
-
     def test_get_import(self, seeded_db: Database) -> None:
         """Should get an import by UID."""
         with seeded_db.session() as session:
@@ -513,7 +485,6 @@ class TestImportLookups:
 
             assert result is not None
             assert result.imported_name == "os"
-
     def test_get_import_nonexistent(self, seeded_db: Database) -> None:
         """Should return None for nonexistent import."""
         with seeded_db.session() as session:
@@ -521,11 +492,8 @@ class TestImportLookups:
             result = queries.get_import("nonexistent")
 
             assert result is None
-
-
 class TestExportLookups:
     """Tests for export lookup methods."""
-
     def test_get_export_surface(self, seeded_db: Database) -> None:
         """Should get export surface for a unit."""
         with seeded_db.session() as session:
@@ -538,7 +506,6 @@ class TestExportLookups:
 
             assert result is not None
             assert result.unit_id == ctx.id
-
     def test_get_export_surface_nonexistent(self, seeded_db: Database) -> None:
         """Should return None for nonexistent surface."""
         with seeded_db.session() as session:
@@ -546,7 +513,6 @@ class TestExportLookups:
             result = queries.get_export_surface(99999)
 
             assert result is None
-
     def test_list_export_entries(self, seeded_db: Database) -> None:
         """Should list export entries for a surface."""
         with seeded_db.session() as session:
@@ -563,11 +529,8 @@ class TestExportLookups:
             assert len(results) == 2
             names = {e.exported_name for e in results}
             assert names == {"foo", "bar"}
-
-
 class TestAnchorGroupLookups:
     """Tests for anchor group lookup methods."""
-
     def test_get_anchor_group_with_receiver(self, seeded_db: Database) -> None:
         """Should get anchor group with receiver shape."""
         with seeded_db.session() as session:
@@ -582,7 +545,6 @@ class TestAnchorGroupLookups:
             assert result.member_token == "method"
             assert result.receiver_shape == "self."
             assert result.total_count == 5
-
     def test_get_anchor_group_without_receiver(self, seeded_db: Database) -> None:
         """Should get anchor group without receiver shape."""
         with seeded_db.session() as session:
@@ -597,7 +559,6 @@ class TestAnchorGroupLookups:
             assert result.member_token == "method"
             assert result.receiver_shape is None
             assert result.total_count == 3
-
     def test_get_anchor_group_nonexistent(self, seeded_db: Database) -> None:
         """Should return None for nonexistent anchor group."""
         with seeded_db.session() as session:
@@ -609,7 +570,6 @@ class TestAnchorGroupLookups:
             result = queries.get_anchor_group(ctx.id, "nonexistent", None)
 
             assert result is None
-
     def test_list_anchor_groups(self, seeded_db: Database) -> None:
         """Should list anchor groups in a unit."""
         with seeded_db.session() as session:
@@ -621,11 +581,8 @@ class TestAnchorGroupLookups:
             results = queries.list_anchor_groups(ctx.id)
 
             assert len(results) == 2
-
-
 class TestFileLookups:
     """Tests for file lookup methods."""
-
     def test_get_file(self, seeded_db: Database) -> None:
         """Should get a file by ID."""
         with seeded_db.session() as session:
@@ -639,7 +596,6 @@ class TestFileLookups:
 
             assert result is not None
             assert result.path == "src/main.py"
-
     def test_get_file_nonexistent(self, seeded_db: Database) -> None:
         """Should return None for nonexistent file."""
         with seeded_db.session() as session:
@@ -647,7 +603,6 @@ class TestFileLookups:
             result = queries.get_file(99999)
 
             assert result is None
-
     def test_get_file_by_path(self, seeded_db: Database) -> None:
         """Should get a file by path."""
         with seeded_db.session() as session:
@@ -657,7 +612,6 @@ class TestFileLookups:
             assert result is not None
             assert result.path == "src/main.py"
             assert result.language_family == "python"
-
     def test_get_file_by_path_nonexistent(self, seeded_db: Database) -> None:
         """Should return None for nonexistent path."""
         with seeded_db.session() as session:
@@ -665,7 +619,6 @@ class TestFileLookups:
             result = queries.get_file_by_path("nonexistent.py")
 
             assert result is None
-
     def test_list_files(self, seeded_db: Database) -> None:
         """Should list all files."""
         with seeded_db.session() as session:
@@ -675,7 +628,6 @@ class TestFileLookups:
             assert len(results) == 2
             paths = {f.path for f in results}
             assert paths == {"src/main.py", "src/utils.py"}
-
     def test_list_files_with_limit(self, seeded_db: Database) -> None:
         """Should respect limit parameter."""
         with seeded_db.session() as session:
@@ -683,15 +635,11 @@ class TestFileLookups:
             results = queries.list_files(limit=1)
 
             assert len(results) == 1
-
-
 class TestBackwardsCompatibility:
     """Tests for backwards compatibility."""
-
     def test_symbol_graph_alias(self) -> None:
         """SymbolGraph should be an alias for FactQueries."""
         assert SymbolGraph is FactQueries
-
 
 # ===================================================================
 # Tests for new signal gap query methods
@@ -700,7 +648,6 @@ class TestBackwardsCompatibility:
 
 class TestInterfaceImplQueries:
     """Tests for type hierarchy / InterfaceImplFact lookups."""
-
     def test_list_implementors(self, seeded_db: Database) -> None:
         """Should find types implementing a given interface."""
         with seeded_db.session() as session:
@@ -722,12 +669,10 @@ class TestInterfaceImplQueries:
             results = fq.list_implementors("IHandler")
             assert len(results) == 1
             assert results[0].implementor_name == "Foo"
-
     def test_list_implementors_empty(self, seeded_db: Database) -> None:
         with seeded_db.session() as session:
             fq = FactQueries(session)
             assert fq.list_implementors("NoSuchInterface") == []
-
     def test_list_interfaces_of(self, seeded_db: Database) -> None:
         with seeded_db.session() as session:
             impl = InterfaceImplFact(
@@ -747,7 +692,6 @@ class TestInterfaceImplQueries:
             results = fq.list_interfaces_of("def_class_bar")
             assert len(results) == 1
             assert results[0].interface_name == "Serializable"
-
     def test_list_co_implementors(self, seeded_db: Database) -> None:
         """Two types implementing the same interface should find each other."""
         with seeded_db.session() as session:
@@ -768,11 +712,8 @@ class TestInterfaceImplQueries:
             co_impls = fq.list_co_implementors("def_alpha")
             assert "def_beta" in co_impls
             assert "def_alpha" not in co_impls
-
-
 class TestDocCrossRefQueries:
     """Tests for DocCrossRef lookups."""
-
     def test_list_doc_xrefs_from(self, seeded_db: Database) -> None:
         with seeded_db.session() as session:
             session.add(DefFact(
@@ -796,7 +737,6 @@ class TestDocCrossRefQueries:
             results = fq.list_doc_xrefs_from("def_src")
             assert len(results) == 1
             assert results[0].target_def_uid == "def_target"
-
     def test_list_doc_xrefs_to(self, seeded_db: Database) -> None:
         with seeded_db.session() as session:
             session.add(DefFact(
@@ -820,17 +760,13 @@ class TestDocCrossRefQueries:
             results = fq.list_doc_xrefs_to("def_target")
             assert len(results) == 1
             assert results[0].source_def_uid == "def_src"
-
     def test_list_doc_xrefs_empty(self, seeded_db: Database) -> None:
         with seeded_db.session() as session:
             fq = FactQueries(session)
             assert fq.list_doc_xrefs_from("nonexistent") == []
             assert fq.list_doc_xrefs_to("nonexistent") == []
-
-
 class TestEndpointQueries:
     """Tests for EndpointFact batch lookup."""
-
     def test_batch_get_endpoints(self, seeded_db: Database) -> None:
         with seeded_db.session() as session:
             session.add(DefFact(
@@ -857,16 +793,12 @@ class TestEndpointQueries:
             assert "def_get_users" in result
             assert result["def_get_users"].url_pattern == "/api/users"
             assert "def_nonexistent" not in result
-
     def test_batch_get_endpoints_empty(self, seeded_db: Database) -> None:
         with seeded_db.session() as session:
             fq = FactQueries(session)
             assert fq.batch_get_endpoints([]) == {}
-
-
 class TestCoverageQueries:
     """Tests for TestCoverageFact batch lookup."""
-
     def test_batch_count_test_coverage(self, seeded_db: Database) -> None:
         with seeded_db.session() as session:
             session.add(DefFact(
@@ -903,7 +835,6 @@ class TestCoverageQueries:
             result = fq.batch_count_test_coverage(["def_covered", "def_uncovered"])
             assert result["def_covered"] == 2  # stale excluded
             assert result["def_uncovered"] == 0
-
     def test_batch_count_test_coverage_empty(self, seeded_db: Database) -> None:
         with seeded_db.session() as session:
             fq = FactQueries(session)

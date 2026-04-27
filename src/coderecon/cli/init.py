@@ -1,5 +1,4 @@
 """recon init command - initialize a repository for CodeRecon."""
-
 from __future__ import annotations
 
 import asyncio
@@ -266,7 +265,6 @@ def _get_mcp_server_name(repo_root: Path) -> str:
     normalized = repo_name.lower().replace(".", "_").replace("-", "_")
     return f"coderecon-{normalized}"
 
-
 def _ensure_vscode_mcp_config(repo_root: Path, port: int) -> tuple[bool, str]:
     """Ensure .vscode/mcp.json has the CodeRecon server entry with static port.
 
@@ -324,7 +322,6 @@ def _ensure_vscode_mcp_config(repo_root: Path, port: int) -> tuple[bool, str]:
         output = json.dumps(config, indent=2) + "\n"
         atomic_write_text(mcp_json_path, output)
         return True, server_name
-
 
 def sync_vscode_mcp_port(repo_root: Path, port: int) -> bool:
     """Update port in .vscode/mcp.json if it differs from configured port.
@@ -392,13 +389,11 @@ def _is_cross_filesystem(path: Path) -> bool:
     # Common network/remote mounts
     return path_str.startswith(("/run/user/", "/media/", "/net/"))
 
-
 def _get_xdg_index_dir(repo_root: Path) -> Path:
     """Get XDG-compliant index directory for a repo."""
     xdg_data = Path.home() / ".local" / "share" / "coderecon" / "indices"
     repo_hash = hashlib.sha256(str(repo_root.resolve()).encode()).hexdigest()[:12]
     return xdg_data / repo_hash
-
 
 def initialize_repo(
     repo_root: Path,
@@ -611,7 +606,6 @@ def initialize_repo(
         indexing_phase = phase_box("Indexing", width=60)
         indexing_phase.__enter__()
         indexing_task_id = indexing_phase.add_progress("Indexing files", total=100)
-
         def on_index_progress(
             indexed: int, total: int, files_by_ext: dict[str, int], progress_phase: str
         ) -> None:
@@ -757,7 +751,6 @@ def initialize_repo(
 
     return True
 
-
 def _make_init_extension_table(files_by_ext: dict[str, int]) -> Table:
     """Create extension breakdown table for init output."""
     sorted_exts = sorted(files_by_ext.items(), key=lambda x: -x[1])
@@ -785,7 +778,6 @@ def _make_init_extension_table(files_by_ext: dict[str, int]) -> Table:
         table.add_row("other", str(rest_count), bar, style="dim")
 
     return table
-
 
 @click.command(hidden=True)
 @click.argument("path", default=None, required=False, type=click.Path(exists=True, path_type=Path))

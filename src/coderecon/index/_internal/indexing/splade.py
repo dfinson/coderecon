@@ -116,7 +116,6 @@ def _ensure_cuda_lib_path() -> None:
                 log.debug("cudnn_preload_failed", path=str(cudnn_path), exc_info=True)
             break
 
-
 def _select_onnx_providers(
     vram_bytes: int | None = None,
 ) -> list[str | tuple[str, dict[str, Any]]]:
@@ -161,7 +160,6 @@ def _select_onnx_providers(
     # Always include CPU as fallback
     providers.append("CPUExecutionProvider")
     return providers
-
 
 def is_gpu_active() -> bool:
     """Return True if the last ONNX session loaded a GPU provider.
@@ -218,7 +216,6 @@ def _query_gpu_vram_bytes() -> int | None:
         log.debug("nvidia_smi_query_failed", exc_info=True)
     return None
 
-
 def _compute_gpu_batch_size(max_seq_len: int, vram_bytes: int) -> int:
     """Derive a safe batch size for *max_seq_len* tokens given *vram_bytes* of GPU memory."""
     usable = int(vram_bytes * _VRAM_UTILIZATION) - _VRAM_MODEL_OVERHEAD_BYTES
@@ -250,7 +247,6 @@ def word_split(name: str) -> list[str]:
             words.append(part.lower())
     return words
 
-
 def _path_to_phrase(file_path: str) -> str:
     """Convert file path to natural-language phrase."""
     p = file_path.replace("\\", "/")
@@ -265,7 +261,6 @@ def _path_to_phrase(file_path: str) -> str:
     for segment in p.split("/"):
         parts.extend(word_split(segment))
     return " ".join(parts)
-
 
 def _compact_sig(name: str, sig: str) -> str:
     """Build compact anglicised signature."""
@@ -507,7 +502,6 @@ class SpladeEncoder:
     _tokenizer: Tokenizer | None = field(default=None, repr=False)
     _cpu_session: ort.InferenceSession | None = field(default=None, repr=False)
     _vram_bytes: int | None = field(default=None, repr=False)
-
     def _make_gpu_session(
         self,
         vram_bytes: int | None = None,
@@ -529,7 +523,6 @@ class SpladeEncoder:
             sess_options=opts,
             providers=providers,
         )
-
     @staticmethod
     def _validate_model_batch_axis(onnx_path: Path) -> None:
         """Verify the ONNX model has a dynamic batch axis on its output.
@@ -560,7 +553,6 @@ class SpladeEncoder:
                     f"The model must use a dynamic batch axis (dim_param). "
                     f"Re-export the model or update the coderecon-models-splade package."
                 )
-
     def load(self) -> None:
         """Load ONNX session + tokenizer (lazy, auto-detect GPU)."""
         global _gpu_active, BATCH_SIZE  # noqa: PLW0603
@@ -584,7 +576,6 @@ class SpladeEncoder:
         self._tokenizer = Tokenizer.from_file(str(self.tokenizer_path))
         self._tokenizer.enable_truncation(max_length=512)
         self._tokenizer.enable_padding()
-
     def _encode_batch(
         self,
         texts: list[str],
@@ -626,7 +617,6 @@ class SpladeEncoder:
             nz = np.nonzero(row)[0]
             results.append({int(idx): float(row[idx]) for idx in nz})
         return results
-
     def _get_cpu_session(self) -> ort.InferenceSession:
         """Lazily create a CPU-only ONNX session for OOM fallback."""
         if self._cpu_session is None:
@@ -642,7 +632,6 @@ class SpladeEncoder:
                 providers=["CPUExecutionProvider"],
             )
         return self._cpu_session
-
     def _encode_batch_safe(self, texts: list[str]) -> list[dict[int, float]]:
         """Encode with OOM recovery: fresh GPU session, then CPU fallback.
 
@@ -684,7 +673,6 @@ class SpladeEncoder:
             # Single item OOM on GPU — fall back to CPU
             log.warning("splade.cpu_fallback", extra={"text_len": len(texts[0])})
             return self._encode_batch(texts, session=self._get_cpu_session())
-
     def encode_documents(self, texts: list[str], batch_size: int = BATCH_SIZE) -> list[dict[int, float]]:
         """Encode document texts → sparse vectors (batched ONNX inference).
 
@@ -740,7 +728,6 @@ class SpladeEncoder:
         # Restore original order
         ordered_vecs.sort(key=lambda x: x[0])
         return [vec for _, vec in ordered_vecs]
-
     def encode_queries(self, texts: list[str], batch_size: int = BATCH_SIZE) -> list[dict[int, float]]:
         """Encode query texts → sparse vectors.
 
@@ -748,8 +735,6 @@ class SpladeEncoder:
         model is used for both documents and queries.
         """
         return self.encode_documents(texts, batch_size=batch_size)
-
-
 def sparse_dot(a: dict[int, float], b: dict[int, float]) -> float:
     """Dot product of two sparse vectors."""
     if len(a) > len(b):
@@ -774,11 +759,9 @@ def _get_encoder() -> SpladeEncoder:
         _encoder_singleton = SpladeEncoder()
     return _encoder_singleton
 
-
 def _vec_to_json(vec: dict[int, float]) -> str:
     """Compact JSON serialisation of a sparse vector."""
     return json.dumps({str(k): round(v, 4) for k, v in vec.items()})
-
 
 def _json_to_vec(blob: str) -> dict[int, float]:
     """Deserialise a sparse vector from JSON."""
@@ -798,7 +781,6 @@ def _vec_to_blob(vec: dict[int, float]) -> bytes:
     for k, v in vec.items():
         parts.append(struct.pack(_PAIR_FMT, k, v))
     return b"".join(parts)
-
 
 def _blob_to_vec(data: bytes) -> dict[int, float]:
     """Unpack a binary sparse vector to dict."""
@@ -830,7 +812,6 @@ def load_all_vectors_fast(
             else:
                 vecs[row.def_uid] = _json_to_vec(row.vector_json)
     return vecs
-
 
 def index_splade_vectors(
     db: Database,
@@ -930,7 +911,6 @@ def index_splade_vectors(
 
     log.info("splade.stored", extra={"count": stored})
     return stored
-
 
 def backfill_scaffold_text(
     db: Database,

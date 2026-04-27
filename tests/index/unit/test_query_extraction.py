@@ -498,7 +498,6 @@ def make_tree(code: str, language: str) -> Any:
     ext = ext_map.get(language, language)
     return parser.parse(Path(f"test.{ext}"), code.encode())
 
-
 def _grammar_for_config(config: TypeExtractionConfig) -> str:
     """Resolve grammar_name from a TypeExtractionConfig by finding its pack."""
     for pack in PACKS.values():
@@ -506,7 +505,6 @@ def _grammar_for_config(config: TypeExtractionConfig) -> str:
             return pack.grammar_name
     # Fallback: use language_family as grammar hint
     return config.language_family
-
 
 def make_extractor(
     config: TypeExtractionConfig, grammar_name: str | None = None
@@ -527,7 +525,6 @@ def make_extractor(
 
 class TestTypeAnnotationExtraction:
     """Test type annotation extraction across all languages."""
-
     @pytest.mark.parametrize(
         "config,grammar,code,expected_name,expected_type",
         TYPE_ANNOTATION_SAMPLES,
@@ -560,7 +557,6 @@ class TestTypeAnnotationExtraction:
             f"Expected annotation for '{expected_name}' with type containing '{expected_type}'. "
             f"Got: {[(a.target_name, a.raw_annotation) for a in annotations]}"
         )
-
     @pytest.mark.parametrize(
         "config,grammar,code,expected_name,expected_type",
         RETURN_TYPE_SAMPLES,
@@ -594,7 +590,6 @@ class TestTypeAnnotationExtraction:
             f"Expected return annotation for '{expected_name}' with type '{expected_type}'. "
             f"Got returns: {[(a.target_name, a.raw_annotation) for a in return_anns]}"
         )
-
     @pytest.mark.parametrize(
         "config,grammar,code",
         OPTIONAL_TYPE_SAMPLES,
@@ -620,7 +615,6 @@ class TestTypeAnnotationExtraction:
             f"Expected at least one optional annotation. "
             f"Got: {[(a.target_name, a.raw_annotation, a.is_optional) for a in annotations]}"
         )
-
     @pytest.mark.parametrize(
         "config,grammar,code",
         ARRAY_TYPE_SAMPLES,
@@ -646,7 +640,6 @@ class TestTypeAnnotationExtraction:
             f"Expected at least one array annotation. "
             f"Got: {[(a.target_name, a.raw_annotation, a.is_array) for a in annotations]}"
         )
-
     @pytest.mark.parametrize(
         "config,grammar,code",
         GENERIC_TYPE_SAMPLES,
@@ -673,7 +666,6 @@ class TestTypeAnnotationExtraction:
             f"Got: {[(a.target_name, a.raw_annotation, a.is_generic) for a in annotations]}"
         )
 
-
 # =============================================================================
 # Parametrized Tests: Type Members
 # =============================================================================
@@ -681,7 +673,6 @@ class TestTypeAnnotationExtraction:
 
 class TestTypeMemberExtraction:
     """Test type member extraction across all languages."""
-
     @pytest.mark.parametrize(
         "config,grammar,code,parent_name,expected_member,member_kind",
         TYPE_MEMBER_SAMPLES,
@@ -718,7 +709,6 @@ class TestTypeMemberExtraction:
                 f"Expected member kind '{member_kind}'. Got: {[m.member_kind for m in matching]}"
             )
 
-
 # =============================================================================
 # Parametrized Tests: Member Accesses
 # =============================================================================
@@ -726,7 +716,6 @@ class TestTypeMemberExtraction:
 
 class TestMemberAccessExtraction:
     """Test member access extraction across all languages."""
-
     @pytest.mark.parametrize(
         "config,grammar,code,expected_receiver,expected_member",
         MEMBER_ACCESS_SAMPLES,
@@ -761,7 +750,6 @@ class TestMemberAccessExtraction:
             f"Got: {[(a.receiver_name, a.member_chain) for a in accesses]}"
         )
 
-
 # =============================================================================
 # Parametrized Tests: Interface Implementations
 # =============================================================================
@@ -769,7 +757,6 @@ class TestMemberAccessExtraction:
 
 class TestInterfaceImplExtraction:
     """Test interface implementation extraction across all languages."""
-
     @pytest.mark.parametrize(
         "config,grammar,code,implementor,interface",
         INTERFACE_IMPL_SAMPLES,
@@ -804,7 +791,6 @@ class TestInterfaceImplExtraction:
             f"Got: {[(i.implementor_name, i.interface_name) for i in impls]}"
         )
 
-
 # =============================================================================
 # Extractor Properties Tests
 # =============================================================================
@@ -812,7 +798,6 @@ class TestInterfaceImplExtraction:
 
 class TestExtractorProperties:
     """Test QueryBasedExtractor property accessors."""
-
     @pytest.mark.parametrize(
         "config",
         [
@@ -831,7 +816,6 @@ class TestExtractorProperties:
         """Test that language_family property returns correct value."""
         extractor = make_extractor(config)
         assert extractor.language_family == config.language_family
-
     @pytest.mark.parametrize(
         "config,expected",
         [
@@ -850,7 +834,6 @@ class TestExtractorProperties:
         """Test supports_type_annotations property."""
         extractor = make_extractor(config)
         assert extractor.supports_type_annotations == expected
-
     @pytest.mark.parametrize(
         "config,expected",
         [
@@ -869,7 +852,6 @@ class TestExtractorProperties:
         """Test supports_interfaces property."""
         extractor = make_extractor(config)
         assert extractor.supports_interfaces == expected
-
     @pytest.mark.parametrize(
         "config,expected_styles",
         [
@@ -886,7 +868,6 @@ class TestExtractorProperties:
         extractor = make_extractor(config)
         assert extractor.access_styles == expected_styles
 
-
 # =============================================================================
 # Registry Tests
 # =============================================================================
@@ -894,13 +875,11 @@ class TestExtractorProperties:
 
 class TestExtractorRegistry:
     """Test the extractor registry functionality."""
-
     def test_registry_has_extractors(self) -> None:
         """Registry should have extractors loaded."""
         registry = get_registry()
         languages = registry.supported_languages()
         assert len(languages) > 0
-
     def test_get_python_extractor(self) -> None:
         """Can retrieve Python extractor from registry."""
         registry = get_registry()
@@ -908,31 +887,26 @@ class TestExtractorRegistry:
         assert extractor is not None
         assert extractor.language_family == "python"
         assert extractor.supports_type_annotations
-
     def test_get_or_fallback_known_language(self) -> None:
         """Known language returns its extractor."""
         registry = get_registry()
         extractor = registry.get_or_fallback("python")
         assert extractor.language_family == "python"
-
     def test_get_or_fallback_unknown_language(self) -> None:
         """Unknown language returns fallback extractor."""
         registry = get_registry()
         extractor = registry.get_or_fallback("unknown_xyz_123")
         assert extractor is not None
         assert not extractor.supports_type_annotations
-
     def test_pack_lookup(self) -> None:
         """Pack lookup returns valid packs."""
         pack = get_pack("python")
         assert pack is not None
         assert pack.type_config is not None
         assert pack.type_config.language_family == "python"
-
     def test_pack_lookup_nonexistent(self) -> None:
         """Nonexistent language returns None."""
         assert get_pack("nonexistent_language_xyz") is None
-
     @pytest.mark.parametrize(
         "lang_key",
         [name for name, p in PACKS.items() if p.type_config is not None],
@@ -945,7 +919,6 @@ class TestExtractorRegistry:
         assert pack.type_config is not None
         assert pack.type_config.language_family
 
-
 # =============================================================================
 # Output Format Consistency Tests
 # =============================================================================
@@ -953,7 +926,6 @@ class TestExtractorRegistry:
 
 class TestOutputFormatConsistency:
     """Verify all extractors produce consistent output formats."""
-
     @pytest.mark.parametrize(
         "config,code,grammar",
         [
@@ -993,7 +965,6 @@ class TestOutputFormatConsistency:
             assert ann.start_line >= 1
             assert isinstance(ann.start_col, int)
             assert ann.start_col >= 0
-
     @pytest.mark.parametrize(
         "config,code,grammar,parent",
         [
@@ -1027,7 +998,6 @@ class TestOutputFormatConsistency:
             assert isinstance(member.start_line, int)
             assert member.start_line >= 1
             assert isinstance(member.start_col, int)
-
     @pytest.mark.parametrize(
         "config,code,grammar",
         [
@@ -1062,7 +1032,6 @@ class TestOutputFormatConsistency:
             assert isinstance(access.is_invocation, bool)
             assert isinstance(access.start_line, int)
             assert isinstance(access.end_line, int)
-
     @pytest.mark.parametrize(
         "config,code,grammar,impl_name,iface_name",
         [
@@ -1106,7 +1075,6 @@ class TestOutputFormatConsistency:
             assert impl.impl_style
             assert isinstance(impl.start_line, int)
 
-
 # =============================================================================
 # Edge Cases and Error Handling
 # =============================================================================
@@ -1114,7 +1082,6 @@ class TestOutputFormatConsistency:
 
 class TestEdgeCases:
     """Test edge cases and error handling."""
-
     @pytest.mark.parametrize(
         "config,grammar",
         [
@@ -1145,7 +1112,6 @@ class TestEdgeCases:
         assert members == []
         assert accesses == []
         assert impls == []
-
     @pytest.mark.parametrize(
         "config,grammar,code",
         [
@@ -1172,7 +1138,6 @@ class TestEdgeCases:
         # Should not raise
         annotations = extractor.extract_type_annotations(tree.tree, f"bad.{grammar}", scopes=[])
         assert isinstance(annotations, list)
-
     def test_deeply_nested_generics_python(self) -> None:
         """Handle complex nested generic types."""
         extractor = make_extractor(PYTHON_CONFIG)
@@ -1184,7 +1149,6 @@ class TestEdgeCases:
 
         assert len(param_anns) >= 1
         assert any(a.is_generic for a in param_anns)
-
     def test_multiline_type_annotation_python(self) -> None:
         """Handle type annotations spanning multiple lines."""
         extractor = make_extractor(PYTHON_CONFIG)
@@ -1205,7 +1169,6 @@ def long_sig(
 
         param_anns = [a for a in annotations if a.target_kind == "parameter"]
         assert len(param_anns) >= 2
-
     def test_no_type_annotation_query(self) -> None:
         """Extractor with no type_annotation_query returns empty."""
         config = TypeExtractionConfig(
@@ -1217,7 +1180,6 @@ def long_sig(
 
         annotations = extractor.extract_type_annotations(tree.tree, "test.py", scopes=[])
         assert annotations == []
-
     def test_no_member_query(self) -> None:
         """Extractor with no type_member_query returns empty."""
         config = TypeExtractionConfig(
@@ -1233,7 +1195,6 @@ def long_sig(
             defs=[{"name": "C", "kind": "class", "def_uid": "C", "start_line": 1}],
         )
         assert members == []
-
     def test_no_interface_impl_query(self) -> None:
         """Extractor with no interface_impl_query returns empty."""
         config = TypeExtractionConfig(
@@ -1249,7 +1210,6 @@ def long_sig(
             defs=[{"name": "C", "kind": "class", "def_uid": "C", "start_line": 1}],
         )
         assert impls == []
-
     def test_member_without_parent_def(self) -> None:
         """Members without matching parent def are skipped."""
         extractor = make_extractor(PYTHON_CONFIG)
@@ -1258,7 +1218,6 @@ def long_sig(
         # Pass empty defs - no parent to match
         members = extractor.extract_type_members(tree.tree, "test.py", defs=[])
         assert members == []
-
     def test_scope_id_lookup(self) -> None:
         """Test scope ID assignment from scopes list."""
         extractor = make_extractor(PYTHON_CONFIG)
@@ -1285,7 +1244,6 @@ def long_sig(
 
 class TestUtilityMethods:
     """Test internal utility methods."""
-
     def test_is_optional_python(self) -> None:
         """Test optional type detection for Python."""
         extractor = make_extractor(PYTHON_CONFIG)
@@ -1294,7 +1252,6 @@ class TestUtilityMethods:
         assert extractor._is_optional("None | str")
         assert not extractor._is_optional("int")
         assert not extractor._is_optional("str")
-
     def test_is_optional_typescript(self) -> None:
         """Test optional type detection for TypeScript."""
         extractor = make_extractor(TYPESCRIPT_CONFIG)
@@ -1302,7 +1259,6 @@ class TestUtilityMethods:
         assert extractor._is_optional("string | undefined")
         assert extractor._is_optional("string?")
         assert not extractor._is_optional("number")
-
     def test_is_array_python(self) -> None:
         """Test array type detection for Python."""
         extractor = make_extractor(PYTHON_CONFIG)
@@ -1312,7 +1268,6 @@ class TestUtilityMethods:
         assert extractor._is_array("tuple[int, str]")
         assert not extractor._is_array("int")
         assert not extractor._is_array("dict[str, int]")
-
     def test_is_array_typescript(self) -> None:
         """Test array type detection for TypeScript."""
         extractor = make_extractor(TYPESCRIPT_CONFIG)
@@ -1320,7 +1275,6 @@ class TestUtilityMethods:
         assert extractor._is_array("Array<string>")
         assert extractor._is_array("ReadonlyArray<number>")
         assert not extractor._is_array("number")
-
     def test_extract_base_type_python(self) -> None:
         """Test base type extraction for Python."""
         extractor = make_extractor(PYTHON_CONFIG)
@@ -1328,20 +1282,17 @@ class TestUtilityMethods:
         assert extractor._extract_base_type("dict[str, int]") == "dict"
         assert extractor._extract_base_type("int") == "int"
         assert extractor._extract_base_type("  str  ") == "str"
-
     def test_extract_base_type_rust(self) -> None:
         """Test base type extraction for Rust (with reference indicator)."""
         extractor = make_extractor(RUST_CONFIG)
         assert extractor._extract_base_type("&str") == "str"
         assert extractor._extract_base_type("&mut String") == "mut String"
         assert extractor._extract_base_type("Vec<i32>") == "Vec"
-
     def test_canonicalize_type(self) -> None:
         """Test type canonicalization."""
         extractor = make_extractor(PYTHON_CONFIG)
         assert extractor._canonicalize_type("  int  ") == "int"
         assert extractor._canonicalize_type("list[str]") == "list[str]"
-
     def test_compute_member_def_uid(self) -> None:
         """Test member def_uid computation is stable."""
         extractor = make_extractor(PYTHON_CONFIG)
@@ -1355,7 +1306,6 @@ class TestUtilityMethods:
         assert uid1 != uid3  # Different method = different uid
         assert len(uid1) == 16  # SHA256 truncated to 16 chars
 
-
 # =============================================================================
 # Language-Specific Quirks Tests
 # =============================================================================
@@ -1363,7 +1313,6 @@ class TestUtilityMethods:
 
 class TestLanguageSpecificBehavior:
     """Test language-specific extraction behavior."""
-
     def test_python_private_visibility(self) -> None:
         """Python underscore prefix indicates private visibility."""
         extractor = make_extractor(PYTHON_CONFIG)
@@ -1383,7 +1332,6 @@ class TestLanguageSpecificBehavior:
             assert private_member.visibility == "private"
         if public_member:
             assert public_member.visibility == "public"
-
     def test_rust_reference_types(self) -> None:
         """Rust reference types are detected."""
         extractor = make_extractor(RUST_CONFIG)
@@ -1394,7 +1342,6 @@ class TestLanguageSpecificBehavior:
         ref_anns = [a for a in annotations if a.is_reference]
 
         assert len(ref_anns) >= 1
-
     def test_go_pointer_types(self) -> None:
         """Go pointer types are detected as references."""
         extractor = make_extractor(GO_CONFIG)
@@ -1405,7 +1352,6 @@ class TestLanguageSpecificBehavior:
         ref_anns = [a for a in annotations if a.is_reference]
 
         assert len(ref_anns) >= 1
-
     def test_ruby_no_type_annotations(self) -> None:
         """Ruby has no native type annotations."""
         extractor = make_extractor(RUBY_CONFIG)
@@ -1419,7 +1365,6 @@ class TestLanguageSpecificBehavior:
         except ValueError:
             pytest.skip("Ruby grammar not available")
 
-
 # =============================================================================
 # Grammar Loading Tests
 # =============================================================================
@@ -1427,7 +1372,6 @@ class TestLanguageSpecificBehavior:
 
 class TestGrammarLoading:
     """Test grammar loading behavior."""
-
     def test_unknown_grammar_raises(self) -> None:
         """Unknown grammar name raises ValueError."""
         config = TypeExtractionConfig(
@@ -1437,7 +1381,6 @@ class TestGrammarLoading:
 
         with pytest.raises(ValueError, match="Unknown grammar|Grammar not installed"):
             extractor._get_language()
-
     def test_grammar_cached(self) -> None:
         """Grammar is loaded once and cached."""
         extractor = make_extractor(PYTHON_CONFIG)
@@ -1446,7 +1389,6 @@ class TestGrammarLoading:
         lang2 = extractor._get_language()
 
         assert lang1 is lang2  # Same object
-
     def test_query_cached(self) -> None:
         """Queries are compiled once and cached."""
         extractor = make_extractor(PYTHON_CONFIG)
@@ -1456,7 +1398,6 @@ class TestGrammarLoading:
         query2 = extractor._get_query(query_str)
 
         assert query1 is query2  # Same object
-
     def test_invalid_query_returns_none(self) -> None:
         """Invalid query string returns None."""
         extractor = make_extractor(PYTHON_CONFIG)
@@ -1465,7 +1406,6 @@ class TestGrammarLoading:
         # Depending on tree-sitter behavior, this might return None or raise
         # We're testing that it doesn't crash the extractor
         assert result is None or result is not None  # Just ensure no crash
-
     def test_empty_query_returns_none(self) -> None:
         """Empty query string returns None."""
         extractor = make_extractor(PYTHON_CONFIG)

@@ -45,11 +45,9 @@ log = structlog.get_logger(__name__)
 if TYPE_CHECKING:
     from coderecon.index._internal.parsing.packs import ImportQueryConfig
 
-
 @dataclass
 class SyntacticScope:
     """A lexical scope extracted via Tree-sitter parsing."""
-
     scope_id: int  # Local ID within file (assigned by extractor)
     parent_scope_id: int | None  # Parent scope ID (None for file scope)
     kind: str  # file, class, function, block, comprehension, lambda
@@ -57,12 +55,9 @@ class SyntacticScope:
     start_col: int
     end_line: int
     end_col: int
-
-
 @dataclass
 class SyntacticImport:
     """An import statement extracted via Tree-sitter parsing."""
-
     import_uid: str  # Unique ID (computed from file + line + name)
     imported_name: str  # Name being imported
     alias: str | None  # Local alias (None if no alias)
@@ -73,12 +68,9 @@ class SyntacticImport:
     end_line: int
     end_col: int
     scope_id: int | None = None  # Scope where import is visible
-
-
 @dataclass
 class SyntacticBind:
     """A local binding extracted via Tree-sitter parsing."""
-
     name: str  # Bound identifier name
     scope_id: int  # Scope where binding occurs
     target_kind: str  # DEF, IMPORT, UNKNOWN
@@ -86,23 +78,17 @@ class SyntacticBind:
     reason_code: str  # PARAM, LOCAL_ASSIGN, DEF_IN_SCOPE, IMPORT_ALIAS, etc.
     start_line: int
     start_col: int
-
-
 @dataclass
 class DynamicAccess:
     """A dynamic access pattern detected via Tree-sitter parsing."""
-
     pattern_type: str  # bracket_access, getattr, reflect, eval, import_module
     start_line: int
     start_col: int
     extracted_literals: list[str] = field(default_factory=list)
     has_non_literal_key: bool = False
-
-
 @dataclass
 class SyntacticSymbol:
     """A symbol extracted via Tree-sitter parsing."""
-
     name: str
     kind: str  # function, class, method, variable, etc.
     line: int
@@ -115,41 +101,31 @@ class SyntacticSymbol:
     decorators: list[str] | None = None  # Decorator/annotation strings
     docstring: str | None = None  # First paragraph of docstring
     return_type: str | None = None  # Return type annotation text
-
-
 @dataclass
 class IdentifierOccurrence:
     """An identifier occurrence (not a semantic reference)."""
-
     name: str
     line: int
     column: int
     end_line: int
     end_column: int
-
-
 @dataclass
 class ProbeValidation:
     """Result of validating a file for context probing."""
-
     is_valid: bool
     error_count: int
     total_nodes: int
     has_meaningful_content: bool
     error_ratio: float = 0.0
-
-
 @dataclass
 class ParseResult:
     """Result of parsing a file."""
-
     tree: tree_sitter.Tree  # Tree-sitter Tree (not serializable)
     language: str
     error_count: int
     total_nodes: int
     root_node: tree_sitter.Node  # Tree-sitter Node
     ts_language: tree_sitter.Language | None = None  # tree-sitter Language object for grammar introspection
-
 
 # C# preprocessor wrapper node types that may contain declarations.
 # Tree-sitter wraps code inside #if/#region blocks under these types.
@@ -167,7 +143,6 @@ _CSHARP_PREPROC_WRAPPERS = frozenset(
 def _import_uid(file_path: str, name: str, line: int) -> str:
     """Compute stable import UID."""
     return hashlib.sha256(f"{file_path}:{line}:{name}".encode()).hexdigest()[:16]
-
 
 @dataclass
 class TreeSitterParser:
@@ -199,12 +174,10 @@ class TreeSitterParser:
 
     _parser: tree_sitter.Parser = field(default=None, repr=False)  # type: ignore[assignment]
     _languages: dict[str, tree_sitter.Language] = field(default_factory=dict, repr=False)
-
     def __post_init__(self) -> None:
         """Initialize the parser."""
         self._parser = tree_sitter.Parser()
         self._languages = {}
-
     def _get_language(self, lang_name: str) -> tree_sitter.Language | None:
         """Get or load a Tree-sitter language.
 
@@ -236,7 +209,6 @@ class TreeSitterParser:
         lang = tree_sitter.Language(lang_module.language())
         self._languages[lang_name] = lang
         return lang
-
     @staticmethod
     def _find_pack_by_grammar(grammar_name: str) -> LanguagePack | None:
         """Find the pack whose grammar_name matches."""
@@ -249,7 +221,6 @@ class TreeSitterParser:
             if p.grammar_name == grammar_name:
                 return p
         return None
-
     def _load_language_module(self, lang_name: str) -> Any:
         """Load tree-sitter language module by name.
 
@@ -265,7 +236,6 @@ class TreeSitterParser:
         except ImportError:
             log.debug("language_module_import_failed", exc_info=True)
             return None
-
     def parse(self, path: Path, content: bytes | None = None) -> ParseResult:
         """
         Parse a file with Tree-sitter.
@@ -301,7 +271,6 @@ class TreeSitterParser:
         # Count errors and total nodes
         error_count = 0
         total_nodes = 0
-
         def count_nodes(node: tree_sitter.Node) -> None:
             nonlocal error_count, total_nodes
             total_nodes += 1
@@ -320,7 +289,6 @@ class TreeSitterParser:
             root_node=tree.root_node,
             ts_language=ts_lang,
         )
-
     def extract_symbols(self, result: ParseResult) -> list[SyntacticSymbol]:
         """
         Extract symbol definitions from a parse result.
@@ -343,7 +311,6 @@ class TreeSitterParser:
             return self._extract_symbols_via_query(result.tree, result.root_node, config)
         # Generic extraction via walking for unsupported languages
         return self._extract_generic_symbols(result.root_node, result.language)
-
     def extract_identifier_occurrences(self, result: ParseResult) -> list[IdentifierOccurrence]:
         """
         Extract all identifier occurrences from a parse result.
@@ -358,7 +325,6 @@ class TreeSitterParser:
             List of IdentifierOccurrence objects.
         """
         occurrences: list[IdentifierOccurrence] = []
-
         def walk(node: tree_sitter.Node) -> None:
             if node.type == "identifier" or node.type.endswith("_identifier"):
                 name = node.text.decode("utf-8") if node.text else ""
@@ -377,7 +343,6 @@ class TreeSitterParser:
 
         walk(result.root_node)
         return occurrences
-
     def extract_scopes(self, result: ParseResult) -> list[SyntacticScope]:
         """Extract lexical scopes from a parse result.
 
@@ -402,7 +367,6 @@ class TreeSitterParser:
         if pack is not None and pack.scope_types:
             return _extract_scopes_generic(result.root_node, pack.scope_types)
         return _extract_scopes_by_pattern(result.root_node, _GENERIC_SCOPE_PATTERNS)
-
     def extract_imports(self, result: ParseResult, file_path: str) -> list[SyntacticImport]:
         """Extract import statements from a parse result.
 
@@ -422,7 +386,6 @@ class TreeSitterParser:
         return self._extract_imports_declarative(
             result.tree, result.root_node, pack.import_query_config, file_path
         )
-
     def _extract_imports_declarative(
         self,
         tree: tree_sitter.Tree,
@@ -537,7 +500,6 @@ class TreeSitterParser:
                 )
             )
         return imports
-
     def extract_declared_module(self, result: ParseResult, file_path: str) -> str | None:
         """Extract the language-level module/package/namespace declaration.
 
@@ -560,7 +522,6 @@ class TreeSitterParser:
         elif lang == "ocaml":
             return self._declared_module_ocaml(file_path)
         return None
-
     def _extract_declared_module_via_query(
         self,
         tree: tree_sitter.Tree,
@@ -637,8 +598,6 @@ class TreeSitterParser:
 
         # Generic: try using node text directly
         return module_node.text.decode("utf-8") if module_node.text else None
-
-
     def _extract_java_scoped_path(self, node: tree_sitter.Node) -> list[str]:
         """Extract path parts from a Java scoped_identifier."""
         if node.type == "identifier":
@@ -648,7 +607,6 @@ class TreeSitterParser:
             if child.type in ("scoped_identifier", "identifier"):
                 parts.extend(self._extract_java_scoped_path(child))
         return parts
-
     def _declared_module_java_node(self, node: tree_sitter.Node) -> str | None:
         """Extract module from a package_declaration node."""
         for child in node.children:
@@ -658,7 +616,6 @@ class TreeSitterParser:
             elif child.type == "identifier":
                 return child.text.decode("utf-8") if child.text else None
         return None
-
     def _declared_module_kotlin_node(self, node: tree_sitter.Node) -> str | None:
         """Extract module from a package_header node."""
         for child in node.children:
@@ -670,7 +627,6 @@ class TreeSitterParser:
                 ]
                 return ".".join(parts) if parts else None
         return None
-
     def _declared_module_scala_node(self, node: tree_sitter.Node) -> str | None:
         """Extract module from a package_clause node."""
         for child in node.children:
@@ -682,7 +638,6 @@ class TreeSitterParser:
                 ]
                 return ".".join(parts) if parts else None
         return None
-
     def _declared_module_csharp(self, root: tree_sitter.Node) -> str | None:
         """Extract namespace from C# file, handling nesting.
 
@@ -730,21 +685,18 @@ class TreeSitterParser:
             if not found:
                 break
         return ".".join(parts) if parts else None
-
     def _declared_module_go_node(self, node: tree_sitter.Node) -> str | None:
         """Extract module from a package_clause node."""
         for child in node.children:
             if child.type == "package_identifier":
                 return child.text.decode("utf-8") if child.text else None
         return None
-
     def _declared_module_ruby(self, root: tree_sitter.Node) -> str | None:
         """Extract nested `module A; module B; end; end` → 'A::B'.
 
         Walks the module nesting chain and builds the full constant path.
         """
         parts: list[str] = []
-
         def _walk_modules(node: tree_sitter.Node) -> None:
             if node.type == "module":
                 for sub in node.children:
@@ -762,7 +714,6 @@ class TreeSitterParser:
 
         _walk_modules(root.children[0] if root.children else root)
         return "::.".join(parts).replace("::", ".") if parts else None
-
     @staticmethod
     def _declared_module_ocaml(file_path: str) -> str | None:
         """Derive OCaml module name from filename.
@@ -781,7 +732,6 @@ class TreeSitterParser:
             return None
         # OCaml modules are the stem with first character capitalized
         return stem[0].upper() + stem[1:]
-
     def extract_dynamic_accesses(self, result: ParseResult) -> list[DynamicAccess]:
         """Extract dynamic access patterns for telemetry.
 
@@ -795,7 +745,6 @@ class TreeSitterParser:
         if pack is not None and pack.dynamic_query is not None:
             return self._extract_dynamic_via_query(result.tree, result.root_node, pack)
         return []
-
     def _extract_dynamic_via_query(
         self,
         tree: tree_sitter.Tree,
@@ -825,7 +774,6 @@ class TreeSitterParser:
             for node in nodes:
                 dynamics.extend(processor(node))
         return dynamics
-
     def _process_python_import_node(self, node: tree_sitter.Node, file_path: str) -> list[SyntacticImport]:
         """Process a single Python import node found by query."""
         imports: list[SyntacticImport] = []
@@ -932,7 +880,6 @@ class TreeSitterParser:
         return imports
 
     # C# using directive and namespace extraction
-
     @staticmethod
     def _qualified_name_text(node: tree_sitter.Node) -> str:
         """Extract full text of a qualified_name or identifier node."""
@@ -940,7 +887,6 @@ class TreeSitterParser:
             text: str = node.text.decode("utf-8")
             return text
         return ""
-
     def _process_python_dynamic_node(self, node: tree_sitter.Node) -> list[DynamicAccess]:
         """Process a single Python dynamic-access node found by query."""
         dynamics: list[DynamicAccess] = []
@@ -1003,7 +949,6 @@ class TreeSitterParser:
             )
 
         return dynamics
-
     def _process_js_dynamic_node(self, node: tree_sitter.Node) -> list[DynamicAccess]:
         """Process a single JS/TS dynamic-access node found by query."""
         dynamics: list[DynamicAccess] = []
@@ -1041,7 +986,6 @@ class TreeSitterParser:
                     )
 
         return dynamics
-
     def compute_interface_hash(self, symbols: list[SyntacticSymbol]) -> str:
         """
         Compute a hash of the public interface of symbols.
@@ -1066,7 +1010,6 @@ class TreeSitterParser:
 
         interface_str = "\n".join(parts)
         return hashlib.sha256(interface_str.encode()).hexdigest()
-
     def validate_code_file(self, result: ParseResult) -> ProbeValidation:
         """
         Validate a code file for context probing.
@@ -1103,7 +1046,6 @@ class TreeSitterParser:
             has_meaningful_content=has_meaningful,
             error_ratio=error_ratio,
         )
-
     def validate_data_file(self, result: ParseResult) -> ProbeValidation:
         """
         Validate a data file for context probing.
@@ -1128,17 +1070,14 @@ class TreeSitterParser:
             has_meaningful_content=has_content,
             error_ratio=(result.error_count / result.total_nodes if result.total_nodes > 0 else 0),
         )
-
     def _detect_language_from_ext(self, ext: str) -> str | None:
         """Detect language from file extension -- delegates to packs."""
         pack = get_pack_for_ext(ext)
         return pack.name if pack is not None else None
-
     def _detect_language_from_filename(self, filename: str) -> str | None:
         """Detect language from filename -- delegates to packs."""
         pack = get_pack_for_filename(filename)
         return pack.name if pack is not None else None
-
     def _has_meaningful_nodes(self, node: tree_sitter.Node) -> bool:
         """Check if tree has meaningful (non-comment, non-whitespace) nodes."""
         meaningless_types = {
@@ -1148,7 +1087,6 @@ class TreeSitterParser:
             "ERROR",
             "MISSING",
         }
-
         def check(n: tree_sitter.Node) -> bool:
             if n.is_named and n.type not in meaningless_types:
                 # Has at least one meaningful named node
@@ -1158,7 +1096,6 @@ class TreeSitterParser:
         return check(node)
 
     # Unified query-based symbol extraction
-
     def extract_csharp_namespace_types(self, root: tree_sitter.Node) -> dict[str, list[str]]:
         """Extract namespace -> type names mapping from a C# AST.
 
@@ -1181,7 +1118,6 @@ class TreeSitterParser:
         }
 
         ns_map: dict[str, list[str]] = {}
-
         def _type_names_from(declaration_list: tree_sitter.Node, ns_name: str) -> None:
             """Collect type names from a declaration_list node, recursing into nested namespaces."""
             for child in declaration_list.children:
@@ -1196,7 +1132,6 @@ class TreeSitterParser:
                 elif child.type in _CSHARP_PREPROC_WRAPPERS:
                     # Recurse into preprocessor blocks
                     _type_names_from(child, ns_name)
-
         def _process_namespace(node: tree_sitter.Node, parent_ns: str | None) -> None:
             """Process a namespace_declaration node, composing the full namespace path."""
             ns_name = None
@@ -1206,7 +1141,6 @@ class TreeSitterParser:
                     ns_name = f"{parent_ns}.{local_ns}" if parent_ns else local_ns
                 elif child.type == "declaration_list" and ns_name:
                     _type_names_from(child, ns_name)
-
         def _walk_for_namespaces(parent: tree_sitter.Node, parent_ns: str | None = None) -> None:
             """Walk tree nodes, descending into preprocessor wrappers."""
             for node in parent.children:
@@ -1229,7 +1163,6 @@ class TreeSitterParser:
                 elif node.type in _CSHARP_PREPROC_WRAPPERS:
                     # Recurse into preprocessor blocks to find wrapped namespaces
                     _walk_for_namespaces(node, parent_ns)
-
         def _collect_file_scoped_types(parent: tree_sitter.Node, ns_name: str) -> None:
             """Collect type declarations for file-scoped namespaces, including inside preproc blocks."""
             for sibling in parent.children:
@@ -1244,7 +1177,6 @@ class TreeSitterParser:
         _walk_for_namespaces(root)
 
         return ns_map
-
     def _process_js_import_node(self, node: tree_sitter.Node, file_path: str) -> list[SyntacticImport]:
         """Process a single JS/TS import node found by query."""
         imports: list[SyntacticImport] = []
@@ -1356,7 +1288,6 @@ class TreeSitterParser:
         return imports
 
     # Unified query-based symbol extraction
-
     def _extract_symbols_via_query(
         self,
         tree: tree_sitter.Tree,
@@ -1433,7 +1364,6 @@ class TreeSitterParser:
             )
 
         return symbols
-
     @staticmethod
     def _find_container_name(
         node: tree_sitter.Node,
@@ -1454,7 +1384,6 @@ class TreeSitterParser:
                 return None
             current = current.parent
         return None
-
     @staticmethod
     def _extract_signature(
         captures: dict[str, list[Any]],
@@ -1488,7 +1417,6 @@ class TreeSitterParser:
                 return "(" + ", ".join(params) + ")"
 
         return None
-
     @staticmethod
     def _extract_decorators(node: tree_sitter.Node) -> list[str] | None:
         """Extract decorator/annotation strings from a definition node.
@@ -1540,7 +1468,6 @@ class TreeSitterParser:
                     decorators.append(sibling.text.decode("utf-8").strip())
 
         return decorators if decorators else None
-
     @staticmethod
     def _extract_return_type(node: tree_sitter.Node) -> str | None:
         """Extract return type annotation from a definition node.
@@ -1559,7 +1486,6 @@ class TreeSitterParser:
         # Check for return type indicated by '->' or ':' followed by type
         # (TypeScript/Rust arrow return types handled by field names above)
         return None
-
     @staticmethod
     def _extract_docstring(
         node: tree_sitter.Node,
@@ -1645,7 +1571,6 @@ class TreeSitterParser:
                 return " ".join(first_para.split())
 
         return None
-
     def _extract_generic_symbols(self, root: tree_sitter.Node, _language: str) -> list[SyntacticSymbol]:
         """Generic symbol extraction by walking the tree."""
         symbols: list[SyntacticSymbol] = []
@@ -1670,7 +1595,6 @@ class TreeSitterParser:
             "record_declaration",
             "record_struct_declaration",
         }
-
         def walk(node: tree_sitter.Node) -> None:
             if node.type in def_types:
                 name_node = node.child_by_field_name("name")

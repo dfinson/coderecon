@@ -29,7 +29,6 @@ _DELETE_KEY = object()
 @dataclass
 class SafeExecutionConfig:
     """Configuration for safe execution context."""
-
     artifact_dir: Path
     workspace_root: Path
     timeout_sec: int = 300
@@ -40,7 +39,6 @@ class SafeExecutionConfig:
     # Per-subprocess memory ceiling (MB). When set, language strategies
     # inject this via their runtime-specific env vars.
     subprocess_memory_limit_mb: int | None = None
-
 
 LanguageFamily = Literal[
     "python",
@@ -95,7 +93,6 @@ def _get_language_family(pack_id: str) -> LanguageFamily:
     }
     return mappings.get(pack_id, "unknown")
 
-
 class SafeExecutionContext:
     """Provides defensive environment isolation for test execution.
 
@@ -105,15 +102,12 @@ class SafeExecutionContext:
     3. Isolating coverage/artifact files to prevent corruption
     4. Enforcing non-interactive execution modes
     """
-
     def __init__(self, config: SafeExecutionConfig) -> None:
         self._config = config
         self._temp_dirs: list[Path] = []
-
     @property
     def config(self) -> SafeExecutionConfig:
         return self._config
-
     def prepare_environment(
         self,
         pack_id: str,
@@ -147,7 +141,6 @@ class SafeExecutionContext:
                 env[key] = value  # type: ignore[assignment]
 
         return env
-
     def sanitize_command(
         self,
         cmd: list[str],
@@ -168,7 +161,6 @@ class SafeExecutionContext:
         lang = _get_language_family(pack_id)
         strategy = self._get_cmd_strategy(lang)
         return strategy(list(cmd))  # Copy to avoid mutation
-
     def cleanup(self) -> None:
         """Clean up any temporary resources created during execution."""
         # Temp dirs are managed by tempfile module, but we track them
@@ -176,7 +168,6 @@ class SafeExecutionContext:
         self._temp_dirs.clear()
 
     # Universal Environment Overrides
-
     def _universal_env_overrides(self) -> dict[str, str]:
         """Environment variables that apply to all languages.
 
@@ -213,7 +204,6 @@ class SafeExecutionContext:
         }
 
     # Language-Specific Environment Strategies
-
     def _get_env_strategy(self, lang: LanguageFamily) -> Callable[[], dict[str, str | object]]:
         """Get environment strategy for language family."""
         strategies: dict[LanguageFamily, Callable[[], dict[str, str | object]]] = {
@@ -235,7 +225,6 @@ class SafeExecutionContext:
             "unknown": self._unknown_env,
         }
         return strategies.get(lang, self._unknown_env)
-
     def _unknown_env(self) -> dict[str, str | object]:
         """Environment overrides for unknown language families.
 
@@ -252,7 +241,6 @@ class SafeExecutionContext:
             "COVERAGE_FILE": _DELETE_KEY,
             "COVERAGE_PROCESS_START": _DELETE_KEY,
         }
-
     def _python_env(self) -> dict[str, str | object]:
         """Python-specific environment overrides.
 
@@ -292,7 +280,6 @@ class SafeExecutionContext:
             # Pytest specific
             "PYTEST_ADDOPTS": "--tb=short -q",  # Override verbose project settings
         }
-
     def _javascript_env(self) -> dict[str, str | object]:
         """JavaScript/TypeScript environment overrides.
 
@@ -329,7 +316,6 @@ class SafeExecutionContext:
             "NX_DAEMON": "false",
             "TURBO_TELEMETRY_DISABLED": "1",
         }
-
     def _go_env(self) -> dict[str, str | object]:
         """Go environment overrides.
 
@@ -359,7 +345,6 @@ class SafeExecutionContext:
         if limit:
             go_env["GOMEMLIMIT"] = f"{limit}MiB"
         return go_env
-
     def _rust_env(self) -> dict[str, str | object]:
         """Rust environment overrides.
 
@@ -382,7 +367,6 @@ class SafeExecutionContext:
             "CARGO_NET_OFFLINE": "false",  # Allow network but...
             "CARGO_HTTP_CHECK_REVOKE": "false",  # ...skip cert checks for speed
         }
-
     def _java_env(self) -> dict[str, str | object]:
         """Java/Kotlin/Scala environment overrides.
 
@@ -413,7 +397,6 @@ class SafeExecutionContext:
             # Kotlin specific
             "KOTLIN_DAEMON_ENABLED": "false",
         }
-
     def _csharp_env(self) -> dict[str, str | object]:
         """C#/.NET environment overrides.
 
@@ -445,7 +428,6 @@ class SafeExecutionContext:
             # .NET GC hard heap limit in bytes (hex)
             env["DOTNET_GCHeapHardLimit"] = hex(limit * BYTES_PER_MB)
         return env
-
     def _cpp_env(self) -> dict[str, str | object]:
         """C/C++ environment overrides.
 
@@ -468,7 +450,6 @@ class SafeExecutionContext:
             "CTEST_OUTPUT_ON_FAILURE": "1",
             "CTEST_PARALLEL_LEVEL": "4",
         }
-
     def _ruby_env(self) -> dict[str, str | object]:
         """Ruby environment overrides.
 
@@ -495,7 +476,6 @@ class SafeExecutionContext:
             # RSpec settings
             "SPEC_OPTS": "--no-color --format documentation",
         }
-
     def _php_env(self) -> dict[str, str | object]:
         """PHP environment overrides.
 
@@ -523,7 +503,6 @@ class SafeExecutionContext:
             if self._config.subprocess_memory_limit_mb
             else "-1",
         }
-
     def _elixir_env(self) -> dict[str, str | object]:
         """Elixir environment overrides.
 
@@ -550,7 +529,6 @@ class SafeExecutionContext:
         if limit:
             env["ERL_FLAGS"] = f"+MBs {limit}"
         return env
-
     def _dart_env(self) -> dict[str, str | object]:
         """Dart/Flutter environment overrides.
 
@@ -570,7 +548,6 @@ class SafeExecutionContext:
             # Coverage output
             "DART_COVERAGE_DIR": str(coverage_dir),
         }
-
     def _swift_env(self) -> dict[str, str | object]:
         """Swift environment overrides.
 
@@ -593,7 +570,6 @@ class SafeExecutionContext:
         }
 
     # Language-Specific Command Sanitization Strategies
-
     def _get_cmd_strategy(self, lang: LanguageFamily) -> Callable[[list[str]], list[str]]:
         """Get command sanitization strategy for language family."""
         strategies: dict[LanguageFamily, Callable[[list[str]], list[str]]] = {
@@ -615,7 +591,6 @@ class SafeExecutionContext:
             "unknown": lambda cmd: cmd,
         }
         return strategies.get(lang, lambda cmd: cmd)
-
     def _sanitize_python_cmd(self, cmd: list[str]) -> list[str]:
         """Sanitize Python test commands.
 
@@ -657,7 +632,6 @@ class SafeExecutionContext:
             result.append(arg)
 
         return result
-
     def _sanitize_javascript_cmd(self, cmd: list[str]) -> list[str]:
         """Sanitize JavaScript/TypeScript test commands.
 
@@ -703,7 +677,6 @@ class SafeExecutionContext:
                     break
 
         return result
-
     def _sanitize_go_cmd(self, cmd: list[str]) -> list[str]:
         """Sanitize Go test commands.
 
@@ -723,7 +696,6 @@ class SafeExecutionContext:
             result.append(f"-timeout={self._config.timeout_sec}s")
 
         return result
-
     def _sanitize_rust_cmd(self, cmd: list[str]) -> list[str]:
         """Sanitize Rust test commands.
 
@@ -738,7 +710,6 @@ class SafeExecutionContext:
             result.append("--color=never")
 
         return result
-
     def _sanitize_java_cmd(self, cmd: list[str]) -> list[str]:
         """Sanitize Java/Maven/Gradle commands.
 
@@ -770,7 +741,6 @@ class SafeExecutionContext:
                 result.append("--console=plain")
 
         return result
-
     def _sanitize_csharp_cmd(self, cmd: list[str]) -> list[str]:
         """Sanitize .NET test commands.
 
@@ -785,7 +755,6 @@ class SafeExecutionContext:
             result.append("--verbosity=minimal")
 
         return result
-
     def _sanitize_cpp_cmd(self, cmd: list[str]) -> list[str]:
         """Sanitize C/C++ test commands (CTest, etc).
 
@@ -804,7 +773,6 @@ class SafeExecutionContext:
                 result.extend(["--parallel", "4"])
 
         return result
-
     def _sanitize_ruby_cmd(self, cmd: list[str]) -> list[str]:
         """Sanitize Ruby test commands.
 
@@ -825,7 +793,6 @@ class SafeExecutionContext:
                 result.extend(["--format", "documentation"])
 
         return result
-
     def _sanitize_php_cmd(self, cmd: list[str]) -> list[str]:
         """Sanitize PHP test commands.
 
@@ -844,7 +811,6 @@ class SafeExecutionContext:
                 result.append("--colors=never")
 
         return result
-
     def _sanitize_elixir_cmd(self, cmd: list[str]) -> list[str]:
         """Sanitize Elixir test commands.
 
@@ -859,7 +825,6 @@ class SafeExecutionContext:
             result.remove("--stale")  # Run all tests, not just stale
 
         return result
-
     def _sanitize_dart_cmd(self, cmd: list[str]) -> list[str]:
         """Sanitize Dart/Flutter test commands.
 
@@ -875,7 +840,6 @@ class SafeExecutionContext:
             result.append("--no-pub")
 
         return result
-
     def _sanitize_swift_cmd(self, cmd: list[str]) -> list[str]:
         """Sanitize Swift test commands.
 
@@ -888,7 +852,6 @@ class SafeExecutionContext:
             result.append("--parallel")
 
         return result
-
 
 # Factory Function
 

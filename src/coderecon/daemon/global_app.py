@@ -40,7 +40,6 @@ log = structlog.get_logger(__name__)
 @dataclass
 class WorktreeSlot:
     """Runtime state for a single worktree within a repo."""
-
     name: str
     repo_root: Path
     watcher: FileWatcher
@@ -51,8 +50,6 @@ class WorktreeSlot:
     _mcp_lifespan_ctx: contextlib.AbstractAsyncContextManager[None]
     activated_at: float = field(default_factory=time.time)
     last_request_at: float = field(default_factory=time.time)
-
-
 class RepoSlot:
     """Runtime state for a single registered repository.
 
@@ -70,7 +67,6 @@ class RepoSlot:
         "indexer",
         "worktrees",
     )
-
     def __init__(
         self,
         name: str,
@@ -90,7 +86,6 @@ class RepoSlot:
         self.indexer = indexer
         self.worktrees: dict[str, WorktreeSlot] = {}
 
-
 # Default inotify watch ceiling.  The real limit comes from
 # /proc/sys/fs/inotify/max_user_watches but 200_000 is a safe budget to
 # stay well below the typical 524288 default and leave room for other procs.
@@ -99,7 +94,6 @@ _DEFAULT_WATCH_CEILING = 200_000
 
 class GlobalDaemon:
     """Manages multiple repos behind a single Starlette app."""
-
     def __init__(
         self,
         registry: CatalogRegistry,
@@ -111,11 +105,9 @@ class GlobalDaemon:
         self._start_time = time.time()
         self._watch_ceiling = watch_ceiling
         self._eviction_task: asyncio.Task[None] | None = None
-
     @property
     def slot_names(self) -> list[str]:
         return list(self._slots.keys())
-
     def get_slot(self, name: str) -> RepoSlot | None:
         return self._slots.get(name)
 
@@ -496,7 +488,6 @@ class GlobalDaemon:
 
         for name in list(self._slots):
             await self.deactivate_repo(name)
-
     def _current_watch_count(self) -> int:
         """Sum of inotify watches across all active worktree watchers."""
         total = 0
@@ -535,7 +526,6 @@ class GlobalDaemon:
         except asyncio.CancelledError:
             structlog.get_logger().debug("eviction_loop_cancelled", exc_info=True)
             pass
-
     def start_eviction_loop(self, idle_timeout: float) -> None:
         """Start the idle-eviction background task.
 
@@ -700,7 +690,6 @@ class GlobalDaemon:
         if new_names:
             log.info("worktrees_refreshed", repo=name, added=new_names)
         return new_names
-
     def build_app(self, *, dev_mode: bool = False) -> Starlette:
         """Build the global Starlette application with all routes.
 

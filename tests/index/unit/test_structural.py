@@ -43,22 +43,18 @@ def db(temp_dir: Path) -> Database:
 
     return db
 
-
 @pytest.fixture
 def indexer(db: Database, temp_dir: Path) -> StructuralIndexer:
     """Create a StructuralIndexer instance."""
     return StructuralIndexer(db, temp_dir)
 
-
 class TestDefUidComputation:
     """Tests for def_uid computation."""
-
     def test_compute_def_uid_basic(self) -> None:
         """def_uid should be deterministic."""
         uid1 = _compute_def_uid(1, "src/foo.py", "function", "foo", None)
         uid2 = _compute_def_uid(1, "src/foo.py", "function", "foo", None)
         assert uid1 == uid2
-
     def test_compute_def_uid_different_inputs(self) -> None:
         """Different inputs should produce different def_uids."""
         uid1 = _compute_def_uid(1, "src/foo.py", "function", "foo", None)
@@ -68,28 +64,22 @@ class TestDefUidComputation:
         assert uid1 != uid2
         assert uid1 != uid3
         assert uid1 != uid4
-
     def test_compute_def_uid_with_signature(self) -> None:
         """Signature hash should affect def_uid."""
         uid1 = _compute_def_uid(1, "src/foo.py", "function", "foo", "abc123")
         uid2 = _compute_def_uid(1, "src/foo.py", "function", "foo", "def456")
         assert uid1 != uid2
-
     def test_compute_def_uid_length(self) -> None:
         """def_uid should be 16 characters (truncated SHA256)."""
         uid = _compute_def_uid(1, "src/foo.py", "function", "foo", None)
         assert len(uid) == 16
-
-
 class TestFindContainingScope:
     """Tests for scope containment."""
-
     def test_file_scope_default(self) -> None:
         """Should return file scope (0) when no scopes contain position."""
         scopes: list[SyntacticScope] = []
         result = _find_containing_scope(scopes, 10, 5)
         assert result == 0
-
     def test_find_containing_scope_basic(self) -> None:
         """Should find the scope containing a position."""
         scopes = [
@@ -114,7 +104,6 @@ class TestFindContainingScope:
         ]
         result = _find_containing_scope(scopes, 10, 5)
         assert result == 1  # Inside function scope
-
     def test_find_innermost_scope(self) -> None:
         """Should return innermost scope when multiple scopes contain position."""
         scopes = [
@@ -148,17 +137,13 @@ class TestFindContainingScope:
         ]
         result = _find_containing_scope(scopes, 15, 8)
         assert result == 2  # Innermost (function) scope
-
-
 class TestExtractFile:
     """Tests for single file extraction."""
-
     def test_extract_python_file(self, temp_dir: Path) -> None:
         """Should extract facts from Python file."""
         content = """
 def hello():
     return "Hello"
-
 class Greeter:
     def greet(self, name):
         return f"Hello, {name}"
@@ -172,7 +157,6 @@ class Greeter:
         assert len(result.defs) >= 3  # hello, Greeter, greet
         assert len(result.refs) > 0  # At least definition refs
         assert len(result.scopes) >= 1  # At least file scope
-
     def test_extract_with_imports(self, temp_dir: Path) -> None:
         """Should extract import facts."""
         content = """
@@ -191,7 +175,6 @@ from pathlib import Path
         import_names = [i["imported_name"] for i in result.imports]
         assert "os" in import_names
         assert "Path" in import_names
-
     def test_extract_with_local_binds(self, temp_dir: Path) -> None:
         """Should extract local binding facts."""
         content = """
@@ -207,14 +190,12 @@ def foo():
         assert result.error is None
         # Should have binding for function definition
         assert len(result.binds) >= 1
-
     def test_extract_nonexistent_file(self, temp_dir: Path) -> None:
         """Should return error for nonexistent file."""
         result = _extract_file("nonexistent.py", str(temp_dir), unit_id=1)
 
         assert result.error is not None
         assert "not found" in result.error.lower()
-
     def test_extract_unsupported_extension(self, temp_dir: Path) -> None:
         """Should gracefully skip unsupported file types."""
         file_path = temp_dir / "test.unknown"
@@ -225,7 +206,6 @@ def foo():
         # Unsupported files are skipped (no error), but marked as no-grammar
         assert result.error is None
         assert result.skipped_no_grammar is True
-
     def test_extract_content_hash(self, temp_dir: Path) -> None:
         """Should compute content hash."""
         content = "def foo(): pass"
@@ -236,7 +216,6 @@ def foo():
 
         assert result.content_hash is not None
         assert len(result.content_hash) == 64  # SHA256 hex
-
     def test_extract_dynamic_access(self, temp_dir: Path) -> None:
         """Should extract dynamic access sites."""
         content = """
@@ -252,10 +231,8 @@ y = obj["key"]
         # Should detect getattr and bracket access
         assert len(result.dynamic_sites) >= 2
 
-
 class TestExtractionResult:
     """Tests for ExtractionResult structure."""
-
     def test_extraction_result_defaults(self) -> None:
         """ExtractionResult should have correct defaults."""
         result = ExtractionResult(file_path="test.py")
@@ -268,11 +245,8 @@ class TestExtractionResult:
         assert result.binds == []
         assert result.dynamic_sites == []
         assert result.error is None
-
-
 class TestBatchResult:
     """Tests for BatchResult structure."""
-
     def test_batch_result_defaults(self) -> None:
         """BatchResult should have correct defaults."""
         result = BatchResult()
@@ -286,15 +260,11 @@ class TestBatchResult:
         assert result.dynamic_sites_extracted == 0
         assert result.errors == []
         assert result.duration_ms == 0
-
-
 class TestStructuralIndexer:
     """Tests for StructuralIndexer."""
-
     def test_indexer_creation(self, indexer: StructuralIndexer) -> None:
         """Should create indexer instance."""
         assert indexer is not None
-
     def test_index_single_file(
         self, db: Database, indexer: StructuralIndexer, temp_dir: Path
     ) -> None:
@@ -323,7 +293,6 @@ def hello():
         assert result.files_processed == 1
         assert result.defs_extracted >= 1  # hello function
         assert result.errors == []
-
     def test_index_multiple_files(
         self, db: Database, indexer: StructuralIndexer, temp_dir: Path
     ) -> None:
@@ -346,7 +315,6 @@ def hello():
 
         assert result.files_processed == 2
         assert result.defs_extracted >= 2  # foo and bar
-
     def test_index_with_errors(
         self, db: Database, indexer: StructuralIndexer, temp_dir: Path
     ) -> None:
@@ -370,10 +338,8 @@ def hello():
         assert result.defs_extracted >= 1  # From good.py
         assert len(result.errors) >= 1  # From nonexistent.py
 
-
 class TestRefTierAssignment:
     """Tests for RefTier assignment during extraction."""
-
     def test_definition_refs_are_proven(self, temp_dir: Path) -> None:
         """Definition sites should have PROVEN ref_tier."""
         content = "def foo(): pass"
@@ -386,7 +352,6 @@ class TestRefTierAssignment:
         def_refs = [r for r in result.refs if r["role"] == Role.DEFINITION.value]
         assert len(def_refs) >= 1
         assert all(r["ref_tier"] == RefTier.PROVEN.value for r in def_refs)
-
     def test_same_file_refs_are_proven(self, temp_dir: Path) -> None:
         """References to same-file definitions should be PROVEN."""
         content = """
@@ -407,7 +372,6 @@ x = foo()
         # Should have at least one PROVEN reference
         proven_refs = [r for r in usage_refs if r["ref_tier"] == RefTier.PROVEN.value]
         assert len(proven_refs) >= 1
-
     def test_import_refs_are_unknown_or_strong(self, temp_dir: Path) -> None:
         """Import statements should have UNKNOWN or STRONG ref_tier."""
         content = """
@@ -426,7 +390,6 @@ os.path.exists(".")
         assert all(
             r["ref_tier"] in (RefTier.UNKNOWN.value, RefTier.STRONG.value) for r in import_refs
         )
-
     def test_csharp_using_creates_import_facts(self, temp_dir: Path) -> None:
         """C# using directives should be extracted as ImportFacts."""
         content = """using System;
@@ -444,7 +407,6 @@ namespace Test {
         import_names = [i["imported_name"] for i in result.imports]
         assert "System" in import_names
         assert "Newtonsoft.Json" in import_names
-
     def test_csharp_aliased_using_creates_strong_ref(self, temp_dir: Path) -> None:
         """Aliased C# usings should produce STRONG refs via import_uid_by_alias."""
         content = """using MyAlias = System.Collections.Generic.List;
@@ -468,7 +430,6 @@ namespace Test {
         ]
         strong_refs = [r for r in alias_refs if r["ref_tier"] == RefTier.STRONG.value]
         assert len(strong_refs) >= 1
-
     def test_csharp_namespace_type_map_populated(self, temp_dir: Path) -> None:
         """C# extraction should populate namespace_type_map."""
         content = """using System;
@@ -486,7 +447,6 @@ namespace Foo.Bar {
         assert "Foo.Bar" in result.namespace_type_map
         assert "Baz" in result.namespace_type_map["Foo.Bar"]
         assert "IBaz" in result.namespace_type_map["Foo.Bar"]
-
     def test_csharp_namespace_inside_preprocessor_block(self, temp_dir: Path) -> None:
         """C# namespace inside #if preprocessor block should be extracted."""
         content = """#if NET6_0_OR_GREATER
@@ -506,7 +466,6 @@ namespace My.App.Tests {
         assert "My.App.Tests" in result.namespace_type_map
         assert "MyTestClass" in result.namespace_type_map["My.App.Tests"]
         assert "HelperClass" in result.namespace_type_map["My.App.Tests"]
-
     def test_csharp_namespace_inside_region(self, temp_dir: Path) -> None:
         """C# namespace inside #region block should be extracted."""
         content = """#region License
@@ -524,7 +483,6 @@ namespace My.App {
 
         assert "My.App" in result.namespace_type_map
         assert "Foo" in result.namespace_type_map["My.App"]
-
     def test_python_wildcard_import_extracted(self, temp_dir: Path) -> None:
         """Python wildcard imports should be extracted as ImportFacts."""
         content = "from os.path import *\n"
@@ -537,10 +495,8 @@ namespace My.App {
         assert len(star_imports) == 1
         assert star_imports[0]["import_kind"] == "python_from"
 
-
 class TestCrossFileResolution:
     """Tests for DB-backed cross-file ref_tier resolution (Pass 1.5)."""
-
     def test_csharp_namespace_using_upgrades_to_strong(self, db: Database, temp_dir: Path) -> None:
         """UNKNOWN refs matching project-internal namespace types should become STRONG."""
         # File 1: defines the type in a namespace
@@ -615,7 +571,6 @@ namespace App {
             assert all(r.target_def_uid == resolver_def.def_uid for r in dcr_refs_after), (
                 "target_def_uid must link to the DefFact for rename discovery"
             )
-
     def test_csharp_external_namespace_stays_unknown(self, db: Database, temp_dir: Path) -> None:
         """Refs to types from external namespaces (not in project) stay UNKNOWN."""
         (temp_dir / "Client.cs").write_text(
@@ -660,14 +615,12 @@ namespace App {
             ).all()
             if list_refs:
                 assert all(r.ref_tier == RefTier.UNKNOWN.value for r in list_refs)
-
     def test_python_star_import_upgrades_to_strong(self, db: Database, temp_dir: Path) -> None:
         """Python star imports from project-internal modules should upgrade refs to STRONG."""
         # Module with exported definitions
         (temp_dir / "utils.py").write_text(
             """def helper():
     pass
-
 class Utility:
     pass
 """
@@ -747,7 +700,6 @@ y = Utility()
             assert all(r.target_def_uid == utility_def.def_uid for r in utility_refs_after), (
                 "target_def_uid must link to DefFact for rename discovery"
             )
-
     def test_python_star_import_external_stays_unknown(self, db: Database, temp_dir: Path) -> None:
         """Star imports from external modules should leave refs as UNKNOWN."""
         (temp_dir / "main.py").write_text(
@@ -788,7 +740,6 @@ x = exists("/tmp")
             ).all()
             if exists_refs:
                 assert all(r.ref_tier == RefTier.UNKNOWN.value for r in exists_refs)
-
     def test_csharp_multiple_files_same_namespace(self, db: Database, temp_dir: Path) -> None:
         """Types from the same namespace across multiple files should all resolve."""
         (temp_dir / "A.cs").write_text(
@@ -851,7 +802,6 @@ namespace App {
                 assert all(r.ref_tier == RefTier.STRONG.value for r in refs), (
                     f"{type_name} should be STRONG after DB-backed resolution"
                 )
-
     def test_csharp_namespace_on_def_facts(self, db: Database, temp_dir: Path) -> None:
         """C# extraction should populate namespace on DefFacts."""
         (temp_dir / "test.cs").write_text(
@@ -882,7 +832,6 @@ namespace App {
             assert baz_def.namespace == "Foo.Bar"
             assert ibaz_def is not None
             assert ibaz_def.namespace == "Foo.Bar"
-
     def test_csharp_same_namespace_upgrades_to_strong(self, db: Database, temp_dir: Path) -> None:
         """Types in the same namespace should resolve without a using directive."""
         # File 1: defines JsonSerializer in Newtonsoft.Json
@@ -961,7 +910,6 @@ namespace App {
             assert all(r.target_def_uid == serializer_def.def_uid for r in js_refs_after), (
                 "target_def_uid must link to DefFact for rename discovery"
             )
-
     def test_csharp_parent_namespace_upgrades_to_strong(self, db: Database, temp_dir: Path) -> None:
         """Types in a parent namespace should resolve without a using directive."""
         # File 1: defines JsonSerializer in Newtonsoft.Json
@@ -1034,7 +982,6 @@ namespace App {
             assert all(r.target_def_uid == serializer_def.def_uid for r in js_refs_after), (
                 "target_def_uid must link to DefFact for rename discovery"
             )
-
     def test_csharp_unrelated_namespace_stays_unknown(self, db: Database, temp_dir: Path) -> None:
         """Types in unrelated namespaces should NOT resolve via same-namespace."""
         # File 1: defines Foo in Namespace.A
@@ -1086,10 +1033,8 @@ namespace App {
             if foo_refs:
                 assert all(r.ref_tier == RefTier.UNKNOWN.value for r in foo_refs)
 
-
 class TestExtractionResultUnifiedFields:
     """Tests for content_text and symbol_names fields (unified single-pass indexing)."""
-
     def test_content_text_populated_python(self, temp_dir: Path) -> None:
         """content_text should contain the file's UTF-8 content."""
         content = "def hello(): pass\n"
@@ -1099,7 +1044,6 @@ class TestExtractionResultUnifiedFields:
 
         assert result.error is None
         assert result.content_text == content
-
     def test_content_text_populated_no_grammar(self, temp_dir: Path) -> None:
         """content_text should be populated even for files without a tree-sitter grammar."""
         content = "some plain text content"
@@ -1109,7 +1053,6 @@ class TestExtractionResultUnifiedFields:
 
         assert result.skipped_no_grammar is True
         assert result.content_text == content
-
     def test_content_text_empty_for_binary(self, temp_dir: Path) -> None:
         """content_text should be empty string for non-UTF-8 binary files."""
         (temp_dir / "test.py").write_bytes(b"\x80\x81\x82\x83")
@@ -1118,14 +1061,12 @@ class TestExtractionResultUnifiedFields:
 
         assert result.content_text == ""
         assert result.error is None
-
     def test_content_text_none_for_nonexistent(self, temp_dir: Path) -> None:
         """content_text should remain None when file does not exist."""
         result = _extract_file("nonexistent.py", str(temp_dir), unit_id=1)
 
         assert result.error is not None
         assert result.content_text is None
-
     def test_symbol_names_python(self, temp_dir: Path) -> None:
         """symbol_names should contain extracted symbol names from tree-sitter."""
         content = "def hello(): pass\ndef world(): pass\nclass Greeter: pass\n"
@@ -1137,7 +1078,6 @@ class TestExtractionResultUnifiedFields:
         assert "hello" in result.symbol_names
         assert "world" in result.symbol_names
         assert "Greeter" in result.symbol_names
-
     def test_symbol_names_empty_no_grammar(self, temp_dir: Path) -> None:
         """symbol_names should be empty for files without a grammar."""
         (temp_dir / "test.unknown").write_text("content")
@@ -1146,20 +1086,17 @@ class TestExtractionResultUnifiedFields:
 
         assert result.skipped_no_grammar is True
         assert result.symbol_names == []
-
     def test_symbol_names_empty_for_nonexistent(self, temp_dir: Path) -> None:
         """symbol_names should be empty for nonexistent files."""
         result = _extract_file("nonexistent.py", str(temp_dir), unit_id=1)
 
         assert result.symbol_names == []
-
     def test_defaults_content_text_none(self) -> None:
         """Default ExtractionResult should have content_text=None and empty symbol_names."""
         result = ExtractionResult(file_path="test.py")
 
         assert result.content_text is None
         assert result.symbol_names == []
-
     def test_content_text_matches_defs(self, temp_dir: Path) -> None:
         """symbol_names count should match defs count for simple files."""
         content = "def alpha(): pass\ndef beta(): pass\n"
@@ -1171,11 +1108,8 @@ class TestExtractionResultUnifiedFields:
         def_names = [d["name"] for d in result.defs]
         for name in def_names:
             assert name in result.symbol_names
-
-
 class TestExtractFilesMethod:
     """Tests for StructuralIndexer.extract_files() public method."""
-
     def test_extract_files_returns_results(
         self, indexer: StructuralIndexer, temp_dir: Path
     ) -> None:
@@ -1187,7 +1121,6 @@ class TestExtractFilesMethod:
 
         assert len(results) == 2
         assert all(isinstance(r, ExtractionResult) for r in results)
-
     def test_extract_files_populates_content_text(
         self, indexer: StructuralIndexer, temp_dir: Path
     ) -> None:
@@ -1199,7 +1132,6 @@ class TestExtractFilesMethod:
 
         assert len(results) == 1
         assert results[0].content_text == content
-
     def test_extract_files_populates_symbol_names(
         self, indexer: StructuralIndexer, temp_dir: Path
     ) -> None:
@@ -1210,7 +1142,6 @@ class TestExtractFilesMethod:
 
         assert "foo" in results[0].symbol_names
         assert "Bar" in results[0].symbol_names
-
     def test_extract_files_handles_missing_files(
         self, indexer: StructuralIndexer, temp_dir: Path
     ) -> None:
@@ -1226,11 +1157,8 @@ class TestExtractFilesMethod:
         assert good.content_text is not None
         assert missing.error is not None
         assert missing.content_text is None
-
-
 class TestPrecomputedExtractions:
     """Tests for index_files with _extractions kwarg."""
-
     def test_index_files_with_precomputed(
         self, db: Database, indexer: StructuralIndexer, temp_dir: Path
     ) -> None:
@@ -1259,7 +1187,6 @@ class TestPrecomputedExtractions:
         assert result.files_processed == 1
         assert result.defs_extracted >= 2  # foo and bar
         assert result.errors == []
-
     def test_precomputed_produces_same_facts(self, db: Database, temp_dir: Path) -> None:
         """Pre-computed extractions should produce equivalent persisted facts."""
         from sqlmodel import select
@@ -1302,7 +1229,6 @@ class TestPrecomputedExtractions:
         assert direct_def_count == precomputed_def_count
         assert direct_ref_count == precomputed_ref_count
 
-
 # ---------------------------------------------------------------------------
 # _apply_worktree_uid_remap unit tests
 # ---------------------------------------------------------------------------
@@ -1325,10 +1251,8 @@ def _make_extraction(
     ]
     return extraction
 
-
 class TestApplyWorktreeUidRemap:
     """Unit tests for _apply_worktree_uid_remap."""
-
     def test_main_worktree_is_noop(self) -> None:
         """Main worktree must not change any UIDs (canonical identifiers)."""
         ex = _make_extraction()
@@ -1339,7 +1263,6 @@ class TestApplyWorktreeUidRemap:
 
         assert ex.defs[0]["def_uid"] == original_def_uid
         assert ex.imports[0]["import_uid"] == original_import_uid
-
     def test_def_uid_is_remapped(self) -> None:
         """def_uid must be replaced by sha256(f'{wt_id}:{old_uid}')[:16]."""
         import hashlib
@@ -1351,7 +1274,6 @@ class TestApplyWorktreeUidRemap:
         expected = hashlib.sha256(f"3:{old_uid}".encode()).hexdigest()[:16]
         assert ex.defs[0]["def_uid"] == expected
         assert ex.defs[0]["def_uid"] != old_uid
-
     def test_import_uid_is_remapped(self) -> None:
         """import_uid must also be remapped to prevent cross-worktree import PK collisions."""
         import hashlib
@@ -1362,7 +1284,6 @@ class TestApplyWorktreeUidRemap:
 
         expected = hashlib.sha256(f"2:{old_uid}".encode()).hexdigest()[:16]
         assert ex.imports[0]["import_uid"] == expected
-
     def test_different_worktree_ids_produce_different_uids(self) -> None:
         """worktree_id=1 and worktree_id=2 must produce different UIDs for the same symbol."""
         old_uid = "aabbccdd11223344"
@@ -1375,7 +1296,6 @@ class TestApplyWorktreeUidRemap:
         assert ex1.defs[0]["def_uid"] != ex2.defs[0]["def_uid"]
         assert ex1.defs[0]["def_uid"] != old_uid
         assert ex2.defs[0]["def_uid"] != old_uid
-
     def test_type_member_parent_and_member_uid_remapped(self) -> None:
         """TypeMemberFact.parent_def_uid and member_def_uid must track the remapped def_uid."""
         old_uid = "aabbccdd11223344"
@@ -1385,7 +1305,6 @@ class TestApplyWorktreeUidRemap:
         new_uid = ex.defs[0]["def_uid"]
         assert ex.type_members[0]["parent_def_uid"] == new_uid
         assert ex.type_members[0]["member_def_uid"] == new_uid
-
     def test_interface_impl_uids_remapped(self) -> None:
         """InterfaceImplFact.implementor_def_uid and interface_def_uid must be remapped."""
         old_uid = "aabbccdd11223344"
@@ -1395,7 +1314,6 @@ class TestApplyWorktreeUidRemap:
         new_uid = ex.defs[0]["def_uid"]
         assert ex.interface_impls[0]["implementor_def_uid"] == new_uid
         assert ex.interface_impls[0]["interface_def_uid"] == new_uid
-
     def test_local_bind_def_target_remapped(self) -> None:
         """LocalBindFact.target_uid must be remapped when target_kind == 'DEF'."""
         old_uid = "aabbccdd11223344"
@@ -1408,7 +1326,6 @@ class TestApplyWorktreeUidRemap:
         # Second bind has target_kind=import — must be remapped via import_uid_remap
         new_import_uid = ex.imports[0]["import_uid"]
         assert ex.binds[1]["target_uid"] == new_import_uid
-
     def test_uid_length_stays_16_chars(self) -> None:
         """Remapped UIDs must be exactly 16 hex chars (same format as originals)."""
         ex = _make_extraction()

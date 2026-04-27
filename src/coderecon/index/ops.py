@@ -89,7 +89,6 @@ if TYPE_CHECKING:
     from coderecon.index.models import FileState
     from coderecon.testing.runtime import ContextRuntime
 
-
 def _glob_to_regex(pattern: str) -> str:
     """Convert a glob pattern to a regex string.
 
@@ -160,12 +159,10 @@ def _glob_to_regex(pattern: str) -> str:
         # Bare filename/glob — match last path component
         return "(?:^|/)" + body + "$"
 
-
 @lru_cache(maxsize=512)
 def _compile_glob_pattern(pattern: str) -> re.Pattern[str]:
     """Compile a single glob pattern to a regex.  LRU-cached by pattern string."""
     return re.compile(_glob_to_regex(pattern))
-
 
 def _compile_glob_set(patterns: list[str]) -> re.Pattern[str] | None:
     """Compile a list of glob patterns into a single combined regex.
@@ -179,14 +176,12 @@ def _compile_glob_set(patterns: list[str]) -> re.Pattern[str] | None:
         return None
     return _compile_glob_set_cached(tuple(patterns))
 
-
 @lru_cache(maxsize=128)
 def _compile_glob_set_cached(patterns: tuple[str, ...]) -> re.Pattern[str]:
     """Cache-friendly compile for a frozen tuple of patterns."""
     alternatives = [_glob_to_regex(p) for p in patterns]
     combined = "|".join(f"(?:{alt})" for alt in alternatives)
     return re.compile(combined)
-
 
 def _matches_glob(rel_path: str, pattern: str) -> bool:
     """Check if a path matches a glob pattern, with ``**`` support.
@@ -202,7 +197,6 @@ def _matches_glob(rel_path: str, pattern: str) -> bool:
         return False
 
     return bool(_compile_glob_pattern(pattern).search(rel_path))
-
 
 def _matches_filter_paths(rel_path: str, filter_paths: list[str]) -> bool:
     """Check if a path matches any of the filter_paths patterns.
@@ -231,11 +225,9 @@ def _matches_filter_paths(rel_path: str, filter_paths: list[str]) -> bool:
             return True
     return False
 
-
 @dataclass
 class InitResult:
     """Result of coordinator initialization."""
-
     contexts_discovered: int
     contexts_valid: int
     contexts_failed: int
@@ -243,47 +235,33 @@ class InitResult:
     files_indexed: int
     errors: list[str]
     files_by_ext: dict[str, int] = field(default_factory=dict)  # extension -> file count
-
-
 @dataclass
 class IndexStats:
     """Statistics from an indexing operation."""
-
     files_processed: int
     files_added: int
     files_updated: int
     files_removed: int
     symbols_indexed: int
     duration_seconds: float
-
-
 @dataclass
 class SearchResult:
     """Result from a search operation."""
-
     path: str
     line: int
     column: int | None
     snippet: str
     score: float
-
-
 @dataclass
 class SearchResponse:
     """Response from a search operation including metadata."""
-
     results: list[SearchResult]
     fallback_reason: str | None = None  # Set if query syntax error triggered literal fallback
-
-
 class SearchMode:
     """Search mode enum."""
-
     TEXT = "text"
     SYMBOL = "symbol"
     PATH = "path"
-
-
 class IndexCoordinatorEngine:
     """
     High-level orchestration with serialization guarantees.
@@ -307,7 +285,6 @@ class IndexCoordinatorEngine:
         # Reindex (acquires locks automatically)
         stats = await coordinator.reindex_incremental([Path("a.py")])
     """
-
     def __init__(
         self,
         repo_root: Path,
@@ -360,14 +337,12 @@ class IndexCoordinatorEngine:
         # Optional in-memory cache of all DefFacts (keyed by def_uid).
         # Lazy-loaded on first batch_get_defs() call; cleared on close().
         self._def_cache: dict[str, DefFact] | None = None
-
     def _get_worktree_lock(self, worktree: str) -> threading.Lock:
         """Return a per-worktree lock, creating it on first access."""
         with self._worktree_locks_guard:
             if worktree not in self._worktree_locks:
                 self._worktree_locks[worktree] = threading.Lock()
             return self._worktree_locks[worktree]
-
     def _is_main_worktree(self, worktree: str) -> bool:
         """Return True if *worktree* is the main checkout (from DB flag)."""
         if worktree in self._worktree_is_main_cache:
@@ -377,7 +352,6 @@ class IndexCoordinatorEngine:
             is_main = wt.is_main if wt else (worktree == "main")
             self._worktree_is_main_cache[worktree] = is_main
             return is_main
-
     def _get_or_create_worktree_id(self, name: str, root_path: str | None = None) -> int:
         """Return the `worktrees.id` for *name*, inserting the row if absent.
 
@@ -413,7 +387,6 @@ class IndexCoordinatorEngine:
                 self._worktree_id_cache[name] = wt.id
                 self._worktree_is_main_cache[name] = wt.is_main
                 return wt.id
-
     def set_freshness_gate(
         self, gate: FreshnessGate, worktree: str, worktree_root: str | None = None
     ) -> None:
@@ -766,7 +739,6 @@ class IndexCoordinatorEngine:
 
         self._initialized = True
         return True
-
     def backfill_missing_signals(self) -> dict[str, int]:
         """Detect and backfill missing derived signals.
 
@@ -786,7 +758,6 @@ class IndexCoordinatorEngine:
         if report.consistent:
             return {}
         return backfill_gaps(self.db, report)
-
     def changed_since_last_index(self) -> list[Path]:
         """Return paths changed since the last indexed HEAD (git-diff based).
 
@@ -1414,7 +1385,6 @@ class IndexCoordinatorEngine:
             symbols_indexed=0,
             duration_seconds=duration,
         )
-
     def _remove_structural_facts_for_paths(
         self, paths: list[str], *, worktree_id: int | None = None,
     ) -> None:
@@ -1462,7 +1432,6 @@ class IndexCoordinatorEngine:
                             )
                         )  # type: ignore[call-overload]
             session.commit()
-
     def _invalidate_dangling_refs(
         self, changed_file_ids: list[int], worktree_id: int | None = None,
     ) -> list[int]:
@@ -1531,7 +1500,6 @@ class IndexCoordinatorEngine:
                     affected_files=len(extra_file_ids),
                 )
             return extra_file_ids
-
     def _propagate_def_changes(self, worktree_id: int) -> int:
         """Mark files in OTHER worktrees stale when their refs point to
         def_uids that no longer exist.
@@ -1567,7 +1535,6 @@ class IndexCoordinatorEngine:
                 session.commit()
                 log.debug("propagated_def_changes", stale_files=count)
             return count
-
     def _sweep_orphaned_edges(self) -> None:
         """Delete semantic_neighbor_facts and test_coverage_facts rows that
         reference def_uids no longer present in def_facts.
@@ -1601,7 +1568,6 @@ class IndexCoordinatorEngine:
                 )
             )
             session.commit()
-
     def _mark_coverage_stale(self, changed_file_ids: list[int]) -> None:
         """Mark test_coverage_facts as stale for defs in changed files.
 
@@ -1889,7 +1855,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
             raise RuntimeError(msg)
         if self._freshness_gate is not None and self._freshness_worktree is not None:
             await self._freshness_gate.wait_fresh(self._freshness_worktree)
-
     def score_files_bm25(self, query: str, limit: int = 500) -> dict[str, float]:
         """Score files by BM25 relevance to *query* using Tantivy.
 
@@ -2592,25 +2557,21 @@ is_main_worktree=self._is_main_worktree(_wt2),
         recovery.wipe_all()
         self._initialized = False
         self._lexical = None
-
     def get_current_epoch(self) -> int:
         """Return current epoch ID, or 0 if none published."""
         if self._epoch_manager is None:
             return 0
         return self._epoch_manager.get_current_epoch()
-
     def publish_epoch(self, files_indexed: int = 0, commit_hash: str | None = None) -> EpochStats:
         """Atomically publish a new epoch. See SPEC.md §7.6."""
         if self._epoch_manager is None:
             raise RuntimeError("Coordinator not initialized")
         return self._epoch_manager.publish_epoch(files_indexed, commit_hash)
-
     def await_epoch(self, target_epoch: int, timeout_seconds: float = 5.0) -> bool:
         """Block until epoch >= target, or timeout. Returns True if reached."""
         if self._epoch_manager is None:
             return False
         return self._epoch_manager.await_epoch(target_epoch, timeout_seconds)
-
     def close(self) -> None:
         """Close all resources."""
         self._lexical = None
@@ -3308,7 +3269,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 self._index_doc_chunks(on_progress, files_by_ext)
 
         return count, indexed_paths, files_by_ext
-
     def _index_splade_vectors(
         self,
         on_progress: Callable[[int, int, dict[str, int], str], None],
@@ -3318,13 +3278,11 @@ is_main_worktree=self._is_main_worktree(_wt2),
         from coderecon.index._internal.indexing.splade import index_splade_vectors
 
         on_progress(0, 1, files_by_ext, "encoding_splade")
-
         def _splade_progress(encoded: int, total: int) -> None:
             on_progress(encoded, total, files_by_ext, "encoding_splade")
 
         stored = index_splade_vectors(self.db, progress_cb=_splade_progress)
         log.info("index.splade.complete", extra={"stored": stored})
-
     def _reindex_splade_vectors(self, file_ids: list[int]) -> None:
         """Re-encode SPLADE vectors for defs in changed files (incremental)."""
         if not file_ids:
@@ -3333,7 +3291,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
 
         stored = index_splade_vectors(self.db, file_ids=file_ids)
         log.debug("reindex.splade.complete", extra={"stored": stored, "file_ids": len(file_ids)})
-
     def _reindex_semantic_passes(self, changed_file_ids: list[int]) -> None:
         """Run Passes 5-7 after incremental SPLADE re-encode.
 
@@ -3388,7 +3345,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
             log.debug("reindex.doc_chunks.link", extra={"edges": edges})
         except (ImportError, OSError, RuntimeError, ValueError):  # doc chunk linking is best-effort
             log.warning("reindex.doc_chunks.failed", exc_info=True)
-
     def _get_doc_file_ids(self, file_ids: list[int]) -> list[int]:
         """Filter file_ids to only doc/config files."""
         if not file_ids:
@@ -3402,7 +3358,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 )
             ).all()
             return [r for r in rows if r is not None]
-
     def _semantic_resolve(
         self,
         on_progress: Callable[[int, int, dict[str, int], str], None],
@@ -3428,7 +3383,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
 
         log.info("index.semantic_resolve.complete",
                  extra={"refs": refs, "accesses": accesses, "shapes": shapes})
-
     def _compute_semantic_neighbors(
         self,
         on_progress: Callable[[int, int, dict[str, int], str], None],
@@ -3443,7 +3397,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
         edges = compute_semantic_neighbors(self.db)
         on_progress(1, 1, files_by_ext, "semantic_neighbors")
         log.info("index.semantic_neighbors.complete", extra={"edges": edges})
-
     def _index_doc_chunks(
         self,
         on_progress: Callable[[int, int, dict[str, int], str], None],
@@ -3461,7 +3414,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
         edges = link_doc_chunks_to_defs(self.db)
         on_progress(2, 2, files_by_ext, "doc_chunk_linking")
         log.info("index.doc_chunks.complete", extra={"chunks": chunks, "edges": edges})
-
     def batch_get_defs(self, def_uids: list[str]) -> dict[str, DefFact]:
         """Get DefFacts by UID, using an in-memory cache.
 
@@ -3483,7 +3435,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
                     extra={"count": len(self._def_cache)},
                 )
         return {uid: self._def_cache[uid] for uid in def_uids if uid in self._def_cache}
-
     def _clear_all_structural_facts(self) -> None:
         """Clear all structural facts from the database.
 
@@ -3498,7 +3449,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
             session.exec(text("DELETE FROM local_bind_facts"))  # type: ignore[call-overload]
             session.exec(text("DELETE FROM dynamic_access_sites"))  # type: ignore[call-overload]
             session.commit()
-
     def _extract_symbols(self, file_path: Path) -> list[str]:
         """Extract symbol names from a file."""
         if self._parser is None:
@@ -3515,7 +3465,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
         except (OSError, UnicodeDecodeError, ValueError):
             # ValueError: unsupported file extension
             return []
-
     def _safe_read_text(self, path: Path) -> str:
         """Read file text, treating binary/encoding errors as empty content."""
         try:
@@ -3523,7 +3472,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
         except (UnicodeDecodeError, OSError):
             log.debug("safe_read_text_failed", exc_info=True)
             return ""
-
     def _walk_all_files(self) -> list[str]:
         """Walk filesystem once, return all indexable file paths (relative to repo root).
 
@@ -3584,7 +3532,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
                     all_files.append(rel_str)
 
         return all_files
-
     def _filter_files_for_context(
         self,
         all_files: list[str],
@@ -3633,7 +3580,6 @@ is_main_worktree=self._is_main_worktree(_wt2),
                 log.debug("file_access_error", path=rel_str)
 
         return files
-
     def _filter_unclaimed_files(
         self,
         all_files: list[str],

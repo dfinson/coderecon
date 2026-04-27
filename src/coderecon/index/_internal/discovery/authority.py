@@ -30,11 +30,8 @@ log = structlog.get_logger(__name__)
 @dataclass
 class AuthorityResult:
     """Result of authority filtering."""
-
     pending: list[CandidateContext]
     detached: list[CandidateContext]
-
-
 class Tier1AuthorityFilter:
     """
     Filters Tier 2 candidates based on Tier 1 workspace configuration.
@@ -53,11 +50,9 @@ class Tier1AuthorityFilter:
         # result.pending - candidates that passed
         # result.detached - candidates that were excluded
     """
-
     def __init__(self, repo_root: Path) -> None:
         """Initialize authority filter."""
         self.repo_root = repo_root
-
     def apply(self, candidates: list[CandidateContext]) -> AuthorityResult:
         """
         Apply Tier 1 authority filter to candidates.
@@ -111,7 +106,6 @@ class Tier1AuthorityFilter:
             detached.extend(d)
 
         return AuthorityResult(pending=pending, detached=detached)
-
     def _filter_javascript(
         self, candidates: list[CandidateContext]
     ) -> tuple[list[CandidateContext], list[CandidateContext]]:
@@ -154,7 +148,6 @@ class Tier1AuthorityFilter:
                 detached.append(candidate)
 
         return pending, detached
-
     def _filter_go(
         self, candidates: list[CandidateContext]
     ) -> tuple[list[CandidateContext], list[CandidateContext]]:
@@ -194,7 +187,6 @@ class Tier1AuthorityFilter:
                 detached.append(candidate)
 
         return pending, detached
-
     def _filter_rust(
         self, candidates: list[CandidateContext]
     ) -> tuple[list[CandidateContext], list[CandidateContext]]:
@@ -234,7 +226,6 @@ class Tier1AuthorityFilter:
                 detached.append(candidate)
 
         return pending, detached
-
     def _filter_jvm(
         self, candidates: list[CandidateContext]
     ) -> tuple[list[CandidateContext], list[CandidateContext]]:
@@ -283,7 +274,6 @@ class Tier1AuthorityFilter:
                 detached.append(candidate)
 
         return pending, detached
-
     def _filter_dotnet(
         self, candidates: list[CandidateContext]
     ) -> tuple[list[CandidateContext], list[CandidateContext]]:
@@ -332,7 +322,6 @@ class Tier1AuthorityFilter:
                 detached.append(candidate)
 
         return pending, detached
-
     def _get_js_workspace_globs(self, t1: CandidateContext) -> list[str]:
         """Extract workspace globs from JavaScript workspace config."""
         globs: list[str] = []
@@ -378,7 +367,6 @@ class Tier1AuthorityFilter:
                 )
 
         return globs
-
     def _get_go_work_modules(self, t1: CandidateContext) -> list[str]:
         """Extract modules from go.work."""
         modules: list[str] = []
@@ -407,7 +395,6 @@ class Tier1AuthorityFilter:
                     log.debug("go_work_read_failed", marker=str(marker_path))
 
         return modules
-
     def _get_cargo_workspace_members(self, t1: CandidateContext) -> list[str]:
         """Extract members from Cargo.toml [workspace]."""
         members: list[str] = []
@@ -452,7 +439,6 @@ class Tier1AuthorityFilter:
                     log.debug("cargo_toml_read_failed", path=str(marker_path), exc_info=True)
 
         return members
-
     def _get_gradle_includes(self, t1: CandidateContext) -> tuple[list[str], bool]:
         """Extract includes from settings.gradle."""
         includes: list[str] = []
@@ -477,7 +463,6 @@ class Tier1AuthorityFilter:
                     log.debug("gradle_settings_read_failed", path=str(marker_path), exc_info=True)
 
         return includes, is_strict
-
     def _get_maven_modules(self, t1: CandidateContext) -> list[str]:
         """Extract modules from Maven pom.xml."""
         modules: list[str] = []
@@ -500,7 +485,6 @@ class Tier1AuthorityFilter:
                     log.debug("pom_xml_read_failed", path=str(marker_path), exc_info=True)
 
         return modules
-
     def _get_sln_projects(self, t1: CandidateContext) -> list[str]:
         """Extract project paths from .sln solution file."""
         projects: list[str] = []
@@ -522,7 +506,6 @@ class Tier1AuthorityFilter:
                     log.debug("sln_read_failed", path=str(marker_path), exc_info=True)
 
         return projects
-
     def _is_inside(self, file_path: str, root_path: str) -> bool:
         """Segment-safe containment check."""
         if root_path == "":
@@ -530,7 +513,6 @@ class Tier1AuthorityFilter:
         if file_path == root_path:
             return True
         return file_path.startswith(root_path + "/")
-
     def _relative_to(self, path: str, root: str) -> str:
         """Get path relative to root."""
         if root == "":
@@ -540,7 +522,6 @@ class Tier1AuthorityFilter:
         if path.startswith(root + "/"):
             return path[len(root) + 1 :]
         return path
-
     def _matches_any_glob(self, path: str, globs: list[str]) -> bool:
         """Check if path matches any of the globs."""
         for glob in globs:

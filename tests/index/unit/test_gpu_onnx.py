@@ -30,10 +30,8 @@ def _provider_name(entry: str | tuple) -> str:
     """Extract provider name from a string or (name, opts) tuple."""
     return entry[0] if isinstance(entry, tuple) else entry
 
-
 def _provider_names(providers: list) -> list[str]:
     return [_provider_name(p) for p in providers]
-
 
 class TestSelectOnnxProviders:
     def test_cpu_only(self) -> None:
@@ -41,7 +39,6 @@ class TestSelectOnnxProviders:
             mock_ort.get_available_providers.return_value = ["CPUExecutionProvider"]
             providers = _select_onnx_providers()
         assert _provider_names(providers) == ["CPUExecutionProvider"]
-
     def test_cuda_preferred_over_cpu(self) -> None:
         with patch("coderecon.index._internal.indexing.splade.ort") as mock_ort:
             mock_ort.get_available_providers.return_value = [
@@ -52,7 +49,6 @@ class TestSelectOnnxProviders:
         names = _provider_names(providers)
         assert names[0] == "CUDAExecutionProvider"
         assert "CPUExecutionProvider" in names
-
     def test_cuda_gets_arena_config(self) -> None:
         with patch("coderecon.index._internal.indexing.splade.ort") as mock_ort:
             mock_ort.get_available_providers.return_value = [
@@ -65,7 +61,6 @@ class TestSelectOnnxProviders:
         name, opts = providers[0]
         assert name == "CUDAExecutionProvider"
         assert opts["arena_extend_strategy"] == "kSameAsRequested"
-
     def test_cuda_with_vram_sets_gpu_mem_limit(self) -> None:
         vram = 4 * 1024**3
         with patch("coderecon.index._internal.indexing.splade.ort") as mock_ort:
@@ -76,7 +71,6 @@ class TestSelectOnnxProviders:
             providers = _select_onnx_providers(vram_bytes=vram)
         _, opts = providers[0]
         assert opts["gpu_mem_limit"] == int(vram * 0.85)
-
     def test_rocm_included(self) -> None:
         with patch("coderecon.index._internal.indexing.splade.ort") as mock_ort:
             mock_ort.get_available_providers.return_value = [
@@ -87,7 +81,6 @@ class TestSelectOnnxProviders:
         names = _provider_names(providers)
         assert "ROCMExecutionProvider" in names
         assert "CPUExecutionProvider" in names
-
     def test_coreml_included(self) -> None:
         with patch("coderecon.index._internal.indexing.splade.ort") as mock_ort:
             mock_ort.get_available_providers.return_value = [
@@ -97,7 +90,6 @@ class TestSelectOnnxProviders:
             providers = _select_onnx_providers()
         names = _provider_names(providers)
         assert "CoreMLExecutionProvider" in names
-
     def test_cuda_before_rocm_before_coreml(self) -> None:
         with patch("coderecon.index._internal.indexing.splade.ort") as mock_ort:
             mock_ort.get_available_providers.return_value = [
@@ -111,17 +103,14 @@ class TestSelectOnnxProviders:
         assert names.index("CUDAExecutionProvider") < names.index("ROCMExecutionProvider")
         assert names.index("ROCMExecutionProvider") < names.index("CoreMLExecutionProvider")
         assert names[-1] == "CPUExecutionProvider"
-
     def test_forced_cpu_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("CODERECON_ONNX_DEVICE", "cpu")
         providers = _select_onnx_providers()
         assert providers == ["CPUExecutionProvider"]
-
     def test_forced_cpu_case_insensitive(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("CODERECON_ONNX_DEVICE", "CPU")
         providers = _select_onnx_providers()
         assert providers == ["CPUExecutionProvider"]
-
     def test_unknown_env_value_does_not_force_cpu(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("CODERECON_ONNX_DEVICE", "auto")
         with patch("coderecon.index._internal.indexing.splade.ort") as mock_ort:
@@ -132,14 +121,12 @@ class TestSelectOnnxProviders:
             providers = _select_onnx_providers()
         names = _provider_names(providers)
         assert "CUDAExecutionProvider" in names
-
     def test_cpu_always_included_as_fallback(self) -> None:
         with patch("coderecon.index._internal.indexing.splade.ort") as mock_ort:
             mock_ort.get_available_providers.return_value = ["CUDAExecutionProvider"]
             providers = _select_onnx_providers()
         names = _provider_names(providers)
         assert "CPUExecutionProvider" in names
-
 
 # ── _ensure_cuda_lib_path tests ──────────────────────────────────
 
@@ -150,13 +137,11 @@ class TestEnsureCudaLibPath:
         original = os.environ.get("LD_LIBRARY_PATH", "")
         _ensure_cuda_lib_path()
         assert os.environ.get("LD_LIBRARY_PATH", "") == original
-
     def test_noop_on_windows(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(sys, "platform", "win32")
         original = os.environ.get("LD_LIBRARY_PATH", "")
         _ensure_cuda_lib_path()
         assert os.environ.get("LD_LIBRARY_PATH", "") == original
-
     @pytest.mark.skipif(sys.platform != "linux", reason="Linux-specific test")
     def test_adds_pip_package_lib_dirs(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -192,7 +177,6 @@ class TestEnsureCudaLibPath:
 
         # Clean up
         monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
-
     @pytest.mark.skipif(sys.platform != "linux", reason="Linux-specific test")
     def test_does_not_duplicate_existing_paths(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -213,7 +197,6 @@ class TestEnsureCudaLibPath:
 
         # Clean up
         monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
-
     @pytest.mark.skipif(sys.platform != "linux", reason="Linux-specific test")
     def test_preserves_existing_ld_library_path(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -234,7 +217,6 @@ class TestEnsureCudaLibPath:
 
         # Clean up
         monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
-
     @pytest.mark.skipif(sys.platform != "linux", reason="Linux-specific test")
     def test_no_nvidia_packages_no_system_paths_no_change(
         self, monkeypatch: pytest.MonkeyPatch
@@ -266,7 +248,6 @@ class TestEnsureCudaLibPath:
 
         assert os.environ.get("LD_LIBRARY_PATH", "") == ""
 
-
 # ── Adaptive batch size tests ────────────────────────────────────
 
 
@@ -274,7 +255,6 @@ class TestAdaptiveBatchSize:
     def test_default_batch_size_is_cpu(self) -> None:
         assert BATCH_SIZE_CPU == 16
         assert BATCH_SIZE_GPU == 64
-
     def test_gpu_active_before_load_returns_false(self) -> None:
         # Reset global state
         original = splade_mod._gpu_active
@@ -283,7 +263,6 @@ class TestAdaptiveBatchSize:
             assert is_gpu_active() is False
         finally:
             splade_mod._gpu_active = original
-
     def test_is_gpu_active_true_when_set(self) -> None:
         original = splade_mod._gpu_active
         try:
@@ -291,7 +270,6 @@ class TestAdaptiveBatchSize:
             assert is_gpu_active() is True
         finally:
             splade_mod._gpu_active = original
-
     def test_is_gpu_active_false_when_cpu(self) -> None:
         original = splade_mod._gpu_active
         try:
@@ -299,7 +277,6 @@ class TestAdaptiveBatchSize:
             assert is_gpu_active() is False
         finally:
             splade_mod._gpu_active = original
-
     def test_batch_size_set_to_gpu_when_gpu_active(self) -> None:
         """Verify SpladeEncoder.load() sets BATCH_SIZE to GPU value when GPU provider is active."""
         from coderecon.index._internal.indexing.splade import SpladeEncoder
@@ -336,7 +313,6 @@ class TestAdaptiveBatchSize:
         finally:
             splade_mod.BATCH_SIZE = original_batch
             splade_mod._gpu_active = original_gpu
-
     def test_batch_size_stays_cpu_when_no_gpu(self) -> None:
         """Verify SpladeEncoder.load() keeps BATCH_SIZE at CPU value when CPU-only."""
         from coderecon.index._internal.indexing.splade import SpladeEncoder
@@ -374,7 +350,6 @@ class TestAdaptiveBatchSize:
         finally:
             splade_mod.BATCH_SIZE = original_batch
             splade_mod._gpu_active = original_gpu
-
     def test_load_is_idempotent(self) -> None:
         """Calling load() twice should not create a second session."""
         from coderecon.index._internal.indexing.splade import SpladeEncoder
@@ -408,7 +383,6 @@ class TestAdaptiveBatchSize:
         finally:
             splade_mod._gpu_active = original_gpu
 
-
 # ── _query_gpu_vram_bytes tests ─────────────────────────────────
 
 
@@ -418,54 +392,43 @@ class TestQueryGpuVram:
             mock_run.return_value = MagicMock(returncode=0, stdout="4096\n")
             result = _query_gpu_vram_bytes()
         assert result == 4096 * 1024 * 1024
-
     def test_returns_none_when_nvidia_smi_missing(self) -> None:
         with patch("subprocess.run", side_effect=FileNotFoundError):
             assert _query_gpu_vram_bytes() is None
-
     def test_returns_none_on_nonzero_exit(self) -> None:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=1, stdout="")
             assert _query_gpu_vram_bytes() is None
-
     def test_multi_gpu_takes_first(self) -> None:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="8192\n4096\n")
             result = _query_gpu_vram_bytes()
         assert result == 8192 * 1024 * 1024
 
-
 # ── _compute_gpu_batch_size tests ───────────────────────────────
 
 
 class TestComputeGpuBatchSize:
     VRAM_4GB = 4 * 1024 * 1024 * 1024
-
     def test_short_sequences_get_large_batch(self) -> None:
         bs = _compute_gpu_batch_size(32, self.VRAM_4GB)
         assert bs == BATCH_SIZE_GPU  # capped at max
-
     def test_long_sequences_get_small_batch(self) -> None:
         bs = _compute_gpu_batch_size(512, self.VRAM_4GB)
         assert 1 <= bs < BATCH_SIZE_GPU
-
     def test_340_tokens_4gb_avoids_oom(self) -> None:
         bs = _compute_gpu_batch_size(340, self.VRAM_4GB)
         assert bs < 55  # 55 was the OOM batch size
-
     def test_always_at_least_one(self) -> None:
         bs = _compute_gpu_batch_size(512, 100 * 1024 * 1024)  # 100 MB VRAM
         assert bs >= 1
-
     def test_capped_at_batch_size_gpu(self) -> None:
         bs = _compute_gpu_batch_size(1, 32 * 1024**3)  # 32 GB
         assert bs == BATCH_SIZE_GPU
-
     def test_scales_inversely_with_seq_len(self) -> None:
         bs_short = _compute_gpu_batch_size(128, self.VRAM_4GB)
         bs_long = _compute_gpu_batch_size(512, self.VRAM_4GB)
         assert bs_short > bs_long
-
 
 # ── OOM fallback tests ─────────────────────────────────────────
 
@@ -506,7 +469,6 @@ class TestOomFallback:
             enc._make_gpu_session.assert_called()
         finally:
             splade_mod._gpu_active = original_gpu
-
     def test_encode_batch_safe_cpu_fallback_for_single(self) -> None:
         """When a single item OOMs on GPU, fall back to CPU session."""
         from coderecon.index._internal.indexing.splade import SpladeEncoder
@@ -526,7 +488,6 @@ class TestOomFallback:
             cpu_session = MagicMock()
             fresh_gpu = MagicMock()
             enc._make_gpu_session = MagicMock(return_value=fresh_gpu)
-
             def mock_encode(texts, session=None):
                 if session is cpu_session:
                     return [{2: 0.9}]
@@ -539,7 +500,6 @@ class TestOomFallback:
             assert result == [{2: 0.9}]
         finally:
             splade_mod._gpu_active = original_gpu
-
     def test_non_oom_errors_propagate(self) -> None:
         """Non-OOM errors should not be caught."""
         from coderecon.index._internal.indexing.splade import SpladeEncoder
@@ -555,7 +515,6 @@ class TestOomFallback:
             enc._vram_bytes = 4 * 1024**3
             enc.onnx_path = Path("/fake/model.onnx")
             enc.tokenizer_path = Path("/fake/tokenizer.json")
-
             def mock_encode(texts, session=None):
                 raise ValueError("bad input")
 

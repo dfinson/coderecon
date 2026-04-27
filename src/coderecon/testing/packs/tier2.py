@@ -46,7 +46,6 @@ log = structlog.get_logger(__name__)
 @runner_registry.register
 class KotlinGradlePack(RunnerPack):
     """Kotlin Gradle runner."""
-
     pack_id = "kotlin.gradle"
     language = "kotlin"
     runner_name = "gradle test"
@@ -64,7 +63,6 @@ class KotlinGradlePack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=True,
     )
-
     def detect(self, workspace_root: Path) -> float:
         build_kts = workspace_root / "build.gradle.kts"
         if build_kts.exists():
@@ -93,7 +91,6 @@ class KotlinGradlePack(RunnerPack):
                 )
             )
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -119,7 +116,6 @@ class KotlinGradlePack(RunnerPack):
         if pattern:
             cmd.extend(["--tests", pattern])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
 
@@ -146,14 +142,12 @@ class KotlinGradlePack(RunnerPack):
             duration_seconds=total_duration,
         )
 
-
 # Swift - swift test
 
 
 @runner_registry.register
 class SwiftTestPack(RunnerPack):
     """Swift Package Manager test runner."""
-
     pack_id = "swift.swiftpm"
     language = "swift"
     runner_name = "swift test"
@@ -170,7 +164,6 @@ class SwiftTestPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=False,
     )
-
     def detect(self, workspace_root: Path) -> float:
         if (workspace_root / "Package.swift").exists():
             return 1.0
@@ -190,7 +183,6 @@ class SwiftTestPack(RunnerPack):
                 )
             )
         return targets
-
     def build_command(
         self,
         target: TestTarget,  # noqa: ARG002
@@ -204,7 +196,6 @@ class SwiftTestPack(RunnerPack):
         if pattern:
             cmd.extend(["--filter", pattern])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         # Parse coarse swift test output
         lines = stdout.split("\n")
@@ -229,14 +220,12 @@ class SwiftTestPack(RunnerPack):
             failed=failed,
         )
 
-
 # Scala - sbt test
 
 
 @runner_registry.register
 class SbtTestPack(RunnerPack):
     """Scala sbt test runner."""
-
     pack_id = "scala.sbt"
     language = "scala"
     runner_name = "sbt test"
@@ -254,7 +243,6 @@ class SbtTestPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=True,  # Via sbt-junit-interface or scalatest junit reporter
     )
-
     def detect(self, workspace_root: Path) -> float:
         if (workspace_root / "build.sbt").exists():
             return 1.0
@@ -276,7 +264,6 @@ class SbtTestPack(RunnerPack):
                 )
             )
         return targets
-
     def build_command(
         self,
         target: TestTarget,  # noqa: ARG002
@@ -292,7 +279,6 @@ class SbtTestPack(RunnerPack):
         else:
             cmd.append("test")
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
 
@@ -319,14 +305,12 @@ class SbtTestPack(RunnerPack):
             duration_seconds=total_duration,
         )
 
-
 # Dart - dart test / flutter test
 
 
 @runner_registry.register
 class DartTestPack(RunnerPack):
     """Dart test runner."""
-
     pack_id = "dart.dart_test"
     language = "dart"
     runner_name = "dart test"
@@ -341,7 +325,6 @@ class DartTestPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=False,  # Use json reporter
     )
-
     def detect(self, workspace_root: Path) -> float:
         pubspec = workspace_root / "pubspec.yaml"
         if pubspec.exists():
@@ -372,7 +355,6 @@ class DartTestPack(RunnerPack):
                 )
             )
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -388,7 +370,6 @@ class DartTestPack(RunnerPack):
         if tags:
             cmd.extend(["--tags", ",".join(tags)])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         # Parse dart test JSON output (NDJSON format)
         tests: dict[int, ParsedTestCase] = {}
@@ -440,12 +421,9 @@ class DartTestPack(RunnerPack):
             skipped=sum(1 for t in test_list if t.status == "skipped"),
             errors=sum(1 for t in test_list if t.status == "error"),
         )
-
-
 @runner_registry.register
 class FlutterTestPack(RunnerPack):
     """Flutter test runner."""
-
     pack_id = "dart.flutter_test"
     language = "dart"
     runner_name = "flutter test"
@@ -460,7 +438,6 @@ class FlutterTestPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=False,
     )
-
     def detect(self, workspace_root: Path) -> float:
         pubspec = workspace_root / "pubspec.yaml"
         if pubspec.exists():
@@ -489,7 +466,6 @@ class FlutterTestPack(RunnerPack):
                 )
             )
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -505,7 +481,6 @@ class FlutterTestPack(RunnerPack):
         if tags:
             cmd.extend(["--tags", ",".join(tags)])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:
         # Flutter uses same JSON format as dart test
         dart_pack = DartTestPack()
@@ -513,14 +488,12 @@ class FlutterTestPack(RunnerPack):
         result.name = "flutter test"
         return result
 
-
 # Bash - bats (Bash Automated Testing System)
 
 
 @runner_registry.register
 class BatsPack(RunnerPack):
     """Bash bats test runner."""
-
     pack_id = "bash.bats"
     language = "bash"
     runner_name = "bats"
@@ -537,7 +510,6 @@ class BatsPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=True,  # bats --formatter junit
     )
-
     def detect(self, workspace_root: Path) -> float:
         if list(workspace_root.glob("test/*.bats")) or list(workspace_root.glob("tests/*.bats")):
             return 1.0
@@ -562,7 +534,6 @@ class BatsPack(RunnerPack):
                 )
             )
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -577,7 +548,6 @@ class BatsPack(RunnerPack):
             cmd.extend(["--filter", pattern])
         # Redirect to file
         return cmd + [">", str(output_path)]
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:
         from coderecon.testing.parsers import parse_junit_xml, parse_tap
 
@@ -590,14 +560,12 @@ class BatsPack(RunnerPack):
         # Fall back to TAP
         return parse_tap(stdout)
 
-
 # PowerShell - Pester
 
 
 @runner_registry.register
 class PesterPack(RunnerPack):
     """PowerShell Pester test runner."""
-
     pack_id = "powershell.pester"
     language = "powershell"
     runner_name = "Pester"
@@ -615,7 +583,6 @@ class PesterPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=True,  # Via -OutputFormat JUnitXml
     )
-
     def detect(self, workspace_root: Path) -> float:
         if list(workspace_root.glob("**/*.Tests.ps1")):
             return 1.0
@@ -638,7 +605,6 @@ class PesterPack(RunnerPack):
                 )
             )
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -663,7 +629,6 @@ $config.TestResult.OutputFormat = 'JUnitXml'
         pester_config += "Invoke-Pester -Configuration $config"
 
         return ["pwsh", "-NoProfile", "-Command", pester_config]
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
 
@@ -678,7 +643,6 @@ $config.TestResult.OutputFormat = 'JUnitXml'
 @runner_registry.register
 class BustedPack(RunnerPack):
     """Lua busted test runner."""
-
     pack_id = "lua.busted"
     language = "lua"
     runner_name = "busted"
@@ -694,7 +658,6 @@ class BustedPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=True,  # busted -o junit
     )
-
     def detect(self, workspace_root: Path) -> float:
         if (workspace_root / ".busted").exists():
             return 1.0
@@ -721,7 +684,6 @@ class BustedPack(RunnerPack):
                 )
             )
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -737,7 +699,6 @@ class BustedPack(RunnerPack):
         if tags:
             cmd.extend(["--tags", ",".join(tags)])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
 
@@ -745,14 +706,12 @@ class BustedPack(RunnerPack):
             return parse_junit_xml(output_path.read_text())
         return ParsedTestSuite(name="busted", errors=1)
 
-
 # Elixir - Mix Test (ExUnit)
 
 
 @runner_registry.register
 class MixTestPack(RunnerPack):
     """Elixir ExUnit runner (mix test)."""
-
     pack_id = "elixir.mix_test"
     language = "elixir"
     runner_name = "mix_test"
@@ -769,7 +728,6 @@ class MixTestPack(RunnerPack):
         supports_parallel=False,
         supports_junit_output=True,
     )
-
     def detect(self, workspace_root: Path) -> float:
         if (workspace_root / "mix.exs").exists():
             # Check it's not a Phoenix umbrella or deps-only project
@@ -803,7 +761,6 @@ class MixTestPack(RunnerPack):
                 )
             )
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -820,7 +777,6 @@ class MixTestPack(RunnerPack):
             for tag in tags:
                 cmd.extend(["--only", tag])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         # ExUnit prints results to stdout; parse from stdout lines
         suite = ParsedTestSuite(name="mix_test")
@@ -849,14 +805,12 @@ class MixTestPack(RunnerPack):
                             log.debug("elixir_output_parse_failed", exc_info=True)
         return suite
 
-
 # Haskell - Cabal Test
 
 
 @runner_registry.register
 class CabalTestPack(RunnerPack):
     """Haskell cabal test runner."""
-
     pack_id = "haskell.cabal_test"
     language = "haskell"
     runner_name = "cabal_test"
@@ -871,7 +825,6 @@ class CabalTestPack(RunnerPack):
         supports_parallel=False,
         supports_junit_output=False,
     )
-
     def detect(self, workspace_root: Path) -> float:
         cabal_files = list(workspace_root.glob("*.cabal"))
         if cabal_files:
@@ -898,7 +851,6 @@ class CabalTestPack(RunnerPack):
                 workspace_root=str(workspace_root),
             )
         ]
-
     def build_command(
         self,
         target: TestTarget,  # noqa: ARG002
@@ -909,7 +861,6 @@ class CabalTestPack(RunnerPack):
         exec_ctx: RuntimeExecutionContext | None = None,  # noqa: ARG002
     ) -> list[str]:
         return ["cabal", "test", "--test-show-details=streaming"]
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         import re
 
@@ -946,14 +897,12 @@ class CabalTestPack(RunnerPack):
                 suite.failed = 1 if failed_suites else 0
         return suite
 
-
 # Julia - Pkg.test (Julia standard package testing)
 
 
 @runner_registry.register
 class JuliaPkgTestPack(RunnerPack):
     """Julia Pkg.test() runner."""
-
     pack_id = "julia.pkg_test"
     language = "julia"
     runner_name = "pkg_test"
@@ -968,7 +917,6 @@ class JuliaPkgTestPack(RunnerPack):
         supports_parallel=False,
         supports_junit_output=False,
     )
-
     def detect(self, workspace_root: Path) -> float:
         project_toml = workspace_root / "Project.toml"
         if project_toml.exists():
@@ -990,7 +938,6 @@ class JuliaPkgTestPack(RunnerPack):
                 workspace_root=str(workspace_root),
             )
         ]
-
     def build_command(
         self,
         target: TestTarget,  # noqa: ARG002
@@ -1001,7 +948,6 @@ class JuliaPkgTestPack(RunnerPack):
         exec_ctx: RuntimeExecutionContext | None = None,  # noqa: ARG002
     ) -> list[str]:
         return ["julia", "--project=.", "-e", "using Pkg; Pkg.test()"]
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         import re
 
@@ -1036,14 +982,12 @@ class JuliaPkgTestPack(RunnerPack):
                 suite.failed = 1
         return suite
 
-
 # OCaml - Dune Test
 
 
 @runner_registry.register
 class DuneTestPack(RunnerPack):
     """OCaml Dune test runner."""
-
     pack_id = "ocaml.dune_test"
     language = "ocaml"
     runner_name = "dune_test"
@@ -1058,7 +1002,6 @@ class DuneTestPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=False,
     )
-
     def detect(self, workspace_root: Path) -> float:
         if (workspace_root / "dune-project").exists():
             # Check for test directory or inline_tests
@@ -1088,7 +1031,6 @@ class DuneTestPack(RunnerPack):
                 workspace_root=str(workspace_root),
             )
         ]
-
     def build_command(
         self,
         target: TestTarget,  # noqa: ARG002
@@ -1099,7 +1041,6 @@ class DuneTestPack(RunnerPack):
         exec_ctx: RuntimeExecutionContext | None = None,  # noqa: ARG002
     ) -> list[str]:
         return ["dune", "test"]
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         import re
 

@@ -35,10 +35,8 @@ def make_candidate(
         probe_status=ProbeStatus.PENDING,
     )
 
-
 class TestTier1AuthorityFilter:
     """Tests for Tier1AuthorityFilter class."""
-
     def test_no_tier1_markers_passes_all(self, temp_dir: Path) -> None:
         """Without Tier 1 markers, all candidates pass through."""
         repo_path = temp_dir / "repo"
@@ -55,7 +53,6 @@ class TestTier1AuthorityFilter:
         assert isinstance(result, AuthorityResult)
         assert len(result.pending) == 2
         assert len(result.detached) == 0
-
     def test_pnpm_workspace_authority(self, temp_dir: Path) -> None:
         """pnpm-workspace.yaml should define authority."""
         repo_path = temp_dir / "repo"
@@ -103,7 +100,6 @@ class TestTier1AuthorityFilter:
 
         assert "packages/included" in pending_roots
         assert "other" in detached_roots
-
     def test_npm_workspaces_authority(self, temp_dir: Path) -> None:
         """package.json workspaces field should define authority."""
         repo_path = temp_dir / "repo"
@@ -135,7 +131,6 @@ class TestTier1AuthorityFilter:
         # Should be pending (in workspace)
         assert len(result.pending) == 1
         assert result.pending[0].root_path == "packages/core"
-
     def test_go_work_authority(self, temp_dir: Path) -> None:
         """go.work should define authority for Go modules."""
         repo_path = temp_dir / "repo"
@@ -177,7 +172,6 @@ use (
         assert "cmd" in pending_roots
         assert "pkg" in pending_roots
         assert "orphan" in detached_roots
-
     def test_cargo_workspace_authority(self, temp_dir: Path) -> None:
         """Cargo.toml workspace should define authority."""
         repo_path = temp_dir / "repo"
@@ -209,7 +203,6 @@ members = [
 
         assert len(result.pending) == 1
         assert result.pending[0].root_path == "crates/lib-a"
-
     def test_non_code_families_pass_through(self, temp_dir: Path) -> None:
         """Non-code families should pass through without authority check."""
         repo_path = temp_dir / "repo"
@@ -227,10 +220,8 @@ members = [
         assert len(result.pending) == 2
         assert len(result.detached) == 0
 
-
 class TestAuthorityResult:
     """Tests for AuthorityResult dataclass."""
-
     def test_authority_result_structure(self) -> None:
         """AuthorityResult should have pending and detached lists."""
         result = AuthorityResult(pending=[], detached=[])
@@ -239,11 +230,8 @@ class TestAuthorityResult:
         assert hasattr(result, "detached")
         assert isinstance(result.pending, list)
         assert isinstance(result.detached, list)
-
-
 class TestDotNetAuthority:
     """Tests for .NET solution file authority filtering (applies to C#/F#/VB)."""
-
     def test_sln_workspace_authority(self, temp_dir: Path) -> None:
         """Solution file should define authority for projects."""
         repo_path = temp_dir / "repo"
@@ -300,7 +288,6 @@ EndProject
         assert "src/Core" in pending_roots
         assert "src/Api" in pending_roots
         assert "src/Orphan" in detached_roots
-
     def test_sln_with_no_projects(self, temp_dir: Path) -> None:
         """Empty solution file should pass all candidates."""
         repo_path = temp_dir / "repo"
@@ -331,10 +318,8 @@ EndProject
         assert len(result.pending) == 2
         assert len(result.detached) == 0
 
-
 class TestJvmAuthority:
     """Tests for JVM (Gradle/Maven) authority filtering (applies to Java/Kotlin/Scala/Groovy)."""
-
     def test_gradle_settings_authority(self, temp_dir: Path) -> None:
         """settings.gradle should define authority."""
         repo_path = temp_dir / "repo"
@@ -389,7 +374,6 @@ include('lib')
         assert "app" in pending_roots
         assert "lib" in pending_roots
         assert "orphan" in detached_roots
-
     def test_gradle_with_variables_is_permissive(self, temp_dir: Path) -> None:
         """Gradle settings with variables should be permissive."""
         repo_path = temp_dir / "repo"
@@ -422,7 +406,6 @@ include("${dynamicProject}")
         # Permissive mode - all pass
         assert len(result.pending) == 2
         assert len(result.detached) == 0
-
     def test_maven_pom_authority(self, temp_dir: Path) -> None:
         """Maven pom.xml modules should define authority."""
         repo_path = temp_dir / "repo"
@@ -479,10 +462,8 @@ include("${dynamicProject}")
         assert "api" in pending_roots
         assert "orphan" in detached_roots
 
-
 class TestJsWorkspaceEdgeCases:
     """Tests for JavaScript workspace edge cases."""
-
     def test_lerna_json_authority(self, temp_dir: Path) -> None:
         """lerna.json packages should define authority."""
         repo_path = temp_dir / "repo"
@@ -525,7 +506,6 @@ class TestJsWorkspaceEdgeCases:
 
         assert "packages/core" in pending_roots
         assert "orphan" in detached_roots
-
     def test_npm_workspaces_object_format(self, temp_dir: Path) -> None:
         """package.json workspaces as object with packages key."""
         repo_path = temp_dir / "repo"
@@ -557,11 +537,8 @@ class TestJsWorkspaceEdgeCases:
 
         assert len(result.pending) == 2
         assert result.pending[1].root_path == "packages/lib"
-
-
 class TestCargoWorkspaceEdgeCases:
     """Tests for Cargo workspace edge cases."""
-
     def test_cargo_inline_members(self, temp_dir: Path) -> None:
         """Cargo.toml with inline members array."""
         repo_path = temp_dir / "repo"
@@ -602,11 +579,8 @@ class TestCargoWorkspaceEdgeCases:
         pending_roots = {c.root_path for c in result.pending}
         assert "crates/a" in pending_roots
         assert "crates/b" in pending_roots
-
-
 class TestGoWorkEdgeCases:
     """Tests for Go workspace edge cases."""
-
     def test_go_work_single_use(self, temp_dir: Path) -> None:
         """go.work with single use directive."""
         repo_path = temp_dir / "repo"
@@ -632,65 +606,50 @@ class TestGoWorkEdgeCases:
 
         assert "cmd" in pending_roots
         assert "orphan" in detached_roots
-
-
 class TestHelperMethods:
     """Tests for authority filter helper methods."""
-
     def test_is_inside_empty_root(self, temp_dir: Path) -> None:
         """Empty root path should contain all paths."""
         authority = Tier1AuthorityFilter(temp_dir)
         assert authority._is_inside("any/path", "") is True
-
     def test_is_inside_same_path(self, temp_dir: Path) -> None:
         """Same path should be inside itself."""
         authority = Tier1AuthorityFilter(temp_dir)
         assert authority._is_inside("some/path", "some/path") is True
-
     def test_is_inside_child_path(self, temp_dir: Path) -> None:
         """Child path should be inside parent."""
         authority = Tier1AuthorityFilter(temp_dir)
         assert authority._is_inside("parent/child/file", "parent") is True
-
     def test_is_inside_not_child(self, temp_dir: Path) -> None:
         """Non-child path should not be inside."""
         authority = Tier1AuthorityFilter(temp_dir)
         assert authority._is_inside("other/path", "parent") is False
-
     def test_relative_to_empty_root(self, temp_dir: Path) -> None:
         """Relative to empty root should return path."""
         authority = Tier1AuthorityFilter(temp_dir)
         assert authority._relative_to("some/path", "") == "some/path"
-
     def test_relative_to_same_path(self, temp_dir: Path) -> None:
         """Relative to same path should return empty."""
         authority = Tier1AuthorityFilter(temp_dir)
         assert authority._relative_to("some/path", "some/path") == ""
-
     def test_matches_glob_with_trailing_stars(self, temp_dir: Path) -> None:
         """Glob with trailing /** should match."""
         authority = Tier1AuthorityFilter(temp_dir)
         assert authority._matches_any_glob("packages/core", ["packages/**"]) is True
-
     def test_matches_glob_with_leading_dot_slash(self, temp_dir: Path) -> None:
         """Glob with leading ./ should match."""
         authority = Tier1AuthorityFilter(temp_dir)
         assert authority._matches_any_glob("cmd", ["./cmd"]) is True
-
     def test_matches_glob_exact_match(self, temp_dir: Path) -> None:
         """Exact path should match."""
         authority = Tier1AuthorityFilter(temp_dir)
         assert authority._matches_any_glob("exact/path", ["exact/path"]) is True
-
     def test_matches_glob_wildcard(self, temp_dir: Path) -> None:
         """Wildcard glob should match."""
         authority = Tier1AuthorityFilter(temp_dir)
         assert authority._matches_any_glob("packages/core", ["packages/*"]) is True
-
-
 class TestFileReadErrors:
     """Tests for handling file read errors gracefully."""
-
     def test_missing_pnpm_workspace_file(self, temp_dir: Path) -> None:
         """Missing workspace file should not crash."""
         repo_path = temp_dir / "repo"
@@ -717,7 +676,6 @@ class TestFileReadErrors:
 
         # Should not crash, candidates pass through
         assert len(result.pending) == 2
-
     def test_invalid_json_package(self, temp_dir: Path) -> None:
         """Invalid JSON in package.json should not crash."""
         repo_path = temp_dir / "repo"
@@ -739,7 +697,6 @@ class TestFileReadErrors:
 
         # Should not crash
         assert len(result.pending) == 1
-
     def test_invalid_yaml_workspace(self, temp_dir: Path) -> None:
         """Invalid YAML in pnpm-workspace.yaml should not crash."""
         repo_path = temp_dir / "repo"

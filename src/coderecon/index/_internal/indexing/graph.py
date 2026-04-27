@@ -32,22 +32,18 @@ from coderecon.index.models import (
 if TYPE_CHECKING:
     from sqlmodel import Session
 
-
 class FactQueries:
     """Bounded fact queries for the Tier 1 index.
 
     All queries require explicit limits. No unbounded returns.
     """
-
     def __init__(self, session: Session) -> None:
         self._session = session
 
     # Definition lookups
-
     def get_def(self, def_uid: str) -> DefFact | None:
         """Get a definition by its stable UID."""
         return self._session.get(DefFact, def_uid)
-
     def batch_get_defs(self, def_uids: list[str]) -> dict[str, DefFact]:
         """Get multiple definitions by UID in a single query.
 
@@ -59,12 +55,10 @@ class FactQueries:
         stmt = select(DefFact).where(col(DefFact.def_uid).in_(def_uids))
         results = list(self._session.exec(stmt).all())
         return {d.def_uid: d for d in results}
-
     def list_defs_by_name(self, unit_id: int, name: str, *, limit: int = 100) -> list[DefFact]:
         """List definitions by simple name within a build unit."""
         stmt = select(DefFact).where(DefFact.unit_id == unit_id, DefFact.name == name).limit(limit)
         return list(self._session.exec(stmt).all())
-
     def list_defs_in_file(self, file_id: int, *, limit: int = 1000) -> list[DefFact]:
         """List all definitions in a file, ordered by source position."""
         stmt = (
@@ -76,7 +70,6 @@ class FactQueries:
         return list(self._session.exec(stmt).all())
 
     # Reference lookups
-
     def list_refs_by_def_uid(
         self,
         def_uid: str,
@@ -101,7 +94,6 @@ class FactQueries:
             stmt = stmt.where(RefFact.ref_tier == tier.value)
         stmt = stmt.order_by(col(RefFact.ref_id)).offset(offset).limit(limit)
         return list(self._session.exec(stmt).all())
-
     def list_all_refs_by_def_uid(
         self,
         def_uid: str,
@@ -132,16 +124,13 @@ class FactQueries:
                 break
             offset += page_size
         return all_refs
-
     def list_proven_refs(self, def_uid: str, *, limit: int = 100) -> list[RefFact]:
         """List PROVEN references to a definition (convenience)."""
         return self.list_refs_by_def_uid(def_uid, tier=RefTier.PROVEN, limit=limit)
-
     def list_refs_in_file(self, file_id: int, *, limit: int = 1000) -> list[RefFact]:
         """List all references in a file."""
         stmt = select(RefFact).where(RefFact.file_id == file_id).limit(limit)
         return list(self._session.exec(stmt).all())
-
     def list_callees_in_scope(
         self,
         file_id: int,
@@ -178,7 +167,6 @@ class FactQueries:
             .limit(limit)
         )
         return list(self._session.exec(stmt).all())
-
     def count_callers(self, def_uid: str) -> int:
         """Count distinct files that reference a definition (hub inbound score)."""
         from sqlalchemy import func
@@ -188,7 +176,6 @@ class FactQueries:
         )
         result = self._session.exec(stmt).one()
         return int(result) if result else 0
-
     def batch_count_callers(self, def_uids: list[str]) -> dict[str, int]:
         """Count distinct caller files for multiple defs in a single query.
 
@@ -212,7 +199,6 @@ class FactQueries:
         for uid, count in rows:
             result[uid] = int(count)
         return result
-
     def list_refs_by_token(
         self, unit_id: int, token_text: str, *, limit: int = 100
     ) -> list[RefFact]:
@@ -225,32 +211,27 @@ class FactQueries:
         return list(self._session.exec(stmt).all())
 
     # Scope lookups
-
     def get_scope(self, scope_id: int) -> ScopeFact | None:
         """Get a scope by ID."""
         return self._session.get(ScopeFact, scope_id)
-
     def list_scopes_in_file(self, file_id: int) -> list[ScopeFact]:
         """List all scopes in a file (typically bounded by file size)."""
         stmt = select(ScopeFact).where(ScopeFact.file_id == file_id)
         return list(self._session.exec(stmt).all())
 
     # Binding lookups
-
     def get_local_bind(self, scope_id: int, name: str) -> LocalBindFact | None:
         """Get a local binding by scope and name."""
         stmt = select(LocalBindFact).where(
             LocalBindFact.scope_id == scope_id, LocalBindFact.name == name
         )
         return self._session.exec(stmt).first()
-
     def list_binds_in_scope(self, scope_id: int, *, limit: int = 100) -> list[LocalBindFact]:
         """List all bindings in a scope."""
         stmt = select(LocalBindFact).where(LocalBindFact.scope_id == scope_id).limit(limit)
         return list(self._session.exec(stmt).all())
 
     # Import lookups
-
     def list_imports(self, file_id: int, *, limit: int = 100) -> list[ImportFact]:
         """List all imports in a file, ordered by source position."""
         stmt = (
@@ -260,25 +241,21 @@ class FactQueries:
             .limit(limit)
         )
         return list(self._session.exec(stmt).all())
-
     def get_import(self, import_uid: str) -> ImportFact | None:
         """Get an import by its UID."""
         return self._session.get(ImportFact, import_uid)
 
     # Export lookups
-
     def get_export_surface(self, unit_id: int) -> ExportSurface | None:
         """Get the export surface for a build unit."""
         stmt = select(ExportSurface).where(ExportSurface.unit_id == unit_id)
         return self._session.exec(stmt).first()
-
     def list_export_entries(self, surface_id: int, *, limit: int = 1000) -> list[ExportEntry]:
         """List export entries for a surface."""
         stmt = select(ExportEntry).where(ExportEntry.surface_id == surface_id).limit(limit)
         return list(self._session.exec(stmt).all())
 
     # Anchor group lookups
-
     def get_anchor_group(
         self, unit_id: int, member_token: str, receiver_shape: str | None
     ) -> AnchorGroup | None:
@@ -292,18 +269,15 @@ class FactQueries:
         else:
             stmt = stmt.where(AnchorGroup.receiver_shape.is_(None))  # type: ignore[union-attr]
         return self._session.exec(stmt).first()
-
     def list_anchor_groups(self, unit_id: int, *, limit: int = 100) -> list[AnchorGroup]:
         """List anchor groups in a build unit."""
         stmt = select(AnchorGroup).where(AnchorGroup.unit_id == unit_id).limit(limit)
         return list(self._session.exec(stmt).all())
 
     # File lookups
-
     def get_file(self, file_id: int) -> File | None:
         """Get a file by ID."""
         return self._session.get(File, file_id)
-
     def batch_get_files(self, file_ids: list[int]) -> dict[int, File]:
         """Get multiple files by ID in a single query.
 
@@ -314,12 +288,10 @@ class FactQueries:
         stmt = select(File).where(col(File.id).in_(file_ids))
         results = list(self._session.exec(stmt).all())
         return {f.id: f for f in results if f.id is not None}
-
     def get_file_by_path(self, path: str) -> File | None:
         """Get a file by path."""
         stmt = select(File).where(File.path == path)
         return self._session.exec(stmt).first()
-
     def batch_get_files_by_paths(self, paths: list[str]) -> dict[str, File]:
         """Get multiple files by path in a single query.
 
@@ -330,14 +302,12 @@ class FactQueries:
         stmt = select(File).where(col(File.path).in_(paths))
         results = list(self._session.exec(stmt).all())
         return {f.path: f for f in results}
-
     def list_files(self, *, limit: int = 10000) -> list[File]:
         """List all indexed files."""
         stmt = select(File).limit(limit)
         return list(self._session.exec(stmt).all())
 
     # Seed finding (recon-dedicated)
-
     def find_defs_matching_term(
         self,
         term: str,
@@ -374,7 +344,6 @@ class FactQueries:
             .limit(limit)
         )
         return list(self._session.exec(stmt).all())
-
     def find_files_matching_term(
         self,
         term: str,
@@ -397,7 +366,6 @@ class FactQueries:
         return list(self._session.exec(stmt).all())
 
     # Interface / type hierarchy lookups (Tier 2)
-
     def list_implementors(
         self, interface_name: str, *, limit: int = 100
     ) -> list[InterfaceImplFact]:
@@ -408,7 +376,6 @@ class FactQueries:
             .limit(limit)
         )
         return list(self._session.exec(stmt).all())
-
     def list_interfaces_of(
         self, implementor_def_uid: str, *, limit: int = 50
     ) -> list[InterfaceImplFact]:
@@ -419,7 +386,6 @@ class FactQueries:
             .limit(limit)
         )
         return list(self._session.exec(stmt).all())
-
     def list_co_implementors(
         self, def_uid: str, *, limit: int = 100
     ) -> list[str]:
@@ -441,7 +407,6 @@ class FactQueries:
         return list(self._session.exec(stmt).all())
 
     # DocCrossRef lookups
-
     def list_doc_xrefs_from(
         self, source_def_uid: str, *, limit: int = 50
     ) -> list[DocCrossRef]:
@@ -452,7 +417,6 @@ class FactQueries:
             .limit(limit)
         )
         return list(self._session.exec(stmt).all())
-
     def list_doc_xrefs_to(
         self, target_def_uid: str, *, limit: int = 50
     ) -> list[DocCrossRef]:
@@ -465,7 +429,6 @@ class FactQueries:
         return list(self._session.exec(stmt).all())
 
     # Endpoint lookups
-
     def batch_get_endpoints(
         self, handler_def_uids: list[str]
     ) -> dict[str, EndpointFact]:
@@ -487,7 +450,6 @@ class FactQueries:
         return out
 
     # Test coverage lookups
-
     def batch_count_test_coverage(
         self, def_uids: list[str]
     ) -> dict[str, int]:
@@ -516,7 +478,6 @@ class FactQueries:
         for uid, count in rows:
             result[uid] = int(count)
         return result
-
     def batch_get_covering_test_file_paths(
         self, def_uids: list[str],
     ) -> set[str]:
@@ -545,7 +506,6 @@ class FactQueries:
             if file_path:
                 paths.add(file_path)
         return paths
-
     def batch_get_covered_def_uids(
         self, test_file_paths: list[str],
     ) -> set[str]:
@@ -574,7 +534,6 @@ class FactQueries:
         )
         rows = list(self._session.exec(stmt).all())
         return set(rows)
-
 
 # Re-export for backwards compatibility during migration
 # These will be removed once all consumers are updated

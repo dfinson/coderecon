@@ -1,5 +1,4 @@
 """Comprehensive tests for all Tier-1 runner packs."""
-
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -15,14 +14,12 @@ from coderecon.testing.runner_pack import runner_registry
 
 class TestPytestPack:
     """Tests for Python pytest runner pack."""
-
     def test_pack_id(self) -> None:
         pack_class = runner_registry.get("python.pytest")
         assert pack_class is not None
         assert pack_class.pack_id == "python.pytest"
         assert pack_class.language == "python"
         assert pack_class.runner_name == "pytest"
-
     def test_detect_with_pytest_ini(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -31,7 +28,6 @@ class TestPytestPack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) == 1.0
-
     def test_detect_with_conftest(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -40,7 +36,6 @@ class TestPytestPack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) == 0.8
-
     def test_detect_with_pyproject_pytest_section(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -49,7 +44,6 @@ class TestPytestPack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) == 1.0
-
     def test_detect_with_setup_cfg(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -58,7 +52,6 @@ class TestPytestPack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) == 0.9
-
     def test_detect_with_test_files_only(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -68,7 +61,6 @@ class TestPytestPack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) == 0.5
-
     def test_detect_no_markers(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -76,7 +68,6 @@ class TestPytestPack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) == 0.0
-
     @pytest.mark.asyncio
     async def test_discover_finds_test_files(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -97,7 +88,6 @@ class TestPytestPack:
             assert any("test_one.py" in s for s in selectors)
             assert any("test_two.py" in s for s in selectors)
             assert any("module_test.py" in s for s in selectors)
-
     @pytest.mark.asyncio
     async def test_discover_excludes_conftest(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -113,7 +103,6 @@ class TestPytestPack:
 
             assert len(targets) == 1
             assert "conftest.py" not in targets[0].selector
-
     @pytest.mark.asyncio
     async def test_discover_excludes_underscore_files(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -128,7 +117,6 @@ class TestPytestPack:
             targets = await pack.discover(root)
 
             assert len(targets) == 1
-
     def test_build_command_basic(self) -> None:
         pack_class = runner_registry.get("python.pytest")
         assert pack_class is not None
@@ -146,7 +134,6 @@ class TestPytestPack:
         assert "pytest" in cmd
         assert "tests/test_foo.py" in cmd
         assert any("junit" in arg for arg in cmd)
-
     def test_build_command_with_pattern(self) -> None:
         pack_class = runner_registry.get("python.pytest")
         assert pack_class is not None
@@ -165,7 +152,6 @@ class TestPytestPack:
 
         assert "-k" in cmd
         assert "test_specific" in cmd
-
     def test_build_command_with_tags(self) -> None:
         pack_class = runner_registry.get("python.pytest")
         assert pack_class is not None
@@ -184,7 +170,6 @@ class TestPytestPack:
 
         assert "-m" in cmd
 
-
 # =============================================================================
 # JavaScript - Jest
 # =============================================================================
@@ -192,13 +177,11 @@ class TestPytestPack:
 
 class TestJestPack:
     """Tests for JavaScript Jest runner pack."""
-
     def test_pack_id(self) -> None:
         pack_class = runner_registry.get("js.jest")
         assert pack_class is not None
         assert pack_class.pack_id == "js.jest"
         assert pack_class.language == "javascript"
-
     def test_detect_with_jest_config_js(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -207,7 +190,6 @@ class TestJestPack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) == 1.0
-
     def test_detect_with_jest_config_ts(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -216,7 +198,6 @@ class TestJestPack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) == 1.0
-
     def test_detect_with_jest_config_json(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -225,7 +206,6 @@ class TestJestPack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) == 1.0
-
     def test_detect_with_jest_config_mjs(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -234,7 +214,6 @@ class TestJestPack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) == 1.0
-
     def test_detect_with_package_json_jest_field(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -244,7 +223,6 @@ class TestJestPack:
             pack = pack_class()
             # Package.json with jest config is medium confidence
             assert pack.detect(root) >= 0.5
-
     def test_detect_no_markers(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -252,7 +230,6 @@ class TestJestPack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) == 0.0
-
     @pytest.mark.asyncio
     async def test_discover_finds_test_files(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -268,7 +245,6 @@ class TestJestPack:
             targets = await pack.discover(root)
 
             assert len(targets) == 3
-
     @pytest.mark.asyncio
     async def test_discover_excludes_node_modules(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -285,7 +261,6 @@ class TestJestPack:
 
             assert len(targets) == 1
             assert "node_modules" not in targets[0].selector
-
     def test_build_command_basic(self) -> None:
         pack_class = runner_registry.get("js.jest")
         assert pack_class is not None
@@ -303,7 +278,6 @@ class TestJestPack:
         assert "jest" in cmd
         assert "src/app.test.js" in cmd
 
-
 # =============================================================================
 # JavaScript - Vitest
 # =============================================================================
@@ -311,12 +285,10 @@ class TestJestPack:
 
 class TestVitestPack:
     """Tests for JavaScript Vitest runner pack."""
-
     def test_pack_id(self) -> None:
         pack_class = runner_registry.get("js.vitest")
         assert pack_class is not None
         assert pack_class.pack_id == "js.vitest"
-
     def test_detect_with_vitest_config(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -325,7 +297,6 @@ class TestVitestPack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) == 1.0
-
     def test_build_command(self) -> None:
         pack_class = runner_registry.get("js.vitest")
         assert pack_class is not None
@@ -343,7 +314,6 @@ class TestVitestPack:
         assert "vitest" in cmd
         assert "run" in cmd
 
-
 # =============================================================================
 # Go - go test
 # =============================================================================
@@ -351,13 +321,11 @@ class TestVitestPack:
 
 class TestGoTestPack:
     """Tests for Go test runner pack."""
-
     def test_pack_id(self) -> None:
         pack_class = runner_registry.get("go.gotest")
         assert pack_class is not None
         assert pack_class.pack_id == "go.gotest"
         assert pack_class.language == "go"
-
     def test_detect_with_go_mod(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -366,7 +334,6 @@ class TestGoTestPack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) == 1.0
-
     def test_detect_with_go_files_only(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -376,7 +343,6 @@ class TestGoTestPack:
             pack = pack_class()
             # Go files without go.mod has lower confidence
             assert 0.0 < pack.detect(root) < 1.0
-
     @pytest.mark.asyncio
     async def test_discover_finds_packages(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -394,7 +360,6 @@ class TestGoTestPack:
 
             assert len(targets) >= 2
             assert all(t.kind == "package" for t in targets)
-
     def test_build_command(self) -> None:
         pack_class = runner_registry.get("go.gotest")
         assert pack_class is not None
@@ -412,7 +377,6 @@ class TestGoTestPack:
         assert "go" in cmd
         assert "test" in cmd
         assert "-json" in cmd
-
     def test_build_command_with_pattern(self) -> None:
         pack_class = runner_registry.get("go.gotest")
         assert pack_class is not None
@@ -430,7 +394,6 @@ class TestGoTestPack:
         assert "-run" in cmd
         assert "TestFoo" in cmd
 
-
 # =============================================================================
 # Rust - cargo-nextest and cargo test
 # =============================================================================
@@ -438,13 +401,11 @@ class TestGoTestPack:
 
 class TestCargoNextestPack:
     """Tests for Rust cargo-nextest runner pack."""
-
     def test_pack_id(self) -> None:
         pack_class = runner_registry.get("rust.nextest")
         assert pack_class is not None
         assert pack_class.pack_id == "rust.nextest"
         assert pack_class.language == "rust"
-
     def test_detect_with_cargo_toml(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -455,7 +416,6 @@ class TestCargoNextestPack:
             # Will be >= 0.0 depending on if cargo-nextest is installed
             result = pack.detect(root)
             assert result >= 0.0
-
     @pytest.mark.asyncio
     async def test_discover_single_package(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -470,16 +430,12 @@ class TestCargoNextestPack:
 
             assert len(targets) >= 1
             assert targets[0].kind == "package"
-
-
 class TestCargoTestPack:
     """Tests for Rust cargo test runner pack."""
-
     def test_pack_id(self) -> None:
         pack_class = runner_registry.get("rust.cargo_test")
         assert pack_class is not None
         assert pack_class.pack_id == "rust.cargo_test"
-
 
 # =============================================================================
 # Java - Maven and Gradle
@@ -488,13 +444,11 @@ class TestCargoTestPack:
 
 class TestMavenSurefirePack:
     """Tests for Java Maven Surefire runner pack."""
-
     def test_pack_id(self) -> None:
         pack_class = runner_registry.get("java.maven")
         assert pack_class is not None
         assert pack_class.pack_id == "java.maven"
         assert pack_class.language == "java"
-
     def test_detect_with_pom(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -503,7 +457,6 @@ class TestMavenSurefirePack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) == 1.0
-
     @pytest.mark.asyncio
     async def test_discover_single_module(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -518,16 +471,12 @@ class TestMavenSurefirePack:
 
             assert len(targets) >= 1
             assert targets[0].kind == "project"
-
-
 class TestGradlePack:
     """Tests for Java Gradle runner pack."""
-
     def test_pack_id(self) -> None:
         pack_class = runner_registry.get("java.gradle")
         assert pack_class is not None
         assert pack_class.pack_id == "java.gradle"
-
     def test_detect_with_build_gradle(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -536,7 +485,6 @@ class TestGradlePack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) == 1.0
-
     def test_detect_with_build_gradle_kts(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -546,7 +494,6 @@ class TestGradlePack:
             pack = pack_class()
             assert pack.detect(root) == 1.0
 
-
 # =============================================================================
 # C# - dotnet test
 # =============================================================================
@@ -554,13 +501,11 @@ class TestGradlePack:
 
 class TestDotnetTestPack:
     """Tests for C# dotnet test runner pack."""
-
     def test_pack_id(self) -> None:
         pack_class = runner_registry.get("csharp.dotnet")
         assert pack_class is not None
         assert pack_class.pack_id == "csharp.dotnet"
         assert pack_class.language == "csharp"
-
     def test_detect_with_sln(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -569,7 +514,6 @@ class TestDotnetTestPack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) == 1.0
-
     def test_detect_with_csproj(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -579,7 +523,6 @@ class TestDotnetTestPack:
             pack = pack_class()
             assert pack.detect(root) >= 0.5
 
-
 # =============================================================================
 # C/C++ - CTest
 # =============================================================================
@@ -587,13 +530,11 @@ class TestDotnetTestPack:
 
 class TestCTestPack:
     """Tests for C/C++ CTest runner pack."""
-
     def test_pack_id(self) -> None:
         pack_class = runner_registry.get("cpp.ctest")
         assert pack_class is not None
         assert pack_class.pack_id == "cpp.ctest"
         assert pack_class.language == "cpp"
-
     def test_detect_with_cmake_testing(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -602,7 +543,6 @@ class TestCTestPack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) == 1.0
-
     def test_detect_with_cmake_no_testing(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -612,7 +552,6 @@ class TestCTestPack:
             pack = pack_class()
             # CMakeLists without testing has lower confidence
             assert 0.0 < pack.detect(root) < 1.0
-
     def test_build_command(self) -> None:
         pack_class = runner_registry.get("cpp.ctest")
         assert pack_class is not None
@@ -629,7 +568,6 @@ class TestCTestPack:
 
         assert "ctest" in cmd
 
-
 # =============================================================================
 # Ruby - RSpec
 # =============================================================================
@@ -637,13 +575,11 @@ class TestCTestPack:
 
 class TestRSpecPack:
     """Tests for Ruby RSpec runner pack."""
-
     def test_pack_id(self) -> None:
         pack_class = runner_registry.get("ruby.rspec")
         assert pack_class is not None
         assert pack_class.pack_id == "ruby.rspec"
         assert pack_class.language == "ruby"
-
     def test_detect_with_rspec_file(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -652,7 +588,6 @@ class TestRSpecPack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) == 1.0
-
     def test_detect_with_gemfile(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -661,7 +596,6 @@ class TestRSpecPack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) >= 0.5
-
     @pytest.mark.asyncio
     async def test_discover(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -679,7 +613,6 @@ class TestRSpecPack:
 
             assert len(targets) == 2
 
-
 # =============================================================================
 # PHP - PHPUnit
 # =============================================================================
@@ -687,13 +620,11 @@ class TestRSpecPack:
 
 class TestPHPUnitPack:
     """Tests for PHP PHPUnit runner pack."""
-
     def test_pack_id(self) -> None:
         pack_class = runner_registry.get("php.phpunit")
         assert pack_class is not None
         assert pack_class.pack_id == "php.phpunit"
         assert pack_class.language == "php"
-
     def test_detect_with_phpunit_xml(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -702,7 +633,6 @@ class TestPHPUnitPack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) == 1.0
-
     def test_detect_with_phpunit_xml_dist(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -711,7 +641,6 @@ class TestPHPUnitPack:
             assert pack_class is not None
             pack = pack_class()
             assert pack.detect(root) >= 0.5
-
     @pytest.mark.asyncio
     async def test_discover(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -729,7 +658,6 @@ class TestPHPUnitPack:
 
             assert len(targets) == 2
 
-
 # =============================================================================
 # parse_output and get_cwd Tests
 # =============================================================================
@@ -737,7 +665,6 @@ class TestPHPUnitPack:
 
 class TestPytestParseOutput:
     """Tests for pytest parse_output method."""
-
     def test_parse_output_valid_junit_xml(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -755,7 +682,6 @@ class TestPytestParseOutput:
 
             assert result.total == 2
             assert result.passed == 2
-
     def test_parse_output_missing_file(self) -> None:
         pack_class = runner_registry.get("python.pytest")
         assert pack_class is not None
@@ -764,10 +690,8 @@ class TestPytestParseOutput:
 
         assert result.errors >= 1
 
-
 class TestJestParseOutput:
     """Tests for Jest parse_output method."""
-
     def test_parse_output_valid_json(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -794,10 +718,8 @@ class TestJestParseOutput:
             assert result.passed == 2
             assert result.failed == 1
 
-
 class TestGoTestParseOutput:
     """Tests for Go test parse_output method."""
-
     def test_parse_output_from_stdout(self) -> None:
         pack_class = runner_registry.get("go.gotest")
         assert pack_class is not None
@@ -809,7 +731,6 @@ class TestGoTestParseOutput:
         result = pack.parse_output(Path("/nonexistent.json"), stdout)
 
         assert result.passed >= 1
-
     def test_parse_output_with_failure(self) -> None:
         pack_class = runner_registry.get("go.gotest")
         assert pack_class is not None
@@ -822,10 +743,8 @@ class TestGoTestParseOutput:
 
         assert result.failed >= 1
 
-
 class TestCargoParseOutput:
     """Tests for Cargo parse_output method."""
-
     def test_parse_output_from_stdout(self) -> None:
         pack_class = runner_registry.get("rust.cargo_test")
         assert pack_class is not None
@@ -841,10 +760,8 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
         assert result.total == 2
         assert result.passed == 2
 
-
 class TestMavenParseOutput:
     """Tests for Maven parse_output method."""
-
     def test_parse_output_valid_surefire(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -874,7 +791,6 @@ class TestMavenParseOutput:
 
 class TestGetCwd:
     """Tests for get_cwd method across packs."""
-
     def test_pytest_get_cwd(self) -> None:
         pack_class = runner_registry.get("python.pytest")
         assert pack_class is not None
@@ -889,7 +805,6 @@ class TestGetCwd:
         )
         cwd = pack.get_cwd(target)
         assert cwd == Path("/repo")
-
     def test_jest_get_cwd(self) -> None:
         pack_class = runner_registry.get("js.jest")
         assert pack_class is not None
@@ -904,7 +819,6 @@ class TestGetCwd:
         )
         cwd = pack.get_cwd(target)
         assert cwd == Path("/repo")
-
     def test_gotest_get_cwd(self) -> None:
         pack_class = runner_registry.get("go.gotest")
         assert pack_class is not None
@@ -919,7 +833,6 @@ class TestGetCwd:
         )
         cwd = pack.get_cwd(target)
         assert cwd == Path("/repo")
-
     def test_cargo_get_cwd(self) -> None:
         pack_class = runner_registry.get("rust.cargo_test")
         assert pack_class is not None
@@ -935,7 +848,6 @@ class TestGetCwd:
         cwd = pack.get_cwd(target)
         assert cwd == Path("/repo")
 
-
 # =============================================================================
 # Additional Tier-1 build_command Coverage
 # =============================================================================
@@ -943,7 +855,6 @@ class TestGetCwd:
 
 class TestVitestBuildCommandDetailed:
     """Detailed tests for Vitest build_command method."""
-
     def test_build_command_with_pattern(self) -> None:
         pack_class = runner_registry.get("js.vitest")
         assert pack_class is not None
@@ -959,11 +870,8 @@ class TestVitestBuildCommandDetailed:
         cmd = pack.build_command(target, output_path=Path("/out/results.json"), pattern="render")
 
         assert any("render" in str(arg) for arg in cmd)
-
-
 class TestGradleBuildCommandDetailed:
     """Detailed tests for Gradle build_command method."""
-
     def test_build_command_basic(self) -> None:
         pack_class = runner_registry.get("java.gradle")
         assert pack_class is not None
@@ -980,11 +888,8 @@ class TestGradleBuildCommandDetailed:
 
         assert any("gradle" in str(arg) for arg in cmd)
         assert "test" in cmd
-
-
 class TestDotNetBuildCommandDetailed:
     """Detailed tests for .NET build_command method."""
-
     def test_build_command_basic(self) -> None:
         pack_class = runner_registry.get("csharp.dotnet")
         assert pack_class is not None
@@ -1001,7 +906,6 @@ class TestDotNetBuildCommandDetailed:
 
         assert "dotnet" in cmd
         assert "test" in cmd
-
     def test_build_command_with_pattern(self) -> None:
         pack_class = runner_registry.get("csharp.dotnet")
         assert pack_class is not None
@@ -1019,11 +923,8 @@ class TestDotNetBuildCommandDetailed:
         )
 
         assert "--filter" in cmd
-
-
 class TestCTestBuildCommandDetailed:
     """Detailed tests for CTest build_command method."""
-
     def test_build_command_basic(self) -> None:
         pack_class = runner_registry.get("cpp.ctest")
         assert pack_class is not None
@@ -1039,11 +940,8 @@ class TestCTestBuildCommandDetailed:
         cmd = pack.build_command(target, output_path=Path("/out/results.xml"))
 
         assert "ctest" in cmd
-
-
 class TestRSpecBuildCommandDetailed:
     """Detailed tests for RSpec build_command method."""
-
     def test_build_command_basic(self) -> None:
         pack_class = runner_registry.get("ruby.rspec")
         assert pack_class is not None
@@ -1059,7 +957,6 @@ class TestRSpecBuildCommandDetailed:
         cmd = pack.build_command(target, output_path=Path("/out/results.xml"))
 
         assert "rspec" in cmd
-
     def test_build_command_with_pattern(self) -> None:
         pack_class = runner_registry.get("ruby.rspec")
         assert pack_class is not None
@@ -1075,11 +972,8 @@ class TestRSpecBuildCommandDetailed:
         cmd = pack.build_command(target, output_path=Path("/out/results.xml"), pattern="validates")
 
         assert any("validates" in str(arg) for arg in cmd)
-
-
 class TestPHPUnitBuildCommandDetailed:
     """Detailed tests for PHPUnit build_command method."""
-
     def test_build_command_basic(self) -> None:
         pack_class = runner_registry.get("php.phpunit")
         assert pack_class is not None
@@ -1097,7 +991,6 @@ class TestPHPUnitBuildCommandDetailed:
         # PHPUnit uses ./vendor/bin/phpunit
         assert any("phpunit" in arg for arg in cmd)
         assert target.selector in cmd
-
     def test_build_command_with_pattern(self) -> None:
         pack_class = runner_registry.get("php.phpunit")
         assert pack_class is not None

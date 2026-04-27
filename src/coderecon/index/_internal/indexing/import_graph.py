@@ -36,51 +36,39 @@ if TYPE_CHECKING:
 @dataclass
 class ImpactMatch:
     """A single test file matched by the import graph."""
-
     test_file: str
     source_modules: list[str]  # modules it imports that were in the changed set
     confidence: Literal["high", "low"]
     reason: str
     hop: int = 0  # graph distance: 0 = direct import/changed test, 1+ = transitive
-
-
 @dataclass
 class ImpactConfidence:
     """Confidence assessment for an import graph query."""
-
     tier: Literal["complete", "partial"]
     resolved_ratio: float  # 0.0–1.0
     unresolved_files: list[str]  # changed files that couldn't map to modules
     null_source_count: int  # ImportFacts with NULL source_literal in test scope
     reasoning: str
-
-
 @dataclass
 class ImportGraphResult:
     """Result of an affected_tests query."""
-
     matches: list[ImpactMatch]
     confidence: ImpactConfidence
     changed_modules: list[str]  # dotted module names derived from changed files
-
     @property
     def test_files(self) -> list[str]:
         """All test file paths (convenience)."""
         return [m.test_file for m in self.matches]
-
     @property
     def high_confidence_tests(self) -> list[str]:
         return [m.test_file for m in self.matches if m.confidence == "high"]
-
     @property
     def low_confidence_tests(self) -> list[str]:
         return [m.test_file for m in self.matches if m.confidence == "low"]
-
     @property
     def max_hop(self) -> int:
         """Highest hop distance among all matches."""
         return max((m.hop for m in self.matches), default=0)
-
     def tests_by_hop(self) -> dict[int, list[str]]:
         """Group test file paths by hop distance.
 
@@ -93,25 +81,18 @@ class ImportGraphResult:
         for m in self.matches:
             result.setdefault(m.hop, []).append(m.test_file)
         return result
-
-
 @dataclass
 class CoverageSourceResult:
     """Result of an imported_sources query."""
-
     source_dirs: list[str]  # deduplicated source directories for --cov=
     source_modules: list[str]  # raw source_literal values
     confidence: Literal["complete", "partial"]
     null_import_count: int  # imports with no source_literal
-
-
 @dataclass
 class CoverageGap:
     """A source module with no test imports."""
-
     module: str  # dotted module name
     file_path: str | None  # resolved file path, if available
-
 
 # ImportGraph
 
@@ -122,14 +103,12 @@ class ImportGraph:
     All queries operate on ``ImportFact.source_literal`` for module-level
     precision.  The graph is built lazily on first query and cached.
     """
-
     def __init__(self, session: Session) -> None:
         self._session = session
         self._module_index: dict[str, str] | None = None  # module_key -> file_path
         self._file_paths: list[str] | None = None
         self._test_file_paths: list[str] | None = None
         self._test_file_set: set[str] | None = None  # O(1) membership checks
-
     def _ensure_caches(self) -> None:
         """Build module index, file path list, and test file list on first use."""
         if self._module_index is not None:
@@ -142,7 +121,6 @@ class ImportGraph:
         self._test_file_set = set(self._test_file_paths)
 
     # 1. affected_tests: changed files → test files
-
     def affected_tests(self, changed_files: list[str]) -> ImportGraphResult:
         """Find test files affected by changed files.
 
@@ -493,7 +471,6 @@ class ImportGraph:
         )
 
     # 2. imported_sources: test files → source modules (for --cov scoping)
-
     def imported_sources(self, test_files: list[str]) -> CoverageSourceResult:
         """Given test files, find source modules they import.
 
@@ -555,7 +532,6 @@ class ImportGraph:
         )
 
     # 3. uncovered_modules: source modules with zero test imports
-
     def uncovered_modules(self) -> list[CoverageGap]:
         """Find source modules that no test file imports.
 

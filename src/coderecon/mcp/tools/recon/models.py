@@ -274,14 +274,11 @@ _PATH_STOP_TOKENS = frozenset(
 
 class ArtifactKind(StrEnum):
     """Classification of what kind of artifact a definition belongs to."""
-
     code = "code"
     test = "test"
     config = "config"
     doc = "doc"
     build = "build"
-
-
 def _classify_artifact(path: str) -> ArtifactKind:
     """Classify a file path into an ArtifactKind."""
     name = PurePosixPath(path).name
@@ -303,14 +300,12 @@ def _classify_artifact(path: str) -> ArtifactKind:
 
 class TaskIntent(StrEnum):
     """High-level classification of what the user wants to do."""
-
     debug = "debug"
     implement = "implement"
     refactor = "refactor"
     understand = "understand"
     test = "test"
     unknown = "unknown"
-
 
 _INTENT_KEYWORDS: dict[TaskIntent, frozenset[str]] = {
     TaskIntent.debug: frozenset(
@@ -425,11 +420,9 @@ def _extract_intent(task: str) -> TaskIntent:
 @dataclass
 class EvidenceRecord:
     """A single piece of evidence supporting a candidate's relevance."""
-
     category: str  # "term_match", "lexical", "explicit"
     detail: str  # Human-readable description
     score: float = 0.0  # Normalized [0, 1] contribution
-
 
 # HarvestCandidate — unified representation from all harvesters
 
@@ -491,7 +484,6 @@ class HarvestCandidate:
     shares_file_with_seed: bool = False
     is_callee_of_top: bool = False
     is_imported_by_top: bool = False
-
     @property
     def evidence_axes(self) -> int:
         """Count of independent harvester sources that found this candidate."""
@@ -503,7 +495,6 @@ class HarvestCandidate:
                 self.from_coverage,
             ]
         )
-
     @property
     def has_semantic_evidence(self) -> bool:
         """Semantic axis: matched >= 2 terms,
@@ -516,7 +507,6 @@ class HarvestCandidate:
             or self.from_explicit
             or self.from_graph
         )
-
     @property
     def has_structural_evidence(self) -> bool:
         """Structural axis: hub >= 1, OR shares file, OR callee-of,
@@ -527,7 +517,6 @@ class HarvestCandidate:
             or self.is_callee_of_top
             or self.is_imported_by_top
         )
-
     def matches_negative(self, negative_mentions: list[str]) -> bool:
         """Return True if this candidate's name/path matches a negated term."""
         if not negative_mentions:
@@ -535,7 +524,6 @@ class HarvestCandidate:
         name_lower = self.def_fact.name.lower() if self.def_fact else ""
         path_lower = self.file_path.lower()
         return any(neg in name_lower or neg in path_lower for neg in negative_mentions)
-
     @property
     def has_strong_single_axis(self) -> bool:
         """True if any one axis is strong enough to pass alone (OR gate).
@@ -544,7 +532,6 @@ class HarvestCandidate:
         lack evidence on other axes.
         """
         return self.from_explicit or self.hub_score >= 8 or len(self.matched_terms) >= 3
-
 
 # ParsedTask — structured extraction from free-text
 
@@ -582,7 +569,6 @@ class ParsedTask:
     is_stacktrace_driven: bool = False
     is_test_driven: bool = False
 
-
 # File-type classifiers
 
 
@@ -595,7 +581,6 @@ def _is_test_file(path: str) -> bool:
         or basename.startswith("test_")
         or basename.endswith("_test.py")
     )
-
 
 def _is_barrel_file(path: str) -> bool:
     """Check if a file is a barrel/index re-export file."""

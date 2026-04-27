@@ -141,7 +141,6 @@ def _discover_string_node_types(ts_language: tree_sitter.Language) -> frozenset[
     _string_node_types_cache[lang_id] = result
     return result
 
-
 def _collect_string_literals(
     root_node: tree_sitter.Node,
     content: bytes,
@@ -166,7 +165,6 @@ def _collect_string_literals(
         List of string literal texts (unquoted, non-empty).
     """
     results: list[str] = []
-
     def walk(node: tree_sitter.Node) -> None:
         # Skip nodes entirely outside the def span
         if node.end_point[0] < start_line or node.start_point[0] > end_line:
@@ -191,7 +189,6 @@ def _collect_string_literals(
 
     walk(root_node)
     return results
-
 
 def _extract_string_literals_regex(
     content_text: str,
@@ -323,7 +320,6 @@ def _extract_sem_facts(
         if facts:
             def_dict["_sem_facts"] = facts
 
-
 def _compute_def_uid(
     unit_id: int,
     file_path: str,
@@ -342,7 +338,6 @@ def _compute_def_uid(
     raw = f"{unit_id}:{file_path}:{kind}:{lexical_path}:{sig}:{disambiguator}"
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
-
 def _apply_worktree_uid_remap(
     extraction: "ExtractionResult", worktree_id: int, *, is_main_worktree: bool = True
 ) -> None:
@@ -359,7 +354,6 @@ def _apply_worktree_uid_remap(
     """
     if is_main_worktree:
         return  # main worktree keeps canonical UIDs
-
     def _remap(uid: str) -> str:
         return hashlib.sha256(f"{worktree_id}:{uid}".encode()).hexdigest()[:16]
 
@@ -415,7 +409,6 @@ def _apply_worktree_uid_remap(
         if old_uid and old_uid in import_uid_remap:
             imp["import_uid"] = import_uid_remap[old_uid]
 
-
 def _has_grammar_for_family(language_family: str | None) -> bool:
     """Check if a language family has a tree-sitter grammar available.
 
@@ -427,11 +420,9 @@ def _has_grammar_for_family(language_family: str | None) -> bool:
         return False
     return has_grammar(language_family)
 
-
 @dataclass
 class ExtractionResult:
     """Result of extracting facts from a single file."""
-
     file_path: str
     defs: list[dict[str, Any]] = field(default_factory=list)
     refs: list[dict[str, Any]] = field(default_factory=list)
@@ -465,12 +456,9 @@ class ExtractionResult:
     # Language-level module/package identity (e.g. 'cats.effect' from Scala
     # `package cats.effect`). Extracted by tree-sitter or config-file parsers.
     declared_module: str | None = None
-
-
 @dataclass
 class BatchResult:
     """Result of processing a batch of files."""
-
     files_processed: int = 0
     defs_extracted: int = 0
     refs_extracted: int = 0
@@ -488,8 +476,6 @@ class BatchResult:
     duration_ms: int = 0
     # Count of files skipped due to no grammar (not errors)
     files_skipped_no_grammar: int = 0
-
-
 def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionResult:
     """Extract all facts from a single file (worker function).
 
@@ -868,7 +854,6 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
 
     return result
 
-
 def _extract_type_aware_facts(
     extraction: ExtractionResult,
     tree: tree_sitter.Tree,
@@ -986,7 +971,6 @@ def _extract_type_aware_facts(
         # Don't fail extraction for type-aware facts — they're supplementary
         log.debug("type_aware_facts_failed", exc_info=True)
 
-
 def _find_containing_scope(scopes: list[SyntacticScope], line: int, col: int) -> int:
     """Find the innermost scope containing the given position.
 
@@ -1009,7 +993,6 @@ def _find_containing_scope(scopes: list[SyntacticScope], line: int, col: int) ->
         key=lambda s: (s.end_line - s.start_line) * _SCOPE_SORT_LINE_WEIGHT + (s.end_col - s.start_col),
     )
     return innermost.scope_id
-
 
 def _compute_lexical_path(sym: SyntacticSymbol, all_symbols: list[SyntacticSymbol]) -> str:
     """Compute the lexical path for a symbol (e.g., 'Class.method')."""
@@ -1037,7 +1020,6 @@ def _compute_lexical_path(sym: SyntacticSymbol, all_symbols: list[SyntacticSymbo
 
     return sym.name
 
-
 class StructuralIndexer:
     """Extracts facts from source files using Tree-sitter.
 
@@ -1058,11 +1040,9 @@ class StructuralIndexer:
         indexer = StructuralIndexer(db, repo_path)
         result = indexer.index_files(file_paths, context_id=1, worktree_id=wt_id)
     """
-
     def __init__(self, db: Database, repo_path: Path | str) -> None:
         self.db = db
         self.repo_path = Path(repo_path)
-
     def extract_files(
         self,
         file_paths: list[str],
@@ -1087,7 +1067,6 @@ class StructuralIndexer:
         if workers > 1 and len(file_paths) > 1:
             return self._parallel_extract(file_paths, context_id, workers, repo_root=effective_root)
         return self._sequential_extract(file_paths, context_id, repo_root=effective_root)
-
     def index_files(
         self,
         file_paths: list[str],
@@ -1357,7 +1336,6 @@ class StructuralIndexer:
 
         result.duration_ms = int((time.monotonic() - start) * MS_PER_SEC)
         return result
-
     def _augment_declared_modules(self, extractions: list[ExtractionResult]) -> None:
         """Post-process declared_module for languages needing config files.
 
@@ -1399,7 +1377,6 @@ class StructuralIndexer:
                 all_paths_set.add(str(cfg.relative_to(self.repo_path)))
 
         resolver = ConfigResolver(str(self.repo_path), list(all_paths_set))
-
         def _read_file(rel_path: str) -> str | None:
             full = self.repo_path / rel_path
             try:
@@ -1428,7 +1405,6 @@ class StructuralIndexer:
                 continue
             if ex.declared_module is None:
                 ex.declared_module = path_to_module(ex.file_path)
-
     def _resolve_xref_target(self, writer: BulkWriter, target_name: str) -> str | None:
         """Resolve a cross-ref target name to a def_uid using the BulkWriter's connection."""
         from sqlalchemy import text as sa_text
@@ -1457,7 +1433,6 @@ class StructuralIndexer:
         if row:
             return row[0]
         return None
-
     def _resolve_import_paths(self, extractions: list[ExtractionResult]) -> None:
         """Resolve every import's source_literal to a target file path.
 
@@ -1524,7 +1499,6 @@ class StructuralIndexer:
                 resolved = resolver.resolve(source_literal, import_kind, ex.file_path)
                 if resolved:
                     imp["resolved_path"] = resolved
-
     def resolve_all_imports(self) -> int:
         """Re-resolve all unresolved import paths using the complete DB.
 
@@ -1600,7 +1574,6 @@ class StructuralIndexer:
                 session.commit()
 
         return newly_resolved
-
     def _sequential_extract(
         self, file_paths: list[str], unit_id: int, repo_root: Path | None = None
     ) -> list[ExtractionResult]:
@@ -1611,7 +1584,6 @@ class StructuralIndexer:
             result = _extract_file(path, root, unit_id)
             results.append(result)
         return results
-
     def _parallel_extract(
         self, file_paths: list[str], unit_id: int, workers: int, repo_root: Path | None = None
     ) -> list[ExtractionResult]:
@@ -1634,7 +1606,6 @@ class StructuralIndexer:
                     results.append(ExtractionResult(file_path=path, error=str(e)))
 
         return results
-
     def _ensure_file_id(
         self,
         file_path: str,
@@ -1692,12 +1663,9 @@ class StructuralIndexer:
             if file.id is None:
                 raise RuntimeError(f"Failed to allocate file id for {file_path!r}")
             return file.id
-
     def extract_single(self, file_path: str, unit_id: int = 0) -> ExtractionResult:
         """Extract facts from a single file without storing."""
         return _extract_file(file_path, str(self.repo_path), unit_id)
-
-
 def index_context(
     db: Database,
     repo_path: Path | str,

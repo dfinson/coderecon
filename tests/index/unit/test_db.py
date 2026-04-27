@@ -20,7 +20,6 @@ from coderecon.index.models import Context, DefFact, File, ProbeStatus, Worktree
 
 class TestDatabaseEngine:
     """Tests for Database engine configuration."""
-
     def test_engine_created_with_wal_mode(self, temp_dir: Path) -> None:
         """Engine should use WAL journal mode."""
         db_path = temp_dir / "test.db"
@@ -34,7 +33,6 @@ class TestDatabaseEngine:
             row = result.fetchone()
             assert row is not None
             assert row[0] == "wal"
-
     def test_engine_created_with_busy_timeout(self, temp_dir: Path) -> None:
         """Engine should have 30 second busy timeout."""
         db_path = temp_dir / "test.db"
@@ -48,7 +46,6 @@ class TestDatabaseEngine:
             row = result.fetchone()
             assert row is not None
             assert row[0] == 30000
-
     def test_engine_created_with_foreign_keys_enabled(self, temp_dir: Path) -> None:
         """Engine should have foreign keys enabled."""
         db_path = temp_dir / "test.db"
@@ -62,11 +59,8 @@ class TestDatabaseEngine:
             row = result.fetchone()
             assert row is not None
             assert row[0] == 1
-
-
 class TestDatabaseTables:
     """Tests for table creation."""
-
     def test_create_all_creates_tables(self, temp_dir: Path) -> None:
         """create_all() should create all expected tables."""
         db_path = temp_dir / "test.db"
@@ -97,11 +91,8 @@ class TestDatabaseTables:
             "epochs",
         }
         assert expected_tables.issubset(tables)
-
-
 class TestSession:
     """Tests for session context manager."""
-
     def test_session_commit(self, temp_dir: Path) -> None:
         """Session should commit when explicitly requested."""
         db_path = temp_dir / "test.db"
@@ -121,7 +112,6 @@ class TestSession:
             result = session.exec(select(File).where(File.path == "test.py")).first()
             assert result is not None
             assert result.content_hash == "abc123"
-
     def test_session_rollback_on_error(self, temp_dir: Path) -> None:
         """Session should rollback on exception."""
         db_path = temp_dir / "test.db"
@@ -131,7 +121,6 @@ class TestSession:
         with db.session() as session:
             session.add(Worktree(id=1, name="main", root_path="/test", is_main=True))
             session.commit()
-
         class TestError(Exception):
             pass
 
@@ -143,11 +132,8 @@ class TestSession:
         with db.session() as session:
             result = session.exec(select(File).where(File.path == "rollback.py")).first()
             assert result is None
-
-
 class TestBulkWriter:
     """Tests for BulkWriter operations."""
-
     def test_insert_many_files(self, temp_dir: Path) -> None:
         """insert_many should insert multiple records."""
         db_path = temp_dir / "test.db"
@@ -172,7 +158,6 @@ class TestBulkWriter:
             assert len(files) == 2
             paths = {f.path for f in files}
             assert paths == {"a.py", "b.py"}
-
     def test_insert_many_def_facts(self, temp_dir: Path) -> None:
         """insert_many should work with DefFact table."""
         db_path = temp_dir / "test.db"
@@ -224,11 +209,8 @@ class TestBulkWriter:
             assert len(defs) == 1
             assert defs[0].name == "foo"
             assert defs[0].def_uid == "uid_foo"
-
-
 class TestAdditionalIndexes:
     """Tests for additional index creation/deletion."""
-
     def test_create_additional_indexes(self, temp_dir: Path) -> None:
         """create_additional_indexes should create composite indexes."""
         from sqlalchemy import text
@@ -256,7 +238,6 @@ class TestAdditionalIndexes:
             "idx_anchor_groups_unit",
         }
         assert expected.issubset(indexes)
-
     def test_drop_additional_indexes(self, temp_dir: Path) -> None:
         """drop_additional_indexes should remove composite indexes."""
         from sqlalchemy import text
@@ -289,7 +270,6 @@ class TestAdditionalIndexes:
             "idx_ref_facts_target_tier",
         }
         assert expected_dropped.isdisjoint(indexes)
-
     def test_create_indexes_is_idempotent(self, temp_dir: Path) -> None:
         """create_additional_indexes can be called multiple times."""
         from coderecon.index._internal.db import create_additional_indexes
@@ -301,7 +281,6 @@ class TestAdditionalIndexes:
         # Call twice - should not fail
         create_additional_indexes(db.engine)
         create_additional_indexes(db.engine)  # Should not raise
-
     def test_drop_indexes_is_idempotent(self, temp_dir: Path) -> None:
         """drop_additional_indexes can be called when no indexes exist."""
         from coderecon.index._internal.db.indexes import drop_additional_indexes
@@ -312,11 +291,8 @@ class TestAdditionalIndexes:
 
         # Call without creating indexes - should not fail
         drop_additional_indexes(db.engine)  # Should not raise
-
-
 class TestBulkWriterAdvanced:
     """Advanced tests for BulkWriter operations."""
-
     def test_bulk_writer_rollback_on_error(self, temp_dir: Path) -> None:
         """BulkWriter should rollback on exception."""
         from sqlmodel import select
@@ -328,7 +304,6 @@ class TestBulkWriterAdvanced:
         with db.session() as session:
             session.add(Worktree(name="main", root_path=str(temp_dir), is_main=True))
             session.commit()
-
         class TestError(Exception):
             pass
 
@@ -343,7 +318,6 @@ class TestBulkWriterAdvanced:
         with db.session() as session:
             result = session.exec(select(File).where(File.path == "a.py")).first()
             assert result is None
-
     def test_insert_many_empty_list(self, temp_dir: Path) -> None:
         """insert_many with empty list should be no-op."""
         db_path = temp_dir / "test.db"
@@ -352,7 +326,6 @@ class TestBulkWriterAdvanced:
 
         with db.bulk_writer() as writer:
             writer.insert_many(File, [])  # Should not raise
-
     def test_insert_many_returning_ids(self, temp_dir: Path) -> None:
         """insert_many_returning_ids should return id mapping."""
         db_path = temp_dir / "test.db"
@@ -377,7 +350,6 @@ class TestBulkWriterAdvanced:
         assert len(id_map) == 2
         assert ("x.py",) in id_map
         assert ("y.py",) in id_map
-
     def test_insert_many_returning_ids_empty(self, temp_dir: Path) -> None:
         """insert_many_returning_ids with empty list returns empty dict."""
         db_path = temp_dir / "test.db"
@@ -388,7 +360,6 @@ class TestBulkWriterAdvanced:
             id_map = writer.insert_many_returning_ids(File, [], key_columns=["path"])
 
         assert id_map == {}
-
     def test_delete_where(self, temp_dir: Path) -> None:
         """delete_where should remove matching records."""
         from sqlmodel import select
@@ -425,7 +396,6 @@ class TestBulkWriterAdvanced:
             assert "a.py" in paths
             assert "b.py" not in paths
             assert "c.py" in paths
-
     def test_upsert_many_insert(self, temp_dir: Path) -> None:
         """upsert_many should insert new records."""
         from sqlmodel import select
@@ -454,7 +424,6 @@ class TestBulkWriterAdvanced:
             f = session.exec(select(File).where(File.path == "new.py")).first()
             assert f is not None
             assert f.content_hash == "hash_new"
-
     def test_upsert_many_update(self, temp_dir: Path) -> None:
         """upsert_many should update existing records on conflict."""
         from sqlmodel import select
@@ -484,7 +453,6 @@ class TestBulkWriterAdvanced:
             f = session.exec(select(File).where(File.path == "exist.py")).first()
             assert f is not None
             assert f.content_hash == "new_hash"
-
     def test_upsert_many_empty(self, temp_dir: Path) -> None:
         """upsert_many with empty list returns 0."""
         db_path = temp_dir / "test.db"
@@ -500,7 +468,6 @@ class TestBulkWriterAdvanced:
             )
 
         assert count == 0
-
     def test_execute_raw(self, temp_dir: Path) -> None:
         """execute_raw should run raw SQL."""
         db_path = temp_dir / "test.db"

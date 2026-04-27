@@ -25,10 +25,8 @@ def _noop_progress(indexed: int, total: int, files_by_ext: dict[str, int], phase
     """No-op progress callback for tests."""
     pass
 
-
 class TestCoordinatorInitialization:
     """Tests for IndexCoordinatorEngine.initialize()."""
-
     @pytest.mark.asyncio
     async def test_initialize_python_project(self, integration_repo: Path, tmp_path: Path) -> None:
         """Should initialize a Python project."""
@@ -46,7 +44,6 @@ class TestCoordinatorInitialization:
             assert len(result.errors) == 0
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_initialize_creates_database(
         self, integration_repo: Path, tmp_path: Path
@@ -64,7 +61,6 @@ class TestCoordinatorInitialization:
             assert db_path.exists()
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_initialize_creates_tantivy_index(
         self, integration_repo: Path, tmp_path: Path
@@ -82,7 +78,6 @@ class TestCoordinatorInitialization:
             assert tantivy_path.exists()
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_initialize_indexes_all_python_files(
         self, integration_repo: Path, tmp_path: Path
@@ -101,7 +96,6 @@ class TestCoordinatorInitialization:
             assert result.files_indexed >= 4
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_initialize_calls_progress_callback(
         self, integration_repo: Path, tmp_path: Path
@@ -112,7 +106,6 @@ class TestCoordinatorInitialization:
 
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
         progress_calls: list[tuple[int, int, dict[str, int], str]] = []
-
         def track_progress(
             indexed: int, total: int, files_by_ext: dict[str, int], phase: str = ""
         ) -> None:
@@ -137,7 +130,6 @@ class TestCoordinatorInitialization:
             assert "indexing" in by_phase
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_progress_phases_unified(self, integration_repo: Path, tmp_path: Path) -> None:
         """Progress phases should use unified naming (no 'lexical' or 'structural')."""
@@ -146,7 +138,6 @@ class TestCoordinatorInitialization:
 
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
         phases_seen: list[str] = []
-
         def track_phases(
             _indexed: int, _total: int, _files_by_ext: dict[str, int], phase: str = ""
         ) -> None:
@@ -176,11 +167,8 @@ class TestCoordinatorInitialization:
                     )
         finally:
             coordinator.close()
-
-
 class TestCoordinatorSearch:
     """Tests for IndexCoordinatorEngine search operations."""
-
     @pytest.mark.asyncio
     async def test_search_text(self, integration_repo: Path, tmp_path: Path) -> None:
         """Should search file content."""
@@ -199,7 +187,6 @@ class TestCoordinatorSearch:
             assert all(isinstance(r, SearchResult) for r in results.results)
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_search_symbols(self, integration_repo: Path, tmp_path: Path) -> None:
         """Should search by symbol name."""
@@ -217,7 +204,6 @@ class TestCoordinatorSearch:
             assert len(results.results) >= 1
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_search_path(self, integration_repo: Path, tmp_path: Path) -> None:
         """Should search by file path."""
@@ -236,7 +222,6 @@ class TestCoordinatorSearch:
             assert any("utils" in r.path for r in results.results)
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_search_no_results(self, integration_repo: Path, tmp_path: Path) -> None:
         """Should return empty list when no matches."""
@@ -253,11 +238,8 @@ class TestCoordinatorSearch:
             assert len(results.results) == 0
         finally:
             coordinator.close()
-
-
 class TestCoordinatorReindex:
     """Tests for IndexCoordinatorEngine reindex operations."""
-
     @pytest.mark.asyncio
     async def test_reindex_incremental(self, integration_repo: Path, tmp_path: Path) -> None:
         """Should perform incremental reindex."""
@@ -271,10 +253,8 @@ class TestCoordinatorReindex:
 
             # Modify a file
             (integration_repo / "src" / "main.py").write_text('''"""Modified main."""
-
 def main():
     print("Modified!")
-
 
 def new_function():
     """New function added."""
@@ -288,7 +268,6 @@ def new_function():
             assert stats.files_processed == 1
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_reindex_full(self, integration_repo: Path, tmp_path: Path) -> None:
         """Should perform full reindex and discover new files."""
@@ -302,7 +281,6 @@ def new_function():
 
             # Add a new file (no git commit needed - we index all files)
             (integration_repo / "src" / "new_module.py").write_text('''"""New module."""
-
 def new_func():
     return "new"
 ''')
@@ -315,10 +293,8 @@ def new_func():
         finally:
             coordinator.close()
 
-
 class TestCoordinatorMonorepo:
     """Tests for IndexCoordinatorEngine with monorepo structure."""
-
     @pytest.mark.asyncio
     async def test_initialize_monorepo(self, integration_monorepo: Path, tmp_path: Path) -> None:
         """Should discover multiple contexts in monorepo."""
@@ -334,7 +310,6 @@ class TestCoordinatorMonorepo:
             assert result.contexts_discovered >= 2  # pkg-a and pkg-b
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_search_across_packages(self, integration_monorepo: Path, tmp_path: Path) -> None:
         """Should search across all packages."""
@@ -352,11 +327,8 @@ class TestCoordinatorMonorepo:
             assert len(results.results) >= 1
         finally:
             coordinator.close()
-
-
 class TestCoordinatorCplignore:
     """Tests for .reconignore enforcement during indexing."""
-
     @pytest.mark.asyncio
     async def test_reconignore_excludes_dependencies(self, tmp_path: Path) -> None:
         """Should not index files in dependency directories (node_modules, venv, etc)."""
@@ -419,7 +391,6 @@ class TestCoordinatorCplignore:
             assert len(main_results.results) >= 1, "main.py should be indexed"
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_reconignore_excludes_build_outputs(self, tmp_path: Path) -> None:
         """Should not index build output directories (dist, build, target)."""
@@ -477,7 +448,6 @@ class TestCoordinatorCplignore:
             assert len(main_results.results) >= 1, "main.py should be indexed"
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_coderecon_directory_always_excluded(self, tmp_path: Path) -> None:
         """Should never index .recon directory itself."""
@@ -525,11 +495,8 @@ class TestCoordinatorCplignore:
             assert len(main_results.results) >= 1, "main.py should be indexed"
         finally:
             coordinator.close()
-
-
 class TestCplignoreChangeHandling:
     """Tests for .reconignore change detection and index updates."""
-
     @pytest.mark.asyncio
     async def test_reconignore_change_adds_previously_ignored_py_files(
         self, integration_repo: Path, tmp_path: Path
@@ -571,7 +538,6 @@ class TestCplignoreChangeHandling:
             )
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_reconignore_change_removes_newly_ignored_py_files(
         self, integration_repo: Path, tmp_path: Path
@@ -608,7 +574,6 @@ class TestCplignoreChangeHandling:
             )
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_reconignore_unchanged_no_reindex(
         self, integration_repo: Path, tmp_path: Path
@@ -639,11 +604,8 @@ class TestCplignoreChangeHandling:
             assert len(final_results.results) == initial_count
         finally:
             coordinator.close()
-
-
 class TestCoordinatorSearchFilterLanguages:
     """Tests for search filter_languages parameter."""
-
     @pytest.fixture
     def multilang_repo(self, tmp_path: Path) -> Path:
         """Create a repository with multiple language files."""
@@ -663,13 +625,11 @@ class TestCoordinatorSearchFilterLanguages:
         # Create Python files
         (repo_path / "src").mkdir()
         (repo_path / "src" / "main.py").write_text('''"""Python main module."""
-
 def search_handler():
     """Handle search requests."""
     return "python search"
 ''')
         (repo_path / "src" / "utils.py").write_text('''"""Python utils."""
-
 def python_helper():
     return "helper"
 ''')
@@ -715,7 +675,6 @@ func SearchHandler() string {
         subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_path, capture_output=True, check=True)
 
         return repo_path
-
     @pytest.mark.asyncio
     async def test_filter_languages_returns_only_matching_language(
         self, multilang_repo: Path, tmp_path: Path
@@ -738,7 +697,6 @@ func SearchHandler() string {
                 assert r.path.endswith(".py"), f"Expected .py file, got {r.path}"
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_filter_languages_multiple_languages(
         self, multilang_repo: Path, tmp_path: Path
@@ -764,7 +722,6 @@ func SearchHandler() string {
             assert has_py or has_js, f"Expected .py or .js files, got {paths}"
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_filter_languages_none_returns_all(
         self, multilang_repo: Path, tmp_path: Path
@@ -790,7 +747,6 @@ func SearchHandler() string {
             assert len(paths) >= 1
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_filter_languages_empty_for_nonexistent_language(
         self, multilang_repo: Path, tmp_path: Path
@@ -811,7 +767,6 @@ func SearchHandler() string {
             assert len(results.results) == 0
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_filter_languages_excludes_other_languages(
         self, multilang_repo: Path, tmp_path: Path
@@ -845,7 +800,6 @@ func SearchHandler() string {
             assert not has_js_filtered, "JS file should be filtered out"
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_filter_languages_with_symbol_search(
         self, multilang_repo: Path, tmp_path: Path
@@ -869,7 +823,6 @@ func SearchHandler() string {
                 assert r.path.endswith(".py"), f"Symbol search returned non-Python file: {r.path}"
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_filter_languages_respects_limit(
         self, multilang_repo: Path, tmp_path: Path
@@ -892,7 +845,6 @@ func SearchHandler() string {
             assert len(results.results) <= 1
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_filter_languages_empty_list_returns_all(
         self, multilang_repo: Path, tmp_path: Path
@@ -920,7 +872,6 @@ func SearchHandler() string {
         finally:
             coordinator.close()
 
-
 class TestCoordinatorTestTargetIncremental:
     """Tests for _update_test_targets_incremental via reindex_incremental.
 
@@ -928,7 +879,6 @@ class TestCoordinatorTestTargetIncremental:
     the canonical is_test_file from coderecon.core.languages, and that it
     creates/removes TestTarget records accordingly.
     """
-
     @pytest.mark.asyncio
     async def test_new_test_file_creates_target(
         self, integration_repo: Path, tmp_path: Path
@@ -963,7 +913,6 @@ class TestCoordinatorTestTargetIncremental:
             assert "tests/test_utils.py" in target_paths
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_non_test_file_does_not_create_target(
         self, integration_repo: Path, tmp_path: Path
@@ -991,7 +940,6 @@ class TestCoordinatorTestTargetIncremental:
             assert len(updated_targets) == initial_count
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_modified_test_file_updates_target(
         self, integration_repo: Path, tmp_path: Path
@@ -1024,7 +972,6 @@ class TestCoordinatorTestTargetIncremental:
             assert "tests/test_updatable.py" in target_paths
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_suffix_test_file_detected(self, integration_repo: Path, tmp_path: Path) -> None:
         """Files matching *_test.py pattern are detected as test files."""
@@ -1052,11 +999,8 @@ class TestCoordinatorTestTargetIncremental:
             assert "tests/utils_test.py" in target_paths
         finally:
             coordinator.close()
-
-
 class TestCoordinatorStaleTantivyRemoval:
     """Tests that stale Tantivy docs are removed when extraction fails."""
-
     @pytest.mark.asyncio
     async def test_unreadable_file_removes_stale_tantivy_doc(
         self, integration_repo: Path, tmp_path: Path
@@ -1085,7 +1029,6 @@ class TestCoordinatorStaleTantivyRemoval:
             # Patch _extract_file to simulate TOCTOU: file passes .exists()
             # but extraction returns content_text=None (file vanished mid-read)
             real_extract = _extract_file
-
             def _failing_extract(file_path: str, repo_root: str, unit_id: int) -> ExtractionResult:
                 if file_path == "src/utils.py":
                     return ExtractionResult(file_path=file_path, error="File not found")
@@ -1122,8 +1065,6 @@ class TestCoordinatorStaleTantivyRemoval:
                     )
         finally:
             coordinator.close()
-
-
 class TestWorktreeIsolation:
     """Tests for multi-worktree def_uid isolation and per-worktree file extraction.
 
@@ -1131,7 +1072,6 @@ class TestWorktreeIsolation:
     - UNIQUE constraint on def_facts.def_uid across worktrees (def_uid collision fix)
     - Feature-branch files being read from the correct worktree checkout directory
     """
-
     @pytest.mark.asyncio
     async def test_def_uid_isolation_across_worktrees(self, tmp_path: Path) -> None:
         """def_uid for the same symbol must differ between main and a feature worktree.
@@ -1220,7 +1160,6 @@ class TestWorktreeIsolation:
             f"feature_fn missing from feat worktree defs — "
             f"file was probably read from main checkout instead of worktree: {feat_defs}"
         )
-
     @pytest.mark.asyncio
     async def test_feature_worktree_reindex_is_idempotent(self, tmp_path: Path) -> None:
         """Reindexing the same feature-worktree file twice must not create duplicate defs."""
@@ -1277,7 +1216,6 @@ class TestWorktreeIsolation:
         con.close()
 
         assert count == 2, f"Expected 2 defs after idempotent reindex, got {count}"
-
     @pytest.mark.asyncio
     async def test_set_freshness_gate_caches_worktree_root(self, tmp_path: Path) -> None:
         """set_freshness_gate must store non-main worktree roots in _worktree_root_cache."""
