@@ -80,17 +80,10 @@ async def _run_single_target(
     pack_class = runner_registry.get(target.runner_pack_id)
     if not pack_class:
         return (
-            ParsedTestSuite(
-                name=target.selector,
-                errors=1,
-                error_type="unknown",
-                error_detail=f"Runner pack not found: {target.runner_pack_id}",
-                suggested_action="Check that the runner pack is registered",
-                target_selector=target.selector,
-                workspace_root=target.workspace_root,
-            ),
-            None,
-            0,
+            _single_error_suite(target, "unknown",
+                f"Runner pack not found: {target.runner_pack_id}",
+                "Check that the runner pack is registered", [], ""),
+            None, 0,
         )
     pack = pack_class()
     # Get pre-indexed execution context (runtime captured at discovery time)
@@ -108,24 +101,16 @@ async def _run_single_target(
     )
     if not cmd:
         return (
-            ParsedTestSuite(
-                name=target.selector,
-                errors=1,
-                error_type="unknown",
-                error_detail="Runner pack returned empty command",
-                suggested_action="Check target configuration",
-                target_selector=target.selector,
-                workspace_root=target.workspace_root,
-            ),
-            None,
-            0,
+            _single_error_suite(target, "unknown",
+                "Runner pack returned empty command",
+                "Check target configuration", [], ""),
+            None, 0,
         )
     # Handle coverage - use pre-indexed capability instead of detecting at runtime
     cov_artifact: CoverageArtifact | None = None
+    coverage_available: bool = False
     emitter = get_emitter(target.runner_pack_id) if coverage else None
-    coverage_available = False
     if emitter:
-        # Get pre-indexed coverage tools from index (O(1) lookup)
         coverage_tools = await coordinator.get_coverage_capability(
             target.workspace_root, target.runner_pack_id
         )
@@ -134,11 +119,9 @@ async def _run_single_target(
             runner_available=True,
             coverage_tools=coverage_tools,
         )
-        capability = emitter.capability(runtime)
-        coverage_available = capability == CoverageCapability.AVAILABLE
-    # Create safe execution context to protect against repo misconfigurations
-    # strip_coverage_flags=True removes existing coverage flags from the command
-    # BEFORE we add our own (so project configs don't interfere)
+        coverage_available = emitter.capability(runtime) == CoverageCapability.AVAILABLE
+    # Create safe execution context — strip_coverage_flags removes existing
+    # coverage flags BEFORE we add our own
     safe_ctx = SafeExecutionContext(
         SafeExecutionConfig(
             artifact_dir=artifact_dir,
@@ -148,9 +131,8 @@ async def _run_single_target(
             subprocess_memory_limit_mb=subprocess_memory_limit_mb,
         )
     )
-    # Sanitize command FIRST (removes dangerous flags including existing coverage flags)
+    # Sanitize command, then add our coverage flags
     cmd = safe_ctx.sanitize_command(cmd, target.runner_pack_id)
-    # NOW add our coverage flags after sanitization
     if coverage_available and emitter and coverage_dir:
         cmd = emitter.modify_command(cmd, coverage_dir, source_dirs=source_dirs)
         cov_artifact = CoverageArtifact(
@@ -159,141 +141,53 @@ async def _run_single_target(
             pack_id=target.runner_pack_id,
             invocation_id=target.target_id,
         )
-    # Prepare safe environment (overrides project configs to prevent corruption)
     safe_env = safe_ctx.prepare_environment(target.runner_pack_id)
-    # Merge execution context environment overrides (from runtime resolution)
-    # This includes venv PATH adjustments and any tool-specific env vars
+    # Merge execution context environment overrides
     if exec_ctx:
         runtime_env = exec_ctx.build_env()
         safe_env.update(runtime_env)
-    # Verify executable exists (use safe_env PATH which includes venv bin)
+    # Verify executable exists
     executable = cmd[0]
     resolved_executable = shutil.which(executable, path=safe_env.get("PATH"))
     if not resolved_executable:
         safe_ctx.cleanup()
         return (
-            ParsedTestSuite(
-                name=target.selector,
-                errors=1,
-                error_type="command_not_found",
-                error_detail=f"Executable not found: {executable}",
-                suggested_action=f"Install {executable} or activate the correct environment",
-                execution=ExecutionContext(
-                    command=cmd,
-                    working_directory=str(pack.get_cwd(target)),
-                ),
-                target_selector=target.selector,
-                workspace_root=target.workspace_root,
-            ),
-            None,
-            0,
+            _single_error_suite(target, "command_not_found",
+                f"Executable not found: {executable}",
+                f"Install {executable} or activate the correct environment",
+                cmd, pack.get_cwd(target)),
+            None, 0,
         )
     cwd = pack.get_cwd(target)
-    stdout = ""
-    stderr = ""
-    exit_code: int | None = None
-    peak_rss_mb = 0
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=cwd,
-            env=safe_env,  # Use safe environment with defensive overrides
+        result, peak_rss_mb = await _exec_and_parse(
+            cmd, cwd, safe_env, timeout_sec,
+            artifact_dir, safe_name, output_path, pack, target,
         )
-        # Poll child RSS while waiting for completion
-        async def _poll_rss() -> int:
-            peak = 0
-            pid = proc.pid
-            while proc.returncode is None:
-                rss = child_rss_mb(pid) if pid else 0
-                if rss > peak:
-                    peak = rss
-                await asyncio.sleep(2)
-            # One final sample after exit
-            rss = child_rss_mb(pid) if pid else 0
-            if rss > peak:
-                peak = rss
-            return peak
-        rss_task = asyncio.create_task(_poll_rss())
-        stdout_bytes, stderr_bytes = await asyncio.wait_for(
-            proc.communicate(), timeout=timeout_sec
-        )
-        stdout = stdout_bytes.decode(errors="replace")
-        stderr = stderr_bytes.decode(errors="replace")
-        exit_code = proc.returncode
-        # Collect peak RSS (poll task should be done since process exited)
-        peak_rss_mb = await rss_task
-        # Write artifacts
-        stdout_path = artifact_dir / f"{safe_name}.stdout.txt"
-        atomic_write_text(stdout_path, stdout)
-        if stderr:
-            stderr_path = artifact_dir / f"{safe_name}.stderr.txt"
-            atomic_write_text(stderr_path, stderr)
-        # Create execution context
-        execution = ExecutionContext(
-            command=cmd,
-            working_directory=str(cwd),
-            exit_code=exit_code,
-            raw_stdout=stdout,
-            raw_stderr=stderr if stderr else None,
-        )
-        # Parse output
-        result = pack.parse_output(output_path, stdout)
-        result.target_selector = target.selector
-        result.workspace_root = target.workspace_root
-        result.execution = execution
-        # Set parsed_test_count as an observable fact
-        # - int >= 0: Successfully parsed this many test cases
-        # - None: Could not parse output
-        if result.tests is not None:
-            result.parsed_test_count = len(result.tests)
-        else:
-            result.parsed_test_count = None
-        _classify_result_error(result, output_path, stdout, exit_code)
         return (result, cov_artifact, peak_rss_mb)
     except TimeoutError:
         safe_ctx.cleanup()
         return (
-            ParsedTestSuite(
-                name=target.selector,
-                errors=1,
-                error_type="timeout",
-                error_detail=f"Command timed out after {timeout_sec} seconds",
-                suggested_action="Increase timeout or run fewer tests",
-                execution=ExecutionContext(
-                    command=cmd,
-                    working_directory=str(cwd),
-                    raw_stdout=stdout if stdout else None,
-                    raw_stderr=stderr if stderr else None,
-                ),
-                target_selector=target.selector,
-                workspace_root=target.workspace_root,
+            _single_error_suite(
+                target, "timeout",
+                f"Command timed out after {timeout_sec} seconds",
+                "Increase timeout or run fewer tests",
+                cmd, cwd,
             ),
-            None,
-            peak_rss_mb,
+            None, 0,
         )
     except OSError as e:
         safe_ctx.cleanup()
         return (
-            ParsedTestSuite(
-                name=target.selector,
-                errors=1,
-                error_type="command_failed",
-                error_detail=f"OS error executing command: {e}",
-                suggested_action="Check that the command and working directory are valid",
-                execution=ExecutionContext(
-                    command=cmd,
-                    working_directory=str(cwd),
-                ),
-                target_selector=target.selector,
-                workspace_root=target.workspace_root,
+            _single_error_suite(
+                target, "command_failed",
+                f"OS error executing command: {e}",
+                "Check that the command and working directory are valid",
+                cmd, cwd,
             ),
-            None,
-            peak_rss_mb,
+            None, 0,
         )
     finally:
-        # Always cleanup safe execution context
         safe_ctx.cleanup()
 
 
@@ -496,3 +390,96 @@ def _batch_error_suite(
         target_selector=selectors,
         workspace_root=targets[0].workspace_root if targets else "",
     )
+
+
+async def _poll_child_rss(proc: asyncio.subprocess.Process) -> int:
+    """Poll child process RSS until it exits, returning peak MB."""
+    peak = 0
+    pid = proc.pid
+    while proc.returncode is None:
+        rss = child_rss_mb(pid) if pid else 0
+        if rss > peak:
+            peak = rss
+        await asyncio.sleep(2)
+    rss = child_rss_mb(pid) if pid else 0
+    if rss > peak:
+        peak = rss
+    return peak
+
+
+def _single_error_suite(
+    target: TestTarget,
+    error_type: str,
+    error_detail: str,
+    suggested_action: str,
+    cmd: list[str],
+    cwd: str | Path,
+    stdout: str | None = None,
+    stderr: str | None = None,
+) -> ParsedTestSuite:
+    """Build a ``ParsedTestSuite`` for a single-target execution error."""
+    return ParsedTestSuite(
+        name=target.selector,
+        errors=1,
+        error_type=error_type,
+        error_detail=error_detail,
+        suggested_action=suggested_action,
+        execution=ExecutionContext(
+            command=cmd,
+            working_directory=str(cwd),
+            raw_stdout=stdout if stdout else None,
+            raw_stderr=stderr if stderr else None,
+        ),
+        target_selector=target.selector,
+        workspace_root=target.workspace_root,
+    )
+
+
+async def _exec_and_parse(
+    cmd: list[str],
+    cwd: str | Path,
+    env: dict[str, str],
+    timeout_sec: int,
+    artifact_dir: Path,
+    safe_name: str,
+    output_path: Path,
+    pack: object,
+    target: TestTarget,
+) -> tuple[ParsedTestSuite, int]:
+    """Spawn subprocess, write artifacts, parse output. Returns (suite, peak_rss_mb)."""
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=cwd,
+        env=env,
+    )
+    rss_task = asyncio.create_task(_poll_child_rss(proc))
+    stdout_bytes, stderr_bytes = await asyncio.wait_for(
+        proc.communicate(), timeout=timeout_sec
+    )
+    stdout = stdout_bytes.decode(errors="replace")
+    stderr = stderr_bytes.decode(errors="replace")
+    exit_code = proc.returncode
+    peak_rss_mb = await rss_task
+    # Write artifacts
+    atomic_write_text(artifact_dir / f"{safe_name}.stdout.txt", stdout)
+    if stderr:
+        atomic_write_text(artifact_dir / f"{safe_name}.stderr.txt", stderr)
+    execution = ExecutionContext(
+        command=cmd,
+        working_directory=str(cwd),
+        exit_code=exit_code,
+        raw_stdout=stdout,
+        raw_stderr=stderr if stderr else None,
+    )
+    result = pack.parse_output(output_path, stdout)  # type: ignore[union-attr]
+    result.target_selector = target.selector
+    result.workspace_root = target.workspace_root
+    result.execution = execution
+    if result.tests is not None:
+        result.parsed_test_count = len(result.tests)
+    else:
+        result.parsed_test_count = None
+    _classify_result_error(result, output_path, stdout, exit_code)
+    return result, peak_rss_mb

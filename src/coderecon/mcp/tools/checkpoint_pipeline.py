@@ -38,38 +38,7 @@ async def checkpoint_pipeline(
         progress = _NullProgress()
     # ── Read-only checkpoint: clean-tree verification only ──
     if getattr(session, "read_only", None) is True:
-        try:
-            wt_status = app_ctx.git_ops.status()
-            dirty_files = [p for p, flags in wt_status.items() if flags != 0]
-        except GitError:
-            dirty_files = []
-        clean = len(dirty_files) == 0
-        ro_result: dict[str, Any] = {
-            "action": "checkpoint",
-            "read_only": True,
-            "clean_tree": clean,
-            "passed": clean,
-        }
-        if not clean:
-            ro_result["dirty_files"] = dirty_files[:20]
-            ro_result["agentic_hint"] = (
-                f"Read-only checkpoint found {len(dirty_files)} "
-                "uncommitted file(s). This is unexpected for a "
-                "read-only session. Investigate or call "
-                "recon(read_only=False) to switch to a read-write session."
-            )
-        else:
-            ro_result["agentic_hint"] = (
-                "Read-only session complete — working tree is clean. No mutations were made."
-            )
-        # ── Reset session state so next task starts clean ──
-        session.mutation_ctx.clear()
-        app_ctx.refactor_ops.clear_pending()
-        from coderecon.mcp.delivery import wrap_response
-        return wrap_response(
-            ro_result,
-            resource_kind="checkpoint",
-        )
+        return _readonly_checkpoint(app_ctx, session)
     # Compute total phases for progress reporting
     total_phases = int(lint) + int(tests) * 3  # tests = discover + filter + run
     phase = 0
@@ -90,95 +59,13 @@ async def checkpoint_pipeline(
             test_status = "skipped"
             tests = False
     if tests:
-        await progress.report_progress(phase, total_phases, "Discovering test targets")
-        discover_result = await app_ctx.test_ops.discover(paths=None)
-        all_targets = discover_result.targets or []
-        phase += 1
-        if all_targets and changed_files:
-            await progress.report_progress(
-                phase,
-                total_phases,
-                f"Filtering {len(all_targets)} targets by import graph",
-            )
-            graph_result = await app_ctx.coordinator.get_affected_test_targets(changed_files)
-            affected_paths = set(graph_result.test_files)
-            filtered = [
-                t
-                for t in all_targets
-                if _target_matches_affected_files(t, affected_paths, app_ctx.repo_root)
-            ]
-            phase += 1
-            if not filtered:
-                test_status = "skipped"
-                await progress.info("Tests: no affected targets — skipping")
-                result["tests"] = {
-                    "status": "skipped",
-                    "reason": "no affected tests found",
-                    "confidence": graph_result.confidence.tier,
-                }
-            else:
-                # Auto-derive coverage_dir - coverage is always enabled
-                import uuid
-                from coderecon.core.languages import is_test_file
-                coverage_dir = str(
-                    app_ctx.repo_root
-                    / ".recon"
-                    / "artifacts"
-                    / "coverage"
-                    / uuid.uuid4().hex[:8]
-                )
-                Path(coverage_dir).mkdir(parents=True, exist_ok=True)
-                # Filter changed_files to source files only (exclude tests)
-                coverage_filter_paths = {f for f in changed_files if not is_test_file(f)}
-                # Resolve effective max_test_hops
-                if max_test_hops is not None:
-                    effective_hops = max_test_hops
-                elif commit_message:
-                    effective_hops = _COMMIT_MAX_TEST_HOPS
-                else:
-                    effective_hops = _DEFAULT_MAX_TEST_HOPS
-                tiered_result = await _run_tiered_tests(
-                    app_ctx=app_ctx,
-                    progress=progress,
-                    graph_result=graph_result,
-                    filtered_targets=filtered,
-                    repo_root=app_ctx.repo_root,
-                    test_filter=test_filter,
-                    coverage=True,
-                    coverage_dir=coverage_dir,
-                    coverage_filter_paths=coverage_filter_paths,
-                    max_test_hops=effective_hops,
-                    phase=phase,
-                    total_phases=total_phases,
-                )
-                result["tests"] = tiered_result["serialized"]
-                test_status = tiered_result["status"]
-                test_passed = tiered_result["passed"]
-                test_failed = tiered_result["failed"]
-                # Persist coverage facts to DB for recon pipeline
-                _ingest_checkpoint_coverage(
-                    app_ctx, Path(coverage_dir),
-                    failed_test_ids=tiered_result.get("failed_test_ids"),
-                )
-                # Hoist coverage_hint to top-level for agent visibility
-                serialized = tiered_result["serialized"]
-                if isinstance(serialized, dict) and serialized.get("coverage_hint"):
-                    result["coverage_hint"] = serialized.pop("coverage_hint")
-                if test_failed > 0:
-                    await progress.warning(f"Tests: {test_passed} passed, {test_failed} FAILED")
-                elif test_passed > 0:
-                    await progress.info(f"Tests: {test_passed} passed")
-        else:
-            test_status = "skipped"
-            if not all_targets:
-                reason = "no test targets discovered"
-            else:
-                reason = "changed_files is empty — nothing to match against"
-            await progress.info(f"Tests: skipped — {reason}")
-            result["tests"] = {
-                "status": "skipped",
-                "reason": reason,
-            }
+        test_out = await _run_test_phase(
+            app_ctx, changed_files, test_filter, max_test_hops, commit_message,
+            phase, total_phases, progress, result,
+        )
+        test_status = test_out["test_status"]
+        test_passed = test_out["test_passed"]
+        test_failed = test_out["test_failed"]
     result["summary"] = _summarize_verify(
         lint_status, lint_diagnostics, test_passed, test_failed, test_status
     )
@@ -251,6 +138,133 @@ async def checkpoint_pipeline(
         result,
         resource_kind="checkpoint",
     )
+
+
+def _readonly_checkpoint(
+    app_ctx: "AppContext",
+    session: "SessionState",
+) -> dict[str, Any]:
+    """Handle read-only checkpoint: verify clean tree and return."""
+    try:
+        wt_status = app_ctx.git_ops.status()
+        dirty_files = [p for p, flags in wt_status.items() if flags != 0]
+    except GitError:
+        dirty_files = []
+    clean = len(dirty_files) == 0
+    ro_result: dict[str, Any] = {
+        "action": "checkpoint",
+        "read_only": True,
+        "clean_tree": clean,
+        "passed": clean,
+    }
+    if not clean:
+        ro_result["dirty_files"] = dirty_files[:20]
+        ro_result["agentic_hint"] = (
+            f"Read-only checkpoint found {len(dirty_files)} "
+            "uncommitted file(s). This is unexpected for a "
+            "read-only session. Investigate or call "
+            "recon(read_only=False) to switch to a read-write session."
+        )
+    else:
+        ro_result["agentic_hint"] = (
+            "Read-only session complete — working tree is clean. No mutations were made."
+        )
+    session.mutation_ctx.clear()
+    app_ctx.refactor_ops.clear_pending()
+    from coderecon.mcp.delivery import wrap_response
+    return wrap_response(ro_result, resource_kind="checkpoint")
+
+
+async def _run_test_phase(
+    app_ctx: "AppContext",
+    changed_files: list[str],
+    test_filter: str | None,
+    max_test_hops: int | None,
+    commit_message: str | None,
+    phase: int,
+    total_phases: int,
+    progress: ProgressSink,
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    """Discover, filter, and run tests. Populates *result*. Returns state dict."""
+    test_status = "skipped"
+    test_passed = 0
+    test_failed = 0
+    await progress.report_progress(phase, total_phases, "Discovering test targets")
+    discover_result = await app_ctx.test_ops.discover(paths=None)
+    all_targets = discover_result.targets or []
+    phase += 1
+    if all_targets and changed_files:
+        await progress.report_progress(
+            phase, total_phases,
+            f"Filtering {len(all_targets)} targets by import graph",
+        )
+        graph_result = await app_ctx.coordinator.get_affected_test_targets(changed_files)
+        affected_paths = set(graph_result.test_files)
+        filtered = [
+            t for t in all_targets
+            if _target_matches_affected_files(t, affected_paths, app_ctx.repo_root)
+        ]
+        phase += 1
+        if not filtered:
+            test_status = "skipped"
+            await progress.info("Tests: no affected targets — skipping")
+            result["tests"] = {
+                "status": "skipped",
+                "reason": "no affected tests found",
+                "confidence": graph_result.confidence.tier,
+            }
+        else:
+            import uuid
+            from coderecon.core.languages import is_test_file
+            coverage_dir = str(
+                app_ctx.repo_root / ".recon" / "artifacts" / "coverage" / uuid.uuid4().hex[:8]
+            )
+            Path(coverage_dir).mkdir(parents=True, exist_ok=True)
+            coverage_filter_paths = {f for f in changed_files if not is_test_file(f)}
+            if max_test_hops is not None:
+                effective_hops = max_test_hops
+            elif commit_message:
+                effective_hops = _COMMIT_MAX_TEST_HOPS
+            else:
+                effective_hops = _DEFAULT_MAX_TEST_HOPS
+            tiered_result = await _run_tiered_tests(
+                app_ctx=app_ctx, progress=progress,
+                graph_result=graph_result, filtered_targets=filtered,
+                repo_root=app_ctx.repo_root, test_filter=test_filter,
+                coverage=True, coverage_dir=coverage_dir,
+                coverage_filter_paths=coverage_filter_paths,
+                max_test_hops=effective_hops,
+                phase=phase, total_phases=total_phases,
+            )
+            result["tests"] = tiered_result["serialized"]
+            test_status = tiered_result["status"]
+            test_passed = tiered_result["passed"]
+            test_failed = tiered_result["failed"]
+            _ingest_checkpoint_coverage(
+                app_ctx, Path(coverage_dir),
+                failed_test_ids=tiered_result.get("failed_test_ids"),
+            )
+            serialized = tiered_result["serialized"]
+            if isinstance(serialized, dict) and serialized.get("coverage_hint"):
+                result["coverage_hint"] = serialized.pop("coverage_hint")
+            if test_failed > 0:
+                await progress.warning(f"Tests: {test_passed} passed, {test_failed} FAILED")
+            elif test_passed > 0:
+                await progress.info(f"Tests: {test_passed} passed")
+    else:
+        test_status = "skipped"
+        if not all_targets:
+            reason = "no test targets discovered"
+        else:
+            reason = "changed_files is empty — nothing to match against"
+        await progress.info(f"Tests: skipped — {reason}")
+        result["tests"] = {"status": "skipped", "reason": reason}
+    return {
+        "test_status": test_status,
+        "test_passed": test_passed,
+        "test_failed": test_failed,
+    }
 
 
 async def _run_lint_phase(
