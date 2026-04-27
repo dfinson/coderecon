@@ -30,10 +30,10 @@ class CargoNextestPack(RunnerPack):
     pack_id = "rust.nextest"
     language = "rust"
     runner_name = "cargo-nextest"
-    markers = [
+    markers = (
         MarkerRule("Cargo.toml", confidence="high"),
         MarkerRule(".config/nextest.toml", confidence="high"),
-    ]
+    )
     output_strategy = OutputStrategy(format="junit_xml", file_based=True, file_pattern="junit.xml")
     capabilities = RunnerCapabilities(
         supported_kinds=["package"],
@@ -144,9 +144,9 @@ class CargoTestPack(RunnerPack):
     pack_id = "rust.cargo_test"
     language = "rust"
     runner_name = "cargo test"
-    markers = [
+    markers = (
         MarkerRule("Cargo.toml", confidence="high"),
-    ]
+    )
     output_strategy = OutputStrategy(
         format="coarse", file_based=False
     )  # cargo test has no configurable output
@@ -224,10 +224,10 @@ class MavenSurefirePack(RunnerPack):
     pack_id = "java.maven"
     language = "java"
     runner_name = "mvn test"
-    markers = [
+    markers = (
         MarkerRule("pom.xml", confidence="high"),
         MarkerRule("mvnw", confidence="high"),
-    ]
+    )
     output_strategy = OutputStrategy(
         format="junit_xml", file_based=True, file_pattern="target/surefire-reports/*.xml"
     )
@@ -340,11 +340,11 @@ class GradlePack(RunnerPack):
     pack_id = "java.gradle"
     language = "java"
     runner_name = "gradle test"
-    markers = [
+    markers = (
         MarkerRule("build.gradle", confidence="high"),
         MarkerRule("build.gradle.kts", confidence="high"),
         MarkerRule("gradlew", confidence="high"),
-    ]
+    )
     output_strategy = OutputStrategy(
         format="junit_xml", file_based=True, file_pattern="build/test-results/test/*.xml"
     )

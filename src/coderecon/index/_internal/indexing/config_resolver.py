@@ -35,8 +35,6 @@ from pathlib import PurePosixPath
 
 from coderecon.index._internal.indexing.package_parsers import (
     _normalize_path,
-    _parse_export_target,
-    _resolve_export_target,
     build_js_package_exports,
     parse_cargo_toml,
     parse_go_mod,

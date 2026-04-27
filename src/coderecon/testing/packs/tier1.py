@@ -31,12 +31,12 @@ class PytestPack(RunnerPack):
     pack_id = "python.pytest"
     language = "python"
     runner_name = "pytest"
-    markers = [
+    markers = (
         MarkerRule("pytest.ini", confidence="high"),
         MarkerRule("conftest.py", confidence="medium"),
         MarkerRule("pyproject.toml", content_match="[tool.pytest", confidence="high"),
         MarkerRule("setup.cfg", content_match="[tool:pytest]", confidence="medium"),
-    ]
+    )
     output_strategy = OutputStrategy(format="junit_xml", file_based=True, file_pattern="junit.xml")
     capabilities = RunnerCapabilities(
         supported_kinds=["file", "package"],
@@ -165,13 +165,13 @@ class JestPack(RunnerPack):
     pack_id = "js.jest"
     language = "javascript"
     runner_name = "jest"
-    markers = [
+    markers = (
         MarkerRule("jest.config.js", confidence="high"),
         MarkerRule("jest.config.ts", confidence="high"),
         MarkerRule("jest.config.json", confidence="high"),
         MarkerRule("jest.config.mjs", confidence="high"),
         MarkerRule("package.json", content_match='"jest"', confidence="medium"),
-    ]
+    )
     output_strategy = OutputStrategy(format="json", file_based=True, file_pattern="results.json")
     capabilities = RunnerCapabilities(
         supported_kinds=["file"],
@@ -308,12 +308,12 @@ class VitestPack(RunnerPack):
     pack_id = "js.vitest"
     language = "javascript"
     runner_name = "vitest"
-    markers = [
+    markers = (
         MarkerRule("vitest.config.js", confidence="high"),
         MarkerRule("vitest.config.ts", confidence="high"),
         MarkerRule("vite.config.js", content_match="vitest", confidence="medium"),
         MarkerRule("vite.config.ts", content_match="vitest", confidence="medium"),
-    ]
+    )
     output_strategy = OutputStrategy(format="junit_xml", file_based=True, file_pattern="junit.xml")
     capabilities = RunnerCapabilities(
         supported_kinds=["file"],
@@ -410,10 +410,10 @@ class GoTestPack(RunnerPack):
     pack_id = "go.gotest"
     language = "go"
     runner_name = "go test"
-    markers = [
+    markers = (
         MarkerRule("go.mod", confidence="high"),
         MarkerRule("go.sum", confidence="high"),
-    ]
+    )
     output_strategy = OutputStrategy(
         format="ndjson", file_based=False
     )  # go test -json writes to stdout

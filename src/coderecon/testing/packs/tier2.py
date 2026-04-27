@@ -37,10 +37,10 @@ class KotlinGradlePack(RunnerPack):
     pack_id = "kotlin.gradle"
     language = "kotlin"
     runner_name = "gradle test"
-    markers = [
+    markers = (
         MarkerRule("build.gradle.kts", content_match="kotlin", confidence="high"),
         MarkerRule("settings.gradle.kts", confidence="medium"),
-    ]
+    )
     output_strategy = OutputStrategy(
         format="junit_xml", file_based=True, file_pattern="build/test-results/test/*.xml"
     )
@@ -133,9 +133,9 @@ class SwiftTestPack(RunnerPack):
     pack_id = "swift.swiftpm"
     language = "swift"
     runner_name = "swift test"
-    markers = [
+    markers = (
         MarkerRule("Package.swift", confidence="high"),
-    ]
+    )
     output_strategy = OutputStrategy(
         format="coarse", file_based=False
     )  # swift test has limited output options
@@ -207,10 +207,10 @@ class SbtTestPack(RunnerPack):
     pack_id = "scala.sbt"
     language = "scala"
     runner_name = "sbt test"
-    markers = [
+    markers = (
         MarkerRule("build.sbt", confidence="high"),
         MarkerRule("project/build.properties", confidence="medium"),
-    ]
+    )
     output_strategy = OutputStrategy(
         format="junit_xml", file_based=True, file_pattern="target/test-reports/*.xml"
     )
@@ -286,9 +286,9 @@ class DartTestPack(RunnerPack):
     pack_id = "dart.dart_test"
     language = "dart"
     runner_name = "dart test"
-    markers = [
+    markers = (
         MarkerRule("pubspec.yaml", confidence="high"),
-    ]
+    )
     output_strategy = OutputStrategy(format="json", file_based=False)  # dart test --reporter json
     capabilities = RunnerCapabilities(
         supported_kinds=["file", "package"],

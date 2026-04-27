@@ -7,7 +7,7 @@ from coderecon.git.errors import GitError
 if TYPE_CHECKING:
     from coderecon.mcp.context import AppContext
     from coderecon.mcp.session import SessionState
-from coderecon.mcp.tools.checkpoint import ProgressSink, _NullProgress
+from coderecon.mcp.tools.checkpoint import ProgressSink, _NullProgress, _DEFAULT_MAX_TEST_HOPS, _COMMIT_MAX_TEST_HOPS
 from coderecon.mcp.tools.checkpoint_helpers import (
     _detect_test_debt, _ingest_checkpoint_coverage, _run_hook_with_retry,
     _summarize_commit, _validate_commit_message, _validate_paths_exist,

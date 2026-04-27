@@ -35,9 +35,9 @@ class CabalTestPack(RunnerPack):
     pack_id = "haskell.cabal_test"
     language = "haskell"
     runner_name = "cabal_test"
-    markers = [
+    markers = (
         MarkerRule("*.cabal", confidence="high"),
-    ]
+    )
     output_strategy = OutputStrategy(format="coarse", file_based=False)
     capabilities = RunnerCapabilities(
         supported_kinds=["project"],
@@ -124,9 +124,9 @@ class JuliaPkgTestPack(RunnerPack):
     pack_id = "julia.pkg_test"
     language = "julia"
     runner_name = "pkg_test"
-    markers = [
+    markers = (
         MarkerRule("Project.toml", confidence="high"),
-    ]
+    )
     output_strategy = OutputStrategy(format="coarse", file_based=False)
     capabilities = RunnerCapabilities(
         supported_kinds=["project"],
@@ -206,9 +206,9 @@ class DuneTestPack(RunnerPack):
     pack_id = "ocaml.dune_test"
     language = "ocaml"
     runner_name = "dune_test"
-    markers = [
+    markers = (
         MarkerRule("dune-project", confidence="high"),
-    ]
+    )
     output_strategy = OutputStrategy(format="coarse", file_based=False)
     capabilities = RunnerCapabilities(
         supported_kinds=["project"],

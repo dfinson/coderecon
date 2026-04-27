@@ -35,9 +35,9 @@ class FlutterTestPack(RunnerPack):
     pack_id = "dart.flutter_test"
     language = "dart"
     runner_name = "flutter test"
-    markers = [
+    markers = (
         MarkerRule("pubspec.yaml", content_match="flutter:", confidence="high"),
-    ]
+    )
     output_strategy = OutputStrategy(format="json", file_based=False)
     capabilities = RunnerCapabilities(
         supported_kinds=["file", "package"],
@@ -103,11 +103,11 @@ class BatsPack(RunnerPack):
     pack_id = "bash.bats"
     language = "bash"
     runner_name = "bats"
-    markers = [
+    markers = (
         MarkerRule("test/*.bats", confidence="high"),
         MarkerRule("tests/*.bats", confidence="high"),
         MarkerRule(".bats", confidence="medium"),
-    ]
+    )
     output_strategy = OutputStrategy(format="tap", file_based=False)  # bats outputs TAP by default
     capabilities = RunnerCapabilities(
         supported_kinds=["file"],
@@ -171,10 +171,10 @@ class PesterPack(RunnerPack):
     pack_id = "powershell.pester"
     language = "powershell"
     runner_name = "Pester"
-    markers = [
+    markers = (
         MarkerRule("*.Tests.ps1", confidence="high"),
         MarkerRule("tests/*.Tests.ps1", confidence="high"),
-    ]
+    )
     output_strategy = OutputStrategy(
         format="junit_xml", file_based=True, file_pattern="testResults.xml"
     )
@@ -243,10 +243,10 @@ class BustedPack(RunnerPack):
     pack_id = "lua.busted"
     language = "lua"
     runner_name = "busted"
-    markers = [
+    markers = (
         MarkerRule(".busted", confidence="high"),
         MarkerRule("spec/*_spec.lua", confidence="high"),
-    ]
+    )
     output_strategy = OutputStrategy(format="junit_xml", file_based=True, file_pattern="junit.xml")
     capabilities = RunnerCapabilities(
         supported_kinds=["file"],
@@ -309,9 +309,9 @@ class MixTestPack(RunnerPack):
     pack_id = "elixir.mix_test"
     language = "elixir"
     runner_name = "mix_test"
-    markers = [
+    markers = (
         MarkerRule("mix.exs", confidence="high"),
-    ]
+    )
     output_strategy = OutputStrategy(
         format="junit_xml", file_based=True, file_pattern="_build/test/lib/**/test-junit-report.xml"
     )

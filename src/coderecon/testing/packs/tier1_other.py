@@ -31,11 +31,11 @@ class DotnetTestPack(RunnerPack):
     pack_id = "csharp.dotnet"
     language = "csharp"
     runner_name = "dotnet test"
-    markers = [
+    markers = (
         MarkerRule("*.csproj", confidence="high"),
         MarkerRule("*.sln", confidence="high"),
         MarkerRule("global.json", confidence="medium"),
-    ]
+    )
     output_strategy = OutputStrategy(
         format="junit_xml", file_based=True, file_pattern="TestResults/*.xml"
     )
@@ -126,10 +126,10 @@ class CTestPack(RunnerPack):
     pack_id = "cpp.ctest"
     language = "cpp"
     runner_name = "ctest"
-    markers = [
+    markers = (
         MarkerRule("CMakeLists.txt", content_match="enable_testing", confidence="high"),
         MarkerRule("CMakeLists.txt", confidence="medium"),
-    ]
+    )
     output_strategy = OutputStrategy(format="coarse", file_based=False)  # CTest output is limited
     capabilities = RunnerCapabilities(
         supported_kinds=["project"],
@@ -212,11 +212,11 @@ class RSpecPack(RunnerPack):
     pack_id = "ruby.rspec"
     language = "ruby"
     runner_name = "rspec"
-    markers = [
+    markers = (
         MarkerRule(".rspec", confidence="high"),
         MarkerRule("spec/spec_helper.rb", confidence="high"),
         MarkerRule("Gemfile", content_match="rspec", confidence="medium"),
-    ]
+    )
     output_strategy = OutputStrategy(format="junit_xml", file_based=True, file_pattern="rspec.xml")
     capabilities = RunnerCapabilities(
         supported_kinds=["file"],
@@ -299,11 +299,11 @@ class MinitestPack(RunnerPack):
     pack_id = "ruby.minitest"
     language = "ruby"
     runner_name = "minitest"
-    markers = [
+    markers = (
         MarkerRule("Rakefile", content_match="Rake::TestTask", confidence="high"),
         MarkerRule("Gemfile", content_match="minitest", confidence="medium"),
         MarkerRule("test/test_helper.rb", confidence="high"),
-    ]
+    )
     output_strategy = OutputStrategy(
         format="junit_xml", file_based=True, file_pattern="minitest.xml"
     )
@@ -399,11 +399,11 @@ class PHPUnitPack(RunnerPack):
     pack_id = "php.phpunit"
     language = "php"
     runner_name = "phpunit"
-    markers = [
+    markers = (
         MarkerRule("phpunit.xml", confidence="high"),
         MarkerRule("phpunit.xml.dist", confidence="high"),
         MarkerRule("composer.json", content_match="phpunit", confidence="medium"),
-    ]
+    )
     output_strategy = OutputStrategy(format="junit_xml", file_based=True, file_pattern="junit.xml")
     capabilities = RunnerCapabilities(
         supported_kinds=["file"],

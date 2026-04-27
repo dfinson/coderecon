@@ -32,7 +32,6 @@ if TYPE_CHECKING:
     from coderecon.index.ops import IndexCoordinatorEngine
 
 log = structlog.get_logger(__name__)
-_STDERR_TRUNCATION_CHARS = 2000
 
 # Re-exports for backward compatibility
 from coderecon.testing.ops_environment import (  # noqa: E402, F401

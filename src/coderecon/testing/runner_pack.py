@@ -7,6 +7,7 @@ run, and parse tests for a specific language/framework combination.
 from __future__ import annotations
 
 import abc
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -59,7 +60,7 @@ class RunnerPack(abc.ABC):
     pack_id: str  # e.g., "python.pytest", "js.jest"
     language: str
     runner_name: str
-    markers: list[MarkerRule]
+    markers: Sequence[MarkerRule]
     output_strategy: OutputStrategy
     capabilities: RunnerCapabilities
 

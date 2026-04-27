@@ -426,6 +426,3 @@ class _NullProgress:
         """No-op: warning discarded when no listener is attached."""
         return None
 
-_DEFAULT_MAX_TEST_HOPS = 0
-_COMMIT_MAX_TEST_HOPS = 2
-
