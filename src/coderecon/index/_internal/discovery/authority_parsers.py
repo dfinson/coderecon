@@ -20,15 +20,9 @@ import structlog
 if TYPE_CHECKING:
     from coderecon.index.models import CandidateContext
 
-log = structlog.get_logger(__name__)
+from coderecon.index._internal.discovery.membership import is_inside  # noqa: F401  # re-export
 
-def is_inside(file_path: str, root_path: str) -> bool:
-    """Segment-safe containment check."""
-    if root_path == "":
-        return True
-    if file_path == root_path:
-        return True
-    return file_path.startswith(root_path + "/")
+log = structlog.get_logger(__name__)
 
 def relative_to(path: str, root: str) -> str:
     """Get path relative to root."""

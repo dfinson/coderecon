@@ -5,7 +5,7 @@ import asyncio
 import hashlib
 import math
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import click
 import structlog
@@ -37,9 +37,7 @@ from coderecon.cli.agent_instructions import (  # noqa: E402
     _inject_agent_instructions,
 )
 from coderecon.cli.mcp_config import (  # noqa: E402
-    _ensure_vscode_mcp_config,
     _get_mcp_server_name,
-    sync_vscode_mcp_port,
 )
 
 # Filesystem Helpers
