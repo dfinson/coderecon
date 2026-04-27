@@ -17,6 +17,11 @@ from coderecon.index._internal.discovery import (
     AuthorityResult,
     Tier1AuthorityFilter,
 )
+from coderecon.index._internal.discovery.authority_parsers import (
+    is_inside,
+    matches_any_glob,
+    relative_to,
+)
 from coderecon.index.models import CandidateContext, LanguageFamily, ProbeStatus
 
 
@@ -610,44 +615,34 @@ class TestHelperMethods:
     """Tests for authority filter helper methods."""
     def test_is_inside_empty_root(self, temp_dir: Path) -> None:
         """Empty root path should contain all paths."""
-        authority = Tier1AuthorityFilter(temp_dir)
-        assert authority._is_inside("any/path", "") is True
+        assert is_inside("any/path", "") is True
     def test_is_inside_same_path(self, temp_dir: Path) -> None:
         """Same path should be inside itself."""
-        authority = Tier1AuthorityFilter(temp_dir)
-        assert authority._is_inside("some/path", "some/path") is True
+        assert is_inside("some/path", "some/path") is True
     def test_is_inside_child_path(self, temp_dir: Path) -> None:
         """Child path should be inside parent."""
-        authority = Tier1AuthorityFilter(temp_dir)
-        assert authority._is_inside("parent/child/file", "parent") is True
+        assert is_inside("parent/child/file", "parent") is True
     def test_is_inside_not_child(self, temp_dir: Path) -> None:
         """Non-child path should not be inside."""
-        authority = Tier1AuthorityFilter(temp_dir)
-        assert authority._is_inside("other/path", "parent") is False
+        assert is_inside("other/path", "parent") is False
     def test_relative_to_empty_root(self, temp_dir: Path) -> None:
         """Relative to empty root should return path."""
-        authority = Tier1AuthorityFilter(temp_dir)
-        assert authority._relative_to("some/path", "") == "some/path"
+        assert relative_to("some/path", "") == "some/path"
     def test_relative_to_same_path(self, temp_dir: Path) -> None:
         """Relative to same path should return empty."""
-        authority = Tier1AuthorityFilter(temp_dir)
-        assert authority._relative_to("some/path", "some/path") == ""
+        assert relative_to("some/path", "some/path") == ""
     def test_matches_glob_with_trailing_stars(self, temp_dir: Path) -> None:
         """Glob with trailing /** should match."""
-        authority = Tier1AuthorityFilter(temp_dir)
-        assert authority._matches_any_glob("packages/core", ["packages/**"]) is True
+        assert matches_any_glob("packages/core", ["packages/**"]) is True
     def test_matches_glob_with_leading_dot_slash(self, temp_dir: Path) -> None:
         """Glob with leading ./ should match."""
-        authority = Tier1AuthorityFilter(temp_dir)
-        assert authority._matches_any_glob("cmd", ["./cmd"]) is True
+        assert matches_any_glob("cmd", ["./cmd"]) is True
     def test_matches_glob_exact_match(self, temp_dir: Path) -> None:
         """Exact path should match."""
-        authority = Tier1AuthorityFilter(temp_dir)
-        assert authority._matches_any_glob("exact/path", ["exact/path"]) is True
+        assert matches_any_glob("exact/path", ["exact/path"]) is True
     def test_matches_glob_wildcard(self, temp_dir: Path) -> None:
         """Wildcard glob should match."""
-        authority = Tier1AuthorityFilter(temp_dir)
-        assert authority._matches_any_glob("packages/core", ["packages/*"]) is True
+        assert matches_any_glob("packages/core", ["packages/*"]) is True
 class TestFileReadErrors:
     """Tests for handling file read errors gracefully."""
     def test_missing_pnpm_workspace_file(self, temp_dir: Path) -> None:

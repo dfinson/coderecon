@@ -250,10 +250,7 @@ def shutdown_telemetry() -> None:
 
 
 from coderecon.core._noop_telemetry import (
-    NoOpCounter as _NoOpCounter,
-    NoOpHistogram as _NoOpHistogram,
     NoOpMeter as _NoOpMeter,
-    NoOpObservable as _NoOpObservable,
     NoOpSpan as _NoOpSpan,
     NoOpTracer as _NoOpTracer,
     noop_meter as _noop_meter,

@@ -13,15 +13,22 @@ Unlisted Tier 2 candidates are marked as "detached" (no owner).
 
 from __future__ import annotations
 
-import fnmatch
-import json
-import re
 from dataclasses import dataclass
 from pathlib import Path
-import yaml
 
 import structlog
 
+from coderecon.index._internal.discovery.authority_parsers import (
+    get_cargo_workspace_members,
+    get_go_work_modules,
+    get_gradle_includes,
+    get_js_workspace_globs,
+    get_maven_modules,
+    get_sln_projects,
+    is_inside,
+    matches_any_glob,
+    relative_to,
+)
 from coderecon.index.models import CandidateContext, LanguageFamily, ProbeStatus
 
 log = structlog.get_logger(__name__)
@@ -123,7 +130,7 @@ class Tier1AuthorityFilter:
         # Get workspace globs from each Tier 1
         workspace_globs: dict[str, list[str]] = {}
         for t1 in tier1:
-            globs = self._get_js_workspace_globs(t1)
+            globs = get_js_workspace_globs(self.repo_root, t1)
             if globs:
                 workspace_globs[t1.root_path] = globs
 
@@ -135,9 +142,9 @@ class Tier1AuthorityFilter:
             # Check if candidate is under a Tier 1 and matches its globs
             matched = False
             for t1_root, globs in workspace_globs.items():
-                if self._is_inside(candidate.root_path, t1_root):
-                    rel_path = self._relative_to(candidate.root_path, t1_root)
-                    if self._matches_any_glob(rel_path, globs):
+                if is_inside(candidate.root_path, t1_root):
+                    rel_path = relative_to(candidate.root_path, t1_root)
+                    if matches_any_glob(rel_path, globs):
                         matched = True
                         break
 
@@ -163,7 +170,7 @@ class Tier1AuthorityFilter:
         # Get modules from go.work
         workspace_modules: dict[str, list[str]] = {}
         for t1 in tier1:
-            modules = self._get_go_work_modules(t1)
+            modules = get_go_work_modules(self.repo_root, t1)
             if modules:
                 workspace_modules[t1.root_path] = modules
 
@@ -174,8 +181,8 @@ class Tier1AuthorityFilter:
 
             matched = False
             for t1_root, modules in workspace_modules.items():
-                if self._is_inside(candidate.root_path, t1_root):
-                    rel_path = self._relative_to(candidate.root_path, t1_root)
+                if is_inside(candidate.root_path, t1_root):
+                    rel_path = relative_to(candidate.root_path, t1_root)
                     if rel_path in modules or f"./{rel_path}" in modules:
                         matched = True
                         break
@@ -202,7 +209,7 @@ class Tier1AuthorityFilter:
         # Get members from Cargo.toml [workspace]
         workspace_members: dict[str, list[str]] = {}
         for t1 in tier1:
-            members = self._get_cargo_workspace_members(t1)
+            members = get_cargo_workspace_members(self.repo_root, t1)
             if members:
                 workspace_members[t1.root_path] = members
 
@@ -213,9 +220,9 @@ class Tier1AuthorityFilter:
 
             matched = False
             for t1_root, members in workspace_members.items():
-                if self._is_inside(candidate.root_path, t1_root):
-                    rel_path = self._relative_to(candidate.root_path, t1_root)
-                    if self._matches_any_glob(rel_path, members):
+                if is_inside(candidate.root_path, t1_root):
+                    rel_path = relative_to(candidate.root_path, t1_root)
+                    if matches_any_glob(rel_path, members):
                         matched = True
                         break
 
@@ -242,10 +249,10 @@ class Tier1AuthorityFilter:
         workspace_includes: dict[str, tuple[list[str], bool]] = {}
         for t1 in tier1:
             # Try Gradle first
-            includes, is_strict = self._get_gradle_includes(t1)
+            includes, is_strict = get_gradle_includes(self.repo_root, t1)
             if not includes:
                 # Fall back to Maven
-                includes = self._get_maven_modules(t1)
+                includes = get_maven_modules(self.repo_root, t1)
                 is_strict = bool(includes)  # Maven modules are strict
             workspace_includes[t1.root_path] = (includes, is_strict)
 
@@ -257,9 +264,9 @@ class Tier1AuthorityFilter:
             matched = False
             strict_mode = False
             for t1_root, (includes, is_strict) in workspace_includes.items():
-                if self._is_inside(candidate.root_path, t1_root):
+                if is_inside(candidate.root_path, t1_root):
                     strict_mode = is_strict
-                    rel_path = self._relative_to(candidate.root_path, t1_root)
+                    rel_path = relative_to(candidate.root_path, t1_root)
                     # Gradle uses : as path separator
                     gradle_path = rel_path.replace("/", ":")
                     if gradle_path in includes or rel_path in includes:
@@ -289,7 +296,7 @@ class Tier1AuthorityFilter:
         # Get project paths from each .sln file
         solution_projects: dict[str, list[str]] = {}
         for t1 in tier1:
-            projects = self._get_sln_projects(t1)
+            projects = get_sln_projects(self.repo_root, t1)
             if projects:
                 solution_projects[t1.root_path] = projects
 
@@ -300,8 +307,8 @@ class Tier1AuthorityFilter:
 
             matched = False
             for t1_root, projects in solution_projects.items():
-                if self._is_inside(candidate.root_path, t1_root):
-                    rel_path = self._relative_to(candidate.root_path, t1_root)
+                if is_inside(candidate.root_path, t1_root):
+                    rel_path = relative_to(candidate.root_path, t1_root)
                     # Check if candidate path matches any project directory
                     for proj_path in projects:
                         # Project paths in .sln are relative to solution dir
@@ -322,218 +329,3 @@ class Tier1AuthorityFilter:
                 detached.append(candidate)
 
         return pending, detached
-    def _get_js_workspace_globs(self, t1: CandidateContext) -> list[str]:
-        """Extract workspace globs from JavaScript workspace config."""
-        globs: list[str] = []
-
-        for marker in t1.markers:
-            marker_path = self.repo_root / marker
-            try:
-                if marker.endswith("pnpm-workspace.yaml"):
-                    content = yaml.safe_load(marker_path.read_text())
-                    if content and "packages" in content:
-                        globs.extend(content["packages"])
-                elif marker.endswith("package.json"):
-                    content = json.loads(marker_path.read_text())
-                    if "workspaces" in content:
-                        ws = content["workspaces"]
-                        if isinstance(ws, list):
-                            globs.extend(ws)
-                        elif isinstance(ws, dict) and "packages" in ws:
-                            globs.extend(ws["packages"])
-                elif marker.endswith("lerna.json"):
-                    content = json.loads(marker_path.read_text())
-                    if "packages" in content:
-                        globs.extend(content["packages"])
-            except OSError as e:
-                # File read errors (permission denied, missing file during scan, etc.)
-                # Non-fatal: workspace detection continues with partial info
-                import structlog
-
-                structlog.get_logger(__name__).debug(
-                    "workspace_config_read_error",
-                    marker=marker,
-                    error=str(e),
-                )
-            except (json.JSONDecodeError, yaml.YAMLError) as e:
-                # Parse errors indicate misconfigured workspace files
-                # Log as warning since user may want to fix the config
-                import structlog
-
-                structlog.get_logger(__name__).warning(
-                    "workspace_config_parse_error",
-                    marker=marker,
-                    error=str(e),
-                )
-
-        return globs
-    def _get_go_work_modules(self, t1: CandidateContext) -> list[str]:
-        """Extract modules from go.work."""
-        modules: list[str] = []
-
-        for marker in t1.markers:
-            if marker.endswith("go.work"):
-                marker_path = self.repo_root / marker
-                try:
-                    content = marker_path.read_text()
-                    # Parse "use (" block
-                    in_use_block = False
-                    for line in content.split("\n"):
-                        line = line.strip()
-                        if line.startswith("use ("):
-                            in_use_block = True
-                            continue
-                        if in_use_block:
-                            if line == ")":
-                                break
-                            if line and not line.startswith("//"):
-                                modules.append(line)
-                        elif line.startswith("use "):
-                            # Single use directive
-                            modules.append(line[4:].strip())
-                except OSError:
-                    log.debug("go_work_read_failed", marker=str(marker_path))
-
-        return modules
-    def _get_cargo_workspace_members(self, t1: CandidateContext) -> list[str]:
-        """Extract members from Cargo.toml [workspace]."""
-        members: list[str] = []
-
-        for marker in t1.markers:
-            if marker.endswith("Cargo.toml"):
-                marker_path = self.repo_root / marker
-                try:
-                    content = marker_path.read_text()
-                    # Simple TOML parsing for members
-                    in_workspace = False
-                    in_members = False
-                    for line in content.split("\n"):
-                        line = line.strip()
-                        if line == "[workspace]":
-                            in_workspace = True
-                            continue
-                        if in_workspace and line.startswith("["):
-                            break
-                        if in_workspace and line.startswith("members"):
-                            in_members = True
-                            # Check for inline array
-                            if "=" in line and "[" in line:
-                                # Parse inline: members = ["a", "b"]
-                                match = re.search(r"\[([^\]]+)\]", line)
-                                if match:
-                                    items = match.group(1)
-                                    for item in items.split(","):
-                                        item = item.strip().strip('"').strip("'")
-                                        if item:
-                                            members.append(item)
-                                in_members = False
-                            continue
-                        if in_members:
-                            if line == "]":
-                                in_members = False
-                            elif line and not line.startswith("#"):
-                                item = line.strip('",').strip("',")
-                                if item:
-                                    members.append(item)
-                except OSError:
-                    log.debug("cargo_toml_read_failed", path=str(marker_path), exc_info=True)
-
-        return members
-    def _get_gradle_includes(self, t1: CandidateContext) -> tuple[list[str], bool]:
-        """Extract includes from settings.gradle."""
-        includes: list[str] = []
-        is_strict = True  # Assume strict unless we find variables
-
-        for marker in t1.markers:
-            if marker.endswith(("settings.gradle", "settings.gradle.kts")):
-                marker_path = self.repo_root / marker
-                try:
-                    content = marker_path.read_text()
-                    # Check for variable usage (makes it permissive)
-                    if "${" in content or "$" in content:
-                        is_strict = False
-
-                    # Parse include statements
-                    for match in re.finditer(r"include\s*\(\s*['\"]([^'\"]+)['\"]", content):
-                        includes.append(match.group(1))
-                    # Also handle include ':path' syntax
-                    for match in re.finditer(r"include\s+['\"]([^'\"]+)['\"]", content):
-                        includes.append(match.group(1))
-                except OSError:
-                    log.debug("gradle_settings_read_failed", path=str(marker_path), exc_info=True)
-
-        return includes, is_strict
-    def _get_maven_modules(self, t1: CandidateContext) -> list[str]:
-        """Extract modules from Maven pom.xml."""
-        modules: list[str] = []
-
-        for marker in t1.markers:
-            if marker.endswith("pom.xml"):
-                marker_path = self.repo_root / marker
-                try:
-                    content = marker_path.read_text()
-                    # Parse <modules><module>...</module></modules>
-                    # Simple regex - doesn't handle comments but covers typical cases
-                    modules_match = re.search(r"<modules>\s*(.*?)\s*</modules>", content, re.DOTALL)
-                    if modules_match:
-                        modules_block = modules_match.group(1)
-                        for module_match in re.finditer(
-                            r"<module>\s*([^<]+?)\s*</module>", modules_block
-                        ):
-                            modules.append(module_match.group(1))
-                except OSError:
-                    log.debug("pom_xml_read_failed", path=str(marker_path), exc_info=True)
-
-        return modules
-    def _get_sln_projects(self, t1: CandidateContext) -> list[str]:
-        """Extract project paths from .sln solution file."""
-        projects: list[str] = []
-
-        for marker in t1.markers:
-            if marker.endswith(".sln"):
-                marker_path = self.repo_root / marker
-                try:
-                    content = marker_path.read_text()
-                    # .sln format: Project("{GUID}") = "Name", "path\to\project.csproj", "{GUID}"
-                    for match in re.finditer(
-                        r'Project\("[^"]+"\)\s*=\s*"[^"]+",\s*"([^"]+)"', content
-                    ):
-                        proj_path = match.group(1)
-                        # Filter to actual project files, not solution folders
-                        if proj_path.endswith((".csproj", ".fsproj", ".vbproj")):
-                            projects.append(proj_path)
-                except OSError:
-                    log.debug("sln_read_failed", path=str(marker_path), exc_info=True)
-
-        return projects
-    def _is_inside(self, file_path: str, root_path: str) -> bool:
-        """Segment-safe containment check."""
-        if root_path == "":
-            return True
-        if file_path == root_path:
-            return True
-        return file_path.startswith(root_path + "/")
-    def _relative_to(self, path: str, root: str) -> str:
-        """Get path relative to root."""
-        if root == "":
-            return path
-        if path == root:
-            return ""
-        if path.startswith(root + "/"):
-            return path[len(root) + 1 :]
-        return path
-    def _matches_any_glob(self, path: str, globs: list[str]) -> bool:
-        """Check if path matches any of the globs."""
-        for glob in globs:
-            # Remove trailing /**
-            if glob.endswith("/**"):
-                glob = glob[:-3]
-            # Remove leading ./
-            if glob.startswith("./"):
-                glob = glob[2:]
-            if fnmatch.fnmatch(path, glob) or fnmatch.fnmatch(path, glob + "/*"):
-                return True
-            # Also check exact match
-            if path == glob:
-                return True
-        return False

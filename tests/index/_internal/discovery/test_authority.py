@@ -10,6 +10,17 @@ from coderecon.index._internal.discovery.authority import (
     AuthorityResult,
     Tier1AuthorityFilter,
 )
+from coderecon.index._internal.discovery.authority_parsers import (
+    get_cargo_workspace_members,
+    get_go_work_modules,
+    get_gradle_includes,
+    get_js_workspace_globs,
+    get_maven_modules,
+    get_sln_projects,
+    is_inside,
+    matches_any_glob,
+    relative_to,
+)
 from coderecon.index.models import CandidateContext, LanguageFamily, ProbeStatus
 
 
@@ -120,43 +131,43 @@ class TestTier1AuthorityFilter:
         """_is_inside does segment-safe containment check."""
         f = Tier1AuthorityFilter(Path("/test"))
         # Direct child
-        assert f._is_inside("packages/a", "packages") is True
+        assert is_inside("packages/a", "packages") is True
         # Same path
-        assert f._is_inside("packages", "packages") is True
+        assert is_inside("packages", "packages") is True
         # Not inside (prefix but not segment)
-        assert f._is_inside("packages-extra", "packages") is False
+        assert is_inside("packages-extra", "packages") is False
         # Root contains all
-        assert f._is_inside("anything", "") is True
+        assert is_inside("anything", "") is True
 
     def test_relative_to(self) -> None:
         """_relative_to computes relative path."""
         f = Tier1AuthorityFilter(Path("/test"))
-        assert f._relative_to("packages/a/b", "packages") == "a/b"
-        assert f._relative_to("packages", "packages") == ""
-        assert f._relative_to("other", "packages") == "other"
-        assert f._relative_to("something", "") == "something"
+        assert relative_to("packages/a/b", "packages") == "a/b"
+        assert relative_to("packages", "packages") == ""
+        assert relative_to("other", "packages") == "other"
+        assert relative_to("something", "") == "something"
 
     def test_matches_any_glob_exact(self) -> None:
         """_matches_any_glob matches exact paths."""
         f = Tier1AuthorityFilter(Path("/test"))
-        assert f._matches_any_glob("packages/a", ["packages/a"]) is True
-        assert f._matches_any_glob("packages/b", ["packages/a"]) is False
+        assert matches_any_glob("packages/a", ["packages/a"]) is True
+        assert matches_any_glob("packages/b", ["packages/a"]) is False
 
     def test_matches_any_glob_wildcard(self) -> None:
         """_matches_any_glob supports wildcards."""
         f = Tier1AuthorityFilter(Path("/test"))
-        assert f._matches_any_glob("packages/foo", ["packages/*"]) is True
-        assert f._matches_any_glob("other/foo", ["packages/*"]) is False
+        assert matches_any_glob("packages/foo", ["packages/*"]) is True
+        assert matches_any_glob("other/foo", ["packages/*"]) is False
 
     def test_matches_any_glob_strips_trailing_stars(self) -> None:
         """_matches_any_glob handles trailing /**."""
         f = Tier1AuthorityFilter(Path("/test"))
-        assert f._matches_any_glob("packages/a", ["packages/**"]) is True
+        assert matches_any_glob("packages/a", ["packages/**"]) is True
 
     def test_matches_any_glob_strips_leading_dot_slash(self) -> None:
         """_matches_any_glob handles leading ./."""
         f = Tier1AuthorityFilter(Path("/test"))
-        assert f._matches_any_glob("packages/a", ["./packages/a"]) is True
+        assert matches_any_glob("packages/a", ["./packages/a"]) is True
 
 
 class TestJavaScriptFiltering:
@@ -171,7 +182,7 @@ class TestJavaScriptFiltering:
 
             f = Tier1AuthorityFilter(root)
             t1 = make_candidate("", 1, LanguageFamily.JAVASCRIPT, ["pnpm-workspace.yaml"])
-            globs = f._get_js_workspace_globs(t1)
+            globs = get_js_workspace_globs(root, t1)
 
             assert "packages/*" in globs
             assert "apps/*" in globs
@@ -185,7 +196,7 @@ class TestJavaScriptFiltering:
 
             f = Tier1AuthorityFilter(root)
             t1 = make_candidate("", 1, LanguageFamily.JAVASCRIPT, ["package.json"])
-            globs = f._get_js_workspace_globs(t1)
+            globs = get_js_workspace_globs(root, t1)
 
             assert "packages/*" in globs
 
@@ -198,7 +209,7 @@ class TestJavaScriptFiltering:
 
             f = Tier1AuthorityFilter(root)
             t1 = make_candidate("", 1, LanguageFamily.JAVASCRIPT, ["package.json"])
-            globs = f._get_js_workspace_globs(t1)
+            globs = get_js_workspace_globs(root, t1)
 
             assert "packages/*" in globs
             assert "apps/*" in globs
@@ -212,7 +223,7 @@ class TestJavaScriptFiltering:
 
             f = Tier1AuthorityFilter(root)
             t1 = make_candidate("", 1, LanguageFamily.JAVASCRIPT, ["lerna.json"])
-            globs = f._get_js_workspace_globs(t1)
+            globs = get_js_workspace_globs(root, t1)
 
             assert "packages/*" in globs
 
@@ -229,7 +240,7 @@ class TestGoFiltering:
 
             f = Tier1AuthorityFilter(root)
             t1 = make_candidate("", 1, LanguageFamily.GO, ["go.work"])
-            modules = f._get_go_work_modules(t1)
+            modules = get_go_work_modules(root, t1)
 
             assert "./cmd/app" in modules
             assert "./pkg/lib" in modules
@@ -243,7 +254,7 @@ class TestGoFiltering:
 
             f = Tier1AuthorityFilter(root)
             t1 = make_candidate("", 1, LanguageFamily.GO, ["go.work"])
-            modules = f._get_go_work_modules(t1)
+            modules = get_go_work_modules(root, t1)
 
             assert "./app" in modules
 
@@ -261,7 +272,7 @@ class TestRustFiltering:
 
             f = Tier1AuthorityFilter(root)
             t1 = make_candidate("", 1, LanguageFamily.RUST, ["Cargo.toml"])
-            members = f._get_cargo_workspace_members(t1)
+            members = get_cargo_workspace_members(root, t1)
 
             assert "crates/core" in members
             assert "crates/cli" in members
@@ -275,7 +286,7 @@ class TestRustFiltering:
 
             f = Tier1AuthorityFilter(root)
             t1 = make_candidate("", 1, LanguageFamily.RUST, ["Cargo.toml"])
-            members = f._get_cargo_workspace_members(t1)
+            members = get_cargo_workspace_members(root, t1)
 
             assert "a" in members
             assert "b" in members
@@ -293,7 +304,7 @@ class TestJvmFiltering:
 
             f = Tier1AuthorityFilter(root)
             t1 = make_candidate("", 1, LanguageFamily.JAVA, ["settings.gradle"])
-            includes, is_strict = f._get_gradle_includes(t1)
+            includes, is_strict = get_gradle_includes(root, t1)
 
             assert ":app" in includes or "app" in includes
 
@@ -308,7 +319,7 @@ class TestJvmFiltering:
 
             f = Tier1AuthorityFilter(root)
             t1 = make_candidate("", 1, LanguageFamily.JAVA, ["pom.xml"])
-            modules = f._get_maven_modules(t1)
+            modules = get_maven_modules(root, t1)
 
             assert "core" in modules
             assert "api" in modules
@@ -329,7 +340,7 @@ class TestDotNetFiltering:
 
             f = Tier1AuthorityFilter(root)
             t1 = make_candidate("", 1, LanguageFamily.CSHARP, ["Test.sln"])
-            projects = f._get_sln_projects(t1)
+            projects = get_sln_projects(root, t1)
 
             assert any("App.csproj" in p for p in projects)
 
@@ -355,7 +366,7 @@ class TestDotNetFiltering:
 
             f = Tier1AuthorityFilter(root)
             t1 = make_candidate("", 1, LanguageFamily.CSHARP, ["Test.sln"])
-            projects = f._get_sln_projects(t1)
+            projects = get_sln_projects(root, t1)
 
             # Should extract both project paths
             assert len(projects) == 2
@@ -374,38 +385,38 @@ class TestCrossPlatformPathHandling:
     def test_is_inside_posix_paths(self) -> None:
         """_is_inside works with POSIX-style paths."""
         f = Tier1AuthorityFilter(Path("/test"))
-        assert f._is_inside("packages/core/src", "packages") is True
-        assert f._is_inside("packages/core", "packages/core") is True
-        assert f._is_inside("other/dir", "packages") is False
+        assert is_inside("packages/core/src", "packages") is True
+        assert is_inside("packages/core", "packages/core") is True
+        assert is_inside("other/dir", "packages") is False
 
     def test_relative_to_posix_paths(self) -> None:
         """_relative_to works with POSIX-style paths."""
         f = Tier1AuthorityFilter(Path("/test"))
-        assert f._relative_to("packages/core/src", "packages") == "core/src"
-        assert f._relative_to("packages/core", "packages/core") == ""
+        assert relative_to("packages/core/src", "packages") == "core/src"
+        assert relative_to("packages/core", "packages/core") == ""
 
     def test_matches_any_glob_posix_paths(self) -> None:
         """_matches_any_glob matches POSIX-style paths against POSIX globs."""
         f = Tier1AuthorityFilter(Path("/test"))
         # Standard POSIX paths work
-        assert f._matches_any_glob("packages/core", ["packages/*"]) is True
-        assert f._matches_any_glob("apps/web", ["packages/*", "apps/*"]) is True
-        assert f._matches_any_glob("other/lib", ["packages/*", "apps/*"]) is False
+        assert matches_any_glob("packages/core", ["packages/*"]) is True
+        assert matches_any_glob("apps/web", ["packages/*", "apps/*"]) is True
+        assert matches_any_glob("other/lib", ["packages/*", "apps/*"]) is False
 
     def test_matches_any_glob_with_deep_paths(self) -> None:
         """_matches_any_glob handles deeply nested paths."""
         f = Tier1AuthorityFilter(Path("/test"))
         # Glob with ** trailing should match nested paths after stripping **
         # _matches_any_glob strips /** and then checks fnmatch(path, glob) or fnmatch(path, glob + "/*")
-        assert f._matches_any_glob("packages/core", ["packages/**"]) is True
+        assert matches_any_glob("packages/core", ["packages/**"]) is True
         # Deep path also matches because fnmatch("packages/core/subdir", "packages/*") is True
-        assert f._matches_any_glob("packages/core/subdir", ["packages/**"]) is True
+        assert matches_any_glob("packages/core/subdir", ["packages/**"]) is True
 
     def test_matches_any_glob_exact_match_takes_precedence(self) -> None:
         """_matches_any_glob prefers exact match over wildcard."""
         f = Tier1AuthorityFilter(Path("/test"))
         # Exact match in glob list
-        assert f._matches_any_glob("packages/core", ["packages/other", "packages/core"]) is True
+        assert matches_any_glob("packages/core", ["packages/other", "packages/core"]) is True
 
     def test_dotnet_filter_normalizes_backslash_project_paths(self) -> None:
         """_filter_dotnet correctly matches candidates against .sln project paths.

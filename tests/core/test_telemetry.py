@@ -11,16 +11,18 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from coderecon.core._noop_telemetry import (
+    NoOpCounter as _NoOpCounter,
+    NoOpHistogram as _NoOpHistogram,
+    NoOpMeter as _NoOpMeter,
+    NoOpObservable as _NoOpObservable,
+    NoOpSpan as _NoOpSpan,
+    NoOpTracer as _NoOpTracer,
+)
 from coderecon.core.telemetry import (
     _get_otlp_endpoint,
     _get_service_name,
     _is_telemetry_enabled,
-    _NoOpCounter,
-    _NoOpHistogram,
-    _NoOpMeter,
-    _NoOpObservable,
-    _NoOpSpan,
-    _NoOpTracer,
     get_meter,
     get_tracer,
     is_otel_available,
