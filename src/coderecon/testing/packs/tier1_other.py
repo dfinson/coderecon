@@ -239,22 +239,8 @@ class RSpecPack(RunnerPack):
                 log.debug("rspec_config_read_failed", exc_info=True)
         return 0.0
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
-        targets: list[TestTarget] = []
-        for path in workspace_root.glob("spec/**/*_spec.rb"):
-            if _is_prunable_path(path, workspace_root):
-                continue
-            rel = str(path.relative_to(workspace_root))
-            targets.append(
-                TestTarget(
-                    target_id=f"test:{rel}",
-                    selector=rel,
-                    kind="file",
-                    language="ruby",
-                    runner_pack_id=self.pack_id,
-                    workspace_root=str(workspace_root),
-                )
-            )
-        return targets
+        from coderecon.testing.packs import _discover_by_glob
+        return _discover_by_glob(self, workspace_root, "spec/**/*_spec.rb", "ruby")
     def build_command(
         self,
         target: TestTarget,
@@ -428,22 +414,8 @@ class PHPUnitPack(RunnerPack):
                 log.debug("phpunit_config_read_failed", exc_info=True)
         return 0.0
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
-        targets: list[TestTarget] = []
-        for path in workspace_root.glob("tests/**/*Test.php"):
-            if _is_prunable_path(path, workspace_root):
-                continue
-            rel = str(path.relative_to(workspace_root))
-            targets.append(
-                TestTarget(
-                    target_id=f"test:{rel}",
-                    selector=rel,
-                    kind="file",
-                    language="php",
-                    runner_pack_id=self.pack_id,
-                    workspace_root=str(workspace_root),
-                )
-            )
-        return targets
+        from coderecon.testing.packs import _discover_by_glob
+        return _discover_by_glob(self, workspace_root, "tests/**/*Test.php", "php")
     def build_command(
         self,
         target: TestTarget,

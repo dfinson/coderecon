@@ -109,22 +109,8 @@ class BatsPack(RunnerPack):
             return 0.7
         return 0.0
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
-        targets: list[TestTarget] = []
-        for path in workspace_root.glob("**/*.bats"):
-            if _is_prunable_path(path, workspace_root):
-                continue
-            rel = str(path.relative_to(workspace_root))
-            targets.append(
-                TestTarget(
-                    target_id=f"test:{rel}",
-                    selector=rel,
-                    kind="file",
-                    language="bash",
-                    runner_pack_id=self.pack_id,
-                    workspace_root=str(workspace_root),
-                )
-            )
-        return targets
+        from coderecon.testing.packs import _discover_by_glob
+        return _discover_by_glob(self, workspace_root, "**/*.bats", "bash")
     def build_command(
         self,
         target: TestTarget,
@@ -176,22 +162,8 @@ class PesterPack(RunnerPack):
             return 1.0
         return 0.0
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
-        targets: list[TestTarget] = []
-        for path in workspace_root.glob("**/*.Tests.ps1"):
-            if _is_prunable_path(path, workspace_root):
-                continue
-            rel = str(path.relative_to(workspace_root))
-            targets.append(
-                TestTarget(
-                    target_id=f"test:{rel}",
-                    selector=rel,
-                    kind="file",
-                    language="powershell",
-                    runner_pack_id=self.pack_id,
-                    workspace_root=str(workspace_root),
-                )
-            )
-        return targets
+        from coderecon.testing.packs import _discover_by_glob
+        return _discover_by_glob(self, workspace_root, "**/*.Tests.ps1", "powershell")
     def build_command(
         self,
         target: TestTarget,
@@ -250,22 +222,8 @@ class BustedPack(RunnerPack):
             return 0.7
         return 0.0
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
-        targets: list[TestTarget] = []
-        for path in workspace_root.glob("**/*_spec.lua"):
-            if _is_prunable_path(path, workspace_root):
-                continue
-            rel = str(path.relative_to(workspace_root))
-            targets.append(
-                TestTarget(
-                    target_id=f"test:{rel}",
-                    selector=rel,
-                    kind="file",
-                    language="lua",
-                    runner_pack_id=self.pack_id,
-                    workspace_root=str(workspace_root),
-                )
-            )
-        return targets
+        from coderecon.testing.packs import _discover_by_glob
+        return _discover_by_glob(self, workspace_root, "**/*_spec.lua", "lua")
     def build_command(
         self,
         target: TestTarget,

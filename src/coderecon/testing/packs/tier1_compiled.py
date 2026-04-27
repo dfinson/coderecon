@@ -442,24 +442,5 @@ class GradlePack(RunnerPack):
             cmd.extend(["--tests", pattern])
         return cmd
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
-        from coderecon.testing.parsers import parse_junit_xml
-        # Gradle writes to build/test-results/test/*.xml
-        reports_dir = output_path.parent / "build" / "test-results" / "test"
-        if not reports_dir.exists():
-            return ParsedTestSuite(name="gradle", errors=1)
-        all_tests: list[ParsedTestCase] = []
-        total_duration = 0.0
-        for xml_file in reports_dir.glob("TEST-*.xml"):
-            suite = parse_junit_xml(xml_file.read_text())
-            all_tests.extend(suite.tests)
-            total_duration += suite.duration_seconds
-        return ParsedTestSuite(
-            name="gradle",
-            tests=all_tests,
-            total=len(all_tests),
-            passed=sum(1 for t in all_tests if t.status == "passed"),
-            failed=sum(1 for t in all_tests if t.status == "failed"),
-            skipped=sum(1 for t in all_tests if t.status == "skipped"),
-            errors=sum(1 for t in all_tests if t.status == "error"),
-            duration_seconds=total_duration,
-        )
+        from coderecon.testing.packs import _parse_gradle_test_results
+        return _parse_gradle_test_results(output_path, "gradle")
