@@ -17,7 +17,7 @@ from coderecon.index.models import File
 log = structlog.get_logger(__name__)
 
 
-def _augment_declared_modules(db: "Database", repo_path: Path, extractions: list[ExtractionResult]) -> None:
+def _augment_declared_modules(db: Database, repo_path: Path, extractions: list[ExtractionResult]) -> None:
     """Post-process declared_module for languages needing config files.
     Go files get only the short package name from tree-sitter (e.g.
     ``mypackage``).  This method resolves the full import path using
@@ -103,7 +103,7 @@ def _resolve_xref_target(writer: BulkWriter, target_name: str) -> str | None:
     if row:
         return row[0]
     return None
-def _resolve_import_paths(db: "Database", repo_path: Path, extractions: list[ExtractionResult]) -> None:
+def _resolve_import_paths(db: Database, repo_path: Path, extractions: list[ExtractionResult]) -> None:
     """Resolve every import's source_literal to a target file path.
     Populates ``import_dict["resolved_path"]`` for each import in each
     extraction.  Uses the ``ImportPathResolver`` which supports:
@@ -157,7 +157,7 @@ def _resolve_import_paths(db: "Database", repo_path: Path, extractions: list[Ext
             resolved = resolver.resolve(source_literal, import_kind, ex.file_path)
             if resolved:
                 imp["resolved_path"] = resolved
-def resolve_all_imports(db: "Database", repo_path: Path) -> int:
+def resolve_all_imports(db: Database, repo_path: Path) -> int:
     """Re-resolve all unresolved import paths using the complete DB.
     Called once after all batches have been indexed so that imports
     from early batches can resolve to files indexed in later batches.

@@ -47,7 +47,7 @@ _DEFAULT_MAX_TEST_HOPS = 0
 _COMMIT_MAX_TEST_HOPS = 2
 
 
-def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
+def register_tools(mcp: FastMCP, app_ctx: AppContext) -> None:
     """Register checkpoint tool with FastMCP server."""
     from coderecon.mcp.tools.checkpoint_pipeline import checkpoint_pipeline
 

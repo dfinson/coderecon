@@ -280,7 +280,7 @@ def _result_to_text(result: SemanticDiffResult) -> dict[str, Any]:
 def _result_to_dict(
     result: SemanticDiffResult,
     *,
-    verbosity: Literal["full", "standard", "minimal"] = "full",
+    verbosity: Literal[full, standard, minimal] = "full",
 ) -> dict[str, Any]:
     """Convert SemanticDiffResult to a serializable dict.
     Verbosity levels:

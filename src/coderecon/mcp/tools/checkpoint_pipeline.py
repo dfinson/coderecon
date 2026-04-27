@@ -30,8 +30,8 @@ from coderecon.mcp.tools.checkpoint_tiered import _run_tiered_tests, _summarize_
 
 log = structlog.get_logger(__name__)
 async def checkpoint_pipeline(
-    app_ctx: "AppContext",
-    session: "SessionState",
+    app_ctx: AppContext,
+    session: SessionState,
     *,
     changed_files: list[str],
     lint: bool = True,
@@ -155,8 +155,8 @@ async def checkpoint_pipeline(
 
 
 def _readonly_checkpoint(
-    app_ctx: "AppContext",
-    session: "SessionState",
+    app_ctx: AppContext,
+    session: SessionState,
 ) -> dict[str, Any]:
     """Handle read-only checkpoint: verify clean tree and return."""
     try:
@@ -190,7 +190,7 @@ def _readonly_checkpoint(
 
 
 async def _run_test_phase(
-    app_ctx: "AppContext",
+    app_ctx: AppContext,
     changed_files: list[str],
     test_filter: str | None,
     max_test_hops: int | None,
@@ -283,7 +283,7 @@ async def _run_test_phase(
 
 
 async def _run_lint_phase(
-    app_ctx: "AppContext",
+    app_ctx: AppContext,
     changed_files: list[str],
     autofix: bool,
     phase: int,
@@ -387,7 +387,7 @@ async def _run_lint_phase(
 
 
 async def _evaluate_governance(
-    app_ctx: "AppContext",
+    app_ctx: AppContext,
     result: dict[str, Any],
     changed_files: list[str],
     lint_status: str,
@@ -428,7 +428,7 @@ async def _evaluate_governance(
 
 
 async def _commit_and_push(
-    app_ctx: "AppContext",
+    app_ctx: AppContext,
     result: dict[str, Any],
     changed_files: list[str],
     commit_message: str,

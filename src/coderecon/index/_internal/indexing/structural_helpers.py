@@ -245,7 +245,7 @@ def _compute_def_uid(
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 def _apply_worktree_uid_remap(
-    extraction: "ExtractionResult", worktree_id: int, *, is_main_worktree: bool = True
+    extraction: ExtractionResult, worktree_id: int, *, is_main_worktree: bool = True
 ) -> None:
     """Remap def_uid and import_uid values to be scoped to a worktree.
     def_uid and import_uid are PRIMARY KEYs computed purely from syntactic

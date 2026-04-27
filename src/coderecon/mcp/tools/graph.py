@@ -24,7 +24,7 @@ log = structlog.get_logger(__name__)
 # Core Functions (transport-agnostic)
 
 def graph_cycles_core(
-    app_ctx: "AppContext",
+    app_ctx: AppContext,
     *,
     level: str = "file",
 ) -> dict[str, Any]:
@@ -50,7 +50,7 @@ def graph_cycles_core(
     )
 
 def graph_communities_core(
-    app_ctx: "AppContext",
+    app_ctx: AppContext,
     *,
     level: str = "file",
     resolution: float = 1.0,
@@ -169,7 +169,7 @@ def _sync_analysis_sections(engine: Engine) -> tuple[dict[str, Any], GraphAnalys
     return sections, file_analysis
 
 async def recon_understand_core(
-    app_ctx: "AppContext",
+    app_ctx: AppContext,
 ) -> dict[str, Any]:
     """Full codebase narrative briefing (transport-agnostic)."""
     engine = app_ctx.coordinator.db.engine
@@ -224,7 +224,7 @@ async def recon_understand_core(
     )
 
 def graph_export_core(
-    app_ctx: "AppContext",
+    app_ctx: AppContext,
     *,
     output_path: str = "",
     resolution: float = 1.0,
@@ -251,7 +251,7 @@ def graph_export_core(
 
 # Tool Registration
 
-def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
+def register_tools(mcp: FastMCP, app_ctx: AppContext) -> None:
     """Register graph analysis MCP tools."""
 
     @mcp.tool(

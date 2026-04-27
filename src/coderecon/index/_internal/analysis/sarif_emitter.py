@@ -26,7 +26,7 @@ _LEVEL_MAP = {
 }
 
 def gate_result_to_sarif(
-    gate_result: "GateResult",
+    gate_result: GateResult,
     *,
     tool_name: str = "coderecon-governance",
     tool_version: str = "1.0.0",

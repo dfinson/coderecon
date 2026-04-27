@@ -73,7 +73,7 @@ class EventBus:
         except (OSError, RuntimeError):
             log.debug("event_bus.emit_sync_failed", event_name=event_type, exc_info=True)
 
-def wire_event_hooks(daemon: "GlobalDaemon", bus: EventBus) -> None:
+def wire_event_hooks(daemon: GlobalDaemon, bus: EventBus) -> None:
     """Connect internal daemon lifecycle hooks to the event bus.
 
     This is called once at stdio startup.  It registers callbacks on the

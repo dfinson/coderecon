@@ -147,7 +147,7 @@ _TOOL_DEFS: list[dict[str, Any]] = [
 # OpenAI function calling
 
 def as_openai_tools(
-    sdk: "CodeRecon",
+    sdk: CodeRecon,
     *,
     repo: str,
     worktree: str | None = None,
@@ -208,7 +208,7 @@ def _takes_repo(method: Callable[..., Any]) -> bool:
 # LangChain adapter (optional dependency)
 
 def as_langchain_tools(
-    sdk: "CodeRecon",
+    sdk: CodeRecon,
     *,
     repo: str,
     worktree: str | None = None,

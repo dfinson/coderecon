@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 @contextmanager
 def _override_session(
-    sdk: "CodeRecon", session_id: str | None,
+    sdk: CodeRecon, session_id: str | None,
 ) -> Generator[None, None, None]:
     """Temporarily set *session_id* on *sdk*, restoring the previous value on exit."""
     old = sdk._explicit_session
@@ -42,11 +42,11 @@ class SessionHandle:
     Created by ``sdk.session("name")``.
     """
 
-    def __init__(self, sdk: "CodeRecon", session_id: str) -> None:
+    def __init__(self, sdk: CodeRecon, session_id: str) -> None:
         self._sdk = sdk
         self._session_id = session_id
 
-    def repo(self, name: str, worktree: str | None = None) -> "RepoHandle":
+    def repo(self, name: str, worktree: str | None = None) -> RepoHandle:
         """Return a repo-bound handle using this session."""
         return RepoHandle(self._sdk, name, worktree, explicit_session=self._session_id)
 
@@ -57,7 +57,7 @@ class SessionHandle:
         )
 
     # Forward all tool methods with explicit session
-    async def recon(self, repo: str, task: str, **kwargs: Any) -> "ReconResult":
+    async def recon(self, repo: str, task: str, **kwargs: Any) -> ReconResult:
         old = self._sdk._explicit_session
         self._sdk._explicit_session = self._session_id
         try:
@@ -65,7 +65,7 @@ class SessionHandle:
         finally:
             self._sdk._explicit_session = old
 
-    async def checkpoint(self, repo: str, changed_files: list[str], **kwargs: Any) -> "CheckpointResult":
+    async def checkpoint(self, repo: str, changed_files: list[str], **kwargs: Any) -> CheckpointResult:
         old = self._sdk._explicit_session
         self._sdk._explicit_session = self._session_id
         try:
@@ -73,7 +73,7 @@ class SessionHandle:
         finally:
             self._sdk._explicit_session = old
 
-    async def refactor_rename(self, repo: str, symbol: str, new_name: str, justification: str, **kwargs: Any) -> "RefactorResult":
+    async def refactor_rename(self, repo: str, symbol: str, new_name: str, justification: str, **kwargs: Any) -> RefactorResult:
         old = self._sdk._explicit_session
         self._sdk._explicit_session = self._session_id
         try:
@@ -81,7 +81,7 @@ class SessionHandle:
         finally:
             self._sdk._explicit_session = old
 
-    async def refactor_move(self, repo: str, from_path: str, to_path: str, justification: str, **kwargs: Any) -> "RefactorResult":
+    async def refactor_move(self, repo: str, from_path: str, to_path: str, justification: str, **kwargs: Any) -> RefactorResult:
         old = self._sdk._explicit_session
         self._sdk._explicit_session = self._session_id
         try:
@@ -89,7 +89,7 @@ class SessionHandle:
         finally:
             self._sdk._explicit_session = old
 
-    async def refactor_commit(self, repo: str, refactor_id: str, **kwargs: Any) -> "RefactorCommitResult":
+    async def refactor_commit(self, repo: str, refactor_id: str, **kwargs: Any) -> RefactorCommitResult:
         old = self._sdk._explicit_session
         self._sdk._explicit_session = self._session_id
         try:
@@ -97,7 +97,7 @@ class SessionHandle:
         finally:
             self._sdk._explicit_session = old
 
-    async def refactor_cancel(self, repo: str, refactor_id: str, **kwargs: Any) -> "RefactorCancelResult":
+    async def refactor_cancel(self, repo: str, refactor_id: str, **kwargs: Any) -> RefactorCancelResult:
         old = self._sdk._explicit_session
         self._sdk._explicit_session = self._session_id
         try:
@@ -105,10 +105,10 @@ class SessionHandle:
         finally:
             self._sdk._explicit_session = old
 
-    async def recon_map(self, repo: str, **kwargs: Any) -> "MapResult":
+    async def recon_map(self, repo: str, **kwargs: Any) -> MapResult:
         return await self._sdk.recon_map(repo, **kwargs)
 
-    async def recon_impact(self, repo: str, target: str, justification: str, **kwargs: Any) -> "ImpactResult":
+    async def recon_impact(self, repo: str, target: str, justification: str, **kwargs: Any) -> ImpactResult:
         old = self._sdk._explicit_session
         self._sdk._explicit_session = self._session_id
         try:
@@ -116,19 +116,19 @@ class SessionHandle:
         finally:
             self._sdk._explicit_session = old
 
-    async def recon_understand(self, repo: str, **kwargs: Any) -> "UnderstandResult":
+    async def recon_understand(self, repo: str, **kwargs: Any) -> UnderstandResult:
         return await self._sdk.recon_understand(repo, **kwargs)
 
-    async def semantic_diff(self, repo: str, **kwargs: Any) -> "DiffResult":
+    async def semantic_diff(self, repo: str, **kwargs: Any) -> DiffResult:
         return await self._sdk.semantic_diff(repo, **kwargs)
 
-    async def graph_cycles(self, repo: str, **kwargs: Any) -> "CyclesResult":
+    async def graph_cycles(self, repo: str, **kwargs: Any) -> CyclesResult:
         return await self._sdk.graph_cycles(repo, **kwargs)
 
-    async def graph_communities(self, repo: str, **kwargs: Any) -> "CommunitiesResult":
+    async def graph_communities(self, repo: str, **kwargs: Any) -> CommunitiesResult:
         return await self._sdk.graph_communities(repo, **kwargs)
 
-    async def graph_export(self, repo: str, **kwargs: Any) -> "GraphExportResult":
+    async def graph_export(self, repo: str, **kwargs: Any) -> GraphExportResult:
         return await self._sdk.graph_export(repo, **kwargs)
 
 class RepoHandle:
@@ -139,7 +139,7 @@ class RepoHandle:
 
     def __init__(
         self,
-        sdk: "CodeRecon",
+        sdk: CodeRecon,
         repo: str,
         worktree: str | None = None,
         *,
@@ -160,49 +160,49 @@ class RepoHandle:
         """Context manager to temporarily set explicit session on SDK."""
         return _override_session(self._sdk, self._explicit_session)
 
-    async def recon(self, task: str, **kwargs: Any) -> "ReconResult":
+    async def recon(self, task: str, **kwargs: Any) -> ReconResult:
         with self._with_session():
             return await self._sdk.recon(self._repo, task, worktree=self._worktree, **kwargs)
 
-    async def recon_map(self, **kwargs: Any) -> "MapResult":
+    async def recon_map(self, **kwargs: Any) -> MapResult:
         return await self._sdk.recon_map(self._repo, worktree=self._worktree, **kwargs)
 
-    async def recon_impact(self, target: str, justification: str, **kwargs: Any) -> "ImpactResult":
+    async def recon_impact(self, target: str, justification: str, **kwargs: Any) -> ImpactResult:
         with self._with_session():
             return await self._sdk.recon_impact(self._repo, target, justification, worktree=self._worktree, **kwargs)
 
-    async def recon_understand(self, **kwargs: Any) -> "UnderstandResult":
+    async def recon_understand(self, **kwargs: Any) -> UnderstandResult:
         return await self._sdk.recon_understand(self._repo, worktree=self._worktree, **kwargs)
 
-    async def semantic_diff(self, **kwargs: Any) -> "DiffResult":
+    async def semantic_diff(self, **kwargs: Any) -> DiffResult:
         return await self._sdk.semantic_diff(self._repo, worktree=self._worktree, **kwargs)
 
-    async def graph_cycles(self, **kwargs: Any) -> "CyclesResult":
+    async def graph_cycles(self, **kwargs: Any) -> CyclesResult:
         return await self._sdk.graph_cycles(self._repo, worktree=self._worktree, **kwargs)
 
-    async def graph_communities(self, **kwargs: Any) -> "CommunitiesResult":
+    async def graph_communities(self, **kwargs: Any) -> CommunitiesResult:
         return await self._sdk.graph_communities(self._repo, worktree=self._worktree, **kwargs)
 
-    async def graph_export(self, **kwargs: Any) -> "GraphExportResult":
+    async def graph_export(self, **kwargs: Any) -> GraphExportResult:
         return await self._sdk.graph_export(self._repo, worktree=self._worktree, **kwargs)
 
-    async def refactor_rename(self, symbol: str, new_name: str, justification: str, **kwargs: Any) -> "RefactorResult":
+    async def refactor_rename(self, symbol: str, new_name: str, justification: str, **kwargs: Any) -> RefactorResult:
         with self._with_session():
             return await self._sdk.refactor_rename(self._repo, symbol, new_name, justification, worktree=self._worktree, **kwargs)
 
-    async def refactor_move(self, from_path: str, to_path: str, justification: str, **kwargs: Any) -> "RefactorResult":
+    async def refactor_move(self, from_path: str, to_path: str, justification: str, **kwargs: Any) -> RefactorResult:
         with self._with_session():
             return await self._sdk.refactor_move(self._repo, from_path, to_path, justification, worktree=self._worktree, **kwargs)
 
-    async def refactor_commit(self, refactor_id: str, **kwargs: Any) -> "RefactorCommitResult":
+    async def refactor_commit(self, refactor_id: str, **kwargs: Any) -> RefactorCommitResult:
         with self._with_session():
             return await self._sdk.refactor_commit(self._repo, refactor_id, worktree=self._worktree, **kwargs)
 
-    async def refactor_cancel(self, refactor_id: str, **kwargs: Any) -> "RefactorCancelResult":
+    async def refactor_cancel(self, refactor_id: str, **kwargs: Any) -> RefactorCancelResult:
         with self._with_session():
             return await self._sdk.refactor_cancel(self._repo, refactor_id, worktree=self._worktree, **kwargs)
 
-    async def checkpoint(self, changed_files: list[str], **kwargs: Any) -> "CheckpointResult":
+    async def checkpoint(self, changed_files: list[str], **kwargs: Any) -> CheckpointResult:
         with self._with_session():
             return await self._sdk.checkpoint(self._repo, changed_files, worktree=self._worktree, **kwargs)
 

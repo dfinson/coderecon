@@ -108,8 +108,8 @@ _NO_SESSION_METHODS = frozenset({
 })
 
 async def _handle_register(
-    daemon: "GlobalDaemon",
-    registry: "CatalogRegistry",
+    daemon: GlobalDaemon,
+    registry: CatalogRegistry,
     params: dict[str, Any],
     request_id: str | None,
 ) -> dict[str, Any]:
@@ -126,7 +126,7 @@ async def _handle_register(
         return _error_response(request_id, "REGISTER_FAILED", str(exc))
 
 async def _handle_catalog(
-    registry: "CatalogRegistry",
+    registry: CatalogRegistry,
     request_id: str | None,
 ) -> dict[str, Any]:
     repos = registry.list_repos()
@@ -141,7 +141,7 @@ async def _handle_catalog(
     return _success_response(request_id, {"repos": entries})
 
 async def _handle_status(
-    daemon: "GlobalDaemon",
+    daemon: GlobalDaemon,
     request_id: str | None,
 ) -> dict[str, Any]:
     slots = []
@@ -171,7 +171,7 @@ async def _handle_describe(
     return _success_response(request_id, result)
 
 async def _handle_unregister(
-    registry: "CatalogRegistry",
+    registry: CatalogRegistry,
     params: dict[str, Any],
     request_id: str | None,
 ) -> dict[str, Any]:
@@ -185,10 +185,10 @@ async def _handle_unregister(
         return _error_response(request_id, "UNREGISTER_FAILED", str(exc))
 
 async def _handle_reindex(
-    daemon: "GlobalDaemon",
+    daemon: GlobalDaemon,
     params: dict[str, Any],
     request_id: str | None,
-    event_bus: "EventBus | None" = None,
+    event_bus: EventBus | None = None,
 ) -> dict[str, Any]:
     repo_name = params.get("repo")
     if not repo_name:
@@ -227,7 +227,7 @@ async def _handle_reindex(
     })
 
 async def _handle_session_close(
-    daemon: "GlobalDaemon",
+    daemon: GlobalDaemon,
     params: dict[str, Any],
     request_id: str | None,
 ) -> dict[str, Any]:
@@ -248,11 +248,11 @@ async def _handle_session_close(
 # Main dispatch
 
 async def dispatch(
-    daemon: "GlobalDaemon",
-    registry: "CatalogRegistry",
+    daemon: GlobalDaemon,
+    registry: CatalogRegistry,
     request: dict[str, Any],
     *,
-    event_bus: "EventBus | None" = None,
+    event_bus: EventBus | None = None,
 ) -> dict[str, Any]:
     """Route a single stdio request to the appropriate handler.
 

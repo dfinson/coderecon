@@ -66,7 +66,7 @@ def _discover_by_glob(
     workspace_root: Path,
     glob_pattern: str,
     language: str,
-) -> list["TestTarget"]:
+) -> list[TestTarget]:
     """Discover test targets by globbing for files matching a pattern."""
     from coderecon.testing.models import TestTarget
 
@@ -88,7 +88,7 @@ def _discover_by_glob(
     return targets
 
 
-def _parse_gradle_test_results(output_path: Path, suite_name: str) -> "ParsedTestSuite":
+def _parse_gradle_test_results(output_path: Path, suite_name: str) -> ParsedTestSuite:
     """Parse Gradle/Kotlin JUnit XML test results from build directory."""
     from coderecon.testing.models import ParsedTestSuite
     from coderecon.testing.parsers import parse_junit_xml

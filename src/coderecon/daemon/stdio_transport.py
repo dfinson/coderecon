@@ -39,8 +39,8 @@ async def _write_message(
         transport.write(raw)
 
 async def _handle_request(
-    daemon: "GlobalDaemon",
-    registry: "CatalogRegistry",
+    daemon: GlobalDaemon,
+    registry: CatalogRegistry,
     request: dict[str, Any],
     write_message: Callable[[dict[str, Any]], Awaitable[None]],
     bus: EventBus,
@@ -58,8 +58,8 @@ async def _handle_request(
         })
 
 async def run_stdio_loop(
-    daemon: "GlobalDaemon",
-    registry: "CatalogRegistry",
+    daemon: GlobalDaemon,
+    registry: CatalogRegistry,
 ) -> None:
     """Main stdio transport loop — runs until stdin is closed.
 

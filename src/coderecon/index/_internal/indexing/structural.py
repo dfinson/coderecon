@@ -188,7 +188,7 @@ class StructuralIndexer:
     def _augment_declared_modules(self, extractions: list[ExtractionResult]) -> None:
         """Post-process declared_module for languages needing config files."""
         _augment_declared_modules(self.db, self.repo_path, extractions)
-    def _resolve_xref_target(self, writer: "BulkWriter", target_name: str) -> str | None:
+    def _resolve_xref_target(self, writer: BulkWriter, target_name: str) -> str | None:
         """Resolve a cross-ref target name to a def_uid."""
         return _resolve_xref_target(writer, target_name)
     def _resolve_import_paths(self, extractions: list[ExtractionResult]) -> None:

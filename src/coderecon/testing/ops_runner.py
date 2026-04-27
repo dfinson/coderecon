@@ -341,7 +341,7 @@ async def _run_batch_targets(
 
 
 async def _setup_batch_coverage(
-    coordinator: "IndexCoordinatorEngine",
+    coordinator: IndexCoordinatorEngine,
     first: TestTarget,
     coverage_dir: Path | None,
 ) -> tuple[CoverageArtifact | None, bool, object | None]:

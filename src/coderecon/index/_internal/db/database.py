@@ -42,7 +42,7 @@ def _is_database_locked_error(error: Exception) -> bool:
     error_str = str(error).lower()
     return "database is locked" in error_str or "database is busy" in error_str
 
-def _run_index_migrations(engine: "Engine") -> None:
+def _run_index_migrations(engine: Engine) -> None:
     """Run Alembic migrations to bring the index DB up to date."""
     from alembic import command
     from alembic.config import Config

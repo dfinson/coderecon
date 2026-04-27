@@ -127,7 +127,7 @@ def _partition_for_batching(
 
 async def _run_tiered_tests(
     *,
-    app_ctx: "AppContext",
+    app_ctx: AppContext,
     progress: ProgressSink,
     graph_result: ImportGraphResult,
     filtered_targets: list[TestTarget],
@@ -269,7 +269,7 @@ async def _run_tiered_tests(
 
 async def _run_batch_groups(
     batch_groups: list[list[Any]],
-    app_ctx: "AppContext",
+    app_ctx: AppContext,
     test_filter: str | None,
     cov_dir_path: Path | None,
 ) -> list[tuple[Any, Any]]:

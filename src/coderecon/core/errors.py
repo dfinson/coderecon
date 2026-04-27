@@ -53,7 +53,7 @@ class ConfigError(CodeReconError):
     """Configuration errors."""
 
     @classmethod
-    def parse_error(cls, path: str, reason: str) -> "ConfigError":
+    def parse_error(cls, path: str, reason: str) -> ConfigError:
         return cls(
             InternalErrorCode.CONFIG_PARSE_ERROR,
             f"Failed to parse {path}: {reason}",
@@ -61,7 +61,7 @@ class ConfigError(CodeReconError):
         )
 
     @classmethod
-    def invalid_value(cls, field: str, value: Any, reason: str) -> "ConfigError":
+    def invalid_value(cls, field: str, value: Any, reason: str) -> ConfigError:
         return cls(
             InternalErrorCode.CONFIG_INVALID_VALUE,
             f"Invalid '{field}': {reason}",
@@ -69,7 +69,7 @@ class ConfigError(CodeReconError):
         )
 
     @classmethod
-    def missing_required(cls, field: str) -> "ConfigError":
+    def missing_required(cls, field: str) -> ConfigError:
         return cls(
             InternalErrorCode.CONFIG_MISSING_REQUIRED,
             f"Missing required: {field}",
@@ -77,7 +77,7 @@ class ConfigError(CodeReconError):
         )
 
     @classmethod
-    def file_not_found(cls, path: str) -> "ConfigError":
+    def file_not_found(cls, path: str) -> ConfigError:
         return cls(
             InternalErrorCode.CONFIG_FILE_NOT_FOUND,
             f"Config not found: {path}",
@@ -88,7 +88,7 @@ class InternalError(CodeReconError):
     """Internal errors."""
 
     @classmethod
-    def unexpected(cls, reason: str, **details: Any) -> "InternalError":
+    def unexpected(cls, reason: str, **details: Any) -> InternalError:
         return cls(InternalErrorCode.INTERNAL_ERROR, f"Internal error: {reason}", details=details)
 
 class PathTraversalError(Exception):

@@ -52,7 +52,7 @@ def _display_refactor(status: str, files_affected: int, preview: RefactorPreview
         )
     return f"Refactoring {status}."
 
-def _build_refactor_agentic_hint(result: "RefactorResult", files_affected: int) -> str:
+def _build_refactor_agentic_hint(result: RefactorResult, files_affected: int) -> str:
     """Build next-step instruction for the agent after a refactor operation."""
     rid = result.refactor_id
 
@@ -93,7 +93,7 @@ def _build_refactor_agentic_hint(result: "RefactorResult", files_affected: int) 
 
     return f"Refactoring status: {result.status}."
 
-def _serialize_refactor_result(result: "RefactorResult") -> dict[str, Any]:
+def _serialize_refactor_result(result: RefactorResult) -> dict[str, Any]:
     """Convert RefactorResult to dict."""
     # Get files_affected from preview or applied delta
     if result.preview:
@@ -173,7 +173,7 @@ def _serialize_refactor_result(result: "RefactorResult") -> dict[str, Any]:
 
     return wrap_response(output, resource_kind="refactor_preview")
 
-def _serialize_impact_result(result: "RefactorResult") -> dict[str, Any]:
+def _serialize_impact_result(result: RefactorResult) -> dict[str, Any]:
     """Convert impact RefactorResult to a read-only reference list.
 
     Unlike _serialize_refactor_result, this does NOT include a refactor_id
@@ -211,7 +211,7 @@ def _serialize_impact_result(result: "RefactorResult") -> dict[str, Any]:
 
 # Core Functions (transport-agnostic)
 
-def _require_recon(session: "SessionState") -> None:
+def _require_recon(session: SessionState) -> None:
     """Gate: recon must have been called before refactoring."""
     if not session.candidate_maps:
         raise MCPError(
@@ -223,8 +223,8 @@ def _require_recon(session: "SessionState") -> None:
         )
 
 async def refactor_rename_core(
-    app_ctx: "AppContext",
-    session: "SessionState",
+    app_ctx: AppContext,
+    session: SessionState,
     *,
     symbol: str,
     new_name: str,
@@ -240,8 +240,8 @@ async def refactor_rename_core(
     return _serialize_refactor_result(result)
 
 async def refactor_move_core(
-    app_ctx: "AppContext",
-    session: "SessionState",
+    app_ctx: AppContext,
+    session: SessionState,
     *,
     from_path: str,
     to_path: str,
@@ -256,8 +256,8 @@ async def refactor_move_core(
     return _serialize_refactor_result(result)
 
 async def recon_impact_core(
-    app_ctx: "AppContext",
-    session: "SessionState",
+    app_ctx: AppContext,
+    session: SessionState,
     *,
     target: str,
     include_comments: bool = True,
@@ -270,8 +270,8 @@ async def recon_impact_core(
     return _serialize_impact_result(result)
 
 async def refactor_commit_core(
-    app_ctx: "AppContext",
-    session: "SessionState",
+    app_ctx: AppContext,
+    session: SessionState,
     *,
     refactor_id: str,
     inspect_path: str | None = None,
@@ -301,8 +301,8 @@ async def refactor_commit_core(
     return _serialize_refactor_result(result)
 
 async def refactor_cancel_core(
-    app_ctx: "AppContext",
-    session: "SessionState",
+    app_ctx: AppContext,
+    session: SessionState,
     *,
     refactor_id: str,
 ) -> dict[str, Any]:
@@ -313,7 +313,7 @@ async def refactor_cancel_core(
 
 # Tool Registration
 
-def register_tools(mcp: "FastMCP", app_ctx: "AppContext") -> None:
+def register_tools(mcp: FastMCP, app_ctx: AppContext) -> None:
     """Register refactor tools with FastMCP server."""
 
     @mcp.tool(

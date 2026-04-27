@@ -36,7 +36,7 @@ def matches_any_glob(path: str, globs: list[str]) -> bool:
             return True
     return False
 
-def get_js_workspace_globs(repo_root: Path, t1: "CandidateContext") -> list[str]:
+def get_js_workspace_globs(repo_root: Path, t1: CandidateContext) -> list[str]:
     """Extract workspace globs from JavaScript workspace config."""
     globs: list[str] = []
     for marker in t1.markers:
@@ -64,7 +64,7 @@ def get_js_workspace_globs(repo_root: Path, t1: "CandidateContext") -> list[str]
             log.warning("workspace_config_parse_error", marker=marker, error=str(e))
     return globs
 
-def get_go_work_modules(repo_root: Path, t1: "CandidateContext") -> list[str]:
+def get_go_work_modules(repo_root: Path, t1: CandidateContext) -> list[str]:
     """Extract modules from go.work."""
     modules: list[str] = []
     for marker in t1.markers:
@@ -89,7 +89,7 @@ def get_go_work_modules(repo_root: Path, t1: "CandidateContext") -> list[str]:
                 log.debug("go_work_read_failed", marker=str(marker_path))
     return modules
 
-def get_cargo_workspace_members(repo_root: Path, t1: "CandidateContext") -> list[str]:
+def get_cargo_workspace_members(repo_root: Path, t1: CandidateContext) -> list[str]:
     """Extract members from Cargo.toml [workspace]."""
     members: list[str] = []
     for marker in t1.markers:
@@ -129,7 +129,7 @@ def get_cargo_workspace_members(repo_root: Path, t1: "CandidateContext") -> list
                 log.debug("cargo_toml_read_failed", path=str(marker_path), exc_info=True)
     return members
 
-def get_gradle_includes(repo_root: Path, t1: "CandidateContext") -> tuple[list[str], bool]:
+def get_gradle_includes(repo_root: Path, t1: CandidateContext) -> tuple[list[str], bool]:
     """Extract includes from settings.gradle."""
     includes: list[str] = []
     is_strict = True
@@ -148,7 +148,7 @@ def get_gradle_includes(repo_root: Path, t1: "CandidateContext") -> tuple[list[s
                 log.debug("gradle_settings_read_failed", path=str(marker_path), exc_info=True)
     return includes, is_strict
 
-def get_maven_modules(repo_root: Path, t1: "CandidateContext") -> list[str]:
+def get_maven_modules(repo_root: Path, t1: CandidateContext) -> list[str]:
     """Extract modules from Maven pom.xml."""
     modules: list[str] = []
     for marker in t1.markers:
@@ -167,7 +167,7 @@ def get_maven_modules(repo_root: Path, t1: "CandidateContext") -> list[str]:
                 log.debug("pom_xml_read_failed", path=str(marker_path), exc_info=True)
     return modules
 
-def get_sln_projects(repo_root: Path, t1: "CandidateContext") -> list[str]:
+def get_sln_projects(repo_root: Path, t1: CandidateContext) -> list[str]:
     """Extract project paths from .sln solution file."""
     projects: list[str] = []
     for marker in t1.markers:

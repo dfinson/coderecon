@@ -142,7 +142,7 @@ class CodeRecon:
 
         self._pending.cancel_all()
 
-    async def __aenter__(self) -> "CodeRecon":
+    async def __aenter__(self) -> CodeRecon:
         await self.start()
         return self
 
@@ -151,7 +151,7 @@ class CodeRecon:
 
     # ── Session Management ──
 
-    def session(self, name: str) -> "SessionHandle":
+    def session(self, name: str) -> SessionHandle:
         """Create an explicit named session for multi-agent scenarios."""
         from coderecon.sdk.handle import SessionHandle
 
@@ -164,7 +164,7 @@ class CodeRecon:
         if session_id:
             await self._call("session_close", {"session_id": session_id, "repo": repo, "worktree": worktree}, session_id=None)
 
-    def repo(self, name: str, worktree: str | None = None) -> "RepoHandle":
+    def repo(self, name: str, worktree: str | None = None) -> RepoHandle:
         """Return a repo-bound handle with pre-bound tool methods."""
         from coderecon.sdk.handle import RepoHandle
 

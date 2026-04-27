@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 def ingest_coverage(
     engine: Engine,
-    report: "CoverageReport",
+    report: CoverageReport,
     epoch: int,
     *,
     test_id_prefix: str = "",

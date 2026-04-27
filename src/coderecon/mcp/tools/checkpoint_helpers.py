@@ -209,7 +209,7 @@ def _target_matches_affected_files(
 
 # Test Result Helpers
 
-def _summarize_run(result: "TestResult") -> str:
+def _summarize_run(result: TestResult) -> str:
     """Generate compact summary for a test run."""
     if not result.run_status:
         return "no run status"
@@ -443,7 +443,7 @@ def _enrich_failure_result(
 
 
 def _serialize_test_result(
-    result: "TestResult",
+    result: TestResult,
     coverage_filter_paths: set[str] | None = None,
 ) -> dict[str, Any]:
     """Convert TestResult to compact serializable dict.
@@ -514,7 +514,7 @@ def _serialize_test_result(
 # Coverage Persistence
 
 def _ingest_checkpoint_coverage(
-    app_ctx: "AppContext",
+    app_ctx: AppContext,
     coverage_dir: Path,
     failed_test_ids: set[str] | None = None,
 ) -> None:
