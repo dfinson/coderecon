@@ -15,10 +15,10 @@ if TYPE_CHECKING:
 
 from coderecon.config.constants import MS_PER_SEC
 from coderecon.index._internal.indexing.structural_helpers import (
-    BatchResult, ExtractionResult, _apply_worktree_uid_remap, _compute_def_uid,
+    BatchResult, ExtractionResult, _apply_worktree_uid_remap,
 )
 from coderecon.index._internal.indexing.structural_extract import (
-    _extract_file, _find_containing_scope,
+    _extract_file,
 )
 from coderecon.index._internal.indexing.structural_resolve import (
     _augment_declared_modules, _resolve_import_paths, _resolve_xref_target,

@@ -14,13 +14,13 @@ from coderecon.refactor.ops import (
     EditHunk,
     FileEdit,
     InspectResult,
-    RefactorDivergence,
     RefactorPreview,
     RefactorResult,
     _compute_rename_certainty_from_ref,
     _scan_file_for_comment_occurrences,
     _word_boundary_match,
 )
+from coderecon.refactor.ops_models import RefactorDivergence
 
 class TestWordBoundaryMatch:
     """Tests for _word_boundary_match helper."""

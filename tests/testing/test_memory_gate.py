@@ -422,7 +422,7 @@ class TestSafeExecutionConfigCeiling:
             original_init(self, *args, **kwargs)
             captured_configs.append(self)
 
-        ops = TestOps(tmp_path, _make_coordinator(), subprocess_memory_limit_mb=3000)
+        _ops = TestOps(tmp_path, _make_coordinator(), subprocess_memory_limit_mb=3000)
 
         # Need a registered pack for _run_single_target to proceed
         target = _make_target("t1", "python.pytest")

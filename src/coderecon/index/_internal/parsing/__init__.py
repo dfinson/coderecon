@@ -6,11 +6,13 @@ from coderecon.index._internal.parsing.treesitter import (
     IdentifierOccurrence,
     ParseResult,
     ProbeValidation,
-    SyntacticBind,
     SyntacticImport,
     SyntacticScope,
     SyntacticSymbol,
     TreeSitterParser,
+)
+from coderecon.index._internal.parsing.treesitter_models import (
+    SyntacticBind,
 )
 
 __all__ = [

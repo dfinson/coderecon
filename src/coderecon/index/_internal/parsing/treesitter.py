@@ -37,7 +37,6 @@ from coderecon.index._internal.parsing.treesitter_models import (
     IdentifierOccurrence,
     ParseResult,
     ProbeValidation,
-    SyntacticBind,
     SyntacticImport,
     SyntacticScope,
     SyntacticSymbol,

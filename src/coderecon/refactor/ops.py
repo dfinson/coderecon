@@ -17,7 +17,6 @@ from coderecon.refactor.ops_models import (
     EditHunk,
     FileEdit,
     InspectResult,
-    RefactorDivergence,
     RefactorPreview,
     RefactorResult,
     _compute_rename_certainty_from_ref,

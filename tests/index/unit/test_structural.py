@@ -18,9 +18,13 @@ from coderecon.index._internal.indexing.structural import (
     ExtractionResult,
     StructuralIndexer,
     _apply_worktree_uid_remap,
-    _compute_def_uid,
     _extract_file,
+)
+from coderecon.index._internal.indexing.structural_extract import (
     _find_containing_scope,
+)
+from coderecon.index._internal.indexing.structural_helpers import (
+    _compute_def_uid,
 )
 from coderecon.index._internal.parsing import SyntacticScope
 from coderecon.index.models import Context, DefFact, RefFact, RefTier, Role
