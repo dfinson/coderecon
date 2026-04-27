@@ -1,378 +1,51 @@
-"""Test operations - test_* tools implementation.
+"""Test operations — TestOps class for discovery and execution.
 
-Test discovery and execution using runner packs.
 Per SPEC.md §23.7 test tool specification.
 """
 
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import json
 import structlog
-import os
-import shutil
-import sys
 import time
 import uuid
-from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
-
-from coderecon.index._internal.ignore import PRUNABLE_DIRS
+from typing import TYPE_CHECKING
 
 from coderecon.files.ops import atomic_write_text
 
 # Import packs to trigger registration
 from coderecon.testing import packs as _packs  # noqa: F401
-from coderecon.testing.emitters import (
-    CoverageArtifact,
-    CoverageCapability,
-    PackRuntime,
-    get_emitter,
-)
+from coderecon.testing.emitters import CoverageArtifact  # noqa: F401 — re-export
 from coderecon.testing.models import (
-    ExecutionContext,
-    ExecutionDiagnostic,
-    ParsedTestSuite,
-    TargetProgress,
-    TestCaseProgress,
-    TestFailure,
-    TestProgress,
-    TestResult,
-    TestRunStatus,
-    TestTarget,
+    ExecutionDiagnostic, TargetProgress, TestCaseProgress,
+    TestFailure, TestProgress, TestResult, TestRunStatus, TestTarget,
 )
-from coderecon.testing.resources import (
-    MemoryBudget,
-    MemoryHistory,
-    child_rss_mb,
-    classify_oom,
+from coderecon.testing.ops_environment import _default_parallelism
+from coderecon.testing.ops_executor import _execute_tests as _execute_tests_impl
+from coderecon.testing.ops_workspaces import (
+    DetectedWorkspace, _os_script_path, detect_workspaces,
 )
-from coderecon.testing.runner_pack import RunnerPack, runner_registry
-from coderecon.testing.runtime import (
-    ExecutionContextBuilder,
-    RuntimeExecutionContext,
-)
-from coderecon.testing.safe_execution import SafeExecutionConfig, SafeExecutionContext
+from coderecon.testing.resources import MemoryBudget, MemoryHistory, classify_oom  # noqa: F401 — re-export
+from coderecon.testing.runner_pack import runner_registry
 
 if TYPE_CHECKING:
     from coderecon.index.ops import IndexCoordinatorEngine
 
 log = structlog.get_logger(__name__)
+_STDERR_TRUNCATION_CHARS = 2000
 
-_STDERR_TRUNCATION_CHARS = 2000  # cap stderr in diagnostics to avoid response bloat
+# Re-exports for backward compatibility
+from coderecon.testing.ops_environment import (  # noqa: E402, F401
+    clear_coverage_tools_cache, detect_coverage_tools,
+    detect_node_package_manager, detect_python_venv, get_python_executable,
+)
+from coderecon.testing.ops_workspaces import (  # noqa: E402, F401
+    _classify_result_error, _is_prunable_path,
+)
+from coderecon.testing.ops_runner import _run_batch_targets  # noqa: E402, F401
 
-# Environment Detection
-
-def detect_python_venv(workspace_root: Path) -> Path | None:
-    """Detect Python virtual environment in workspace."""
-    # Check common venv locations
-    for venv_name in [".venv", "venv", ".env", "env"]:
-        venv_path = workspace_root / venv_name
-        if venv_path.is_dir():
-            # Verify it's a venv by checking for pyvenv.cfg or activate script
-            if (venv_path / "pyvenv.cfg").exists():
-                return venv_path
-            # Windows style
-            if (venv_path / "Scripts" / "activate").exists():
-                return venv_path
-            # Unix style
-            if (venv_path / "bin" / "activate").exists():
-                return venv_path
-    return None
-
-def get_python_executable(workspace_root: Path) -> str:
-    """Get Python executable, preferring venv if present."""
-    venv = detect_python_venv(workspace_root)
-    if venv:
-        # Check for Windows first
-        win_python = venv / "Scripts" / "python.exe"
-        if win_python.exists():
-            return str(win_python)
-        # Unix
-        unix_python = venv / "bin" / "python"
-        if unix_python.exists():
-            return str(unix_python)
-    return "python"
-
-# Cache for coverage tool detection - keyed by (workspace_root, runner_pack_id)
-_coverage_tools_cache: dict[tuple[Path, str], dict[str, bool]] = {}
-
-def clear_coverage_tools_cache() -> None:
-    """Clear the coverage tools cache. Useful for testing."""
-    _coverage_tools_cache.clear()
-
-def detect_coverage_tools(
-    workspace_root: Path,
-    runner_pack_id: str,
-    exec_ctx: RuntimeExecutionContext | None = None,
-) -> dict[str, bool]:
-    """Detect available coverage tools for a runner pack.
-    Returns a dict of tool_name -> is_available.
-    Results are cached per (workspace_root, runner_pack_id) to avoid
-    spawning subprocess for every test target.
-    """
-    cache_key = (workspace_root, runner_pack_id)
-    if cache_key in _coverage_tools_cache:
-        return _coverage_tools_cache[cache_key]
-    tools: dict[str, bool] = {}
-    if runner_pack_id == "python.pytest":
-        # Check if pytest-cov is installed
-        # Use RuntimeExecutionContext if available, otherwise fallback to venv detection
-        if exec_ctx and exec_ctx.runtime.python_executable:
-            python_exe = exec_ctx.runtime.python_executable
-        else:
-            python_exe = get_python_executable(workspace_root)
-        try:
-            import subprocess
-            result = subprocess.run(
-                [python_exe, "-c", "import pytest_cov"],
-                capture_output=True,
-                timeout=5,
-                cwd=workspace_root,
-            )
-            tools["pytest-cov"] = result.returncode == 0
-        except FileNotFoundError:
-            # Python executable not found
-            tools["pytest-cov"] = False
-        except subprocess.TimeoutExpired:
-            # Import check timed out
-            tools["pytest-cov"] = False
-        except subprocess.SubprocessError:
-            # Other subprocess errors
-            tools["pytest-cov"] = False
-    elif runner_pack_id in ("js.jest", "js.vitest"):
-        # Jest and Vitest have built-in coverage
-        tools["built-in"] = True
-    elif runner_pack_id == "go.gotest":
-        # Go has built-in coverage
-        tools["built-in"] = True
-    elif runner_pack_id in ("rust.nextest", "rust.cargotest"):
-        # Check for cargo-llvm-cov
-        tools["cargo-llvm-cov"] = shutil.which("cargo-llvm-cov") is not None
-    elif runner_pack_id == "ruby.rspec":
-        # Check for simplecov in Gemfile
-        gemfile = workspace_root / "Gemfile"
-        if gemfile.exists():
-            tools["simplecov"] = "simplecov" in gemfile.read_text()
-    elif runner_pack_id == "php.phpunit":
-        # Check for xdebug or pcov
-        tools["xdebug"] = shutil.which("php") is not None  # Simplified check
-        tools["pcov"] = False  # Would need PHP extension check
-    # Cache the result
-    _coverage_tools_cache[cache_key] = tools
-    return tools
-
-def detect_node_package_manager(workspace_root: Path) -> str:
-    """Detect which Node package manager to use."""
-    if (workspace_root / "pnpm-lock.yaml").exists():
-        return "pnpm"
-    if (workspace_root / "yarn.lock").exists():
-        return "yarn"
-    if (workspace_root / "bun.lockb").exists():
-        return "bun"
-    return "npm"
-
-def _default_parallelism() -> int:
-    """Compute default parallelism based on CPU count."""
-    cpu_count = os.cpu_count() or 4
-    # Use 2x CPU count for I/O-bound test execution, capped at reasonable max
-    return min(cpu_count * 2, 16)
-
-# Workspace Detection
-
-@dataclass
-class DetectedWorkspace:
-    """A detected workspace with its runner pack."""
-    root: Path
-    pack: RunnerPack
-    confidence: float
-def _is_prunable_path(rel_path: Path) -> bool:
-    """Check if relative path contains any prunable directory components.
-    Note: 'packages' is in PRUNABLE_DIRS for .NET, but is also a common JS
-    monorepo pattern. We only consider a path prunable if it has nested
-    prunable dirs or is clearly not a project directory.
-    """
-    parts = rel_path.parts
-    for part in parts:
-        # Skip 'packages' at root level since it's commonly used in JS monorepos
-        if part == "packages" and parts.index(part) == 0:
-            continue
-        if part in PRUNABLE_DIRS:
-            return True
-    return False
-
-def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
-    """Detect all workspaces and their runners in a repo.
-    Supports monorepos by finding nested workspace roots.
-    Respects PRUNABLE_DIRS to avoid scanning .venv, node_modules, etc.
-    """
-    workspaces: list[DetectedWorkspace] = []
-    # First check repo root
-    for pack_class, confidence in runner_registry.detect_all(repo_root):
-        workspaces.append(
-            DetectedWorkspace(
-                root=repo_root,
-                pack=pack_class(),
-                confidence=confidence,
-            )
-        )
-    # Collect workspace directories from various monorepo tools
-    workspace_dirs: set[Path] = set()
-    # Check for yarn/npm workspaces in package.json
-    root_pkg = repo_root / "package.json"
-    if root_pkg.exists():
-        try:
-            data = json.loads(root_pkg.read_text())
-            workspaces_field = data.get("workspaces", [])
-            # Handle both array and object format
-            if isinstance(workspaces_field, dict):
-                patterns = workspaces_field.get("packages", [])
-            else:
-                patterns = workspaces_field
-            for pattern in patterns:
-                # Expand glob patterns
-                for ws_path in repo_root.glob(pattern):
-                    if (
-                        ws_path.is_dir()
-                        and not _is_prunable_path(ws_path.relative_to(repo_root))
-                        and (ws_path / "package.json").exists()
-                    ):
-                        workspace_dirs.add(ws_path)
-        except (OSError, json.JSONDecodeError, KeyError):
-            log.debug("npm_workspace_parse_failed", exc_info=True)
-    # Check for pnpm workspaces
-    pnpm_ws = repo_root / "pnpm-workspace.yaml"
-    if pnpm_ws.exists():
-        try:
-            import yaml
-            data = yaml.safe_load(pnpm_ws.read_text()) or {}
-            for pattern in data.get("packages", []):
-                for ws_path in repo_root.glob(pattern):
-                    if (
-                        ws_path.is_dir()
-                        and not _is_prunable_path(ws_path.relative_to(repo_root))
-                        and (ws_path / "package.json").exists()
-                    ):
-                        workspace_dirs.add(ws_path)
-        except (OSError, yaml.YAMLError, KeyError):
-            log.debug("pnpm_workspace_parse_failed", exc_info=True)
-    # Check for Nx workspaces
-    nx_json = repo_root / "nx.json"
-    if nx_json.exists():
-        # Nx projects can be in apps/, libs/, packages/
-        for subdir in ["apps", "libs", "packages", "projects"]:
-            for project_dir in (repo_root / subdir).glob("*"):
-                if (
-                    project_dir.is_dir()
-                    and not _is_prunable_path(project_dir.relative_to(repo_root))
-                    and (
-                        (project_dir / "package.json").exists()
-                        or (project_dir / "project.json").exists()
-                    )
-                ):
-                    workspace_dirs.add(project_dir)
-    # Check for Turborepo
-    turbo_json = repo_root / "turbo.json"
-    if turbo_json.exists():
-        # Turbo uses package.json workspaces, already handled above
-        # But also check common patterns
-        for subdir in ["apps", "packages"]:
-            for project_dir in (repo_root / subdir).glob("*"):
-                if (
-                    project_dir.is_dir()
-                    and not _is_prunable_path(project_dir.relative_to(repo_root))
-                    and (project_dir / "package.json").exists()
-                ):
-                    workspace_dirs.add(project_dir)
-    # Check for Lerna
-    lerna_json = repo_root / "lerna.json"
-    if lerna_json.exists():
-        try:
-            data = json.loads(lerna_json.read_text())
-            for pattern in data.get("packages", ["packages/*"]):
-                for ws_path in repo_root.glob(pattern):
-                    if (
-                        ws_path.is_dir()
-                        and not _is_prunable_path(ws_path.relative_to(repo_root))
-                        and (ws_path / "package.json").exists()
-                    ):
-                        workspace_dirs.add(ws_path)
-        except (OSError, json.JSONDecodeError, KeyError):
-            log.debug("lerna_workspace_parse_failed", exc_info=True)
-    # Check for Rush
-    rush_json = repo_root / "rush.json"
-    if rush_json.exists():
-        try:
-            data = json.loads(rush_json.read_text())
-            for project in data.get("projects", []):
-                project_folder = project.get("projectFolder")
-                if project_folder:
-                    ws_path = repo_root / project_folder
-                    if ws_path.is_dir():
-                        workspace_dirs.add(ws_path)
-        except (OSError, json.JSONDecodeError, KeyError):
-            log.debug("rush_workspace_parse_failed", exc_info=True)
-    # Legacy: Check for packages/* pattern (fallback)
-    for pkg_json in repo_root.glob("packages/*/package.json"):
-        if not _is_prunable_path(pkg_json.parent.relative_to(repo_root)):
-            workspace_dirs.add(pkg_json.parent)
-    # Detect runners in each workspace
-    # Note: workspace_dirs comes from intentional workspace detection (package.json workspaces,
-    # monorepo configs, etc.) so we don't re-filter them. The prunable path check was already
-    # applied during collection where appropriate.
-    for ws_root in workspace_dirs:
-        for pack_class, confidence in runner_registry.detect_all(ws_root):
-            workspaces.append(
-                DetectedWorkspace(
-                    root=ws_root,
-                    pack=pack_class(),
-                    confidence=confidence,
-                )
-            )
-    # Deduplicate by (root, pack_id), keeping highest confidence
-    seen: dict[tuple[Path, str], DetectedWorkspace] = {}
-    for ws in workspaces:
-        key = (ws.root, ws.pack.pack_id)
-        if key not in seen or ws.confidence > seen[key].confidence:
-            seen[key] = ws
-    return list(seen.values())
-
-# TestOps - Main Implementation
-
-def _os_script_path(unix_path: str) -> str:
-    """Convert Unix script path to OS-appropriate form.
-    On Windows, converts ./script to script (relies on .bat/.cmd lookup).
-    On Unix, returns the path unchanged.
-    """
-    if sys.platform == "win32" and unix_path.startswith("./"):
-        base = unix_path[2:]
-        # Simple wrapper script (no subdirs): ./gradlew -> gradlew
-        if "/" not in base:
-            return base
-        # Subdir path: ./vendor/bin/phpunit -> vendor\bin\phpunit
-        return base.replace("/", "\\")
-    return unix_path
-
-def _classify_result_error(
-    result: ParsedTestSuite,
-    output_path: Path,
-    stdout: str,
-    exit_code: int | None,
-) -> None:
-    """Classify error type on a parsed test result based on output and exit code."""
-    if result.errors > 0 and result.total == 0:
-        if not output_path.exists() and not stdout.strip():
-            result.error_type = "output_missing"
-            result.error_detail = "No output file or stdout from test runner"
-        elif result.error_type == "none":
-            result.error_type = "parse_failed"
-            result.error_detail = "Could not parse test output"
-    elif exit_code and exit_code != 0 and result.failed == 0 and result.errors == 0:
-        result.error_type = "command_failed"
-        result.error_detail = f"Command exited with code {exit_code}"
-        result.errors = 1
 
 class TestOps:
     """Test discovery and execution operations.
@@ -402,14 +75,9 @@ class TestOps:
         Index-first approach: Always queries the index. The index waits for
         freshness internally (via coordinator.wait_for_freshness). No filesystem
         fallback - if index isn't ready, we block until it is.
-        Args:
-            paths: Optional list of path prefixes to filter targets
-        Returns:
-            TestResult with discovered targets
         """
         from typing import cast
         from coderecon.testing.models import TargetKind
-        # Query index - coordinator.get_test_targets waits for freshness internally
         indexed_targets = await self._coordinator.get_test_targets()
         all_targets = [
             TestTarget(
@@ -424,14 +92,12 @@ class TestOps:
             )
             for t in indexed_targets
         ]
-        # Filter by paths if specified
         if paths:
             all_targets = [
                 t
                 for t in all_targets
                 if any(t.selector.startswith(p) or p.startswith(t.selector) for p in paths)
             ]
-        # Generate agentic hint if no targets found
         agentic_hint = None
         if not all_targets:
             agentic_hint = await self._generate_agentic_hint()
@@ -442,15 +108,12 @@ class TestOps:
     ) -> TestResult:
         """Fallback filesystem-based discovery."""
         all_targets: list[TestTarget] = []
-        # Use index contexts to find workspaces (leverages already-indexed data)
         workspaces = await self._detect_workspaces_from_index()
-        # If index doesn't have contexts yet, fall back to filesystem detection
         if not workspaces:
             workspaces = detect_workspaces(self._repo_root)
         for ws in workspaces:
             try:
                 targets = await ws.pack.discover(ws.root)
-                # Filter by paths if specified
                 if paths:
                     targets = [
                         t
@@ -460,41 +123,32 @@ class TestOps:
                 all_targets.extend(targets)
             except (OSError, RuntimeError, ValueError):
                 log.debug("pack_discovery_failed", exc_info=True)
-                continue  # skip unavailable test pack
-        # Deduplicate targets
+                continue
         seen: set[str] = set()
         unique_targets: list[TestTarget] = []
         for t in all_targets:
             if t.target_id not in seen:
                 seen.add(t.target_id)
                 unique_targets.append(t)
-        # If no targets found, provide agentic fallback
         agentic_hint = None
         if not unique_targets:
             agentic_hint = await self._generate_agentic_hint()
         return TestResult(action="discover", targets=unique_targets, agentic_hint=agentic_hint)
     async def _detect_workspaces_from_index(self) -> list[DetectedWorkspace]:
-        """Detect workspaces using index contexts.
-        The index already knows about project contexts (Python packages,
-        JS projects, Go modules, etc.) - leverage that instead of re-scanning.
-        """
+        """Detect workspaces using index contexts."""
         workspaces: list[DetectedWorkspace] = []
         try:
             contexts = await self._coordinator.get_contexts()
         except (OSError, RuntimeError, ValueError):
-            # Index not ready, return empty to trigger filesystem fallback
             log.debug("index_context_lookup_failed", exc_info=True)
             return []
-        # Group contexts by root path to find workspaces
         roots_seen: set[str] = set()
         for ctx in contexts:
             root_path = ctx.root_path or ""
             if root_path in roots_seen:
                 continue
             roots_seen.add(root_path)
-            # Resolve workspace path
             ws_root = self._repo_root / root_path if root_path else self._repo_root
-            # Detect runners for this workspace
             for pack_class, confidence in runner_registry.detect_all(ws_root):
                 workspaces.append(
                     DetectedWorkspace(
@@ -503,7 +157,6 @@ class TestOps:
                         confidence=confidence,
                     )
                 )
-        # Deduplicate by (root, pack_id), keeping highest confidence
         seen: dict[tuple[Path, str], DetectedWorkspace] = {}
         for ws in workspaces:
             key = (ws.root, ws.pack.pack_id)
@@ -511,12 +164,9 @@ class TestOps:
                 seen[key] = ws
         return list(seen.values())
     async def _get_targets_by_id(self, target_ids: list[str]) -> list[TestTarget]:
-        """Get test targets by ID from the index.
-        Index-first: waits for index freshness, does not fallback.
-        """
+        """Get test targets by ID from the index."""
         from typing import cast
         from coderecon.testing.models import TargetKind
-        # Query index - coordinator.get_test_targets waits for freshness internally
         indexed_targets = await self._coordinator.get_test_targets(target_ids=target_ids)
         return [
             TestTarget(
@@ -532,15 +182,9 @@ class TestOps:
             for t in indexed_targets
         ]
     async def _get_all_targets_from_index(self) -> list[TestTarget]:
-        """Get ALL test targets from the index.
-        Index-first approach: This always queries the index. If index is not ready,
-        we wait for it (via coordinator.wait_for_freshness). No filesystem fallback.
-        Returns:
-            List of TestTarget objects from the index
-        """
+        """Get ALL test targets from the index."""
         from typing import cast
         from coderecon.testing.models import TargetKind
-        # Query index - coordinator.get_test_targets calls wait_for_freshness internally
         indexed_targets = await self._coordinator.get_test_targets()
         return [
             TestTarget(
@@ -558,7 +202,6 @@ class TestOps:
     async def _generate_agentic_hint(self) -> str:
         """Generate agentic hint for running tests when no targets detected."""
         hints: list[str] = []
-        # Get languages from index
         try:
             file_stats = await self._coordinator.get_file_stats()
             languages = set(file_stats.keys())
@@ -607,39 +250,19 @@ class TestOps:
         coverage: bool = True,
         coverage_dir: str | None = None,
     ) -> TestResult:
-        """Run tests using runner packs.
-        Args:
-            targets: Specific target IDs to run, or None for all
-            target_filter: Substring to filter which TARGETS to run by path.
-                          Fails explicitly if no targets match.
-            test_filter: Filter test NAMES within targets (pytest -k, jest --testNamePattern).
-                        Does NOT reduce which targets are executed.
-            tags: Test tag filters (pytest markers, etc.)
-            failed_only: Only run previously failed tests
-            parallelism: Max concurrent test invocations
-            timeout_sec: Per-target timeout
-            fail_fast: Stop on first failure
-            coverage: Enable coverage collection if supported (default: True)
-            coverage_dir: Directory for coverage artifacts (auto-derived if not provided)
-        """
-        # Validate that targets is not an empty list
+        """Run tests using runner packs."""
         if targets is not None and len(targets) == 0:
             return TestResult(
                 action="run",
-                run_status=TestRunStatus(
-                    run_id="",
-                    status="failed",
-                ),
+                run_status=TestRunStatus(run_id="", status="failed"),
                 agentic_hint="Empty targets list provided. Either omit targets "
                 "to run all tests, or specify at least one target. "
                 "Use verify to find available targets.",
             )
         run_id = str(uuid.uuid4())[:8]
         cancel_event = asyncio.Event()
-        # Create artifact directory
         artifact_dir = self._artifacts_base / run_id
         artifact_dir.mkdir(parents=True, exist_ok=True)
-        # Auto-derive coverage_dir when coverage enabled and not provided
         effective_coverage_dir: Path | None = None
         if coverage:
             if coverage_dir:
@@ -647,20 +270,13 @@ class TestOps:
             else:
                 effective_coverage_dir = artifact_dir / "coverage"
             effective_coverage_dir.mkdir(parents=True, exist_ok=True)
-        progress = TestProgress(
-            targets=TargetProgress(),
-            cases=TestCaseProgress(),
-        )
+        progress = TestProgress(targets=TargetProgress(), cases=TestCaseProgress())
         failures: list[TestFailure] = []
-        # Resolve targets - query index directly when IDs are provided
         agentic_hint_for_empty: str | None = None
         if targets:
-            # Direct index lookup by ID - no filesystem scan
             resolved_targets = await self._get_targets_by_id(targets)
         else:
-            # Get all targets from index
             resolved_targets = await self._get_all_targets_from_index()
-        # Apply target_filter if provided - FAIL if no matches
         if target_filter and resolved_targets:
             before_count = len(resolved_targets)
             resolved_targets = [
@@ -671,44 +287,30 @@ class TestOps:
             if not resolved_targets:
                 return TestResult(
                     action="run",
-                    run_status=TestRunStatus(
-                        run_id=run_id,
-                        status="failed",
-                    ),
+                    run_status=TestRunStatus(run_id=run_id, status="failed"),
                     agentic_hint=f"target_filter='{target_filter}' matched 0 of {before_count} targets. "
                     f"Use verify to see available target paths. "
                     f"To filter test NAMES within targets, use test_filter instead.",
                 )
-        # Check if we have any targets to run
         if not resolved_targets:
             return TestResult(
                 action="run",
                 run_status=TestRunStatus(
-                    run_id=run_id,
-                    status="completed",
-                    progress=progress,
-                    artifact_dir=str(artifact_dir),
+                    run_id=run_id, status="completed",
+                    progress=progress, artifact_dir=str(artifact_dir),
                 ),
                 agentic_hint="No test targets found to run. "
                 + (agentic_hint_for_empty or "Use verify to check available targets."),
             )
         progress.targets.total = len(resolved_targets)
-        # Create task for execution
         task = asyncio.create_task(
             self._execute_tests(
-                run_id=run_id,
-                targets=resolved_targets,
-                progress=progress,
-                failures=failures,
-                cancel_event=cancel_event,
-                artifact_dir=artifact_dir,
-                test_filter=test_filter,
-                tags=tags,
+                run_id=run_id, targets=resolved_targets, progress=progress,
+                failures=failures, cancel_event=cancel_event,
+                artifact_dir=artifact_dir, test_filter=test_filter, tags=tags,
                 parallelism=parallelism or _default_parallelism(),
-                timeout_sec=timeout_sec or 300,
-                fail_fast=fail_fast,
-                coverage=coverage,
-                coverage_dir=effective_coverage_dir,
+                timeout_sec=timeout_sec or 300, fail_fast=fail_fast,
+                coverage=coverage, coverage_dir=effective_coverage_dir,
             )
         )
         start_time = time.time()
@@ -717,684 +319,32 @@ class TestOps:
         except (OSError, RuntimeError, asyncio.CancelledError):
             log.warning("test_execution_failed", exc_info=True)
             run_status = TestRunStatus(
-                run_id=run_id,
-                status="failed",
-                progress=progress,
-                failures=failures,
-                duration_seconds=time.time() - start_time,
+                run_id=run_id, status="failed", progress=progress,
+                failures=failures, duration_seconds=time.time() - start_time,
                 artifact_dir=str(artifact_dir),
             )
         return TestResult(action="run", run_status=run_status)
     async def _execute_tests(
-        self,
-        run_id: str,
-        targets: list[TestTarget],
-        progress: TestProgress,
-        failures: list[TestFailure],
-        cancel_event: asyncio.Event,
-        artifact_dir: Path,
-        test_filter: str | None,
-        tags: list[str] | None,
-        parallelism: int,
-        timeout_sec: int,
-        fail_fast: bool,
-        coverage: bool,
-        coverage_dir: Path | None,
+        self, run_id: str, targets: list[TestTarget],
+        progress: TestProgress, failures: list[TestFailure],
+        cancel_event: asyncio.Event, artifact_dir: Path,
+        test_filter: str | None, tags: list[str] | None,
+        parallelism: int, timeout_sec: int, fail_fast: bool,
+        coverage: bool, coverage_dir: Path | None,
     ) -> TestRunStatus:
         """Execute tests concurrently with semaphore-limited parallelism."""
-        start_time = time.time()
-        diagnostics: list[ExecutionDiagnostic] = []
-        coverage_artifacts: list[CoverageArtifact] = []
-        # Auto-scope coverage: derive source_dirs from import graph
-        source_dirs: list[str] | None = None
-        if coverage and coverage_dir:
-            try:
-                test_files = [t.selector for t in targets]
-                cov_result = await self._coordinator.get_coverage_sources(test_files)
-                if cov_result.source_dirs:
-                    source_dirs = cov_result.source_dirs
-            except (OSError, RuntimeError, ValueError, TypeError):  # noqa: BLE001
-                # Non-fatal: fall back to --cov=. if import graph fails
-                log.debug("testing.coverage_sources.failed", exc_info=True)
-        # Memory budget + history
-        budget = MemoryBudget(reserve_mb=self._memory_reserve_mb)
-        history = MemoryHistory.for_repo(self._workspace_root)
-        # Compute per-process ceiling: explicit config or dynamic
-        ceiling = self._subprocess_memory_limit_mb or budget.ceiling_mb()
-        # Create semaphore for parallelism
-        sem = asyncio.Semaphore(parallelism)
-        async def run_target(
-            target: TestTarget,
-        ) -> tuple[TestTarget, ParsedTestSuite | None, CoverageArtifact | None]:
-            if cancel_event.is_set():
-                return (target, None, None)
-            async with sem:
-                # Memory gate: wait until there's room
-                estimate = history.estimate_mb(target.target_id)
-                needed = estimate if estimate else 0
-                while not cancel_event.is_set():
-                    avail = budget.available_mb()
-                    if needed and avail < needed + self._memory_reserve_mb:
-                        log.debug(
-                            "memory_gate.waiting target=%s available_mb=%d estimated_mb=%d",
-                            target.target_id, avail, needed,
-                        )
-                        await asyncio.sleep(5)
-                        continue
-                    if not budget.can_launch():
-                        log.debug(
-                            "memory_gate.below_reserve target=%s available_mb=%d",
-                            target.target_id, avail,
-                        )
-                        await asyncio.sleep(5)
-                        continue
-                    break
-                if cancel_event.is_set():
-                    return (target, None, None)
-                # Use per-target ceiling from history if known and smaller
-                target_ceiling = ceiling
-                if history.oom_count(target.target_id) >= 2:
-                    # Chronically OOM target — give it full ceiling, run solo-ish
-                    target_ceiling = budget.ceiling_mb()
-                result, cov_artifact, peak_rss = await self._run_single_target(
-                    target=target,
-                    artifact_dir=artifact_dir,
-                    test_filter=test_filter,
-                    tags=tags,
-                    timeout_sec=timeout_sec,
-                    coverage=coverage,
-                    coverage_dir=coverage_dir,
-                    source_dirs=source_dirs,
-                    subprocess_memory_limit_mb=target_ceiling,
-                )
-                # Classify and handle OOM
-                stderr_text = ""
-                exit_code = None
-                if result and result.execution:
-                    stderr_text = result.execution.raw_stderr or ""
-                    exit_code = result.execution.exit_code
-                is_oom = classify_oom(exit_code, stderr_text, peak_rss, target_ceiling)
-                if is_oom:
-                    history.record_oom(target.target_id, peak_rss)
-                    log.warning(
-                        "test_target.oom target=%s peak_rss_mb=%d ceiling_mb=%d",
-                        target.target_id, peak_rss, target_ceiling,
-                    )
-                    # Retry solo with full available ceiling
-                    retry_ceiling = budget.ceiling_mb()
-                    log.info(
-                        "test_target.oom_retry target=%s retry_ceiling_mb=%d",
-                        target.target_id, retry_ceiling,
-                    )
-                    result, cov_artifact, peak_rss = await self._run_single_target(
-                        target=target,
-                        artifact_dir=artifact_dir,
-                        test_filter=test_filter,
-                        tags=tags,
-                        timeout_sec=timeout_sec,
-                        coverage=coverage,
-                        coverage_dir=coverage_dir,
-                        source_dirs=source_dirs,
-                        subprocess_memory_limit_mb=retry_ceiling,
-                    )
-                    # Check retry result
-                    retry_stderr = ""
-                    retry_exit = None
-                    if result and result.execution:
-                        retry_stderr = result.execution.raw_stderr or ""
-                        retry_exit = result.execution.exit_code
-                    if classify_oom(retry_exit, retry_stderr, peak_rss, retry_ceiling):
-                        history.record_oom(target.target_id, peak_rss)
-                        log.warning(
-                            "test_target.oom_retry_failed target=%s peak_rss_mb=%d",
-                            target.target_id, peak_rss,
-                        )
-                    else:
-                        history.record(target.target_id, peak_rss)
-                else:
-                    # Normal completion — record RSS for future scheduling
-                    if peak_rss > 0:
-                        history.record(target.target_id, peak_rss)
-                return (target, result, cov_artifact)
-        # Run ALL targets concurrently (semaphore limits parallelism)
-        all_tasks = [asyncio.create_task(run_target(t)) for t in targets]
-        # Properly drain all coroutines from as_completed to avoid "coroutine never awaited"
-        for coro in asyncio.as_completed(all_tasks):
-            if cancel_event.is_set() or (fail_fast and progress.cases.failed > 0):
-                # Cancel remaining tasks and await them to avoid leaked coroutines
-                for t in all_tasks:
-                    t.cancel()
-                # Drain remaining coroutines from the iterator
-                # Each coroutine from as_completed must be awaited even after cancellation
-                with contextlib.suppress(asyncio.CancelledError):
-                    await coro  # Await current one
-                # Continue to drain remaining
-                continue
-            try:
-                target, result, cov_artifact = await coro
-            except asyncio.CancelledError:
-                # Task was cancelled, skip processing
-                structlog.get_logger().debug("test_task_cancelled", exc_info=True)
-                continue
-            if cov_artifact:
-                coverage_artifacts.append(cov_artifact)
-            if result:
-                progress.targets.completed += 1
-                progress.cases.passed += result.passed
-                progress.cases.failed += result.failed
-                progress.cases.skipped += result.skipped
-                progress.cases.errors += result.errors
-                progress.cases.total += result.total
-                if result.failed > 0 or result.errors > 0:
-                    progress.targets.failed += 1
-                # Collect execution-level diagnostics (non-test errors)
-                if result.error_type != "none":
-                    # Truncate raw_stderr to ~2000 chars to avoid bloat
-                    truncated_stderr = None
-                    if result.execution and result.execution.raw_stderr:
-                        stderr_text = result.execution.raw_stderr
-                        if len(stderr_text) > _STDERR_TRUNCATION_CHARS:
-                            truncated_stderr = stderr_text[:_STDERR_TRUNCATION_CHARS] + "\n... (truncated)"
-                        else:
-                            truncated_stderr = stderr_text
-                    diagnostics.append(
-                        ExecutionDiagnostic(
-                            target_id=target.target_id,
-                            error_type=result.error_type,
-                            error_detail=result.error_detail,
-                            suggested_action=result.suggested_action,
-                            command=result.execution.command if result.execution else None,
-                            working_directory=(
-                                result.execution.working_directory if result.execution else None
-                            ),
-                            exit_code=result.execution.exit_code if result.execution else None,
-                            raw_stderr=truncated_stderr,
-                            parsed_test_count=result.parsed_test_count,
-                        )
-                    )
-                for test in result.tests:
-                    if test.status in ("failed", "error"):
-                        failures.append(
-                            TestFailure(
-                                name=test.name,
-                                path=test.file_path or test.classname or "",
-                                line=test.line_number,
-                                message=test.message or "Test failed",
-                                traceback=test.traceback,
-                                classname=test.classname,
-                                duration_seconds=test.duration_seconds,
-                            )
-                        )
-        duration = time.time() - start_time
-        status: Literal["running", "completed", "cancelled", "failed"] = (
-            "cancelled" if cancel_event.is_set() else "completed"
+        return await _execute_tests_impl(
+            coordinator=self._coordinator,
+            workspace_root=self._workspace_root,
+            memory_reserve_mb=self._memory_reserve_mb,
+            subprocess_memory_limit_mb=self._subprocess_memory_limit_mb,
+            persist_callback=self._persist_result,
+            run_id=run_id, targets=targets, progress=progress,
+            failures=failures, cancel_event=cancel_event,
+            artifact_dir=artifact_dir, test_filter=test_filter, tags=tags,
+            parallelism=parallelism, timeout_sec=timeout_sec,
+            fail_fast=fail_fast, coverage=coverage, coverage_dir=coverage_dir,
         )
-        # Convert coverage artifacts to serializable dicts
-        coverage_dicts = [
-            {"format": c.format, "path": str(c.path), "pack_id": c.pack_id}
-            for c in coverage_artifacts
-        ]
-        final_status = TestRunStatus(
-            run_id=run_id,
-            status=status,
-            progress=progress,
-            failures=failures,
-            diagnostics=diagnostics,
-            duration_seconds=duration,
-            artifact_dir=str(artifact_dir),
-            coverage=coverage_dicts,
-            target_selectors=[t.selector for t in targets],
-        )
-        # Persist result to artifacts for later retrieval
-        self._persist_result(artifact_dir, final_status)
-        return final_status
-    async def _get_execution_context(
-        self,
-        target: TestTarget,
-    ) -> RuntimeExecutionContext | None:
-        """Get pre-indexed execution context for a test target.
-        Index-first approach: Runtime is captured at discovery time and stored
-        in ContextRuntime table. This provides O(1) lookup instead of re-detecting
-        venvs/runtimes for every test execution.
-        Falls back to PATH-based resolution only if index lookup fails.
-        Returns None if resolution fails, allowing graceful fallback to
-        PATH-based execution.
-        """
-        try:
-            workspace_root = Path(target.workspace_root)
-            # Query indexed runtime (captured at discovery time)
-            indexed_runtime = await self._coordinator.get_context_runtime(str(workspace_root))
-            if indexed_runtime:
-                # Build execution context from indexed runtime
-                exec_ctx = ExecutionContextBuilder.build(
-                    context_root=workspace_root,
-                    runtime=indexed_runtime,
-                )
-                return exec_ctx
-            # Index lookup failed - fall back to PATH-based execution
-            # This should rarely happen if indexing is working correctly
-            return None
-        except (OSError, RuntimeError, ValueError):
-            log.debug("runtime_resolution_failed", exc_info=True)
-            return None
-    async def _run_single_target(
-        self,
-        target: TestTarget,
-        artifact_dir: Path,
-        test_filter: str | None,
-        tags: list[str] | None,
-        timeout_sec: int,
-        coverage: bool,
-        coverage_dir: Path | None,
-        source_dirs: list[str] | None = None,
-        subprocess_memory_limit_mb: int | None = None,
-    ) -> tuple[ParsedTestSuite, CoverageArtifact | None, int]:
-        """Run a single test target using its runner pack.
-        Uses SafeExecutionContext to protect against misconfigurations in
-        target repositories (coverage DB corruption, hanging tests, etc.).
-        Args:
-            target: Test target to run
-            artifact_dir: Directory for output files
-            test_filter: Filter test names within target (pytest -k, jest --testNamePattern)
-            tags: Test tags/markers filter
-            timeout_sec: Timeout for the test run
-            coverage: Whether to collect coverage
-            coverage_dir: Directory for coverage artifacts (required when coverage=True)
-            source_dirs: Optional source directories for targeted coverage scoping.
-            subprocess_memory_limit_mb: Per-subprocess memory ceiling for env injection.
-        Returns:
-            Tuple of (test results, coverage artifact if collected, peak RSS in MB)
-        """
-        pack_class = runner_registry.get(target.runner_pack_id)
-        if not pack_class:
-            return (
-                ParsedTestSuite(
-                    name=target.selector,
-                    errors=1,
-                    error_type="unknown",
-                    error_detail=f"Runner pack not found: {target.runner_pack_id}",
-                    suggested_action="Check that the runner pack is registered",
-                    target_selector=target.selector,
-                    workspace_root=target.workspace_root,
-                ),
-                None,
-                0,
-            )
-        pack = pack_class()
-        # Get pre-indexed execution context (runtime captured at discovery time)
-        exec_ctx = await self._get_execution_context(target)
-        # Create output file path
-        safe_name = target.target_id.replace("/", "_").replace(":", "_")
-        output_path = artifact_dir / f"{safe_name}.xml"
-        # Build command with execution context (uses correct Python/Node/etc. if available)
-        cmd = pack.build_command(
-            target,
-            output_path=output_path,
-            pattern=test_filter,
-            tags=tags,
-            exec_ctx=exec_ctx,
-        )
-        if not cmd:
-            return (
-                ParsedTestSuite(
-                    name=target.selector,
-                    errors=1,
-                    error_type="unknown",
-                    error_detail="Runner pack returned empty command",
-                    suggested_action="Check target configuration",
-                    target_selector=target.selector,
-                    workspace_root=target.workspace_root,
-                ),
-                None,
-                0,
-            )
-        # Handle coverage - use pre-indexed capability instead of detecting at runtime
-        cov_artifact: CoverageArtifact | None = None
-        emitter = get_emitter(target.runner_pack_id) if coverage else None
-        coverage_available = False
-        if emitter:
-            # Get pre-indexed coverage tools from index (O(1) lookup)
-            coverage_tools = await self._coordinator.get_coverage_capability(
-                target.workspace_root, target.runner_pack_id
-            )
-            runtime = PackRuntime(
-                workspace_root=Path(target.workspace_root),
-                runner_available=True,
-                coverage_tools=coverage_tools,
-            )
-            capability = emitter.capability(runtime)
-            coverage_available = capability == CoverageCapability.AVAILABLE
-        # Create safe execution context to protect against repo misconfigurations
-        # strip_coverage_flags=True removes existing coverage flags from the command
-        # BEFORE we add our own (so project configs don't interfere)
-        safe_ctx = SafeExecutionContext(
-            SafeExecutionConfig(
-                artifact_dir=artifact_dir,
-                workspace_root=Path(target.workspace_root),
-                timeout_sec=timeout_sec,
-                strip_coverage_flags=coverage_available,
-                subprocess_memory_limit_mb=subprocess_memory_limit_mb,
-            )
-        )
-        # Sanitize command FIRST (removes dangerous flags including existing coverage flags)
-        cmd = safe_ctx.sanitize_command(cmd, target.runner_pack_id)
-        # NOW add our coverage flags after sanitization
-        if coverage_available and emitter and coverage_dir:
-            cmd = emitter.modify_command(cmd, coverage_dir, source_dirs=source_dirs)
-            cov_artifact = CoverageArtifact(
-                format=emitter.format_id,
-                path=emitter.artifact_path(coverage_dir),
-                pack_id=target.runner_pack_id,
-                invocation_id=target.target_id,
-            )
-        # Prepare safe environment (overrides project configs to prevent corruption)
-        safe_env = safe_ctx.prepare_environment(target.runner_pack_id)
-        # Merge execution context environment overrides (from runtime resolution)
-        # This includes venv PATH adjustments and any tool-specific env vars
-        if exec_ctx:
-            runtime_env = exec_ctx.build_env()
-            safe_env.update(runtime_env)
-        # Verify executable exists (use safe_env PATH which includes venv bin)
-        executable = cmd[0]
-        resolved_executable = shutil.which(executable, path=safe_env.get("PATH"))
-        if not resolved_executable:
-            safe_ctx.cleanup()
-            return (
-                ParsedTestSuite(
-                    name=target.selector,
-                    errors=1,
-                    error_type="command_not_found",
-                    error_detail=f"Executable not found: {executable}",
-                    suggested_action=f"Install {executable} or activate the correct environment",
-                    execution=ExecutionContext(
-                        command=cmd,
-                        working_directory=str(pack.get_cwd(target)),
-                    ),
-                    target_selector=target.selector,
-                    workspace_root=target.workspace_root,
-                ),
-                None,
-                0,
-            )
-        cwd = pack.get_cwd(target)
-        stdout = ""
-        stderr = ""
-        exit_code: int | None = None
-        peak_rss_mb = 0
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=cwd,
-                env=safe_env,  # Use safe environment with defensive overrides
-            )
-            # Poll child RSS while waiting for completion
-            async def _poll_rss() -> int:
-                peak = 0
-                pid = proc.pid
-                while proc.returncode is None:
-                    rss = child_rss_mb(pid) if pid else 0
-                    if rss > peak:
-                        peak = rss
-                    await asyncio.sleep(2)
-                # One final sample after exit
-                rss = child_rss_mb(pid) if pid else 0
-                if rss > peak:
-                    peak = rss
-                return peak
-            rss_task = asyncio.create_task(_poll_rss())
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout_sec
-            )
-            stdout = stdout_bytes.decode(errors="replace")
-            stderr = stderr_bytes.decode(errors="replace")
-            exit_code = proc.returncode
-            # Collect peak RSS (poll task should be done since process exited)
-            peak_rss_mb = await rss_task
-            # Write artifacts
-            stdout_path = artifact_dir / f"{safe_name}.stdout.txt"
-            atomic_write_text(stdout_path, stdout)
-            if stderr:
-                stderr_path = artifact_dir / f"{safe_name}.stderr.txt"
-                atomic_write_text(stderr_path, stderr)
-            # Create execution context
-            execution = ExecutionContext(
-                command=cmd,
-                working_directory=str(cwd),
-                exit_code=exit_code,
-                raw_stdout=stdout,
-                raw_stderr=stderr if stderr else None,
-            )
-            # Parse output
-            result = pack.parse_output(output_path, stdout)
-            result.target_selector = target.selector
-            result.workspace_root = target.workspace_root
-            result.execution = execution
-            # Set parsed_test_count as an observable fact
-            # - int >= 0: Successfully parsed this many test cases
-            # - None: Could not parse output
-            if result.tests is not None:
-                result.parsed_test_count = len(result.tests)
-            else:
-                result.parsed_test_count = None
-            _classify_result_error(result, output_path, stdout, exit_code)
-            return (result, cov_artifact, peak_rss_mb)
-        except TimeoutError:
-            safe_ctx.cleanup()
-            return (
-                ParsedTestSuite(
-                    name=target.selector,
-                    errors=1,
-                    error_type="timeout",
-                    error_detail=f"Command timed out after {timeout_sec} seconds",
-                    suggested_action="Increase timeout or run fewer tests",
-                    execution=ExecutionContext(
-                        command=cmd,
-                        working_directory=str(cwd),
-                        raw_stdout=stdout if stdout else None,
-                        raw_stderr=stderr if stderr else None,
-                    ),
-                    target_selector=target.selector,
-                    workspace_root=target.workspace_root,
-                ),
-                None,
-                peak_rss_mb,
-            )
-        except OSError as e:
-            safe_ctx.cleanup()
-            return (
-                ParsedTestSuite(
-                    name=target.selector,
-                    errors=1,
-                    error_type="command_failed",
-                    error_detail=f"OS error executing command: {e}",
-                    suggested_action="Check that the command and working directory are valid",
-                    execution=ExecutionContext(
-                        command=cmd,
-                        working_directory=str(cwd),
-                    ),
-                    target_selector=target.selector,
-                    workspace_root=target.workspace_root,
-                ),
-                None,
-                peak_rss_mb,
-            )
-        finally:
-            # Always cleanup safe execution context
-            safe_ctx.cleanup()
-    async def _run_batch_targets(
-        self,
-        targets: list[TestTarget],
-        artifact_dir: Path,
-        test_filter: str | None,
-        tags: list[str] | None,
-        timeout_sec: int,
-        coverage_dir: Path | None = None,
-    ) -> tuple[ParsedTestSuite, CoverageArtifact | None]:
-        """Run multiple targets in a single subprocess invocation.
-        All targets must share the same ``runner_pack_id`` and
-        ``workspace_root``.  The runner pack's ``build_batch_command``
-        method produces a single command that exercises every target.
-        Returns (ParsedTestSuite, CoverageArtifact | None).
-        """
-        if not targets:
-            return ParsedTestSuite(name="batch-empty", total=0), None
-        first = targets[0]
-        pack_class = runner_registry.get(first.runner_pack_id)
-        if not pack_class:
-            return ParsedTestSuite(
-                name="batch",
-                errors=len(targets),
-                error_type="unknown",
-                error_detail=f"Runner pack not found: {first.runner_pack_id}",
-            ), None
-        pack = pack_class()
-        exec_ctx = await self._get_execution_context(first)
-        # Deterministic batch name for artifact files
-        batch_name = "batch_" + "_".join(
-            t.target_id.replace("/", "_").replace(":", "_") for t in targets[:5]
-        )
-        if len(targets) > 5:
-            batch_name += f"_plus{len(targets) - 5}"
-        output_path = artifact_dir / f"{batch_name}.xml"
-        cmd = pack.build_batch_command(
-            targets,
-            output_path=output_path,
-            pattern=test_filter,
-            tags=tags,
-            exec_ctx=exec_ctx,
-        )
-        if not cmd:
-            # Fallback: pack doesn't support batching
-            return ParsedTestSuite(
-                name="batch",
-                errors=len(targets),
-                error_type="unknown",
-                error_detail="Runner pack does not support batch execution",
-            ), None
-        # Coverage handling - always enabled when supported
-        cov_artifact: CoverageArtifact | None = None
-        emitter = get_emitter(first.runner_pack_id) if coverage_dir else None
-        coverage_available = False
-        if emitter:
-            coverage_tools = await self._coordinator.get_coverage_capability(
-                first.workspace_root, first.runner_pack_id
-            )
-            runtime = PackRuntime(
-                workspace_root=Path(first.workspace_root),
-                runner_available=True,
-                coverage_tools=coverage_tools,
-            )
-            capability = emitter.capability(runtime)
-            coverage_available = capability == CoverageCapability.AVAILABLE
-        safe_ctx = SafeExecutionContext(
-            SafeExecutionConfig(
-                artifact_dir=artifact_dir,
-                workspace_root=Path(first.workspace_root),
-                timeout_sec=timeout_sec,
-                strip_coverage_flags=coverage_available,
-            )
-        )
-        cmd = safe_ctx.sanitize_command(cmd, first.runner_pack_id)
-        # Add coverage flags after sanitization
-        if coverage_available and emitter and coverage_dir:
-            cmd = emitter.modify_command(cmd, coverage_dir, source_dirs=None)
-            cov_artifact = CoverageArtifact(
-                format=emitter.format_id,
-                path=emitter.artifact_path(coverage_dir),
-                pack_id=first.runner_pack_id,
-                invocation_id=f"batch_{len(targets)}",
-            )
-        safe_env = safe_ctx.prepare_environment(first.runner_pack_id)
-        if exec_ctx:
-            runtime_env = exec_ctx.build_env()
-            safe_env.update(runtime_env)
-        executable = cmd[0]
-        resolved_executable = shutil.which(executable, path=safe_env.get("PATH"))
-        if not resolved_executable:
-            safe_ctx.cleanup()
-            selectors = ", ".join(t.selector for t in targets)
-            return ParsedTestSuite(
-                name="batch",
-                errors=len(targets),
-                error_type="command_not_found",
-                error_detail=f"Executable not found: {executable}",
-                suggested_action=f"Install {executable} or activate the correct environment",
-                execution=ExecutionContext(command=cmd),
-                target_selector=selectors,
-                workspace_root=first.workspace_root,
-            ), None
-        cwd = pack.get_cwd(first)
-        stdout = ""
-        stderr = ""
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=cwd,
-                env=safe_env,
-            )
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout_sec
-            )
-            stdout = stdout_bytes.decode(errors="replace")
-            stderr = stderr_bytes.decode(errors="replace")
-            exit_code = proc.returncode
-            # Write artifacts
-            stdout_path = artifact_dir / f"{batch_name}.stdout.txt"
-            atomic_write_text(stdout_path, stdout)
-            if stderr:
-                stderr_path = artifact_dir / f"{batch_name}.stderr.txt"
-                atomic_write_text(stderr_path, stderr)
-            execution = ExecutionContext(
-                command=cmd,
-                working_directory=str(cwd),
-                exit_code=exit_code,
-                raw_stdout=stdout,
-                raw_stderr=stderr if stderr else None,
-            )
-            result = pack.parse_output(output_path, stdout)
-            selectors = ", ".join(t.selector for t in targets)
-            result.target_selector = selectors
-            result.workspace_root = first.workspace_root
-            result.execution = execution
-            if result.tests is not None:
-                result.parsed_test_count = len(result.tests)
-            _classify_result_error(result, output_path, stdout, exit_code)
-            return result, cov_artifact
-        except TimeoutError:
-            safe_ctx.cleanup()
-            selectors = ", ".join(t.selector for t in targets)
-            return ParsedTestSuite(
-                name="batch",
-                errors=len(targets),
-                error_type="timeout",
-                error_detail=f"Batch command timed out after {timeout_sec} seconds",
-                execution=ExecutionContext(
-                    command=cmd,
-                    working_directory=str(cwd),
-                    raw_stdout=stdout if stdout else None,
-                    raw_stderr=stderr if stderr else None,
-                ),
-                target_selector=selectors,
-                workspace_root=first.workspace_root,
-            ), None
-        except OSError as e:
-            safe_ctx.cleanup()
-            selectors = ", ".join(t.selector for t in targets)
-            return ParsedTestSuite(
-                name="batch",
-                errors=len(targets),
-                error_type="command_failed",
-                error_detail=f"OS error executing batch command: {e}",
-                execution=ExecutionContext(command=cmd, working_directory=str(cwd)),
-                target_selector=selectors,
-                workspace_root=first.workspace_root,
-            ), None
-        finally:
-            safe_ctx.cleanup()
     def _persist_result(self, artifact_dir: Path, status: TestRunStatus) -> None:
         """Persist test run result to artifact directory."""
         result_path = artifact_dir / "result.json"
@@ -1422,11 +372,8 @@ class TestOps:
             else None,
             "failures": [
                 {
-                    "name": f.name,
-                    "path": f.path,
-                    "line": f.line,
-                    "message": f.message,
-                    "traceback": f.traceback,
+                    "name": f.name, "path": f.path, "line": f.line,
+                    "message": f.message, "traceback": f.traceback,
                     "classname": f.classname,
                     "duration_seconds": f.duration_seconds,
                 }
@@ -1434,14 +381,12 @@ class TestOps:
             ],
             "diagnostics": [
                 {
-                    "target_id": d.target_id,
-                    "error_type": d.error_type,
+                    "target_id": d.target_id, "error_type": d.error_type,
                     "error_detail": d.error_detail,
                     "suggested_action": d.suggested_action,
                     "command": d.command,
                     "working_directory": d.working_directory,
-                    "exit_code": d.exit_code,
-                    "raw_stderr": d.raw_stderr,
+                    "exit_code": d.exit_code, "raw_stderr": d.raw_stderr,
                     "parsed_test_count": d.parsed_test_count,
                 }
                 for d in (status.diagnostics or [])
@@ -1477,11 +422,8 @@ class TestOps:
                 )
             failures = [
                 TestFailure(
-                    name=f["name"],
-                    path=f["path"],
-                    line=f.get("line"),
-                    message=f["message"],
-                    traceback=f.get("traceback"),
+                    name=f["name"], path=f["path"], line=f.get("line"),
+                    message=f["message"], traceback=f.get("traceback"),
                     classname=f.get("classname"),
                     duration_seconds=f.get("duration_seconds"),
                 )
@@ -1489,8 +431,7 @@ class TestOps:
             ]
             diagnostics = [
                 ExecutionDiagnostic(
-                    target_id=d["target_id"],
-                    error_type=d["error_type"],
+                    target_id=d["target_id"], error_type=d["error_type"],
                     error_detail=d.get("error_detail"),
                     suggested_action=d.get("suggested_action"),
                     command=d.get("command"),
@@ -1502,10 +443,8 @@ class TestOps:
                 for d in data.get("diagnostics", [])
             ]
             return TestRunStatus(
-                run_id=data["run_id"],
-                status=data["status"],
-                progress=progress,
-                failures=failures,
+                run_id=data["run_id"], status=data["status"],
+                progress=progress, failures=failures,
                 diagnostics=diagnostics,
                 duration_seconds=data.get("duration_seconds"),
                 artifact_dir=data.get("artifact_dir"),
