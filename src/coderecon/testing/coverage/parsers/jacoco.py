@@ -28,9 +28,9 @@ Structure:
 
 from __future__ import annotations
 
-import defusedxml.ElementTree as ET
 from pathlib import Path
 
+import defusedxml.ElementTree as ET
 import structlog
 
 from coderecon.testing.coverage.models import (
@@ -40,6 +40,7 @@ from coderecon.testing.coverage.models import (
     FileCoverage,
     FunctionCoverage,
 )
+
 
 class JacocoParser:
     """Parser for JaCoCo XML format with intelligent fallback."""

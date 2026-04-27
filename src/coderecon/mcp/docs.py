@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+
 class ToolCategory(StrEnum):
     """Categories for grouping tools."""
 

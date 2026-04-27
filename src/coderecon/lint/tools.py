@@ -6,7 +6,9 @@ import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+
 from coderecon.lint.models import ParseResult, ToolCategory
+
 
 @dataclass
 class LintTool:

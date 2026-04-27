@@ -34,9 +34,9 @@ from __future__ import annotations
 
 import contextlib
 import re
-import defusedxml.ElementTree as ET
 from pathlib import Path
 
+import defusedxml.ElementTree as ET
 import structlog
 
 from coderecon.testing.coverage.models import (
@@ -46,6 +46,7 @@ from coderecon.testing.coverage.models import (
     FileCoverage,
     FunctionCoverage,
 )
+
 
 class CoberturaParser:
     """Parser for Cobertura XML format."""

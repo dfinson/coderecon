@@ -183,9 +183,7 @@ def init_telemetry(config: TelemetryConfig | None = None) -> bool:
 def _get_version() -> str:
     """Get CodeRecon version for resource attributes."""
     try:
-        from importlib.metadata import version
-
-        from importlib.metadata import PackageNotFoundError
+        from importlib.metadata import PackageNotFoundError, version
 
         return version("coderecon")
     except (PackageNotFoundError, ImportError):
@@ -242,11 +240,20 @@ def shutdown_telemetry() -> None:
 
 from coderecon.core._noop_telemetry import (
     NoOpMeter as _NoOpMeter,
+)
+from coderecon.core._noop_telemetry import (
     NoOpSpan as _NoOpSpan,
+)
+from coderecon.core._noop_telemetry import (
     NoOpTracer as _NoOpTracer,
+)
+from coderecon.core._noop_telemetry import (
     noop_meter as _noop_meter,
+)
+from coderecon.core._noop_telemetry import (
     noop_tracer as _noop_tracer,
 )
+
 
 def get_tracer() -> _NoOpTracer:
     """Get the global tracer instance.

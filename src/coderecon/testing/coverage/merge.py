@@ -22,6 +22,7 @@ from coderecon.testing.coverage.models import (
     FunctionCoverage,
 )
 
+
 def merge_file_coverage(files: Iterable[FileCoverage]) -> FileCoverage:
     """Merge multiple FileCoverage objects for the same file.
 

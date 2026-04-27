@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import structlog
 from typing import TYPE_CHECKING, Any
 
+import structlog
 import tree_sitter
 from tree_sitter import Query as _TSQuery
 from tree_sitter import QueryCursor as _TSQueryCursor
@@ -14,7 +14,9 @@ if TYPE_CHECKING:
 
 from coderecon.index._internal.parsing.packs import LanguagePack
 from coderecon.index._internal.parsing.treesitter_models import (
-    DynamicAccess, SyntacticImport, _import_uid,
+    DynamicAccess,
+    SyntacticImport,
+    _import_uid,
 )
 
 log = structlog.get_logger(__name__)

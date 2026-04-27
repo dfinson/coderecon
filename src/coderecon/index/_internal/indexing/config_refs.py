@@ -16,9 +16,10 @@ No heuristics - every edge is backed by a verified file existence check.
 from __future__ import annotations
 
 import hashlib
-import structlog
 import re
 from pathlib import Path
+
+import structlog
 
 from coderecon.index._internal.db import Database
 

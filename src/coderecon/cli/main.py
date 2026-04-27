@@ -20,6 +20,7 @@ from coderecon.cli.status import status_command
 from coderecon.cli.up import up_command
 from coderecon.core.logging import configure_logging
 
+
 @click.group()
 @click.version_option(version="0.1.0", prog_name="recon")
 @click.option("-v", "--verbose", is_flag=True, help="Enable debug logging")

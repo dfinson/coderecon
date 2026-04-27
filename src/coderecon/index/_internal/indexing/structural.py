@@ -3,32 +3,49 @@
 from __future__ import annotations
 
 import os
-import structlog
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import structlog
 
 if TYPE_CHECKING:
     from coderecon.index._internal.db import Database
     from coderecon.index._internal.db.database import BulkWriter
 
 from coderecon.config.constants import MS_PER_SEC
-from coderecon.index._internal.indexing.structural_helpers import (
-    BatchResult, ExtractionResult, _apply_worktree_uid_remap,
-)
 from coderecon.index._internal.indexing.structural_extract import (
     _extract_file,
 )
+from coderecon.index._internal.indexing.structural_helpers import (
+    BatchResult,
+    ExtractionResult,
+    _apply_worktree_uid_remap,
+)
 from coderecon.index._internal.indexing.structural_resolve import (
-    _augment_declared_modules, _resolve_import_paths, _resolve_xref_target,
+    _augment_declared_modules,
+    _resolve_import_paths,
+    _resolve_xref_target,
+)
+from coderecon.index._internal.indexing.structural_resolve import (
     resolve_all_imports as _resolve_all_imports_impl,
 )
 from coderecon.index.models import (
-    DefFact, DocCrossRef, DynamicAccessSite,
-    EndpointFact, File, ImportFact, InterfaceImplFact, LocalBindFact,
-    MemberAccessFact, ReceiverShapeFact, RefFact, ScopeFact,
-    TypeAnnotationFact, TypeMemberFact,
+    DefFact,
+    DocCrossRef,
+    DynamicAccessSite,
+    EndpointFact,
+    File,
+    ImportFact,
+    InterfaceImplFact,
+    LocalBindFact,
+    MemberAccessFact,
+    ReceiverShapeFact,
+    RefFact,
+    ScopeFact,
+    TypeAnnotationFact,
+    TypeMemberFact,
 )
 
 log = structlog.get_logger(__name__)

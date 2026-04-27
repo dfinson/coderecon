@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import shutil
-import structlog
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import structlog
 
 from coderecon.files.ops import atomic_write_text
 from coderecon.testing.emitters import (

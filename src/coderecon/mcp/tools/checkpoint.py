@@ -12,6 +12,7 @@ from pydantic import Field
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
+
     from coderecon.mcp.context import AppContext
 
 from fastmcp import Context

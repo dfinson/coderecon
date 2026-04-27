@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from coderecon.index._internal.parsing.packs_base import (
+    _CSHARP_SCOPES,
+    _JAVA_SCOPES,
+    _KOTLIN_SCOPES,
     ImportQueryConfig,
     LanguagePack,
     SymbolPattern,
     SymbolQueryConfig,
     TypeExtractionConfig,
-    _CSHARP_SCOPES,
-    _JAVA_SCOPES,
-    _KOTLIN_SCOPES,
 )
 
 __all__ = [

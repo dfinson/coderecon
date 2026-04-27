@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 from coderecon.index._internal.parsing.packs_base import (
+    _ELIXIR_SCOPES,
+    _HASKELL_SCOPES,
+    _OCAML_SCOPES,
+    _SCALA_SCOPES,
     ImportQueryConfig,
     LanguagePack,
     SymbolPattern,
     SymbolQueryConfig,
     TypeExtractionConfig,
-    _ELIXIR_SCOPES,
-    _HASKELL_SCOPES,
-    _OCAML_SCOPES,
-    _SCALA_SCOPES,
 )
 
 __all__ = [

@@ -18,6 +18,7 @@ import structlog
 from coderecon.core.errors import PathTraversalError
 from coderecon.core.languages import EXTENSION_TO_NAME
 
+
 @dataclass
 class FileResult:
     """Result for a single file read."""

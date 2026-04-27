@@ -7,6 +7,7 @@ from typing import Protocol
 
 from coderecon.testing.coverage.models import CoverageReport
 
+
 class CoverageParser(Protocol):
     """Protocol for coverage format parsers.
 

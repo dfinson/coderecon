@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from importlib.util import find_spec
 from pathlib import Path
-from collections.abc import Callable
 
 import structlog
 

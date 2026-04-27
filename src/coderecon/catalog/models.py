@@ -9,6 +9,7 @@ import time
 
 from sqlmodel import Field, SQLModel
 
+
 class RepoEntry(SQLModel, table=True):
     """A registered git repository."""
 

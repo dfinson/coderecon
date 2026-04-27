@@ -7,6 +7,7 @@ import re
 from coderecon.lint.models import Diagnostic, ParseResult, Severity
 from coderecon.lint.parsers import _severity_from_str
 
+
 def parse_go_vet(stdout: str, stderr: str) -> ParseResult:
     """Parse go vet output."""
     diagnostics: list[Diagnostic] = []

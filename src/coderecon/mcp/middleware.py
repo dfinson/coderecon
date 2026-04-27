@@ -15,18 +15,18 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 from fastmcp.server.middleware import Middleware, MiddlewareContext
-
 from fastmcp.tools.tool import ToolResult
 from pydantic import ValidationError
 
+from coderecon.config.constants import MS_PER_SEC
 from coderecon.core.errors import PathTraversalError
 from coderecon.mcp.errors import MCPError, MCPErrorCode
-from coderecon.config.constants import MS_PER_SEC
 
 if TYPE_CHECKING:
     from fastmcp.server.middleware import CallNext
     from mcp import types as mt
     from rich.console import Console
+
     from coderecon.mcp.session import SessionManager
 
 log = structlog.get_logger(__name__)

@@ -9,9 +9,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from coderecon.mcp.tools.recon.recon_constants import (
+    _STOP_WORDS,  # noqa: F401  # re-exported for parsing.py
     ArtifactKind,
     TaskIntent,
-    _STOP_WORDS,  # noqa: F401  # re-exported for parsing.py
     _classify_artifact,  # noqa: F401  # re-exported for merge.py, tests
     _extract_intent,  # noqa: F401  # re-exported for parsing.py, tests
     _is_barrel_file,  # noqa: F401  # re-exported for merge.py, tests

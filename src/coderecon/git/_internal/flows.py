@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from coderecon.git._internal.access import GitSignature, RepoAccess
 
+
 @dataclass(frozen=True, slots=True)
 class ConflictCheckResult:
     """Result of an operation that may produce conflicts."""

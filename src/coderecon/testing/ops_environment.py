@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import os
 import shutil
-import structlog
 from pathlib import Path
+
+import structlog
 
 from coderecon.testing.runtime import RuntimeExecutionContext
 

@@ -15,6 +15,7 @@ from pathlib import Path
 
 import structlog
 from sqlalchemy import Engine, text
+
 from coderecon.config.constants import MS_PER_SEC
 
 log = structlog.get_logger(__name__)

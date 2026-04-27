@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+
 @dataclass
 class ImpactMatch:
     """A single test file matched by the import graph."""

@@ -12,13 +12,14 @@ Chunking strategy:
 
 from __future__ import annotations
 
-import structlog
 import re
 import time
 from typing import TYPE_CHECKING
 
+import structlog
 from sqlmodel import col, select
 
+from coderecon.config.constants import DB_FLUSH_BATCH_SIZE
 from coderecon.index._internal.indexing.splade import (
     MODEL_VERSION,
     _get_encoder,
@@ -27,7 +28,6 @@ from coderecon.index._internal.indexing.splade import (
     load_all_vectors_fast,
     sparse_dot,
 )
-from coderecon.config.constants import DB_FLUSH_BATCH_SIZE
 from coderecon.index.models import (
     DocCodeEdgeFact,
     File,

@@ -46,6 +46,7 @@ from coderecon.index.models_tables import (  # noqa: F401 — re-exports
     TypeMemberFact,
 )
 
+
 class Worktree(SQLModel, table=True):
     """A worktree (or main checkout) tracked in this repo's index."""
     __tablename__ = "worktrees"

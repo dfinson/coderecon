@@ -6,9 +6,10 @@ Single Responsibility: Low-level file I/O and def signature formatting.
 from __future__ import annotations
 
 import hashlib
-import structlog
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import structlog
 
 log = structlog.get_logger(__name__)
 

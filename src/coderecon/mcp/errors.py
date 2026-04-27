@@ -12,6 +12,7 @@ from typing import Any
 
 from fastmcp.exceptions import ToolError
 
+
 class MCPErrorCode(StrEnum):
     """Machine-readable error codes for MCP tool failures."""
 

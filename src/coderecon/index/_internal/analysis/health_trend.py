@@ -10,7 +10,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import structlog
-
 from sqlalchemy import text
 
 log = structlog.get_logger(__name__)

@@ -10,7 +10,12 @@ import structlog
 if TYPE_CHECKING:
     pass
 
-from coderecon.refactor.ops_models import EditHunk, RefactorPreview, RefactorResult, _word_boundary_match
+from coderecon.refactor.ops_models import (
+    EditHunk,
+    RefactorPreview,
+    RefactorResult,
+    _word_boundary_match,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -71,6 +76,7 @@ class _ImpactMixin:
         Supports all languages via language-aware import variant generation.
         """
         from sqlmodel import select
+
         from coderecon.index._internal.indexing.module_mapping import (
             file_to_import_candidates,
             file_to_import_sql_patterns,
@@ -203,6 +209,7 @@ class _ImpactMixin:
         Searches for all import variants via the index.
         """
         from sqlmodel import select
+
         from coderecon.index._internal.indexing.module_mapping import file_to_import_candidates
         from coderecon.index.models import File
         # Build search patterns based on target type

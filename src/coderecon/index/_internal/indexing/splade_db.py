@@ -10,7 +10,6 @@ import structlog
 from sqlalchemy import text
 from sqlmodel import col, select
 
-from coderecon.index.models import DefFact, SpladeVec
 from coderecon.index._internal.indexing.splade import (
     MODEL_VERSION,
     _blob_to_vec,
@@ -21,6 +20,7 @@ from coderecon.index._internal.indexing.splade import (
     sparse_dot,
 )
 from coderecon.index._internal.indexing.splade_scaffold import build_scaffolds_for_defs
+from coderecon.index.models import DefFact, SpladeVec
 
 if TYPE_CHECKING:
     from coderecon.index._internal.db.database import Database

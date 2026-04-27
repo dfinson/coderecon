@@ -25,6 +25,7 @@ from coderecon.git.errors import GitError
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
+
     from coderecon.catalog.registry import CatalogRegistry
     from coderecon.config.models import CodeReconConfig
     from coderecon.daemon.indexer import BackgroundIndexer

@@ -12,6 +12,7 @@ from rich.console import Console
 from coderecon.cli.init import _get_xdg_index_dir
 from coderecon.cli.utils import find_repo_root
 
+
 def clear_repo(repo_root: Path, *, yes: bool = False) -> bool:
     """Remove all CodeRecon data from a repository.
 

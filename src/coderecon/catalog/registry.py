@@ -14,6 +14,7 @@ log = structlog.get_logger(__name__)
 from coderecon.catalog.db import CatalogDB
 from coderecon.catalog.models import RepoEntry, WorktreeEntry
 
+
 def _repo_hash(git_dir: str) -> str:
     """Deterministic short hash for a git dir path (for storage dir names)."""
     return hashlib.sha256(git_dir.encode()).hexdigest()[:12]

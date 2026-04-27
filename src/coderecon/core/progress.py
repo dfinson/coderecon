@@ -248,6 +248,7 @@ def animate_text(text: str, delay: float = 0.02) -> None:
 
 from coderecon.core.phase_box import PhaseBox  # noqa: E402
 
+
 def phase_box(title: str, *, width: int = 60, console: Console | None = None) -> PhaseBox:
     """Create a dynamic boxed phase with Live + Panel."""
     return PhaseBox(

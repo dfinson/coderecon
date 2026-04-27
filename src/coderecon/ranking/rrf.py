@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
+
 def rrf_fuse(candidates: list[dict[str, Any]], *, k: int = 60) -> list[dict[str, Any]]:
     """Score candidates via Reciprocal Rank Fusion across harvester lists.
 

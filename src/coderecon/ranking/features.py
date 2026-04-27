@@ -13,6 +13,7 @@ import math
 from collections import Counter
 from typing import Any
 
+
 def extract_ranker_features(
     candidates: list[dict[str, Any]],
     query_features: dict[str, Any],

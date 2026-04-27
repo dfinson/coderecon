@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any
 
+
 class InternalErrorCode(IntEnum):
     """Numeric error codes for MCP responses."""
 

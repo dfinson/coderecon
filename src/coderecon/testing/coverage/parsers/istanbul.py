@@ -34,6 +34,7 @@ from coderecon.testing.coverage.models import (
     FunctionCoverage,
 )
 
+
 class IstanbulParser:
     """Parser for Istanbul JSON format."""
 

@@ -7,16 +7,16 @@ No platform-specific code paths.
 from __future__ import annotations
 
 import json
-import structlog
 import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import psutil
+import structlog
 
-from coderecon.files.ops import atomic_write_text
 from coderecon.config.constants import BYTES_PER_MB
+from coderecon.files.ops import atomic_write_text
 
 log = structlog.get_logger(__name__)
 

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import sys
-import structlog
 from dataclasses import dataclass
 from pathlib import Path
+
+import structlog
 
 from coderecon.index._internal.ignore import PRUNABLE_DIRS
 from coderecon.testing.models import ParsedTestSuite

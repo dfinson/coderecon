@@ -7,6 +7,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+
 @dataclass
 class HookResult:
     """Result of running a git hook."""

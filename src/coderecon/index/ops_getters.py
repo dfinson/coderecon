@@ -14,9 +14,9 @@ from sqlmodel import col, func, select
 
 from coderecon.index._internal.db import (
     EpochStats,
+    IndexRecovery,
     IntegrityChecker,
     IntegrityReport,
-    IndexRecovery,
 )
 from coderecon.index._internal.indexing import FactQueries
 from coderecon.index.models import (

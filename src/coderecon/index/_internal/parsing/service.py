@@ -43,6 +43,7 @@ from coderecon.index._internal.parsing.treesitter import (
     TreeSitterParser,
 )
 
+
 class TreeSitterService:
     """Singleton wrapper around :class:`TreeSitterParser`.
 

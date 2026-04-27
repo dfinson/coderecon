@@ -22,7 +22,6 @@ import structlog
 
 from coderecon.testing.packs import _is_prunable_path
 
-
 log = structlog.get_logger(__name__)
 
 @runner_registry.register

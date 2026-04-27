@@ -11,13 +11,6 @@ from typing import TYPE_CHECKING
 from sqlalchemy import text
 from sqlmodel import col, select
 
-from coderecon.index.models import (
-    Certainty,
-    File,
-    ImportFact,
-    RefTier,
-    Role,
-)
 from coderecon.index._internal.indexing.resolver_crossfile import (
     CrossFileResolutionStats,
     ResolutionPassFn,
@@ -26,6 +19,13 @@ from coderecon.index._internal.indexing.resolver_crossfile import (
     resolve_namespace_refs,
     resolve_same_namespace_refs,
     resolve_star_import_refs,
+)
+from coderecon.index.models import (
+    Certainty,
+    File,
+    ImportFact,
+    RefTier,
+    Role,
 )
 
 if TYPE_CHECKING:

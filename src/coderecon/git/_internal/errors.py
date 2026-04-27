@@ -7,6 +7,7 @@ from contextlib import AbstractContextManager, contextmanager
 
 from coderecon.git.errors import AuthenticationError, GitError, RemoteError
 
+
 class ErrorMapper:
     """Maps subprocess git errors to domain errors."""
 

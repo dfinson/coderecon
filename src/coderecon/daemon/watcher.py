@@ -27,7 +27,11 @@ from watchfiles import Change, awatch
 
 from coderecon.daemon.watcher_utils import (
     collect_watch_dirs as _collect_watch_dirs,
+)
+from coderecon.daemon.watcher_utils import (
     is_cross_filesystem as _is_cross_filesystem,
+)
+from coderecon.daemon.watcher_utils import (
     summarize_changes_by_type as _summarize_changes_by_type,
 )
 from coderecon.index._internal.ignore import IgnoreChecker

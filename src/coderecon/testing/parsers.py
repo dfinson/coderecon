@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import json
 import re
-import defusedxml.ElementTree as ET
 from typing import Literal
 
+import defusedxml.ElementTree as ET
 import structlog
 
 # Re-export from models for backward compatibility

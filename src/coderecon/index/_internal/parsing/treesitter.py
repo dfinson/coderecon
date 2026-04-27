@@ -17,12 +17,11 @@ from __future__ import annotations
 
 import hashlib
 import importlib
-
-import structlog
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import structlog
 import tree_sitter
 
 from coderecon.index._internal.parsing.packs import (
@@ -32,6 +31,19 @@ from coderecon.index._internal.parsing.packs import (
     get_pack_for_ext,
     get_pack_for_filename,
 )
+from coderecon.index._internal.parsing.treesitter_imports import (
+    _extract_dynamic_via_query,
+    _extract_imports_declarative,
+)
+from coderecon.index._internal.parsing.treesitter_lang import (
+    _declared_module_csharp,
+    _declared_module_ocaml,
+    _declared_module_ruby,
+    _extract_declared_module_via_query,
+)
+from coderecon.index._internal.parsing.treesitter_lang import (
+    extract_csharp_namespace_types as _extract_csharp_namespace_types,
+)
 from coderecon.index._internal.parsing.treesitter_models import (
     DynamicAccess,
     IdentifierOccurrence,
@@ -40,17 +52,6 @@ from coderecon.index._internal.parsing.treesitter_models import (
     SyntacticImport,
     SyntacticScope,
     SyntacticSymbol,
-)
-from coderecon.index._internal.parsing.treesitter_lang import (
-    _declared_module_csharp,
-    _declared_module_ocaml,
-    _declared_module_ruby,
-    _extract_declared_module_via_query,
-    extract_csharp_namespace_types as _extract_csharp_namespace_types,
-)
-from coderecon.index._internal.parsing.treesitter_imports import (
-    _extract_dynamic_via_query,
-    _extract_imports_declarative,
 )
 from coderecon.index._internal.parsing.treesitter_symbols import (
     _extract_generic_symbols,

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+
 @dataclass(frozen=True, slots=True)
 class DefSnapshot:
     """Point-in-time snapshot of a single definition.

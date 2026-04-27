@@ -30,9 +30,9 @@ Line types:
 from __future__ import annotations
 
 import contextlib
-import defusedxml.ElementTree as ET
 from pathlib import Path
 
+import defusedxml.ElementTree as ET
 import structlog
 
 from coderecon.testing.coverage.models import (
@@ -42,6 +42,7 @@ from coderecon.testing.coverage.models import (
     FileCoverage,
     FunctionCoverage,
 )
+
 
 class CloverParser:
     """Parser for Clover XML format."""

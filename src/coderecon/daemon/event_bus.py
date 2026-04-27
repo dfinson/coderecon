@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import TYPE_CHECKING, Any, Callable, Coroutine
+from typing import TYPE_CHECKING, Any
+from collections.abc import Callable, Coroutine
 
 import structlog
 

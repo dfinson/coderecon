@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import re
-import structlog
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
+
+import structlog
 
 if TYPE_CHECKING:
     import tree_sitter

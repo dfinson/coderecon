@@ -20,23 +20,6 @@ from __future__ import annotations
 from coderecon.index._internal.parsing.packs_base import (
     LanguagePack,
 )
-from coderecon.index._internal.parsing.packs_functional import (
-    ELIXIR_PACK,
-    HASKELL_PACK,
-    OCAML_PACK,
-    SCALA_PACK,
-)
-from coderecon.index._internal.parsing.packs_jvm import (
-    CSHARP_PACK,
-    JAVA_PACK,
-    KOTLIN_PACK,
-)
-from coderecon.index._internal.parsing.packs_mainstream import (
-    JAVASCRIPT_PACK,
-    PYTHON_PACK,
-    TSX_PACK,
-    TYPESCRIPT_PACK,
-)
 from coderecon.index._internal.parsing.packs_config import (
     ADA_PACK,
     CSS_PACK,
@@ -57,6 +40,23 @@ from coderecon.index._internal.parsing.packs_config import (
     XML_PACK,
     YAML_PACK,
 )
+from coderecon.index._internal.parsing.packs_functional import (
+    ELIXIR_PACK,
+    HASKELL_PACK,
+    OCAML_PACK,
+    SCALA_PACK,
+)
+from coderecon.index._internal.parsing.packs_jvm import (
+    CSHARP_PACK,
+    JAVA_PACK,
+    KOTLIN_PACK,
+)
+from coderecon.index._internal.parsing.packs_mainstream import (
+    JAVASCRIPT_PACK,
+    PYTHON_PACK,
+    TSX_PACK,
+    TYPESCRIPT_PACK,
+)
 from coderecon.index._internal.parsing.packs_misc import (
     BASH_PACK,
     JULIA_PACK,
@@ -64,8 +64,8 @@ from coderecon.index._internal.parsing.packs_misc import (
     ZIG_PACK,
 )
 from coderecon.index._internal.parsing.packs_native import (
-    CPP_PACK,
     C_PACK,
+    CPP_PACK,
 )
 from coderecon.index._internal.parsing.packs_scripting import (
     PHP_PACK,
@@ -164,11 +164,11 @@ def get_pack(name: str) -> LanguagePack | None:
 # Re-exports for backward compatibility — all classes and pack constants
 # remain importable from this module.
 from coderecon.index._internal.parsing.packs_base import *  # noqa: E402, F401, F403
-from coderecon.index._internal.parsing.packs_mainstream import *  # noqa: E402, F401, F403
-from coderecon.index._internal.parsing.packs_systems import *  # noqa: E402, F401, F403
-from coderecon.index._internal.parsing.packs_jvm import *  # noqa: E402, F401, F403
-from coderecon.index._internal.parsing.packs_native import *  # noqa: E402, F401, F403
-from coderecon.index._internal.parsing.packs_functional import *  # noqa: E402, F401, F403
-from coderecon.index._internal.parsing.packs_scripting import *  # noqa: E402, F401, F403
-from coderecon.index._internal.parsing.packs_misc import *  # noqa: E402, F401, F403
 from coderecon.index._internal.parsing.packs_config import *  # noqa: E402, F401, F403
+from coderecon.index._internal.parsing.packs_functional import *  # noqa: E402, F401, F403
+from coderecon.index._internal.parsing.packs_jvm import *  # noqa: E402, F401, F403
+from coderecon.index._internal.parsing.packs_mainstream import *  # noqa: E402, F401, F403
+from coderecon.index._internal.parsing.packs_misc import *  # noqa: E402, F401, F403
+from coderecon.index._internal.parsing.packs_native import *  # noqa: E402, F401, F403
+from coderecon.index._internal.parsing.packs_scripting import *  # noqa: E402, F401, F403
+from coderecon.index._internal.parsing.packs_systems import *  # noqa: E402, F401, F403

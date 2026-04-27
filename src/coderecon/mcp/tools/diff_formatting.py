@@ -211,6 +211,7 @@ def _result_to_text(result: SemanticDiffResult) -> dict[str, Any]:
         {change} {kind} {name}  :{start}-{end}  Δ{lines}  …
     """
     from collections import Counter
+
     from coderecon.mcp.tools.index import _change_to_text
     domains = _classify_domains(result.structural_changes, result.non_structural_changes)
     cross_edges = _detect_cross_domain_edges(result.structural_changes, domains)

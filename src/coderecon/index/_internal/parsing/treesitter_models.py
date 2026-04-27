@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 import tree_sitter
 
+
 @dataclass
 class SyntacticScope:
     """A lexical scope extracted via Tree-sitter parsing."""

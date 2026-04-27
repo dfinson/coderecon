@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-import structlog
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import structlog
 
 from coderecon.testing.runtime import ContextRuntime, RuntimeResolutionMethod
 

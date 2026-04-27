@@ -8,6 +8,7 @@ Design principles:
 
 from __future__ import annotations
 
+
 def compress_path(path: str, max_len: int = 30) -> str:
     """Compress path to fit within max_len.
 

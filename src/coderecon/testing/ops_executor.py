@@ -4,15 +4,20 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import structlog
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+import structlog
+
 from coderecon.testing.emitters import CoverageArtifact
 from coderecon.testing.models import (
-    ExecutionDiagnostic, ParsedTestSuite, TestFailure, TestProgress,
-    TestRunStatus, TestTarget,
+    ExecutionDiagnostic,
+    ParsedTestSuite,
+    TestFailure,
+    TestProgress,
+    TestRunStatus,
+    TestTarget,
 )
 from coderecon.testing.ops_runner import _run_single_target
 from coderecon.testing.resources import MemoryBudget, MemoryHistory, classify_oom

@@ -20,10 +20,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from coderecon.config.constants import MS_PER_SEC
 from coderecon.core.languages import detect_language_family
 from coderecon.git import GitOps
 from coderecon.index.models import File, Freshness, RepoState
-from coderecon.config.constants import MS_PER_SEC
 
 if TYPE_CHECKING:
     from coderecon.index._internal.db.database import Database

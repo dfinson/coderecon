@@ -11,6 +11,7 @@ import time
 import structlog
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
+
 from coderecon.config.constants import MS_PER_SEC
 
 log = structlog.get_logger(__name__)

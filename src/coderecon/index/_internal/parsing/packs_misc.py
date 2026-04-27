@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from coderecon.index._internal.parsing.packs_base import (
+    _JULIA_SCOPES,
+    _LUA_SCOPES,
     ImportQueryConfig,
     LanguagePack,
     SymbolPattern,
     SymbolQueryConfig,
     TypeExtractionConfig,
-    _JULIA_SCOPES,
-    _LUA_SCOPES,
 )
 
 __all__ = [

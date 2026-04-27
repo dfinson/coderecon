@@ -1,19 +1,33 @@
 """Core checkpoint pipeline orchestration."""
 from __future__ import annotations
+
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
 import structlog
+
 from coderecon.git.errors import GitError
+
 if TYPE_CHECKING:
     from coderecon.mcp.context import AppContext
     from coderecon.mcp.session import SessionState
-from coderecon.mcp.tools.checkpoint import ProgressSink, _NullProgress, _DEFAULT_MAX_TEST_HOPS, _COMMIT_MAX_TEST_HOPS
+from coderecon.mcp.tools.checkpoint import (
+    _COMMIT_MAX_TEST_HOPS,
+    _DEFAULT_MAX_TEST_HOPS,
+    ProgressSink,
+    _NullProgress,
+)
 from coderecon.mcp.tools.checkpoint_helpers import (
-    _detect_test_debt, _enrich_failure_result, _ingest_checkpoint_coverage,
+    _detect_test_debt,
+    _enrich_failure_result,
+    _ingest_checkpoint_coverage,
     _run_hook_with_retry,
-    _summarize_commit, _validate_commit_message, _validate_paths_exist,
+    _summarize_commit,
+    _validate_commit_message,
+    _validate_paths_exist,
 )
 from coderecon.mcp.tools.checkpoint_tiered import _run_tiered_tests, _summarize_verify
+
 log = structlog.get_logger(__name__)
 async def checkpoint_pipeline(
     app_ctx: "AppContext",
@@ -216,6 +230,7 @@ async def _run_test_phase(
             }
         else:
             import uuid
+
             from coderecon.core.languages import is_test_file
             coverage_dir = str(
                 app_ctx.repo_root / ".recon" / "artifacts" / "coverage" / uuid.uuid4().hex[:8]

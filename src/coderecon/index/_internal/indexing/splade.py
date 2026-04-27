@@ -17,7 +17,6 @@ sig +0.7%, doc +0.2%).
 from __future__ import annotations
 
 import json
-import structlog
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,6 +24,7 @@ from typing import Any
 
 import numpy as np
 import onnxruntime as ort
+import structlog
 from tokenizers import Tokenizer
 
 from coderecon.config.constants import BYTES_PER_MB
@@ -477,16 +477,16 @@ def _blob_to_vec(data: bytes) -> dict[int, float]:
 
 # ── Re-exports for backward compatibility ────────────────────────
 
+from coderecon.index._internal.indexing.splade_db import (  # noqa: E402, F401
+    backfill_scaffold_text,
+    index_splade_vectors,
+    load_all_vectors_fast,
+    retrieve_splade,
+)
 from coderecon.index._internal.indexing.splade_scaffold import (  # noqa: E402, F401
-    word_split,
-    _path_to_phrase,
     _compact_sig,
+    _path_to_phrase,
     build_def_scaffold,
     build_scaffolds_for_defs,
-)
-from coderecon.index._internal.indexing.splade_db import (  # noqa: E402, F401
-    load_all_vectors_fast,
-    index_splade_vectors,
-    backfill_scaffold_text,
-    retrieve_splade,
+    word_split,
 )

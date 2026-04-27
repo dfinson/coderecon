@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+
 class BaseParams(BaseModel):
     """Base class for all tool parameters.
 

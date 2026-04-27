@@ -12,6 +12,7 @@ from coderecon.index.models_enums import (
     ProbeStatus,
 )
 
+
 class TypeAnnotationFact(SQLModel, table=True):
     """Type annotation extracted from source code.
     Captures explicit type annotations from any language that supports them.

@@ -22,6 +22,17 @@ from sqlmodel import select
 
 log = structlog.get_logger(__name__)
 
+# --- Extracted modules ---
+from coderecon.index import (
+    ops_discovery,
+    ops_getters,
+    ops_graph,
+    ops_indexing,
+    ops_init,
+    ops_reindex,
+    ops_reindex_full,
+    ops_search,
+)
 from coderecon.index._internal.db import (
     Database,
     EpochManager,
@@ -41,18 +52,6 @@ from coderecon.index.models import (
     Context,
     DefFact,
     Worktree,
-)
-
-# --- Extracted modules ---
-from coderecon.index import (
-    ops_discovery,
-    ops_getters,
-    ops_graph,
-    ops_indexing,
-    ops_init,
-    ops_reindex,
-    ops_reindex_full,
-    ops_search,
 )
 
 # Re-export data classes and glob helpers for backward compatibility

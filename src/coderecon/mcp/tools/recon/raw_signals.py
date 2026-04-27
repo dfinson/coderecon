@@ -16,6 +16,7 @@ import structlog
 from fastmcp import Context
 from pydantic import Field
 
+from coderecon.config.constants import MS_PER_SEC
 from coderecon.mcp.tools.recon.graph_harvester import _harvest_graph
 from coderecon.mcp.tools.recon.harvesters import (
     _harvest_explicit,
@@ -30,7 +31,6 @@ from coderecon.mcp.tools.recon.merge import (
 )
 from coderecon.mcp.tools.recon.models import HarvestCandidate
 from coderecon.mcp.tools.recon.parsing import parse_task
-from coderecon.config.constants import MS_PER_SEC
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -267,6 +267,7 @@ def _build_pipeline_output(
     try:
         with coordinator.db.session() as session:
             from sqlmodel import func, select
+
             from coderecon.index.models import DefFact, File
             def_count = session.exec(select(func.count()).select_from(DefFact)).one()
             file_count = session.exec(select(func.count()).select_from(File)).one()

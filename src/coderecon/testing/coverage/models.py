@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+
 class CoverageParseError(Exception):
     """Error parsing coverage data."""
 

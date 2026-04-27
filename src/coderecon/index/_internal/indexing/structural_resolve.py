@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import structlog
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import structlog
 
 if TYPE_CHECKING:
     from coderecon.index._internal.db import Database
@@ -29,6 +30,7 @@ def _augment_declared_modules(db: "Database", repo_path: Path, extractions: list
     with ALL file paths from the DB so config discovery works cross-batch.
     """
     from sqlmodel import select
+
     from coderecon.index._internal.indexing.config_resolver import (
         ConfigResolver,
     )
@@ -116,6 +118,7 @@ def _resolve_import_paths(db: "Database", repo_path: Path, extractions: list[Ext
     current batch on top (which may have fresher data).
     """
     from sqlmodel import select
+
     from coderecon.index._internal.indexing.config_resolver import (
         ImportPathResolver,
         build_js_package_exports,
@@ -162,6 +165,7 @@ def resolve_all_imports(db: "Database", repo_path: Path) -> int:
         Number of imports that were newly resolved.
     """
     from sqlmodel import select
+
     from coderecon.index._internal.indexing.config_resolver import (
         ImportPathResolver,
         build_js_package_exports,

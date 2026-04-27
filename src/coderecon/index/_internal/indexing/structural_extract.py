@@ -5,17 +5,18 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-import structlog
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import structlog
 
 if TYPE_CHECKING:
     import tree_sitter
 
 from coderecon.config.constants import MS_PER_SEC
 from coderecon.core.languages import detect_language_family
-from coderecon.index._internal.parsing.service import tree_sitter_service
 from coderecon.index._internal.indexing.structural_helpers import (
+    _MAX_FILE_BYTES,
     ExtractionResult,
     _collect_string_literals,
     _compute_def_uid,
@@ -25,11 +26,14 @@ from coderecon.index._internal.indexing.structural_helpers import (
     _extract_string_literals_regex,
     _find_containing_scope,
     _has_grammar_for_family,
-    _MAX_FILE_BYTES,
 )
+from coderecon.index._internal.parsing.service import tree_sitter_service
 from coderecon.index.models import (
-    BindReasonCode, BindTargetKind, Certainty,
-    RefTier, Role,
+    BindReasonCode,
+    BindTargetKind,
+    Certainty,
+    RefTier,
+    Role,
 )
 
 log = structlog.get_logger(__name__)

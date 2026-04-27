@@ -61,8 +61,8 @@ from coderecon.git.models import (
 
 log = structlog.get_logger(__name__)
 
-from coderecon.git.ops_worktree import _WorktreeMixin
 from coderecon.git.ops_submodule import _SubmoduleMixin
+from coderecon.git.ops_worktree import _WorktreeMixin
 
 
 class GitOps(_WorktreeMixin, _SubmoduleMixin):

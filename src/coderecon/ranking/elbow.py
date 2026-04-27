@@ -7,6 +7,7 @@ cutoff model is unavailable.
 
 from __future__ import annotations
 
+
 def elbow_cut(scores: list[float], *, min_n: int = 3, max_n: int = 30) -> int:
     """Return the elbow position in a descending score list.
 

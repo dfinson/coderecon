@@ -358,15 +358,15 @@ class DartTestPack(RunnerPack):
 
 
 # Re-export classes from split modules for backward compatibility
-from coderecon.testing.packs.tier2_scripting import (  # noqa: F401, E402
-    FlutterTestPack,
-    BatsPack,
-    PesterPack,
-    BustedPack,
-    MixTestPack,
-)
 from coderecon.testing.packs.tier2_functional import (  # noqa: F401, E402
     CabalTestPack,
-    JuliaPkgTestPack,
     DuneTestPack,
+    JuliaPkgTestPack,
+)
+from coderecon.testing.packs.tier2_scripting import (  # noqa: F401, E402
+    BatsPack,
+    BustedPack,
+    FlutterTestPack,
+    MixTestPack,
+    PesterPack,
 )

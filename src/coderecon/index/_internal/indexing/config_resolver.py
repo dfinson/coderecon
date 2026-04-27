@@ -29,9 +29,10 @@ All resolution runs at **index time** and the result is stored in
 
 from __future__ import annotations
 
-import structlog
 from collections.abc import Callable
 from pathlib import PurePosixPath
+
+import structlog
 
 from coderecon.index._internal.indexing.package_parsers import (
     _normalize_path,

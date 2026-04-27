@@ -180,7 +180,7 @@ class FactQueries:
             .group_by(RefFact.target_def_uid)
         )
         rows = list(self._session.exec(stmt).all())
-        result = {uid: 0 for uid in def_uids}
+        result = dict.fromkeys(def_uids, 0)
         for uid, count in rows:
             result[uid] = int(count)
         return result
@@ -436,7 +436,7 @@ class FactQueries:
             .group_by(TestCoverageFact.target_def_uid)
         )
         rows = list(self._session.exec(stmt).all())
-        result = {uid: 0 for uid in def_uids}
+        result = dict.fromkeys(def_uids, 0)
         for uid, count in rows:
             result[uid] = int(count)
         return result

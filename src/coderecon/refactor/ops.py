@@ -13,6 +13,8 @@ if TYPE_CHECKING:
     from coderecon.index.models import RefFact
     from coderecon.index.ops import IndexCoordinatorEngine
 
+from coderecon.refactor.ops_apply import _ApplyMixin
+from coderecon.refactor.ops_impact import _ImpactMixin
 from coderecon.refactor.ops_models import (
     EditHunk,
     FileEdit,
@@ -24,8 +26,6 @@ from coderecon.refactor.ops_models import (
     _word_boundary_match,
 )
 from coderecon.refactor.ops_move import _MoveMixin
-from coderecon.refactor.ops_impact import _ImpactMixin
-from coderecon.refactor.ops_apply import _ApplyMixin
 
 log = structlog.get_logger(__name__)
 

@@ -13,9 +13,10 @@ from __future__ import annotations
 
 import asyncio
 import shutil
-from pathlib import Path
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, AsyncIterator
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+from collections.abc import AsyncIterator
 
 import structlog
 
@@ -127,7 +128,7 @@ class CodeRecon:
                 self._process.stdin.close()
             try:
                 await asyncio.wait_for(self._process.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._process.terminate()
                 await self._process.wait()
 
@@ -449,7 +450,7 @@ class CodeRecon:
         self._event_router.on("daemon.ready", lambda _: self._ready_event.set())
         try:
             await asyncio.wait_for(self._ready_event.wait(), timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise CodeReconError("TIMEOUT", "Daemon did not send daemon.ready within timeout") from None
 
     async def _read_loop(self) -> None:

@@ -7,6 +7,23 @@ from pathlib import Path
 
 import structlog
 
+from coderecon.git._internal.access_helpers import (
+    _BranchHelper,
+    _ParseMixin,
+    _ReferenceHelper,
+)
+from coderecon.git._internal.access_index import GitIndex
+from coderecon.git._internal.access_models import (
+    _INDEX_STATUS_MAP,
+    _WT_STATUS_MAP,
+    GitBranchData,
+    GitCommitData,
+    GitReference,
+    GitSignature,
+    GitStashEntry,
+    GitTagData,
+)
+from coderecon.git._internal.access_worktree import _WorktreeMixin
 from coderecon.git._internal.constants import (
     GIT_REPOSITORY_STATE_APPLY_MAILBOX,
     GIT_REPOSITORY_STATE_APPLY_MAILBOX_OR_REBASE,
@@ -28,23 +45,6 @@ from coderecon.git.errors import (
     NotARepositoryError,
     RefNotFoundError,
     RemoteError,
-)
-from coderecon.git._internal.access_models import (
-    GitBranchData,
-    GitCommitData,
-    GitReference,
-    GitSignature,
-    GitStashEntry,
-    GitTagData,
-    _INDEX_STATUS_MAP,
-    _WT_STATUS_MAP,
-)
-from coderecon.git._internal.access_index import GitIndex
-from coderecon.git._internal.access_worktree import _WorktreeMixin
-from coderecon.git._internal.access_helpers import (
-    _BranchHelper,
-    _ParseMixin,
-    _ReferenceHelper,
 )
 
 log = structlog.get_logger(__name__)

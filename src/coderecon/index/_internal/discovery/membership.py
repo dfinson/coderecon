@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from coderecon.index._internal.discovery.scanner import INCLUDE_SPECS, UNIVERSAL_EXCLUDES
 from coderecon.index.models import CandidateContext, LanguageFamily
 
+
 @dataclass
 class MembershipResult:
     """Result of membership resolution."""

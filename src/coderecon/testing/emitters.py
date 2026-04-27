@@ -12,12 +12,13 @@ Design principles:
 
 from __future__ import annotations
 
-import structlog
 import shutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+
+import structlog
 
 log = structlog.get_logger(__name__)
 

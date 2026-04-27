@@ -19,10 +19,12 @@ from typing import TYPE_CHECKING, Any
 import structlog
 from fastmcp import Context
 from pydantic import Field
+
 from coderecon.config.constants import MS_PER_SEC
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
+
     from coderecon.index import Database
     from coderecon.mcp.context import AppContext
 
@@ -34,6 +36,7 @@ from coderecon.mcp.tools.recon.pipeline_scoring import (  # noqa: E402
     _read_snippet,
     _score_cross_encoder,
 )
+
 
 def _build_query_metrics(diagnostics: dict, candidates: list, seeds: list | None, pins: list | None) -> dict:
     """Build aggregate query metrics from diagnostics."""

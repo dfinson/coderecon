@@ -7,24 +7,33 @@ from __future__ import annotations
 
 import asyncio
 import json
-import structlog
 import time
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import structlog
 
 from coderecon.files.ops import atomic_write_text
 
 # Import packs to trigger registration
 from coderecon.testing import packs as _packs  # noqa: F401
 from coderecon.testing.models import (
-    ExecutionDiagnostic, TargetProgress, TestCaseProgress,
-    TestFailure, TestProgress, TestResult, TestRunStatus, TestTarget,
+    ExecutionDiagnostic,
+    TargetProgress,
+    TestCaseProgress,
+    TestFailure,
+    TestProgress,
+    TestResult,
+    TestRunStatus,
+    TestTarget,
 )
 from coderecon.testing.ops_environment import _default_parallelism
 from coderecon.testing.ops_executor import _execute_tests as _execute_tests_impl
 from coderecon.testing.ops_workspaces import (
-    DetectedWorkspace, _os_script_path, detect_workspaces,
+    DetectedWorkspace,
+    _os_script_path,
+    detect_workspaces,
 )
 from coderecon.testing.runner_pack import runner_registry
 
@@ -35,8 +44,11 @@ log = structlog.get_logger(__name__)
 
 # Re-exports for backward compatibility
 from coderecon.testing.ops_environment import (  # noqa: E402, F401
-    clear_coverage_tools_cache, detect_coverage_tools,
-    detect_node_package_manager, detect_python_venv, get_python_executable,
+    clear_coverage_tools_cache,
+    detect_coverage_tools,
+    detect_node_package_manager,
+    detect_python_venv,
+    get_python_executable,
 )
 from coderecon.testing.ops_workspaces import _is_prunable_path  # noqa: E402, F401
 
@@ -71,6 +83,7 @@ class TestOps:
         fallback - if index isn't ready, we block until it is.
         """
         from typing import cast
+
         from coderecon.testing.models import TargetKind
         indexed_targets = await self._coordinator.get_test_targets()
         all_targets = [
@@ -168,6 +181,7 @@ class TestOps:
     ) -> list[TestTarget]:
         """Get test targets from the index, optionally filtered by IDs."""
         from typing import cast
+
         from coderecon.testing.models import TargetKind
         indexed_targets = await self._coordinator.get_test_targets(target_ids=target_ids)
         return [

@@ -21,6 +21,7 @@ from coderecon.index._internal.parsing import TreeSitterParser
 from coderecon.index._internal.parsing.service import tree_sitter_service
 from coderecon.index.models import CandidateContext, LanguageFamily
 
+
 @dataclass
 class ProbeResult:
     """Result of context validation."""

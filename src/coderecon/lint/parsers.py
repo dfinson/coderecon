@@ -6,6 +6,7 @@ import re
 
 from coderecon.lint.models import Diagnostic, ParseResult, Severity
 
+
 def _severity_from_str(s: str) -> Severity:
     """Convert string to Severity."""
     s = s.lower()

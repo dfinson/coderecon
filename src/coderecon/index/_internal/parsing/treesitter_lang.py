@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import structlog
 from typing import Any
 
+import structlog
 import tree_sitter
 from tree_sitter import Query as _TSQuery
 from tree_sitter import QueryCursor as _TSQueryCursor

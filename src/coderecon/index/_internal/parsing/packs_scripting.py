@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from coderecon.index._internal.parsing.packs_base import (
+    _PHP_SCOPES,
+    _RUBY_SCOPES,
+    _SWIFT_SCOPES,
     ImportQueryConfig,
     LanguagePack,
     SymbolPattern,
     SymbolQueryConfig,
     TypeExtractionConfig,
-    _PHP_SCOPES,
-    _RUBY_SCOPES,
-    _SWIFT_SCOPES,
 )
 
 __all__ = [

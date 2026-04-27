@@ -31,6 +31,7 @@ from coderecon.mcp.tools.diff_formatting import _result_to_text
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
+
     from coderecon.mcp.context import AppContext
 
 log = structlog.get_logger(__name__)
@@ -92,6 +93,7 @@ def _run_git_diff(
 ) -> SemanticDiffResult:
     """Run semantic diff in git mode."""
     import re
+
     from coderecon.git._internal.planners import DiffPlanner
     git_ops = app_ctx.git_ops
     planner = DiffPlanner(git_ops._access)

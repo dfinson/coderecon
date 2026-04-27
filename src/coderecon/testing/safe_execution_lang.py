@@ -11,11 +11,10 @@ from collections.abc import Callable
 
 from coderecon.config.constants import BYTES_PER_MB
 from coderecon.testing.safe_execution import (
+    _DELETE_KEY,
     LanguageFamily,
     SafeExecutionConfig,
-    _DELETE_KEY,
 )
-
 
 # ---------------------------------------------------------------------------
 # Environment strategies

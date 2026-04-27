@@ -14,6 +14,7 @@ from typing import Literal
 
 from coderecon.files.ops import atomic_write_text
 
+
 @dataclass
 class Edit:
     """A single file edit."""

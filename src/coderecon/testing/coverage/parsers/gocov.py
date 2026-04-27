@@ -27,6 +27,7 @@ from coderecon.testing.coverage.models import (
     FileCoverage,
 )
 
+
 class GocovParser:
     """Parser for Go coverage profiles."""
 

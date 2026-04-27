@@ -22,8 +22,6 @@ if TYPE_CHECKING:
 
 import structlog
 
-
-
 log = structlog.get_logger(__name__)
 
 # Kotlin - Gradle with Kotlin DSL

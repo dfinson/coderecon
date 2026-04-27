@@ -15,11 +15,11 @@ persist edge only if CE score exceeds a calibrated confidence threshold.
 
 from __future__ import annotations
 
-import structlog
 import time
 from typing import TYPE_CHECKING
 
 import numpy as np
+import structlog
 from sqlmodel import col, select
 
 from coderecon.core.languages import TYPE_KINDS
@@ -174,7 +174,7 @@ def resolve_unresolved_refs(db: Database, *, file_ids: list[int] | None = None) 
             ).all())
             for d in defs:
                 def_map[d.def_uid] = d
-                file_path = files.get(d.file_id, None)
+                file_path = files.get(d.file_id)
                 fp = file_path.path if file_path else ""
                 scaffold_cache[d.def_uid] = build_def_scaffold(
                     fp, kind=d.kind, name=d.name,

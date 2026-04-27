@@ -166,7 +166,7 @@ async def run_global_server(
         # Hard timeout on cleanup so recon down never waits more than ~4s total
         try:
             await asyncio.wait_for(daemon.stop_all(), timeout=3.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             log.warning("daemon_stop_all_timeout")
         remove_global_pid(home)
 
@@ -203,5 +203,5 @@ async def run_global_server_stdio(
     finally:
         try:
             await asyncio.wait_for(daemon.stop_all(), timeout=3.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             log.warning("daemon_stop_all_timeout")

@@ -13,9 +13,8 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import yaml
-
 import structlog
+import yaml
 
 if TYPE_CHECKING:
     from coderecon.index.models import CandidateContext

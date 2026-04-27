@@ -13,12 +13,12 @@ then vendored into ``ranking/models/ce_minilm_l6/``.
 
 from __future__ import annotations
 
-import structlog
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 import onnxruntime as ort
+import structlog
 from numpy.typing import NDArray
 from tokenizers import Tokenizer
 
@@ -27,6 +27,7 @@ log = structlog.get_logger(__name__)
 # ONNX model + tokenizer (from coderecon-models-ce package)
 from coderecon_models_ce import ONNX_PATH as _ONNX_PATH
 from coderecon_models_ce import TOKENIZER_PATH as _TOKENIZER_PATH
+
 
 @dataclass
 class CrossEncoderScorer:

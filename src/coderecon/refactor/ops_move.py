@@ -40,6 +40,7 @@ class _MoveMixin:
             RefactorResult with preview. Call apply() to execute.
         """
         from sqlmodel import select
+
         from coderecon.index._internal.indexing.module_mapping import (
             file_to_import_candidates,
             file_to_import_sql_patterns,

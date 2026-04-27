@@ -37,9 +37,9 @@ vc = visit count, sl = start line, el = end line, sc = start column, ec = end co
 """
 
 import contextlib
-import defusedxml.ElementTree as ET
 from pathlib import Path
 
+import defusedxml.ElementTree as ET
 import structlog
 
 from coderecon.testing.coverage.models import (
@@ -49,6 +49,7 @@ from coderecon.testing.coverage.models import (
     FileCoverage,
     FunctionCoverage,
 )
+
 
 class OpencoverParser:
     """Parser for OpenCover XML format."""

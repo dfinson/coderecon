@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import Any
 
+
 class NoOpSpan:
     """No-op span for when telemetry is disabled."""
 

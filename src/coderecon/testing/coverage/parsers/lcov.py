@@ -32,6 +32,7 @@ from coderecon.testing.coverage.models import (
     FunctionCoverage,
 )
 
+
 class LcovParser:
     """Parser for LCOV format coverage files."""
 

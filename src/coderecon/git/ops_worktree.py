@@ -5,6 +5,7 @@ from pathlib import Path
 
 import structlog
 
+from coderecon.files.ops import atomic_write_text
 from coderecon.git.errors import (
     BranchNotFoundError,
     GitError,
@@ -14,8 +15,6 @@ from coderecon.git.errors import (
     WorktreeNotFoundError,
 )
 from coderecon.git.models import WorktreeInfo
-
-from coderecon.files.ops import atomic_write_text
 
 log = structlog.get_logger(__name__)
 

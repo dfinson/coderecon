@@ -8,9 +8,9 @@ Runtime state is stored in .recon/state.yaml (auto-generated, not user-editable)
 """
 
 from pathlib import Path
-import structlog
 from typing import Literal
 
+import structlog
 import yaml
 from pydantic import BaseModel, Field
 

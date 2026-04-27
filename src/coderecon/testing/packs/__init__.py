@@ -6,6 +6,7 @@ from pathlib import Path
 
 from coderecon.index._internal.ignore import PRUNABLE_DIRS
 
+
 def _is_prunable_path(
     path: Path,
     workspace_root: Path,
@@ -89,8 +90,8 @@ def _discover_by_glob(
 
 def _parse_gradle_test_results(output_path: Path, suite_name: str) -> "ParsedTestSuite":
     """Parse Gradle/Kotlin JUnit XML test results from build directory."""
-    from coderecon.testing.parsers import parse_junit_xml
     from coderecon.testing.models import ParsedTestSuite
+    from coderecon.testing.parsers import parse_junit_xml
 
     reports_dir = output_path.parent / "build" / "test-results" / "test"
     if not reports_dir.exists():
@@ -118,5 +119,5 @@ from coderecon.testing.packs import tier1 as _tier1  # noqa: F401, E402
 from coderecon.testing.packs import tier1_compiled as _tier1c  # noqa: F401, E402
 from coderecon.testing.packs import tier1_other as _tier1o  # noqa: F401, E402
 from coderecon.testing.packs import tier2 as _tier2  # noqa: F401, E402
-from coderecon.testing.packs import tier2_scripting as _tier2_scripting  # noqa: F401, E402
 from coderecon.testing.packs import tier2_functional as _tier2_functional  # noqa: F401, E402
+from coderecon.testing.packs import tier2_scripting as _tier2_scripting  # noqa: F401, E402

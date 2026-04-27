@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 class GitError(Exception):
     """Base error for git operations."""
 

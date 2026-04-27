@@ -241,7 +241,7 @@ async def _expand_via_coverage(
                     evidence=[
                         EvidenceRecord(
                             category="coverage",
-                            detail=f"covered by candidate test",
+                            detail="covered by candidate test",
                             score=1.0,
                         )
                     ],
