@@ -236,10 +236,7 @@ def graph_export_core(
     from coderecon.mcp.delivery import wrap_response
 
     engine = app_ctx.coordinator.db.engine
-    if not output_path:
-        path = app_ctx.repo_root / ".recon" / "graph.html"
-    else:
-        path = Path(output_path)
+    path = Path(output_path) if output_path else app_ctx.repo_root / ".recon" / "graph.html"
 
     result_path = export_graph_html(
         engine=engine, output_path=path, level="file", resolution=resolution,

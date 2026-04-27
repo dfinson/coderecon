@@ -279,7 +279,7 @@ def _collect_top_neighbors(
         indices = indices[top_k_idx]
         scores = scores[top_k_idx]
 
-    for j, score in zip(indices, scores):
+    for j, score in zip(indices, scores, strict=True):
         j_int = int(j)
         score_f = float(score)
         if len(heap) < max_per_def:
@@ -319,7 +319,7 @@ def _collect_top_neighbors_symmetric(
         indices = indices[top_k_idx]
         scores = scores[top_k_idx]
 
-    for j, score in zip(indices, scores):
+    for j, score in zip(indices, scores, strict=True):
         j_int = int(j)
         score_f = float(score)
         for src, tgt in [(global_i, j_int), (j_int, global_i)]:

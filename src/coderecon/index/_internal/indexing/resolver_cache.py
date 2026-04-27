@@ -446,7 +446,7 @@ def _resolve_rust_relative(
     # Build module path
     base_module = base_dir.replace("/", "::").replace("\\", "::")
     suffix = "::".join(remainder)
-    if suffix:
+    if suffix:  # noqa: SIM108
         abs_module = f"{base_module}::{suffix}" if base_module else suffix
     else:
         abs_module = base_module

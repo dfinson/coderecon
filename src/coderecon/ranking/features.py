@@ -387,7 +387,7 @@ def extract_file_ranker_features(
     # First compute per-candidate ranker features to get encoded booleans
     per_cand = extract_ranker_features(candidates, query_features)
     # Attach encoded features back to candidates
-    enriched = [{**c, **pf} for c, pf in zip(candidates, per_cand)]
+    enriched = [{**c, **pf} for c, pf in zip(candidates, per_cand, strict=True)]
 
     # Group by file path
     file_to_candidates: dict[str, list[dict[str, Any]]] = {}

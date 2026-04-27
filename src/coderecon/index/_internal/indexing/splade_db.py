@@ -107,7 +107,7 @@ def index_splade_vectors(
                     session.delete(existing)
             session.flush()
         merge_t0 = time.monotonic()
-        for uid, vec in zip(uid_order, all_vecs):
+        for uid, vec in zip(uid_order, all_vecs, strict=True):
             if not vec:
                 continue
             row = SpladeVec(

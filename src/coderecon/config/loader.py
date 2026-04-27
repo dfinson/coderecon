@@ -173,8 +173,5 @@ def load_config(repo_root: Path | None = None, **kwargs: Any) -> CodeReconConfig
 def get_index_paths(repo_root: Path) -> tuple[Path, Path]:
     """Get db_path and tantivy_path for a repo, respecting config.index.index_path."""
     config = load_config(repo_root)
-    if config.index.index_path:
-        index_dir = Path(config.index.index_path)
-    else:
-        index_dir = repo_root / ".recon"
+    index_dir = Path(config.index.index_path) if config.index.index_path else repo_root / ".recon"
     return index_dir / "index.db", index_dir / "tantivy"

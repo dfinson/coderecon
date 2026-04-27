@@ -286,10 +286,7 @@ def _harvest_barrel_and_test_files(
             test_path_to_seed[tp] = seed_path
 
     all_lookup_paths = barrel_paths + test_lookup_paths
-    if all_lookup_paths:
-        lookup_files = fq.batch_get_files_by_paths(all_lookup_paths)
-    else:
-        lookup_files = {}
+    lookup_files = fq.batch_get_files_by_paths(all_lookup_paths) if all_lookup_paths else {}
 
     for bp in barrel_paths:
         barrel_file = lookup_files.get(bp)

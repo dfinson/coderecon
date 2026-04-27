@@ -200,7 +200,7 @@ def _pipeline_model(
     )
     file_scores = file_ranker.score(file_features)
     scored_files = sorted(
-        zip(file_features, file_scores), key=lambda x: -x[1],
+        zip(file_features, file_scores, strict=True), key=lambda x: -x[1],
     )
     max_files = min(20, len(scored_files))
     top_file_paths = {ff["_path"] for ff, _ in scored_files[:max_files]}
@@ -214,7 +214,7 @@ def _pipeline_model(
     ranker = load_ranker()
     ranker_features = extract_ranker_features(filtered_candidates, query_features)
     scores = ranker.score(ranker_features)
-    scored = sorted(zip(filtered_candidates, scores), key=lambda x: -x[1])
+    scored = sorted(zip(filtered_candidates, scores, strict=True), key=lambda x: -x[1])
     # Cutoff
     cutoff = load_cutoff()
     ranked_for_cutoff = [{**c, "ranker_score": s} for c, s in scored]

@@ -116,7 +116,7 @@ def _score_cross_encoder_tiny(
     try:
         scorer = get_tiny_scorer()
         scores = scorer.score_pairs(task, documents)
-        for c, s in zip(candidates, scores):
+        for c, s in zip(candidates, scores, strict=True):
             c["ce_score_tiny"] = float(s)
     except (ValueError, RuntimeError):
         log.warning("cross_encoder_tiny.scoring_failed", exc_info=True)
@@ -156,7 +156,7 @@ def _score_cross_encoder(
     try:
         scorer = get_scorer()
         scores = scorer.score_pairs(task, documents)
-        for c, s in zip(candidates, scores):
+        for c, s in zip(candidates, scores, strict=True):
             c["ce_score"] = float(s)
     except (ValueError, RuntimeError):
         log.warning("cross_encoder.scoring_failed", exc_info=True)

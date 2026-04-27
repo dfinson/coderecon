@@ -132,7 +132,7 @@ def _batch_splade_retrieve(
             continue
         idxs = cols[mask]
         filtered_vals = vals[mask]
-        scored = [(uid_list[j], float(v)) for j, v in zip(idxs, filtered_vals)]
+        scored = [(uid_list[j], float(v)) for j, v in zip(idxs, filtered_vals, strict=True)]
         scored.sort(key=lambda x: -x[1])
         results.append(scored[:pool_size])
     return results
@@ -216,7 +216,7 @@ def resolve_unresolved_refs(db: Database, *, file_ids: list[int] | None = None) 
              len(ce_pairs), time.monotonic() - t0)
     # Best CE match per item above threshold
     item_results: dict[int, list[tuple[str, float]]] = {}
-    for (idx, uid), score in zip(ce_meta, ce_scores):
+    for (idx, uid), score in zip(ce_meta, ce_scores, strict=True):
         s = float(score)
         if s >= TAU_REF:
             item_results.setdefault(idx, []).append((uid, s))
@@ -324,7 +324,7 @@ def resolve_unresolved_accesses(db: Database, *, file_ids: list[int] | None = No
              len(ce_pairs), time.monotonic() - t0)
     # Best CE match per item above threshold
     item_results: dict[int, list[tuple[str, float]]] = {}
-    for (idx, uid), score in zip(ce_meta, ce_scores):
+    for (idx, uid), score in zip(ce_meta, ce_scores, strict=True):
         s = float(score)
         if s >= TAU_ACCESS:
             item_results.setdefault(idx, []).append((uid, s))
@@ -457,7 +457,7 @@ def resolve_unresolved_shapes(db: Database, *, file_ids: list[int] | None = None
              len(ce_pairs), time.monotonic() - t0)
     # Best CE match per item above threshold
     item_results: dict[int, list[tuple[str, float]]] = {}
-    for (q_idx, uid), score in zip(ce_meta, ce_scores):
+    for (q_idx, uid), score in zip(ce_meta, ce_scores, strict=True):
         s = float(score)
         if s >= TAU_SHAPE:
             item_results.setdefault(q_idx, []).append((uid, s))

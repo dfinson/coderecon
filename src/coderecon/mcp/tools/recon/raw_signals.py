@@ -351,7 +351,7 @@ def _shared_prefix_depth(a: str, b: str) -> int:
     a_parts = a.split("/")
     b_parts = b.split("/")
     shared = 0
-    for pa, pb in zip(a_parts, b_parts):
+    for pa, pb in zip(a_parts, b_parts, strict=False):
         if pa == pb:
             shared += 1
         else:
@@ -391,7 +391,7 @@ def _min_package_distance(
     for sm in seed_modules:
         s_parts = sm.split(".")
         shared = 0
-        for cp, sp in zip(c_parts, s_parts):
+        for cp, sp in zip(c_parts, s_parts, strict=False):
             if cp == sp:
                 shared += 1
             else:

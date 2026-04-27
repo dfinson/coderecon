@@ -233,7 +233,7 @@ def index_doc_chunk_vectors(
             texts = [c[1] for c in chunks]
             vectors = encoder.encode_documents(texts)
 
-            for (key, text, start, end), vec in zip(chunks, vectors):
+            for (key, text, start, end), vec in zip(chunks, vectors, strict=True):
                 if not vec:  # Empty vector
                     continue
                 session.add(FileChunkVec(

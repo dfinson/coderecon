@@ -305,10 +305,8 @@ class SpladeEncoder:
             },
         )
         # SPLADE pooling: ReLU → log1p → max-over-sequence
-        if raw.ndim == 3:
-            pooled = np.log1p(np.maximum(raw, 0)).max(axis=1)
-        else:
-            pooled = raw  # already (batch, vocab_size)
+        # SPLADE pooling: ReLU → log1p → max-over-sequence
+        pooled = np.log1p(np.maximum(raw, 0)).max(axis=1) if raw.ndim == 3 else raw
         results: list[dict[int, float]] = []
         for row in pooled:
             nz = np.nonzero(row)[0]
@@ -412,7 +410,7 @@ class SpladeEncoder:
                 tok_lengths[batch_items[-1][0]],
                 bt1 - bt0, bt1 - encode_t0,
             )
-            for (orig_idx, _), vec in zip(batch_items, batch_vecs):
+            for (orig_idx, _), vec in zip(batch_items, batch_vecs, strict=True):
                 ordered_vecs.append((orig_idx, vec))
             pos += bs
         # Restore original order
