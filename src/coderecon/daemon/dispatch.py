@@ -40,7 +40,7 @@ def _load_core_functions() -> dict[str, CoreFn]:
         dev_index_status,
         dev_lookup_defs,
     )
-    from coderecon.mcp.tools.checkpoint import checkpoint_pipeline
+    from coderecon.mcp.tools.checkpoint_pipeline import checkpoint_pipeline
     from coderecon.mcp.tools.diff import semantic_diff_core
     from coderecon.mcp.tools.graph import (
         graph_communities_core,

@@ -71,7 +71,7 @@ class TestRunHookWithRetry:
         mock_result = MagicMock()
         mock_result.success = True
 
-        with patch("coderecon.mcp.tools.checkpoint.run_hook", return_value=mock_result):
+        with patch("coderecon.mcp.tools.checkpoint_helpers.run_hook", return_value=mock_result):
             hook_result, failure = checkpoint_tools._run_hook_with_retry(
                 tmp_path, ["a.py"], MagicMock()
             )
@@ -90,7 +90,7 @@ class TestRunHookWithRetry:
         mock_result.stdout = "error output"
         mock_result.stderr = ""
 
-        with patch("coderecon.mcp.tools.checkpoint.run_hook", return_value=mock_result):
+        with patch("coderecon.mcp.tools.checkpoint_helpers.run_hook", return_value=mock_result):
             _, failure = checkpoint_tools._run_hook_with_retry(tmp_path, ["a.py"], MagicMock())
 
         assert failure is not None
@@ -113,7 +113,7 @@ class TestRunHookWithRetry:
         stage_fn = MagicMock()
 
         with patch(
-            "coderecon.mcp.tools.checkpoint.run_hook",
+            "coderecon.mcp.tools.checkpoint_helpers.run_hook",
             side_effect=[first_result, retry_result],
         ):
             hook_result, failure = checkpoint_tools._run_hook_with_retry(
@@ -142,7 +142,7 @@ class TestRunHookWithRetry:
         retry_result.modified_files = []
 
         with patch(
-            "coderecon.mcp.tools.checkpoint.run_hook",
+            "coderecon.mcp.tools.checkpoint_helpers.run_hook",
             side_effect=[first_result, retry_result],
         ):
             _, failure = checkpoint_tools._run_hook_with_retry(tmp_path, ["a.py"], MagicMock())

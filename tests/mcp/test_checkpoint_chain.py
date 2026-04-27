@@ -134,8 +134,8 @@ class TestCheckpointCommitChain:
         fake_diff.files_analyzed = 1
 
         with (
-            patch("coderecon.mcp.tools.checkpoint._validate_paths_exist"),
-            patch("coderecon.mcp.tools.checkpoint._run_hook_with_retry") as mock_hook,
+            patch("coderecon.mcp.tools.checkpoint_pipeline._validate_paths_exist"),
+            patch("coderecon.mcp.tools.checkpoint_pipeline._run_hook_with_retry") as mock_hook,
             patch("coderecon.mcp.tools.diff._run_git_diff", return_value=fake_diff),
         ):
             mock_hook.return_value = (_hook_ok(), None)
@@ -212,8 +212,8 @@ class TestCheckpointCommitChain:
         mock_context.git_ops.repo.workdir = "/tmp/repo"
 
         with (
-            patch("coderecon.mcp.tools.checkpoint._validate_paths_exist"),
-            patch("coderecon.mcp.tools.checkpoint._run_hook_with_retry") as mock_hook,
+            patch("coderecon.mcp.tools.checkpoint_pipeline._validate_paths_exist"),
+            patch("coderecon.mcp.tools.checkpoint_pipeline._run_hook_with_retry") as mock_hook,
             patch("coderecon.mcp.tools.diff._run_git_diff", side_effect=ValueError("no index")),
         ):
             mock_hook.return_value = (_hook_ok(), None)
@@ -259,8 +259,8 @@ class TestCheckpointSemanticDiff:
         fake_diff.files_analyzed = 2
 
         with (
-            patch("coderecon.mcp.tools.checkpoint._validate_paths_exist"),
-            patch("coderecon.mcp.tools.checkpoint._run_hook_with_retry") as mock_hook,
+            patch("coderecon.mcp.tools.checkpoint_pipeline._validate_paths_exist"),
+            patch("coderecon.mcp.tools.checkpoint_pipeline._run_hook_with_retry") as mock_hook,
             patch("coderecon.mcp.tools.diff._run_git_diff", return_value=fake_diff),
         ):
             mock_hook.return_value = (_hook_ok(), None)
@@ -291,8 +291,8 @@ class TestCheckpointSemanticDiff:
         mock_context.git_ops.repo.workdir = "/tmp/repo"
 
         with (
-            patch("coderecon.mcp.tools.checkpoint._validate_paths_exist"),
-            patch("coderecon.mcp.tools.checkpoint._run_hook_with_retry") as mock_hook,
+            patch("coderecon.mcp.tools.checkpoint_pipeline._validate_paths_exist"),
+            patch("coderecon.mcp.tools.checkpoint_pipeline._run_hook_with_retry") as mock_hook,
             patch("coderecon.mcp.tools.diff._run_git_diff", side_effect=RuntimeError("boom")),
         ):
             mock_hook.return_value = (_hook_ok(), None)

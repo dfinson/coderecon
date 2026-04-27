@@ -95,7 +95,7 @@ class TestCheckpointCommitHookAutoRetry:
         mock_context.git_ops.repo.workdir = "/tmp/repo"
 
         with patch(
-            "coderecon.mcp.tools.checkpoint.run_hook",
+            "coderecon.mcp.tools.checkpoint_helpers.run_hook",
             return_value=_make_hook_result(success=True),
         ):
             result = await checkpoint_commit_tool(mock_ctx, message="test commit")
@@ -114,7 +114,7 @@ class TestCheckpointCommitHookAutoRetry:
         mock_context.git_ops.repo.workdir = "/tmp/repo"
 
         with patch(
-            "coderecon.mcp.tools.checkpoint.run_hook",
+            "coderecon.mcp.tools.checkpoint_helpers.run_hook",
             return_value=_make_hook_result(
                 success=False,
                 exit_code=1,
@@ -155,7 +155,7 @@ class TestCheckpointCommitHookAutoRetry:
                 )
             return _make_hook_result(success=True)
 
-        with patch("coderecon.mcp.tools.checkpoint.run_hook", side_effect=side_effect):
+        with patch("coderecon.mcp.tools.checkpoint_helpers.run_hook", side_effect=side_effect):
             result = await checkpoint_commit_tool(mock_ctx, message="test commit")
 
         # Commit succeeded
@@ -196,7 +196,7 @@ class TestCheckpointCommitHookAutoRetry:
                 stderr="mypy: error in types (still)\n",
             )
 
-        with patch("coderecon.mcp.tools.checkpoint.run_hook", side_effect=side_effect):
+        with patch("coderecon.mcp.tools.checkpoint_helpers.run_hook", side_effect=side_effect):
             result = await checkpoint_commit_tool(mock_ctx, message="test commit")
 
         assert result["passed"] is True
@@ -222,7 +222,7 @@ class TestCheckpointCommitHookAutoRetry:
         mock_context.git_ops.repo.workdir = "/tmp/repo"
 
         with patch(
-            "coderecon.mcp.tools.checkpoint.run_hook",
+            "coderecon.mcp.tools.checkpoint_helpers.run_hook",
             return_value=_make_hook_result(success=True),
         ):
             result = await checkpoint_commit_tool(mock_ctx, message="test")

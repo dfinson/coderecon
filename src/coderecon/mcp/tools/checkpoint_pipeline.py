@@ -1,0 +1,501 @@
+"""Core checkpoint pipeline orchestration."""
+from __future__ import annotations
+import asyncio
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+import structlog
+from coderecon.git.errors import GitError
+if TYPE_CHECKING:
+    from coderecon.mcp.context import AppContext
+    from coderecon.mcp.session import SessionState
+from fastmcp import Context
+from coderecon.mcp.tools.checkpoint import ProgressSink, _NullProgress
+from coderecon.mcp.tools.checkpoint_helpers import (
+    _detect_test_debt, _ingest_checkpoint_coverage, _run_hook_with_retry,
+    _serialize_test_result, _summarize_commit, _validate_commit_message, _validate_paths_exist,
+)
+from coderecon.mcp.tools.checkpoint_tiered import _run_tiered_tests, _summarize_verify
+log = structlog.get_logger(__name__)
+async def checkpoint_pipeline(
+    app_ctx: "AppContext",
+    session: "SessionState",
+    *,
+    changed_files: list[str],
+    lint: bool = True,
+    autofix: bool = True,
+    tests: bool = True,
+    test_filter: str | None = None,
+    max_test_hops: int | None = None,
+    commit_message: str | None = None,
+    push: bool = False,
+    progress: ProgressSink | None = None,
+) -> dict[str, Any]:
+    """Core checkpoint logic — lint, test, commit, push.
+    Decoupled from MCP: accepts an ``AppContext``, a ``SessionState``,
+    and an optional ``ProgressSink``.  Both the MCP ``@mcp.tool`` wrapper
+    and the stdio dispatch layer call this function.
+    """
+    if progress is None:
+        progress = _NullProgress()
+    # ── Read-only checkpoint: clean-tree verification only ──
+    if getattr(session, "read_only", None) is True:
+        try:
+            wt_status = app_ctx.git_ops.status()
+            dirty_files = [p for p, flags in wt_status.items() if flags != 0]
+        except GitError:
+            dirty_files = []
+        clean = len(dirty_files) == 0
+        ro_result: dict[str, Any] = {
+            "action": "checkpoint",
+            "read_only": True,
+            "clean_tree": clean,
+            "passed": clean,
+        }
+        if not clean:
+            ro_result["dirty_files"] = dirty_files[:20]
+            ro_result["agentic_hint"] = (
+                f"Read-only checkpoint found {len(dirty_files)} "
+                "uncommitted file(s). This is unexpected for a "
+                "read-only session. Investigate or call "
+                "recon(read_only=False) to switch to a read-write session."
+            )
+        else:
+            ro_result["agentic_hint"] = (
+                "Read-only session complete — working tree is clean. No mutations were made."
+            )
+        # ── Reset session state so next task starts clean ──
+        session.mutation_ctx.clear()
+        app_ctx.refactor_ops.clear_pending()
+        from coderecon.mcp.delivery import wrap_response
+        return wrap_response(
+            ro_result,
+            resource_kind="checkpoint",
+        )
+    # Compute total phases for progress reporting
+    total_phases = int(lint) + int(tests) * 3  # tests = discover + filter + run
+    phase = 0
+    result: dict[str, Any] = {"action": "checkpoint", "changed_files": changed_files}
+    lint_status = "skipped"
+    lint_diagnostics = 0
+    test_passed = 0
+    test_failed = 0
+    test_status = "skipped"
+    if lint:
+        # Fast-path: read cached lint facts if background pipeline already ran
+        cached_lint = None
+        if not autofix and changed_files:
+            try:
+                from coderecon.mcp.tools._checkpoint_cache import try_read_lint_facts
+                cached_lint = try_read_lint_facts(
+                    engine=app_ctx.coordinator.db.engine,
+                    changed_files=changed_files,
+                    current_epoch=app_ctx.coordinator.get_current_epoch(),
+                )
+            except (ImportError, OSError, RuntimeError, ValueError):  # noqa: BLE001
+                cached_lint = None
+        if cached_lint is not None:
+            # Use cached facts — near-instant
+            lint_status = "clean" if cached_lint.clean else "dirty"
+            lint_diagnostics = cached_lint.total_errors + cached_lint.total_warnings
+            phase += 1
+            if cached_lint.clean:
+                await progress.info("Lint: clean (cached)")
+            else:
+                await progress.info(f"Lint: {lint_diagnostics} issue(s) (cached)")
+            result["lint"] = {
+                "status": lint_status,
+                "diagnostics": lint_diagnostics,
+                "fixed_files": 0,
+                "duration": 0.0,
+                "cached": True,
+            }
+            if cached_lint.issues:
+                result["lint"]["issues"] = [
+                    f"{i['file']} {i['tool']} E:{i['errors']} W:{i['warnings']}"
+                    for i in cached_lint.issues
+                ]
+            if lint_diagnostics > 0 and lint_status != "clean":
+                test_status = "skipped"
+                result["tests"] = {
+                    "status": "skipped",
+                    "reason": "lint failed — fix lint issues first",
+                }
+                tests = False
+        else:
+            # Live lint
+            mode = "auto-fix" if autofix else "check-only"
+            await progress.report_progress(phase, total_phases, f"Linting ({mode})")
+            lint_result = await app_ctx.lint_ops.check(
+                paths=changed_files or None,
+                tools=None,
+                categories=None,
+                dry_run=not autofix,
+            )
+            lint_status = lint_result.status
+            lint_diagnostics = lint_result.total_diagnostics
+            phase += 1
+            if lint_status == "clean":
+                await progress.info("Lint: clean")
+            else:
+                await progress.info(
+                    f"Lint: {lint_diagnostics} issue(s), "
+                    f"{lint_result.total_files_modified} file(s) modified"
+                )
+            # Build compact lint result: structured outer keys, text for issues
+            issue_lines: list[str] = []
+            for t in lint_result.tools_run:
+                for d in t.diagnostics:
+                    # Strip repo root prefix for brevity
+                    rel_path = d.path
+                    if "/" in rel_path:
+                        for prefix in (str(app_ctx.repo_root) + "/",):
+                            if rel_path.startswith(prefix):
+                                rel_path = rel_path[len(prefix) :]
+                                break
+                    sev = d.severity.value[0].upper()  # W/E/I
+                    issue_lines.append(f"{rel_path}:{d.line}:{d.column} {sev} {d.code} {d.message}")
+            result["lint"] = {
+                "status": lint_result.status,
+                "diagnostics": lint_result.total_diagnostics,
+                "fixed_files": lint_result.total_files_modified,
+                "duration": round(lint_result.duration_seconds, 2),
+            }
+            if issue_lines:
+                result["lint"]["issues"] = issue_lines
+            if lint_result.agentic_hint:
+                result["lint"]["agentic_hint"] = lint_result.agentic_hint
+            # Fail-fast: skip tests if lint has issues
+            if lint_diagnostics > 0 and lint_status != "clean":
+                test_status = "skipped"
+                result["tests"] = {
+                    "status": "skipped",
+                    "reason": "lint failed — fix lint issues first",
+                }
+                tests = False
+    if tests:
+        await progress.report_progress(phase, total_phases, "Discovering test targets")
+        discover_result = await app_ctx.test_ops.discover(paths=None)
+        all_targets = discover_result.targets or []
+        phase += 1
+        if all_targets and changed_files:
+            await progress.report_progress(
+                phase,
+                total_phases,
+                f"Filtering {len(all_targets)} targets by import graph",
+            )
+            graph_result = await app_ctx.coordinator.get_affected_test_targets(changed_files)
+            affected_paths = set(graph_result.test_files)
+            filtered = [
+                t
+                for t in all_targets
+                if _target_matches_affected_files(t, affected_paths, app_ctx.repo_root)
+            ]
+            phase += 1
+            if not filtered:
+                test_status = "skipped"
+                await progress.info("Tests: no affected targets — skipping")
+                result["tests"] = {
+                    "status": "skipped",
+                    "reason": "no affected tests found",
+                    "confidence": graph_result.confidence.tier,
+                }
+            else:
+                # Auto-derive coverage_dir - coverage is always enabled
+                import uuid
+                from coderecon.core.languages import is_test_file
+                coverage_dir = str(
+                    app_ctx.repo_root
+                    / ".recon"
+                    / "artifacts"
+                    / "coverage"
+                    / uuid.uuid4().hex[:8]
+                )
+                Path(coverage_dir).mkdir(parents=True, exist_ok=True)
+                # Filter changed_files to source files only (exclude tests)
+                coverage_filter_paths = {f for f in changed_files if not is_test_file(f)}
+                # Resolve effective max_test_hops
+                if max_test_hops is not None:
+                    effective_hops = max_test_hops
+                elif commit_message:
+                    effective_hops = _COMMIT_MAX_TEST_HOPS
+                else:
+                    effective_hops = _DEFAULT_MAX_TEST_HOPS
+                tiered_result = await _run_tiered_tests(
+                    app_ctx=app_ctx,
+                    progress=progress,
+                    graph_result=graph_result,
+                    filtered_targets=filtered,
+                    repo_root=app_ctx.repo_root,
+                    test_filter=test_filter,
+                    coverage=True,
+                    coverage_dir=coverage_dir,
+                    coverage_filter_paths=coverage_filter_paths,
+                    max_test_hops=effective_hops,
+                    phase=phase,
+                    total_phases=total_phases,
+                )
+                result["tests"] = tiered_result["serialized"]
+                test_status = tiered_result["status"]
+                test_passed = tiered_result["passed"]
+                test_failed = tiered_result["failed"]
+                # Persist coverage facts to DB for recon pipeline
+                _ingest_checkpoint_coverage(
+                    app_ctx, Path(coverage_dir),
+                    failed_test_ids=tiered_result.get("failed_test_ids"),
+                )
+                # Hoist coverage_hint to top-level for agent visibility
+                serialized = tiered_result["serialized"]
+                if isinstance(serialized, dict) and serialized.get("coverage_hint"):
+                    result["coverage_hint"] = serialized.pop("coverage_hint")
+                if test_failed > 0:
+                    await progress.warning(f"Tests: {test_passed} passed, {test_failed} FAILED")
+                elif test_passed > 0:
+                    await progress.info(f"Tests: {test_passed} passed")
+        else:
+            test_status = "skipped"
+            if not all_targets:
+                reason = "no test targets discovered"
+            else:
+                reason = "changed_files is empty — nothing to match against"
+            await progress.info(f"Tests: skipped — {reason}")
+            result["tests"] = {
+                "status": "skipped",
+                "reason": reason,
+            }
+    result["summary"] = _summarize_verify(
+        lint_status, lint_diagnostics, test_passed, test_failed, test_status
+    )
+    has_lint_issues = lint_diagnostics > 0 and lint_status != "clean"
+    has_test_failures = test_failed > 0
+    has_test_error = test_status == "error"
+    if has_lint_issues or has_test_failures or has_test_error:
+        result["passed"] = False
+        await progress.report_progress(total_phases, total_phases, "Checkpoint FAILED")
+        hints: list[str] = []
+        if has_lint_issues:
+            hints.append(f"Fix {lint_diagnostics} lint issues.")
+        if has_test_failures:
+            hints.append(f"Fix {test_failed} failing test(s).")
+        if has_test_error:
+            hints.append("Test phase errored — check tests section for details.")
+        # Add tier execution transparency
+        tiers_text = (
+            result.get("tests", {}).get("tiers", "")
+            if isinstance(result.get("tests"), dict)
+            else ""
+        )
+        if tiers_text:
+            hints.append(f"Tiers: {tiers_text}")
+        hints.append(
+            "STOP! You passed changed_files — lint and tests ran ONLY on "
+            "code affected by YOUR changes. These failures are almost "
+            "certainly YOUR fault. Do NOT dismiss them as 'pre-existing' "
+            "or 'not related to my changes'. Errors in OTHER files are "
+            "often transitive — caused by your changes breaking downstream "
+            "dependents. These are still YOUR responsibility. "
+            "Fix ALL issues before proceeding."
+        )
+        # ── Build failure-focused enrichment ──
+        try:
+            import hashlib
+            repo_root = app_ctx.coordinator.repo_root
+            refreshed: list[dict[str, Any]] = []
+            for cf in changed_files:
+                fp = repo_root / cf
+                if not fp.exists():
+                    continue
+                try:
+                    raw = fp.read_bytes()
+                    if b"\x00" in raw[:512]:
+                        continue  # skip binary
+                    content_str = raw.decode("utf-8", errors="replace")
+                    sha = hashlib.sha256(raw).hexdigest()
+                    entry: dict[str, Any] = {
+                        "path": cf,
+                        "content": content_str,
+                        "line_count": content_str.count("\n") + 1,
+                        "file_sha256": sha,
+                    }
+                    try:
+                        from coderecon.mcp.tools.files import _build_scaffold
+                        scaffold = _build_scaffold(app_ctx, cf, fp)
+                        entry["scaffold"] = scaffold
+                    except (ImportError, OSError, ValueError):  # best-effort scaffold
+                        log.debug("checkpoint.scaffold.failed", path=cf, exc_info=True)
+                    refreshed.append(entry)
+                except (OSError, UnicodeDecodeError, ValueError):  # best-effort file read
+                    log.debug("checkpoint.file_refresh.failed", path=cf, exc_info=True)
+                    continue
+            if refreshed:
+                session.mutation_ctx.clear()
+                app_ctx.refactor_ops.clear_pending()
+                file_contents = {r["path"]: r["content"] for r in refreshed}
+                # Extract failure list from test results
+                tests_section = result.get("tests", {})
+                fl = (
+                    tests_section.get("failure_list", [])
+                    if isinstance(tests_section, dict)
+                    else []
+                )
+                # Build snippets around failure locations
+                failure_snippets = _build_failure_snippets(fl, file_contents) if fl else {}
+                # Build scaffolds (compact symbol index)
+                def _render_scaffold(scaffold: dict) -> str:
+                    parts: list[str] = []
+                    summary = scaffold.get("summary", "")
+                    if summary:
+                        parts.append(summary)
+                    imports = scaffold.get("imports", [])
+                    if imports:
+                        parts.append(f"imports: {', '.join(str(i) for i in imports)}")
+                    for s in scaffold.get("symbols", []):
+                        name = s.get("name", "?")
+                        kind = s.get("kind", "")
+                        line = s.get("line", "")
+                        parts.append(f"  {kind} {name} (L{line})" if line else f"  {kind} {name}")
+                    return "\n".join(parts)
+                failure_scaffolds: dict[str, str] = {}
+                for r in refreshed:
+                    raw_scaffold: object = r.get("scaffold")
+                    if isinstance(raw_scaffold, dict):
+                        failure_scaffolds[r["path"]] = _render_scaffold(raw_scaffold)
+                file_manifest = [
+                    {
+                        "path": r["path"],
+                        "sha256": r["file_sha256"],
+                        "lines": r["line_count"],
+                    }
+                    for r in refreshed
+                ]
+                result["failure_snippets"] = failure_snippets
+                result["failure_scaffolds"] = failure_scaffolds
+                result["file_manifest"] = file_manifest
+        except (ImportError, OSError, RuntimeError, TypeError, ValueError, KeyError):  # noqa: BLE001
+            log.debug("checkpoint_failure_enrichment_failed", exc_info=True)
+        result["agentic_hint"] = " ".join(hints)
+    else:
+        result["passed"] = True
+        await progress.report_progress(total_phases, total_phases, "Checks passed")
+        # ── Governance gate evaluation ──
+        gate_hints: list[str] = []
+        try:
+            from coderecon.config.loader import load_config
+            from coderecon.index._internal.analysis.gate_engine import evaluate_gates
+            config = load_config(repo_root=app_ctx.repo_root)
+            gate_result = evaluate_gates(
+                governance=config.governance,
+                engine=app_ctx.coordinator.db.engine,
+                changed_files=changed_files,
+                lint_clean=lint_status == "clean",
+                lint_diagnostics=lint_diagnostics,
+                test_debt_info=_detect_test_debt(changed_files, app_ctx.repo_root)
+                if changed_files
+                else None,
+            )
+            if gate_result.violations:
+                result["governance"] = gate_result.to_dict()
+                for v in gate_result.errors:
+                    gate_hints.append(f"[GATE ERROR] {v.rule}: {v.message}")
+                for v in gate_result.warnings:
+                    gate_hints.append(f"[GATE WARNING] {v.rule}: {v.message}")
+                if not gate_result.passed:
+                    result["passed"] = False
+                    result["agentic_hint"] = " ".join(gate_hints)
+                    await progress.warning(
+                        f"Governance: {len(gate_result.errors)} error(s), "
+                        f"{len(gate_result.warnings)} warning(s)"
+                    )
+        except (ImportError, OSError, ValueError, AttributeError):  # best-effort governance
+            log.debug("checkpoint.governance.failed", exc_info=True)
+        # ── Reset mutation state ──
+        try:
+            session.mutation_ctx.clear()
+            app_ctx.refactor_ops.clear_pending()
+        except (AttributeError, RuntimeError):  # best-effort reset
+            log.debug("checkpoint.mutation_reset.failed", exc_info=True)
+        if commit_message:
+            _validate_commit_message(commit_message)
+            repo_path = Path(app_ctx.git_ops.path)
+            await progress.report_progress(total_phases, total_phases + 2, "Staging changes")
+            if changed_files:
+                tracked = set(app_ctx.git_ops.tracked_files())
+                _validate_paths_exist(repo_path, changed_files, tracked_files=tracked)
+                app_ctx.git_ops.stage(changed_files)
+                staged_paths = list(changed_files)
+            else:
+                staged_paths = app_ctx.git_ops.stage_all()
+            await progress.report_progress(
+                total_phases + 1, total_phases + 2, "Running pre-commit hooks"
+            )
+            _hook_result, failure = _run_hook_with_retry(
+                repo_path, staged_paths, app_ctx.git_ops.stage
+            )
+            if failure:
+                await progress.warning("Pre-commit hooks failed — skipping commit")
+                result["commit"] = failure
+            else:
+                sha = app_ctx.git_ops.commit(commit_message)
+                commit_result: dict[str, Any] = {
+                    "oid": sha,
+                    "summary": _summarize_commit(sha, commit_message),
+                }
+                if _hook_result and not _hook_result.success:
+                    fixed = _hook_result.modified_files or []
+                    commit_result["hook_warning"] = f"HOOK_AUTO_FIXED: {', '.join(fixed)}"
+                if push:
+                    app_ctx.git_ops.push(remote="origin", force=False)
+                    commit_result["pushed"] = "origin"
+                    commit_result["summary"] += " → pushed to origin"
+                result["commit"] = commit_result
+                await progress.report_progress(
+                    total_phases + 2,
+                    total_phases + 2,
+                    f"Committed {sha[:7]}",
+                )
+                try:
+                    from coderecon.mcp.tools.diff import _run_git_diff
+                    from coderecon.mcp.tools.diff_formatting import (
+                        _result_to_dict,
+                    )
+                    diff_result = _run_git_diff(
+                        app_ctx, base="HEAD~1", target="HEAD", paths=None
+                    )
+                    minimal = _result_to_dict(diff_result, verbosity="minimal")
+                    diff_summary = minimal.get("summary", "")
+                    changes = minimal.get("structural_changes", [])
+                    if changes:
+                        change_lines = [
+                            f"{c.get('change', '?')} {c.get('kind', '?')} "
+                            f"{c.get('name', '?')} ({c.get('path', '?').split('/')[-1]})"
+                            for c in changes[:15]
+                        ]
+                        commit_result["diff"] = f"{diff_summary}: " + ", ".join(change_lines)
+                    elif diff_summary:
+                        commit_result["diff"] = diff_summary
+                except (ImportError, GitError, KeyError, ValueError, OSError, RuntimeError):
+                    log.debug("post-commit semantic diff skipped", exc_info=True)
+            result["agentic_hint"] = (
+                "All checks passed and changes committed."
+                if "oid" in result.get("commit", {})
+                else "All checks passed but commit failed — see commit section."
+            )
+        else:
+            result["agentic_hint"] = (
+                'All checks passed. Call checkpoint again with commit_message="..." '
+                "to commit your changes."
+            )
+        # ── Test debt detection ──
+        if changed_files:
+            try:
+                debt = _detect_test_debt(changed_files, app_ctx.repo_root)
+                if debt:
+                    result["test_debt"] = debt
+                    existing = result.get("agentic_hint", "")
+                    result["agentic_hint"] = f"{existing}\n\n{debt['hint']}"
+            except (ImportError, OSError, ValueError):
+                log.debug("test_debt_detection_failed", exc_info=True)
+    from coderecon.mcp.delivery import wrap_response
+    return wrap_response(
+        result,
+        resource_kind="checkpoint",
+    )
