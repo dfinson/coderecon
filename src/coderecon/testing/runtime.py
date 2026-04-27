@@ -19,10 +19,6 @@ Architecture:
 from __future__ import annotations
 
 import json
-import structlog
-import shutil
-import subprocess
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -32,8 +28,6 @@ from sqlmodel import Field, SQLModel
 
 if TYPE_CHECKING:
     from coderecon.index.models import Context
-
-log = structlog.get_logger(__name__)
 
 # Database Model: ContextRuntime
 
@@ -263,641 +257,82 @@ class RuntimeResolver:
             method = "not_found"
         runtime.resolution_method = method
         return RuntimeResolutionResult(runtime=runtime, method=method, warnings=warnings)
+
+    # -- Language-specific resolvers (delegated to runtime_resolvers) --------
+
     def _resolve_python(
-        self, context_root: Path, runtime: ContextRuntime, warnings: list[str]
+        self, context_root: Path, runtime: ContextRuntime, warnings: list[str],
     ) -> RuntimeResolutionMethod:
-        """Resolve Python runtime.
-        Resolution order:
-        1. Context-local venv (.venv, venv, .env, env)
-        2. Workspace-level venv (check parent directories up to repo root)
-        3. Poetry environment (if poetry.lock exists)
-        4. System Python via PATH
-        """
-        # Check for local venv
-        venv_names = [".venv", "venv", ".env", "env"]
-        for venv_name in venv_names:
-            venv_path = context_root / venv_name
-            python_exe = self._find_python_in_venv(venv_path)
-            if python_exe:
-                runtime.python_executable = str(python_exe)
-                runtime.python_venv_path = str(venv_path)
-                runtime.python_version = self._get_python_version(python_exe)
-                self._set_python_env_vars(runtime, venv_path)
-                return "venv_detected"
-        # Check parent directories up to repo root
-        current = context_root
-        while current != self.repo_root and current != current.parent:
-            current = current.parent
-            for venv_name in venv_names:
-                venv_path = current / venv_name
-                python_exe = self._find_python_in_venv(venv_path)
-                if python_exe:
-                    runtime.python_executable = str(python_exe)
-                    runtime.python_venv_path = str(venv_path)
-                    runtime.python_version = self._get_python_version(python_exe)
-                    self._set_python_env_vars(runtime, venv_path)
-                    return "venv_detected"
-        # Check repo root explicitly
-        for venv_name in venv_names:
-            venv_path = self.repo_root / venv_name
-            python_exe = self._find_python_in_venv(venv_path)
-            if python_exe:
-                runtime.python_executable = str(python_exe)
-                runtime.python_venv_path = str(venv_path)
-                runtime.python_version = self._get_python_version(python_exe)
-                self._set_python_env_vars(runtime, venv_path)
-                return "venv_detected"
-        # Check for Poetry
-        if (context_root / "poetry.lock").exists() or (self.repo_root / "poetry.lock").exists():
-            poetry_exe = shutil.which("poetry")
-            if poetry_exe:
-                # Get Python from poetry env
-                poetry_python = self._get_poetry_python(context_root)
-                if poetry_python:
-                    runtime.python_executable = poetry_python
-                    runtime.python_version = self._get_python_version(Path(poetry_python))
-                    return "poetry_detected"
-        # Fallback to system Python
-        system_python = shutil.which("python3") or shutil.which("python")
-        if system_python:
-            runtime.python_executable = system_python
-            runtime.python_version = self._get_python_version(Path(system_python))
-            warnings.append(
-                f"Using system Python: {system_python}. Consider creating a virtual environment."
-            )
-            return "path_detected"
-        warnings.append("No Python executable found")
-        return "not_found"
+        return _resolvers._resolve_python(self, context_root, runtime, warnings)
+
     def _find_python_in_venv(self, venv_path: Path) -> Path | None:
-        """Find Python executable in a venv directory."""
-        if not venv_path.is_dir():
-            return None
-        # Verify it's a venv by checking for pyvenv.cfg or activate scripts
-        has_pyvenv_cfg = (venv_path / "pyvenv.cfg").exists()
-        has_unix_activate = (venv_path / "bin" / "activate").exists()
-        has_win_activate = (venv_path / "Scripts" / "activate").exists()
-        if not (has_pyvenv_cfg or has_unix_activate or has_win_activate):
-            return None
-        # Find Python executable
-        # Unix
-        unix_python = venv_path / "bin" / "python"
-        if unix_python.exists():
-            return unix_python
-        # Windows
-        win_python = venv_path / "Scripts" / "python.exe"
-        if win_python.exists():
-            return win_python
-        return None
+        return _resolvers._find_python_in_venv(venv_path)
+
     @staticmethod
     def _run_version_check(
-        args: list[str],
-        parser: Callable[[subprocess.CompletedProcess[str]], str | None],
-        timeout: int = 5,
+        args: list[str], parser: object, timeout: int = 5,
     ) -> str | None:
-        """Run a subprocess version check and parse the output.
-        Args:
-            args: Command and arguments to run.
-            parser: Extracts the version string from a successful CompletedProcess.
-            timeout: Seconds before the check is abandoned.
-        Returns:
-            Parsed version string, or None if the check fails.
-        """
-        try:
-            result = subprocess.run(
-                args,
-                capture_output=True,
-                timeout=timeout,
-                text=True,
-            )
-            return parser(result)
-        except FileNotFoundError:
-            log.debug("version_check_exe_not_found", exc_info=True)
-        except subprocess.TimeoutExpired:
-            log.debug("version_check_timed_out", exc_info=True)
-        except subprocess.SubprocessError:
-            log.debug("version_check_subprocess_error", exc_info=True)
-        return None
+        return _resolvers._run_version_check(args, parser, timeout)
+
     def _get_python_version(self, python_exe: Path) -> str | None:
-        """Get Python version from executable."""
-        def _parse(r: subprocess.CompletedProcess[str]) -> str | None:
-            if r.returncode == 0:
-                # "Python 3.12.1" -> "3.12.1"
-                return r.stdout.strip().split()[-1]
-            return None
-        return self._run_version_check([str(python_exe), "--version"], _parse)
+        return _resolvers._get_python_version(python_exe)
+
     def _get_poetry_python(self, context_root: Path) -> str | None:
-        """Get Python executable from Poetry environment."""
-        try:
-            result = subprocess.run(
-                ["poetry", "env", "info", "-e"],
-                capture_output=True,
-                timeout=10,
-                text=True,
-                cwd=context_root,
-            )
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except FileNotFoundError:
-            log.debug("poetry_not_found", exc_info=True)
-        except subprocess.TimeoutExpired:
-            log.debug("poetry_env_timed_out", exc_info=True)
-        except subprocess.SubprocessError:
-            log.debug("poetry_env_subprocess_error", exc_info=True)
-        return None
+        return _resolvers._get_poetry_python(context_root)
+
     def _set_python_env_vars(self, runtime: ContextRuntime, venv_path: Path) -> None:
-        """Set Python-specific environment variables."""
-        env_vars = runtime.get_env_vars()
-        env_vars["VIRTUAL_ENV"] = str(venv_path)
-        # Prepend venv bin to PATH hint (actual PATH manipulation happens at execution)
-        bin_dir = venv_path / "bin" if (venv_path / "bin").exists() else venv_path / "Scripts"
-        env_vars["_VENV_BIN"] = str(bin_dir)
-        runtime.set_env_vars(env_vars)
+        _resolvers._set_python_env_vars(runtime, venv_path)
+
     def _resolve_javascript(
-        self, context_root: Path, runtime: ContextRuntime, warnings: list[str]
+        self, context_root: Path, runtime: ContextRuntime, warnings: list[str],
     ) -> RuntimeResolutionMethod:
-        """Resolve JavaScript/Node runtime."""
-        # Detect package manager
-        pm, pm_exe = self._detect_package_manager(context_root)
-        runtime.package_manager = pm
-        runtime.package_manager_executable = pm_exe
-        # Find Node
-        # Check for .nvmrc
-        nvmrc_path = context_root / ".nvmrc"
-        has_nvmrc = nvmrc_path.exists()
-        if not has_nvmrc:
-            nvmrc_path = self.repo_root / ".nvmrc"
-            has_nvmrc = nvmrc_path.exists()
-        node_exe = shutil.which("node")
-        if node_exe:
-            runtime.node_executable = node_exe
-            runtime.node_version = self._get_node_version(node_exe)
-            return "nvm_detected" if has_nvmrc else "path_detected"
-        warnings.append("No Node.js executable found")
-        return "not_found"
+        return _resolvers._resolve_javascript(self, context_root, runtime, warnings)
+
     def _detect_package_manager(self, context_root: Path) -> tuple[str, str | None]:
-        """Detect JavaScript package manager."""
-        # Check lockfiles in order of preference
-        checks = [
-            ("pnpm-lock.yaml", "pnpm"),
-            ("yarn.lock", "yarn"),
-            ("bun.lockb", "bun"),
-            ("package-lock.json", "npm"),
-        ]
-        for lockfile, pm in checks:
-            if (context_root / lockfile).exists() or (self.repo_root / lockfile).exists():
-                exe = shutil.which(pm)
-                return (pm, exe)
-        # Default to npm
-        npm_exe = shutil.which("npm")
-        return ("npm", npm_exe)
+        return _resolvers._detect_package_manager(self, context_root)
+
     def _get_node_version(self, node_exe: str) -> str | None:
-        """Get Node.js version."""
-        def _parse(r: subprocess.CompletedProcess[str]) -> str | None:
-            if r.returncode == 0:
-                # "v20.10.0" -> "20.10.0"
-                return r.stdout.strip().lstrip("v")
-            return None
-        return self._run_version_check([node_exe, "--version"], _parse)
+        return _resolvers._get_node_version(node_exe)
+
     def _resolve_go(
-        self, context_root: Path, runtime: ContextRuntime, warnings: list[str]
+        self, context_root: Path, runtime: ContextRuntime, warnings: list[str],
     ) -> RuntimeResolutionMethod:
-        """Resolve Go runtime."""
-        go_exe = shutil.which("go")
-        if go_exe:
-            runtime.go_executable = go_exe
-            runtime.go_version = self._get_go_version(go_exe)
-            # Find go.mod
-            go_mod = context_root / "go.mod"
-            if not go_mod.exists():
-                go_mod = self.repo_root / "go.mod"
-            if go_mod.exists():
-                runtime.go_mod_path = str(go_mod)
-            return "path_detected"
-        warnings.append("No Go executable found")
-        return "not_found"
+        return _resolvers._resolve_go(self, context_root, runtime, warnings)
+
     def _get_go_version(self, go_exe: str) -> str | None:
-        """Get Go version."""
-        def _parse(r: subprocess.CompletedProcess[str]) -> str | None:
-            if r.returncode == 0:
-                # "go version go1.21.5 linux/amd64" -> "1.21.5"
-                parts = r.stdout.split()
-                if len(parts) >= 3:
-                    return parts[2].lstrip("go")
-            return None
-        return self._run_version_check([go_exe, "version"], _parse)
+        return _resolvers._get_go_version(go_exe)
+
     def _resolve_rust(
-        self, _context_root: Path, runtime: ContextRuntime, warnings: list[str]
+        self, _context_root: Path, runtime: ContextRuntime, warnings: list[str],
     ) -> RuntimeResolutionMethod:
-        """Resolve Rust runtime."""
-        cargo_exe = shutil.which("cargo")
-        if cargo_exe:
-            runtime.cargo_executable = cargo_exe
-            runtime.rust_version = self._get_rust_version(cargo_exe)
-            return "path_detected"
-        warnings.append("No Cargo executable found")
-        return "not_found"
+        return _resolvers._resolve_rust(_context_root, runtime, warnings)
+
     def _get_rust_version(self, cargo_exe: str) -> str | None:
-        """Get Rust version via cargo."""
-        def _parse(r: subprocess.CompletedProcess[str]) -> str | None:
-            if r.returncode == 0:
-                # "cargo 1.75.0 (...)" -> "1.75.0"
-                parts = r.stdout.split()
-                if len(parts) >= 2:
-                    return parts[1]
-            return None
-        return self._run_version_check([cargo_exe, "--version"], _parse)
+        return _resolvers._get_rust_version(cargo_exe)
+
     def _resolve_jvm(
-        self, context_root: Path, runtime: ContextRuntime, warnings: list[str]
+        self, context_root: Path, runtime: ContextRuntime, warnings: list[str],
     ) -> RuntimeResolutionMethod:
-        """Resolve JVM (Java/Kotlin/Scala) runtime."""
-        java_exe = shutil.which("java")
-        if java_exe:
-            runtime.java_executable = java_exe
-            runtime.java_version = self._get_java_version(java_exe)
-            # Check for Gradle wrapper
-            gradlew = context_root / "gradlew"
-            if not gradlew.exists():
-                gradlew = self.repo_root / "gradlew"
-            if gradlew.exists():
-                runtime.gradle_executable = str(gradlew)
-            else:
-                gradle = shutil.which("gradle")
-                if gradle:
-                    runtime.gradle_executable = gradle
-            # Check for Maven wrapper
-            mvnw = context_root / "mvnw"
-            if not mvnw.exists():
-                mvnw = self.repo_root / "mvnw"
-            if mvnw.exists():
-                runtime.maven_executable = str(mvnw)
-            else:
-                mvn = shutil.which("mvn")
-                if mvn:
-                    runtime.maven_executable = mvn
-            return "path_detected"
-        warnings.append("No Java executable found")
-        return "not_found"
+        return _resolvers._resolve_jvm(self, context_root, runtime, warnings)
+
     def _get_java_version(self, java_exe: str) -> str | None:
-        """Get Java version."""
-        import re
-        def _parse(r: subprocess.CompletedProcess[str]) -> str | None:
-            # Java version is on stderr
-            output = r.stderr or r.stdout
-            if output:
-                for line in output.split("\n"):
-                    if "version" in line:
-                        match = re.search(r'"([^"]+)"', line)
-                        if match:
-                            return match.group(1)
-            return None
-        return self._run_version_check([java_exe, "-version"], _parse)
+        return _resolvers._get_java_version(java_exe)
+
     def _resolve_dotnet(
-        self, _context_root: Path, runtime: ContextRuntime, warnings: list[str]
+        self, _context_root: Path, runtime: ContextRuntime, warnings: list[str],
     ) -> RuntimeResolutionMethod:
-        """Resolve .NET runtime."""
-        dotnet_exe = shutil.which("dotnet")
-        if dotnet_exe:
-            runtime.dotnet_executable = dotnet_exe
-            runtime.dotnet_version = self._get_dotnet_version(dotnet_exe)
-            return "path_detected"
-        warnings.append("No .NET executable found")
-        return "not_found"
+        return _resolvers._resolve_dotnet(_context_root, runtime, warnings)
+
     def _get_dotnet_version(self, dotnet_exe: str) -> str | None:
-        """Get .NET version."""
-        def _parse(r: subprocess.CompletedProcess[str]) -> str | None:
-            if r.returncode == 0:
-                return r.stdout.strip()
-            return None
-        return self._run_version_check([dotnet_exe, "--version"], _parse)
+        return _resolvers._get_dotnet_version(dotnet_exe)
+
     def _resolve_ruby(
-        self, _context_root: Path, runtime: ContextRuntime, warnings: list[str]
+        self, _context_root: Path, runtime: ContextRuntime, warnings: list[str],
     ) -> RuntimeResolutionMethod:
-        """Resolve Ruby runtime."""
-        ruby_exe = shutil.which("ruby")
-        if ruby_exe:
-            runtime.ruby_executable = ruby_exe
-            runtime.ruby_version = self._get_ruby_version(ruby_exe)
-            bundle_exe = shutil.which("bundle")
-            if bundle_exe:
-                runtime.bundle_executable = bundle_exe
-            return "path_detected"
-        warnings.append("No Ruby executable found")
-        return "not_found"
+        return _resolvers._resolve_ruby(_context_root, runtime, warnings)
+
     def _get_ruby_version(self, ruby_exe: str) -> str | None:
-        """Get Ruby version."""
-        def _parse(r: subprocess.CompletedProcess[str]) -> str | None:
-            if r.returncode == 0:
-                # "ruby 3.2.0 (2022-12-25...) [...]" -> "3.2.0"
-                parts = r.stdout.split()
-                if len(parts) >= 2:
-                    return parts[1]
-            return None
-        return self._run_version_check([ruby_exe, "--version"], _parse)
+        return _resolvers._get_ruby_version(ruby_exe)
 
-# Execution Context Builder
-
-class ExecutionContextBuilder:
-    """Builds RuntimeExecutionContext from Context and ContextRuntime.
-    This is the bridge between the index layer (Context, ContextRuntime)
-    and the execution layer (RuntimeExecutionContext, ToolConfig).
-    """
-    def __init__(self, repo_root: Path) -> None:
-        self.repo_root = repo_root
-    @staticmethod
-    def build(
-        context_root: Path,
-        runtime: ContextRuntime,
-        language_family: str | None = None,
-    ) -> RuntimeExecutionContext:
-        """Build RuntimeExecutionContext from workspace root and runtime.
-        This is a convenience method for execution-time context building
-        when we don't have a persisted Context object.
-        Args:
-            context_root: Absolute path to workspace/context root
-            runtime: ContextRuntime with detected executables
-            language_family: Optional language family (auto-detected if not provided)
-        Returns:
-            RuntimeExecutionContext ready for execution
-        """
-        # Infer language family from runtime if not provided
-        if language_family is None:
-            if runtime.python_executable:
-                language_family = "python"
-            elif runtime.node_executable:
-                language_family = "javascript"
-            elif runtime.go_executable:
-                language_family = "go"
-            elif runtime.cargo_executable:
-                language_family = "rust"
-            elif runtime.java_executable:
-                language_family = "java"
-            elif runtime.dotnet_executable:
-                language_family = "csharp"
-            elif runtime.ruby_executable:
-                language_family = "ruby"
-            else:
-                language_family = "unknown"
-        exec_ctx = RuntimeExecutionContext(
-            context_id=runtime.context_id,
-            language_family=language_family,
-            root_path=context_root,
-            runtime=runtime,
-            env_vars=runtime.get_env_vars(),
-            working_directory=context_root,
-        )
-        # Build tool configs
-        builder = ExecutionContextBuilder(context_root)
-        builder._build_tool_configs_for_runtime(exec_ctx, language_family, runtime)
-        return exec_ctx
-    def build_from_context(
-        self, context: Context, runtime: ContextRuntime
-    ) -> RuntimeExecutionContext:
-        """Build RuntimeExecutionContext from Context and ContextRuntime."""
-        root_path = self.repo_root / context.root_path if context.root_path else self.repo_root
-        exec_ctx = RuntimeExecutionContext(
-            context_id=context.id or 0,
-            language_family=context.language_family,
-            root_path=root_path,
-            runtime=runtime,
-            env_vars=runtime.get_env_vars(),
-            working_directory=root_path,
-        )
-        # Build tool configs based on language
-        self._build_tool_configs_for_runtime(exec_ctx, context.language_family, runtime)
-        return exec_ctx
-    def _build_tool_configs_for_runtime(
-        self, exec_ctx: RuntimeExecutionContext, language_family: str, runtime: ContextRuntime
-    ) -> None:
-        """Populate tool configurations for the execution context."""
-        if language_family == "python":
-            self._build_python_tools(exec_ctx, runtime)
-        elif language_family == "javascript":
-            self._build_javascript_tools(exec_ctx, runtime)
-        elif language_family == "go":
-            self._build_go_tools(exec_ctx, runtime)
-        elif language_family == "rust":
-            self._build_rust_tools(exec_ctx, runtime)
-        elif language_family in ("java", "kotlin", "scala", "groovy"):
-            self._build_jvm_tools(exec_ctx, runtime)
-        elif language_family in ("csharp", "fsharp", "vbnet"):
-            self._build_dotnet_tools(exec_ctx, runtime)
-        elif language_family == "ruby":
-            self._build_ruby_tools(exec_ctx, runtime)
-    def _build_python_tools(
-        self, exec_ctx: RuntimeExecutionContext, runtime: ContextRuntime
-    ) -> None:
-        """Build Python tool configs."""
-        python_exe = runtime.python_executable or "python"
-        # pytest - invoke as module to ensure correct interpreter
-        exec_ctx.test_runners["python.pytest"] = ToolConfig(
-            tool_id="python.pytest",
-            executable=python_exe,
-            base_args=["-m", "pytest"],
-            available=self._check_python_package(python_exe, "pytest"),
-        )
-        # unittest
-        exec_ctx.test_runners["python.unittest"] = ToolConfig(
-            tool_id="python.unittest",
-            executable=python_exe,
-            base_args=["-m", "unittest"],
-            available=True,  # Built-in
-        )
-        # ruff linter
-        ruff_available = self._check_python_package(python_exe, "ruff")
-        exec_ctx.linters["python.ruff"] = ToolConfig(
-            tool_id="python.ruff",
-            executable=python_exe,
-            base_args=["-m", "ruff", "check"],
-            available=ruff_available,
-        )
-        # mypy type checker
-        mypy_available = self._check_python_package(python_exe, "mypy")
-        exec_ctx.linters["python.mypy"] = ToolConfig(
-            tool_id="python.mypy",
-            executable=python_exe,
-            base_args=["-m", "mypy"],
-            available=mypy_available,
-        )
-        # black formatter
-        black_available = self._check_python_package(python_exe, "black")
-        exec_ctx.formatters["python.black"] = ToolConfig(
-            tool_id="python.black",
-            executable=python_exe,
-            base_args=["-m", "black"],
-            available=black_available,
-        )
-    def _check_python_package(self, python_exe: str, package: str) -> bool:
-        """Check if a Python package is installed."""
-        try:
-            result = subprocess.run(
-                [python_exe, "-c", f"import {package}"],
-                capture_output=True,
-                timeout=5,
-            )
-            return result.returncode == 0
-        except FileNotFoundError:
-            log.debug("package_check_exe_not_found", exc_info=True)
-            return False
-        except subprocess.TimeoutExpired:
-            log.debug("package_check_timed_out", exc_info=True)
-            return False
-        except subprocess.SubprocessError:
-            log.debug("package_check_subprocess_error", exc_info=True)
-            return False
-    def _build_javascript_tools(
-        self, exec_ctx: RuntimeExecutionContext, runtime: ContextRuntime
-    ) -> None:
-        """Build JavaScript tool configs."""
-        pm = runtime.package_manager or "npm"
-        pm_exe = runtime.package_manager_executable or pm
-        # Determine how to run packages
-        if pm == "pnpm":
-            run_prefix = [pm_exe, "exec"]
-        elif pm == "yarn":
-            run_prefix = [pm_exe]
-        elif pm == "bun":
-            run_prefix = [pm_exe, "run"]
-        else:  # npm
-            run_prefix = ["npx"]
-        # jest
-        exec_ctx.test_runners["js.jest"] = ToolConfig(
-            tool_id="js.jest",
-            executable=run_prefix[0],
-            base_args=run_prefix[1:] + ["jest"] if len(run_prefix) > 1 else ["jest"],
-            available=True,  # Assume available if package.json exists
-        )
-        # vitest
-        exec_ctx.test_runners["js.vitest"] = ToolConfig(
-            tool_id="js.vitest",
-            executable=run_prefix[0],
-            base_args=run_prefix[1:] + ["vitest", "run"]
-            if len(run_prefix) > 1
-            else ["vitest", "run"],
-            available=True,
-        )
-        # eslint
-        exec_ctx.linters["js.eslint"] = ToolConfig(
-            tool_id="js.eslint",
-            executable=run_prefix[0],
-            base_args=run_prefix[1:] + ["eslint"] if len(run_prefix) > 1 else ["eslint"],
-            available=True,
-        )
-        # prettier
-        exec_ctx.formatters["js.prettier"] = ToolConfig(
-            tool_id="js.prettier",
-            executable=run_prefix[0],
-            base_args=run_prefix[1:] + ["prettier"] if len(run_prefix) > 1 else ["prettier"],
-            available=True,
-        )
-    def _build_go_tools(self, exec_ctx: RuntimeExecutionContext, runtime: ContextRuntime) -> None:
-        """Build Go tool configs."""
-        go_exe = runtime.go_executable or "go"
-        # go test
-        exec_ctx.test_runners["go.gotest"] = ToolConfig(
-            tool_id="go.gotest",
-            executable=go_exe,
-            base_args=["test", "-json"],
-            available=bool(runtime.go_executable),
-        )
-        # golangci-lint
-        golint = shutil.which("golangci-lint")
-        exec_ctx.linters["go.golangci-lint"] = ToolConfig(
-            tool_id="go.golangci-lint",
-            executable=golint or "golangci-lint",
-            base_args=["run"],
-            available=bool(golint),
-        )
-        # gofmt
-        exec_ctx.formatters["go.gofmt"] = ToolConfig(
-            tool_id="go.gofmt",
-            executable=go_exe,
-            base_args=["fmt"],
-            available=bool(runtime.go_executable),
-        )
-    def _build_rust_tools(self, exec_ctx: RuntimeExecutionContext, runtime: ContextRuntime) -> None:
-        """Build Rust tool configs."""
-        cargo_exe = runtime.cargo_executable or "cargo"
-        # cargo test
-        exec_ctx.test_runners["rust.cargo_test"] = ToolConfig(
-            tool_id="rust.cargo_test",
-            executable=cargo_exe,
-            base_args=["test"],
-            available=bool(runtime.cargo_executable),
-        )
-        # cargo-nextest (if available)
-        nextest = shutil.which("cargo-nextest")
-        exec_ctx.test_runners["rust.nextest"] = ToolConfig(
-            tool_id="rust.nextest",
-            executable=cargo_exe,
-            base_args=["nextest", "run"],
-            available=bool(nextest),
-        )
-        # clippy
-        exec_ctx.linters["rust.clippy"] = ToolConfig(
-            tool_id="rust.clippy",
-            executable=cargo_exe,
-            base_args=["clippy"],
-            available=bool(runtime.cargo_executable),
-        )
-        # rustfmt
-        exec_ctx.formatters["rust.rustfmt"] = ToolConfig(
-            tool_id="rust.rustfmt",
-            executable=cargo_exe,
-            base_args=["fmt"],
-            available=bool(runtime.cargo_executable),
-        )
-    def _build_jvm_tools(self, exec_ctx: RuntimeExecutionContext, runtime: ContextRuntime) -> None:
-        """Build JVM tool configs."""
-        # Maven
-        if runtime.maven_executable:
-            exec_ctx.test_runners["java.maven"] = ToolConfig(
-                tool_id="java.maven",
-                executable=runtime.maven_executable,
-                base_args=["test"],
-                available=True,
-            )
-        # Gradle
-        if runtime.gradle_executable:
-            exec_ctx.test_runners["java.gradle"] = ToolConfig(
-                tool_id="java.gradle",
-                executable=runtime.gradle_executable,
-                base_args=["test"],
-                available=True,
-            )
-    def _build_dotnet_tools(
-        self, exec_ctx: RuntimeExecutionContext, runtime: ContextRuntime
-    ) -> None:
-        """Build .NET tool configs."""
-        dotnet_exe = runtime.dotnet_executable or "dotnet"
-        exec_ctx.test_runners["csharp.dotnet"] = ToolConfig(
-            tool_id="csharp.dotnet",
-            executable=dotnet_exe,
-            base_args=["test"],
-            available=bool(runtime.dotnet_executable),
-        )
-    def _build_ruby_tools(self, exec_ctx: RuntimeExecutionContext, runtime: ContextRuntime) -> None:
-        """Build Ruby tool configs."""
-        bundle_exe = runtime.bundle_executable
-        if bundle_exe:
-            exec_ctx.test_runners["ruby.rspec"] = ToolConfig(
-                tool_id="ruby.rspec",
-                executable=bundle_exe,
-                base_args=["exec", "rspec"],
-                available=True,
-            )
-        else:
-            rspec = shutil.which("rspec")
-            exec_ctx.test_runners["ruby.rspec"] = ToolConfig(
-                tool_id="ruby.rspec",
-                executable=rspec or "rspec",
-                base_args=[],
-                available=bool(rspec),
-            )
-        # rubocop
-        rubocop = shutil.which("rubocop")
-        exec_ctx.linters["ruby.rubocop"] = ToolConfig(
-            tool_id="ruby.rubocop",
-            executable=rubocop or "rubocop",
-            base_args=[],
-            available=bool(rubocop),
-        )
+from coderecon.testing import runtime_resolvers as _resolvers  # noqa: E402
+from coderecon.testing.runtime_builder import ExecutionContextBuilder  # noqa: E402, F401
