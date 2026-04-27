@@ -110,10 +110,6 @@ class TestBuildPreview:
         assert preview.low_certainty_count == 1
 class TestBuildDeletePreview:
     """Test _build_impact_preview method."""
-    @pytest.fixture
-    def refactor_ops(self, tmp_path: Path) -> RefactorOps:
-        coordinator = MagicMock()
-        return RefactorOps(tmp_path, coordinator)
     def test_delete_guidance(self, refactor_ops: RefactorOps) -> None:
         edits = {
             "file.py": [
@@ -215,10 +211,6 @@ class TestRefactorImpact:
 @pytest.mark.asyncio
 class TestRefactorCancel:
     """Test refactor_cancel operation."""
-    @pytest.fixture
-    def refactor_ops(self, tmp_path: Path) -> RefactorOps:
-        coordinator = MagicMock()
-        return RefactorOps(tmp_path, coordinator)
 
     async def test_cancel_existing(self, refactor_ops: RefactorOps) -> None:
         # Add a pending refactor
