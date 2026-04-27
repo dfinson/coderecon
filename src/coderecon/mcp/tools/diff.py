@@ -6,9 +6,7 @@ Orchestrates the full pipeline: sources -> engine -> enrichment -> output.
 # Removed: from __future__ import annotations - breaks FastMCP+pydantic Literal resolution
 
 import contextlib
-import re
-from dataclasses import asdict
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from fastmcp import Context
@@ -23,7 +21,6 @@ from coderecon.index._internal.diff.models import (
     ChangedFile,
     DefSnapshot,
     SemanticDiffResult,
-    StructuralChange,
 )
 from coderecon.index._internal.diff.sources import (
     snapshots_from_blob,

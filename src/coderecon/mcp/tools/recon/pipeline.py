@@ -29,12 +29,10 @@ if TYPE_CHECKING:
 log = structlog.get_logger(__name__)
 
 from coderecon.mcp.tools.recon.pipeline_scoring import (  # noqa: E402
-    _build_ce_documents,
-    _fetch_scaffolds,
+    _build_ce_documents,  # noqa: F401  # re-exported for tests
     _read_signature,
     _read_snippet,
     _score_cross_encoder,
-    _score_cross_encoder_tiny,
 )
 
 def _build_query_metrics(diagnostics: dict, candidates: list, seeds: list | None, pins: list | None) -> dict:

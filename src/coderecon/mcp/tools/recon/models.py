@@ -11,18 +11,11 @@ from typing import TYPE_CHECKING
 from coderecon.mcp.tools.recon.recon_constants import (
     ArtifactKind,
     TaskIntent,
-    _BARREL_FILENAMES,
-    _BUILD_FILES,
-    _CONFIG_EXTENSIONS,
-    _DOC_EXTENSIONS,
-    _INTERNAL_DEPTH,
-    _PATH_EXTENSIONS,
-    _PATH_STOP_TOKENS,
-    _STOP_WORDS,
-    _classify_artifact,
-    _extract_intent,
-    _is_barrel_file,
-    _is_test_file,
+    _STOP_WORDS,  # noqa: F401  # re-exported for parsing.py
+    _classify_artifact,  # noqa: F401  # re-exported for merge.py, tests
+    _extract_intent,  # noqa: F401  # re-exported for parsing.py, tests
+    _is_barrel_file,  # noqa: F401  # re-exported for merge.py, tests
+    _is_test_file,  # noqa: F401  # re-exported for merge.py, tests
 )
 
 if TYPE_CHECKING:
