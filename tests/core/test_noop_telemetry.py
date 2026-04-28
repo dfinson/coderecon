@@ -14,16 +14,20 @@ from coderecon.core._noop_telemetry import (
 
 class TestNoOpSpan:
     def test_context_manager(self) -> None:
-        with NoOpSpan() as span:
-            assert span is not None
+        span = NoOpSpan()
+        with span as s:
+            assert s is span
+            assert isinstance(s, NoOpSpan)
 
     def test_set_attribute(self) -> None:
         span = NoOpSpan()
+        assert isinstance(span, NoOpSpan)
         result = span.set_attribute("key", "value")
         assert result is None
 
     def test_set_attributes(self) -> None:
         span = NoOpSpan()
+        assert isinstance(span, NoOpSpan)
         result = span.set_attributes({"k": "v"})
         assert result is None
 
@@ -31,67 +35,92 @@ class TestNoOpSpan:
         span = NoOpSpan()
         result = span.add_event("evt", {"a": 1})
         assert result is None
+        result2 = span.add_event("evt2")
+        assert result2 is None
 
     def test_set_status(self) -> None:
-        result = NoOpSpan().set_status("OK")
+        span = NoOpSpan()
+        result = span.set_status("OK")
         assert result is None
+        assert span.is_recording() is False
 
     def test_record_exception(self) -> None:
-        result = NoOpSpan().record_exception(RuntimeError("boom"))
+        span = NoOpSpan()
+        result = span.record_exception(RuntimeError("boom"))
         assert result is None
+        assert span.is_recording() is False
 
     def test_is_recording(self) -> None:
-        assert NoOpSpan().is_recording() is False
+        span = NoOpSpan()
+        assert span.is_recording() is False
+        assert isinstance(span.is_recording(), bool)
 
 
 class TestNoOpTracer:
     def test_start_span(self) -> None:
-        span = NoOpTracer().start_span("op")
+        tracer = NoOpTracer()
+        span = tracer.start_span("op")
         assert isinstance(span, NoOpSpan)
+        assert span.is_recording() is False
 
     def test_start_as_current_span(self) -> None:
-        span = NoOpTracer().start_as_current_span("op")
+        tracer = NoOpTracer()
+        span = tracer.start_as_current_span("op")
         assert isinstance(span, NoOpSpan)
+        assert span.is_recording() is False
 
     def test_start_as_current_span_cm(self) -> None:
-        with NoOpTracer().start_as_current_span_cm("op") as span:
+        tracer = NoOpTracer()
+        with tracer.start_as_current_span_cm("op") as span:
             assert isinstance(span, NoOpSpan)
+            assert span.is_recording() is False
 
 
 class TestNoOpMeter:
     def test_create_counter(self) -> None:
-        c = NoOpMeter().create_counter("hits")
+        meter = NoOpMeter()
+        c = meter.create_counter("hits")
         assert isinstance(c, NoOpCounter)
         result = c.add(1)
         assert result is None
 
     def test_create_up_down_counter(self) -> None:
-        c = NoOpMeter().create_up_down_counter("gauge")
+        meter = NoOpMeter()
+        c = meter.create_up_down_counter("gauge")
         assert isinstance(c, NoOpCounter)
         assert c.add(1) is None
 
     def test_create_histogram(self) -> None:
-        h = NoOpMeter().create_histogram("latency")
+        meter = NoOpMeter()
+        h = meter.create_histogram("latency")
         assert isinstance(h, NoOpHistogram)
         result = h.record(42.0)
         assert result is None
 
     def test_create_observable_gauge(self) -> None:
-        o = NoOpMeter().create_observable_gauge("g")
+        meter = NoOpMeter()
+        o = meter.create_observable_gauge("g")
         assert isinstance(o, NoOpObservable)
+        assert not isinstance(o, NoOpCounter)
 
     def test_create_observable_counter(self) -> None:
-        o = NoOpMeter().create_observable_counter("c")
+        meter = NoOpMeter()
+        o = meter.create_observable_counter("c")
         assert isinstance(o, NoOpObservable)
+        assert not isinstance(o, NoOpCounter)
 
     def test_create_observable_up_down_counter(self) -> None:
-        o = NoOpMeter().create_observable_up_down_counter("u")
+        meter = NoOpMeter()
+        o = meter.create_observable_up_down_counter("u")
         assert isinstance(o, NoOpObservable)
+        assert not isinstance(o, NoOpCounter)
 
 
 class TestModuleSingletons:
     def test_noop_tracer_is_instance(self) -> None:
         assert isinstance(noop_tracer, NoOpTracer)
+        assert noop_tracer is not None
 
     def test_noop_meter_is_instance(self) -> None:
         assert isinstance(noop_meter, NoOpMeter)
+        assert noop_meter is not None

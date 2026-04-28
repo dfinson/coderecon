@@ -163,27 +163,32 @@ class TestNoOpSpan:
     def test_set_attribute_no_error(self) -> None:
         """set_attribute doesn't raise."""
         span = _NoOpSpan()
-        span.set_attribute("key", "value")
+        result = span.set_attribute("key", "value")
+        assert result is None
 
     def test_set_attributes_no_error(self) -> None:
         """set_attributes doesn't raise."""
         span = _NoOpSpan()
-        span.set_attributes({"key1": "value1", "key2": 123})
+        result = span.set_attributes({"key1": "value1", "key2": 123})
+        assert result is None
 
     def test_add_event_no_error(self) -> None:
         """add_event doesn't raise."""
         span = _NoOpSpan()
-        span.add_event("test_event", {"attr": "value"})
+        result = span.add_event("test_event", {"attr": "value"})
+        assert result is None
 
     def test_set_status_no_error(self) -> None:
         """set_status doesn't raise."""
         span = _NoOpSpan()
-        span.set_status("OK")  # Any value should work
+        result = span.set_status("OK")  # Any value should work
+        assert result is None
 
     def test_record_exception_no_error(self) -> None:
         """record_exception doesn't raise."""
         span = _NoOpSpan()
-        span.record_exception(ValueError("test error"))
+        result = span.record_exception(ValueError("test error"))
+        assert result is None
 
     def test_is_recording_returns_false(self) -> None:
         """is_recording returns False."""
@@ -256,8 +261,10 @@ class TestNoOpCounter:
     def test_add_no_error(self) -> None:
         """add doesn't raise."""
         counter = _NoOpCounter()
-        counter.add(1)
-        counter.add(5, {"attr": "value"})
+        result = counter.add(1)
+        assert result is None
+        result2 = counter.add(5, {"attr": "value"})
+        assert result2 is None
 
 class TestNoOpHistogram:
     """Tests for _NoOpHistogram class."""
@@ -265,8 +272,10 @@ class TestNoOpHistogram:
     def test_record_no_error(self) -> None:
         """record doesn't raise."""
         histogram = _NoOpHistogram()
-        histogram.record(1.5)
-        histogram.record(100, {"attr": "value"})
+        result = histogram.record(1.5)
+        assert result is None
+        result2 = histogram.record(100, {"attr": "value"})
+        assert result2 is None
 
 # =============================================================================
 # Tests for get_tracer / get_meter
