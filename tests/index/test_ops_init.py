@@ -63,7 +63,7 @@ class TestInitialize:
             patch("coderecon.index.ops_init.ContextDiscovery") as mock_discovery_cls,
             patch("coderecon.index.ops_init.Tier1AuthorityFilter") as mock_auth_cls,
             patch("coderecon.index.ops_init.MembershipResolver") as mock_membership_cls,
-            patch("coderecon.index.ops_init.ContextProbe") as mock_probe_cls,
+            patch("coderecon.index.ops_init.ContextProbe"),
             patch("coderecon.index.ops_init.ContextRouter"),
             patch("coderecon.index.ops_init.StructuralIndexer"),
             patch("coderecon.index.ops_init.FileStateService"),

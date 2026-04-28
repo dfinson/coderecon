@@ -483,7 +483,7 @@ class TestUpdateLintToolsIncremental:
             mock_reg.all.return_value = [mock_tool]
             mock_reg.detect.return_value = []
 
-            count = await _update_lint_tools_incremental(
+            await _update_lint_tools_incremental(
                 engine, [Path("pyproject.toml")]
             )
 
