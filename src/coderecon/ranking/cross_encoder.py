@@ -70,7 +70,6 @@ class CrossEncoderScorer:
         self._tokenizer = Tokenizer.from_file(str(self.tokenizer_path))
         self._tokenizer.enable_truncation(max_length=self.max_length)
         self._tokenizer.enable_padding()
-        _gpu = any(p != "CPUExecutionProvider" for p in active)
         log.debug("cross_encoder.loaded", extra={"model": str(self.onnx_path), "providers": active, "gpu": _gpu})
 
     # ONNX Runtime allocates O(batch × seq²) intermediate tensors for

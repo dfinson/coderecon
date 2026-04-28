@@ -167,7 +167,7 @@ async def _handle_describe(
     # Supply available tool names from the dispatch table so describe can
     # report what tools exist even when static docs are missing.
     params.setdefault("available_tool_names", list(core_fns.keys()))
-    result = await describe_fn(**params)
+    result = describe_fn(**params)
     return _success_response(request_id, result)
 
 async def _handle_unregister(
