@@ -13,8 +13,6 @@ Covers:
 
 import json
 
-import pytest
-
 from coderecon.index._internal.indexing.package_parsers import (
     _normalize_path,
     _parse_export_target,

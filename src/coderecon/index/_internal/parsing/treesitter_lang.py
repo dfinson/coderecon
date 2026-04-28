@@ -213,6 +213,88 @@ def _declared_module_ocaml(file_path: str) -> str | None:
     # OCaml modules are the stem with first character capitalized
     return stem[0].upper() + stem[1:]
 
+
+_CSHARP_TYPE_DECLS = frozenset({
+    "class_declaration",
+    "interface_declaration",
+    "struct_declaration",
+    "enum_declaration",
+    "record_declaration",
+    "record_struct_declaration",
+})
+
+
+def _csharp_type_names_from(
+    declaration_list: tree_sitter.Node,
+    ns_name: str,
+    ns_map: dict[str, list[str]],
+) -> None:
+    """Collect type names from a declaration_list node, recursing into nested namespaces."""
+    for child in declaration_list.children:
+        if child.type in _CSHARP_TYPE_DECLS:
+            for sub in child.children:
+                if sub.type == "identifier":
+                    ns_map.setdefault(ns_name, []).append(sub.text.decode("utf-8"))
+                    break
+        elif child.type == "namespace_declaration":
+            _csharp_process_namespace(child, ns_name, ns_map)
+        elif child.type in _CSHARP_PREPROC_WRAPPERS:
+            _csharp_type_names_from(child, ns_name, ns_map)
+
+
+def _csharp_process_namespace(
+    node: tree_sitter.Node,
+    parent_ns: str | None,
+    ns_map: dict[str, list[str]],
+) -> None:
+    """Process a namespace_declaration node, composing the full namespace path."""
+    ns_name = None
+    for child in node.children:
+        if child.type in ("qualified_name", "identifier"):
+            local_ns = _qualified_name_text(child)
+            ns_name = f"{parent_ns}.{local_ns}" if parent_ns else local_ns
+        elif child.type == "declaration_list" and ns_name:
+            _csharp_type_names_from(child, ns_name, ns_map)
+
+
+def _csharp_collect_file_scoped_types(
+    parent: tree_sitter.Node,
+    ns_name: str,
+    ns_map: dict[str, list[str]],
+) -> None:
+    """Collect type declarations for file-scoped namespaces, including inside preproc blocks."""
+    for sibling in parent.children:
+        if sibling.type in _CSHARP_TYPE_DECLS:
+            for sub in sibling.children:
+                if sub.type == "identifier":
+                    ns_map.setdefault(ns_name, []).append(sub.text.decode("utf-8"))
+                    break
+        elif sibling.type in _CSHARP_PREPROC_WRAPPERS:
+            _csharp_collect_file_scoped_types(sibling, ns_name, ns_map)
+
+
+def _csharp_walk_for_namespaces(
+    parent: tree_sitter.Node,
+    root: tree_sitter.Node,
+    ns_map: dict[str, list[str]],
+    parent_ns: str | None = None,
+) -> None:
+    """Walk tree nodes, descending into preprocessor wrappers."""
+    for node in parent.children:
+        if node.type == "namespace_declaration":
+            _csharp_process_namespace(node, parent_ns, ns_map)
+        elif node.type == "file_scoped_namespace_declaration":
+            ns_name = None
+            for child in node.children:
+                if child.type in ("qualified_name", "identifier"):
+                    ns_name = _qualified_name_text(child)
+                    break
+            if ns_name:
+                _csharp_collect_file_scoped_types(root, ns_name, ns_map)
+        elif node.type in _CSHARP_PREPROC_WRAPPERS:
+            _csharp_walk_for_namespaces(node, root, ns_map, parent_ns)
+
+
 def extract_csharp_namespace_types(root: tree_sitter.Node) -> dict[str, list[str]]:
     """Extract namespace -> type names mapping from a C# AST.
     Handles both block-scoped and file-scoped namespace declarations,
@@ -223,67 +305,6 @@ def extract_csharp_namespace_types(root: tree_sitter.Node) -> dict[str, list[str
     top-level type names (classes, interfaces, structs, enums) declared
     within that namespace.
     """
-    _TYPE_DECLS = {
-        "class_declaration",
-        "interface_declaration",
-        "struct_declaration",
-        "enum_declaration",
-        "record_declaration",
-        "record_struct_declaration",
-    }
     ns_map: dict[str, list[str]] = {}
-    def _type_names_from(declaration_list: tree_sitter.Node, ns_name: str) -> None:
-        """Collect type names from a declaration_list node, recursing into nested namespaces."""
-        for child in declaration_list.children:
-            if child.type in _TYPE_DECLS:
-                for sub in child.children:
-                    if sub.type == "identifier":
-                        ns_map.setdefault(ns_name, []).append(sub.text.decode("utf-8"))
-                        break
-            elif child.type == "namespace_declaration":
-                # Nested namespace: namespace Inner { ... }
-                _process_namespace(child, ns_name)
-            elif child.type in _CSHARP_PREPROC_WRAPPERS:
-                # Recurse into preprocessor blocks
-                _type_names_from(child, ns_name)
-    def _process_namespace(node: tree_sitter.Node, parent_ns: str | None) -> None:
-        """Process a namespace_declaration node, composing the full namespace path."""
-        ns_name = None
-        for child in node.children:
-            if child.type in ("qualified_name", "identifier"):
-                local_ns = _qualified_name_text(child)
-                ns_name = f"{parent_ns}.{local_ns}" if parent_ns else local_ns
-            elif child.type == "declaration_list" and ns_name:
-                _type_names_from(child, ns_name)
-    def _walk_for_namespaces(parent: tree_sitter.Node, parent_ns: str | None = None) -> None:
-        """Walk tree nodes, descending into preprocessor wrappers."""
-        for node in parent.children:
-            if node.type == "namespace_declaration":
-                # Block-scoped: namespace X.Y { class A {} }
-                _process_namespace(node, parent_ns)
-            elif node.type == "file_scoped_namespace_declaration":
-                # File-scoped: namespace X.Y;
-                ns_name = None
-                for child in node.children:
-                    if child.type in ("qualified_name", "identifier"):
-                        ns_name = _qualified_name_text(child)
-                        break
-                if ns_name:
-                    # Types are siblings in compilation_unit, not children.
-                    # Scan all root-level nodes (including inside preproc wrappers).
-                    _collect_file_scoped_types(root, ns_name)
-            elif node.type in _CSHARP_PREPROC_WRAPPERS:
-                # Recurse into preprocessor blocks to find wrapped namespaces
-                _walk_for_namespaces(node, parent_ns)
-    def _collect_file_scoped_types(parent: tree_sitter.Node, ns_name: str) -> None:
-        """Collect type declarations for file-scoped namespaces, including inside preproc blocks."""
-        for sibling in parent.children:
-            if sibling.type in _TYPE_DECLS:
-                for sub in sibling.children:
-                    if sub.type == "identifier":
-                        ns_map.setdefault(ns_name, []).append(sub.text.decode("utf-8"))
-                        break
-            elif sibling.type in _CSHARP_PREPROC_WRAPPERS:
-                _collect_file_scoped_types(sibling, ns_name)
-    _walk_for_namespaces(root)
+    _csharp_walk_for_namespaces(root, root, ns_map)
     return ns_map

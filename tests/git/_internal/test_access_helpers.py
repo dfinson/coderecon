@@ -14,7 +14,6 @@ import pytest
 
 from coderecon.git._internal.access_helpers import (
     _BranchCategory,
-    _BranchHelper,
     _ParseMixin,
     _ReferenceHelper,
 )
