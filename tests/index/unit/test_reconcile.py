@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import subprocess
-import time
 from sqlmodel import select
 
 import pytest
