@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 import structlog
 
 from coderecon.testing.packs import _is_prunable_path
+from coderecon.testing.packs.tier2 import DartTestPack
 
 log = structlog.get_logger(__name__)
 

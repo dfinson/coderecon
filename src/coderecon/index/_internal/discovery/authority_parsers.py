@@ -112,7 +112,6 @@ def get_cargo_workspace_members(repo_root: Path, t1: CandidateContext) -> list[s
             except tomllib.TOMLDecodeError:
                 log.warning("cargo_toml_parse_failed", path=str(marker_path), exc_info=True)
     return members
-    return members
 
 def get_gradle_includes(repo_root: Path, t1: CandidateContext) -> tuple[list[str], bool]:
     """Extract includes from settings.gradle."""
