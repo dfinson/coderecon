@@ -104,7 +104,11 @@ async def _reindex_for_reconignore_change(
                 full_path = engine.repo_root / rel_path
                 if not full_path.exists():
                     continue
-                content_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
+                try:
+                    content_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
+                except OSError:
+                    log.error("file_read_failed_during_reconignore_upsert", path=rel_path, exc_info=True)
+                    raise
                 lang = detect_language_family(full_path)
                 file_record = File(
                     path=rel_path,
@@ -348,8 +352,8 @@ def _detect_changed_files(
             try:
                 disk_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
             except OSError:
-                log.debug("hash_read_failed", path=rel_path, exc_info=True)
-                continue
+                log.error("hash_read_failed", path=rel_path, exc_info=True)
+                raise
             if disk_hash != indexed_hashes.get(rel_path):
                 to_update.add(rel_path)
     return to_update
@@ -371,7 +375,11 @@ def _upsert_file_records(
             full_path = engine.repo_root / rel_path
             if not full_path.exists():
                 continue
-            content_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
+            try:
+                content_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
+            except OSError:
+                log.error("file_read_failed_during_upsert", path=rel_path, exc_info=True)
+                raise
             existing = session.exec(
                 select(File).where(
                     File.path == rel_path,
@@ -387,7 +395,11 @@ def _upsert_file_records(
             full_path = engine.repo_root / rel_path
             if not full_path.exists():
                 continue
-            content_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
+            try:
+                content_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
+            except OSError:
+                log.error("file_read_failed_during_upsert", path=rel_path, exc_info=True)
+                raise
             lang = detect_language_family(full_path)
             file_record = File(
                 path=rel_path,

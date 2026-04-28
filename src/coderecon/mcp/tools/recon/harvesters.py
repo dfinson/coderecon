@@ -148,7 +148,7 @@ async def _harvest_explicit(
         for name in auto_seeds:
             d = await coordinator.get_def(name)
             if d is not None and d.def_uid not in candidates:
-                candidates[uid] = HarvestCandidate(
+                candidates[d.def_uid] = HarvestCandidate(
                     def_uid=d.def_uid,
                     def_fact=d,
                     from_explicit=False,

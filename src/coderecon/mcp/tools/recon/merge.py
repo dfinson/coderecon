@@ -90,6 +90,8 @@ async def _enrich_candidates(
 
     # Remove candidates that still lack a DefFact
     dead = [uid for uid, c in candidates.items() if c.def_fact is None]
+    if dead:
+        log.warning("enrich.dropped_candidates", count=len(dead), uids=dead[:10])
     for uid in dead:
         del candidates[uid]
 

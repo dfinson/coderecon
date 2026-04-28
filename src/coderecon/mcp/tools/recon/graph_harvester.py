@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 
+from coderecon.core.languages import CONSTANT_KINDS, TYPE_KINDS
 from coderecon.mcp.tools.recon.merge import _select_graph_seeds
 from coderecon.mcp.tools.recon.models import (
     EvidenceRecord,

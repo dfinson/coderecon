@@ -241,13 +241,6 @@ def _build_pipeline_output(
     t0: float,
 ) -> dict[str, Any]:
     """Build final pipeline output with query features, repo features, diagnostics."""
-    coordinator = app_ctx.coordinator
-    from coderecon.mcp.tools.recon.pipeline_scoring import _score_cross_encoder_tiny
-    candidates_out = _score_cross_encoder_tiny(candidates_out, query, coordinator.db)
-
-    from coderecon.ranking.rrf import rrf_fuse
-    candidates_out = rrf_fuse(candidates_out)
-
     elapsed_ms = round((time.monotonic() - t0) * MS_PER_SEC)
     query_features = {
         "query_len": len(query),

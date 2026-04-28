@@ -284,10 +284,9 @@ class LexicalIndex:
                 count += 1
             # Single atomic commit
             writer.commit()
-        except (OSError, ValueError):
-            # OSError: filesystem errors during commit
-            # ValueError: tantivy index corruption or schema mismatch
-            # On failure, changes are discarded (Tantivy writer rollback)
+        except BaseException:
+            # On failure, discard staging buffers.  The Tantivy writer
+            # automatically rolls back uncommitted changes.
             self._staged_adds.clear()
             self._staged_removes.clear()
             raise

@@ -6,6 +6,8 @@ import hashlib
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 from coderecon.index.ops_reindex_full import (
     _detect_changed_files,
@@ -48,12 +50,12 @@ class TestDetectChangedFiles:
         result = _detect_changed_files(engine, {"gone.py"}, {"gone.py": "hash"})
         assert result == set()
 
-    def test_os_error_skipped(self, tmp_path: Path) -> None:
+    def test_os_error_raises(self, tmp_path: Path) -> None:
         engine = self._make_engine(tmp_path, {"a.py": b"content"})
         with patch("coderecon.index.ops_reindex_full.hashlib") as mock_hash:
             mock_hash.sha256.side_effect = OSError("read error")
-            result = _detect_changed_files(engine, {"a.py"}, {"a.py": "hash"})
-        assert result == set()
+            with pytest.raises(OSError, match="read error"):
+                _detect_changed_files(engine, {"a.py"}, {"a.py": "hash"})
 
     def test_multiple_files_mixed(self, tmp_path: Path) -> None:
         content_a = b"unchanged"
