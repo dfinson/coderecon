@@ -13,6 +13,8 @@ from coderecon.files.ops import atomic_write_text
 
 log = structlog.get_logger(__name__)
 
+_MCP_URL_TEMPLATE = "http://127.0.0.1:{port}/mcp"
+
 def _get_mcp_server_name(repo_root: Path) -> str:
     """Get the normalized MCP server name for a repo."""
     repo_name = repo_root.name
@@ -28,7 +30,7 @@ def _ensure_vscode_mcp_config(repo_root: Path, port: int) -> tuple[bool, str]:
     vscode_dir = repo_root / ".vscode"
     mcp_json_path = vscode_dir / "mcp.json"
     server_name = _get_mcp_server_name(repo_root)
-    expected_url = f"http://127.0.0.1:{port}/mcp"
+    expected_url = _MCP_URL_TEMPLATE.format(port=port)
     expected_config: dict[str, Any] = {
         "type": "http",
         "url": expected_url,
@@ -71,7 +73,7 @@ def sync_vscode_mcp_port(repo_root: Path, port: int) -> bool:
     if not mcp_json_path.exists():
         return _ensure_vscode_mcp_config(repo_root, port)[0]
     server_name = _get_mcp_server_name(repo_root)
-    expected_url = f"http://127.0.0.1:{port}/mcp"
+    expected_url = _MCP_URL_TEMPLATE.format(port=port)
     content = mcp_json_path.read_text()
     try:
         existing: dict[str, Any] = json5.loads(content)

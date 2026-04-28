@@ -33,6 +33,47 @@ log = structlog.get_logger(__name__)
 logger = structlog.get_logger(__name__)
 
 
+def _reset_content_hashes(
+    engine: IndexCoordinatorEngine,
+    paths: list[str],
+    wt_id: int,
+) -> None:
+    """Reset content_hash for paths so the next reindex re-processes them."""
+    with engine.db.session() as session:
+        session.exec(
+            text(
+                "UPDATE files SET content_hash = NULL "
+                "WHERE path IN :paths AND worktree_id = :wt"
+            ).bindparams(
+                bindparam("paths", expanding=True),
+                wt=wt_id,
+            ),
+            params={"paths": paths},
+        )  # type: ignore[call-overload]
+        session.commit()
+
+
+def _cleanup_after_reindex(
+    engine: IndexCoordinatorEngine,
+    removed_paths: list[Path],
+    wt_id: int,
+) -> None:
+    """Post-reindex bookkeeping: propagate defs, remove stale data."""
+    engine._propagate_def_changes(wt_id)
+    if removed_paths:
+        engine._remove_structural_facts_for_paths(
+            [str(p) for p in removed_paths], worktree_id=wt_id,
+        )
+    if removed_paths:
+        with engine.db.bulk_writer() as writer:
+            for path in removed_paths:
+                writer.delete_where(
+                    File,
+                    "path = :p AND worktree_id = :wt",
+                    {"p": str(path), "wt": wt_id},
+                )
+
+
 async def _reindex_incremental_impl(
     engine: IndexCoordinatorEngine,
     changed_paths: list[Path],
@@ -120,24 +161,20 @@ async def _reindex_incremental_impl(
                     engine._lexical.commit_staged()
                 except (OSError, RuntimeError):
                     logger.exception("tantivy_commit_failed")
-                    with engine.db.session() as session:
-                        session.exec(
-                            text(
-                                "UPDATE files SET content_hash = NULL "
-                                "WHERE path IN :paths AND worktree_id = :wt"
-                            ).bindparams(
-                                bindparam("paths", expanding=True),
-                                wt=_wt_id,
-                            ),
-                            params={"paths": list(str_changed)},
-                        )  # type: ignore[call-overload]
-                        session.commit()
+                    _reset_content_hashes(engine, list(str_changed), _wt_id)
                     raise
             # Reload searcher to see committed changes
             engine._lexical.reload()
-            _resolve_and_materialize_incremental(
-                engine, str_changed, _wt_id,
-            )
+            try:
+                _resolve_and_materialize_incremental(
+                    engine, str_changed, _wt_id,
+                )
+            except Exception:
+                logger.exception("resolve_materialize_failed_after_tantivy_commit")
+                # Tantivy is already committed but SQLite facts are incomplete.
+                # Reset content_hash so the next reindex will re-process these files.
+                _reset_content_hashes(engine, list(str_changed), _wt_id)
+                raise
         else:
             # Only removals (or nothing changed)
             with engine._tantivy_write_lock:
@@ -149,22 +186,7 @@ async def _reindex_incremental_impl(
                     engine._lexical.commit_staged()
             if engine._lexical is not None:
                 engine._lexical.reload()
-        # Propagate def changes to sibling worktrees
-        engine._propagate_def_changes(_wt_id)
-        # Remove structural facts for removed files
-        if removed_paths:
-            engine._remove_structural_facts_for_paths(
-                [str(p) for p in removed_paths], worktree_id=_wt_id,
-            )
-        # Remove File records for removed paths
-        if removed_paths:
-            with engine.db.bulk_writer() as writer:
-                for path in removed_paths:
-                    writer.delete_where(
-                        File,
-                        "path = :p AND worktree_id = :wt",
-                        {"p": str(path), "wt": _wt_id},
-                    )
+        _cleanup_after_reindex(engine, removed_paths, _wt_id)
         # Incrementally update test targets for changed test files
         await engine._update_test_targets_incremental(new_paths, existing_paths, removed_paths)
         # Incrementally update lint tools if config files changed

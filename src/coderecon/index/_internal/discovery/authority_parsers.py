@@ -36,6 +36,16 @@ def matches_any_glob(path: str, globs: list[str]) -> bool:
             return True
     return False
 
+def _extract_package_json_workspaces(data: dict) -> list[str]:
+    """Extract workspace globs from a parsed package.json."""
+    ws = data.get("workspaces")
+    if isinstance(ws, list):
+        return list(ws)
+    if isinstance(ws, dict) and "packages" in ws:
+        return list(ws["packages"])
+    return []
+
+
 def get_js_workspace_globs(repo_root: Path, t1: CandidateContext) -> list[str]:
     """Extract workspace globs from JavaScript workspace config."""
     globs: list[str] = []
@@ -48,12 +58,7 @@ def get_js_workspace_globs(repo_root: Path, t1: CandidateContext) -> list[str]:
                     globs.extend(content["packages"])
             elif marker.endswith("package.json"):
                 content = json.loads(marker_path.read_text())
-                if "workspaces" in content:
-                    ws = content["workspaces"]
-                    if isinstance(ws, list):
-                        globs.extend(ws)
-                    elif isinstance(ws, dict) and "packages" in ws:
-                        globs.extend(ws["packages"])
+                globs.extend(_extract_package_json_workspaces(content))
             elif marker.endswith("lerna.json"):
                 content = json.loads(marker_path.read_text())
                 if "packages" in content:
@@ -91,42 +96,22 @@ def get_go_work_modules(repo_root: Path, t1: CandidateContext) -> list[str]:
 
 def get_cargo_workspace_members(repo_root: Path, t1: CandidateContext) -> list[str]:
     """Extract members from Cargo.toml [workspace]."""
+    import tomllib
+
     members: list[str] = []
     for marker in t1.markers:
         if marker.endswith("Cargo.toml"):
             marker_path = repo_root / marker
             try:
-                content = marker_path.read_text()
-                in_workspace = False
-                in_members = False
-                for line in content.split("\n"):
-                    line = line.strip()
-                    if line == "[workspace]":
-                        in_workspace = True
-                        continue
-                    if in_workspace and line.startswith("["):
-                        break
-                    if in_workspace and line.startswith("members"):
-                        in_members = True
-                        if "=" in line and "[" in line:
-                            match = re.search(r"\[([^\]]+)\]", line)
-                            if match:
-                                items = match.group(1)
-                                for item in items.split(","):
-                                    item = item.strip().strip('"').strip("'")
-                                    if item:
-                                        members.append(item)
-                            in_members = False
-                        continue
-                    if in_members:
-                        if line == "]":
-                            in_members = False
-                        elif line and not line.startswith("#"):
-                            item = line.strip('",').strip("',")
-                            if item:
-                                members.append(item)
+                with marker_path.open("rb") as f:
+                    data = tomllib.load(f)
+                ws = data.get("workspace", {})
+                members.extend(ws.get("members", []))
             except OSError:
                 log.debug("cargo_toml_read_failed", path=str(marker_path), exc_info=True)
+            except tomllib.TOMLDecodeError:
+                log.warning("cargo_toml_parse_failed", path=str(marker_path), exc_info=True)
+    return members
     return members
 
 def get_gradle_includes(repo_root: Path, t1: CandidateContext) -> tuple[list[str], bool]:

@@ -10,6 +10,62 @@ from coderecon.index._internal.indexing.lexical_search import _escape_query
 if TYPE_CHECKING:
     from coderecon.index._internal.indexing.lexical import LexicalIndex
 
+# Tantivy query syntax characters (including : for field prefix,
+# . and , which commonly appear in natural language task text).
+_SYNTAX_CHARS = set(r'+-&|!(){}[]^~*?:\\/".@,;')
+
+
+def _clean_token(tok: str) -> str:
+    """Strip Tantivy syntax chars from a token entirely.
+
+    For BM25 scoring we want plain words, not escaped operators.
+    Stripping is safer than escaping because some characters
+    (notably ``:`` for field prefixes) cause parse errors even
+    when escaped in certain positions.
+    """
+    return "".join(ch for ch in tok if ch not in _SYNTAX_CHARS)
+
+
+def _build_bm25_query(
+    query: str,
+    context_id: int | None,
+    worktrees: list[str],
+) -> str | None:
+    """Build an OR-joined BM25 query string from natural language.
+
+    Returns None if no usable tokens remain after cleaning.
+    """
+    raw_tokens = re.findall(r'"[^"]+"|\S+', query)
+    if not raw_tokens:
+        return None
+
+    parts: list[str] = []
+    for token in raw_tokens:
+        upper = token.upper()
+        if upper in ("AND", "OR", "NOT"):
+            continue  # strip boolean operators from the task text
+        if token.startswith('"') and token.endswith('"'):
+            cleaned = _clean_token(token[1:-1])
+            if cleaned:
+                parts.append(f'"{cleaned}"')
+        else:
+            cleaned = _clean_token(token)
+            if cleaned and len(cleaned) >= 2:  # skip single-char noise
+                parts.append(cleaned)
+
+    if not parts:
+        return None
+
+    or_query = " OR ".join(parts)
+    wt_filter = " OR ".join(
+        'worktree:"{}"'.format(wt.replace("\\", "\\\\").replace('"', '\\"'))
+        for wt in worktrees
+    )
+    content_expr = f"({wt_filter}) AND ({or_query})"
+    if context_id is not None:
+        return f"({content_expr}) AND context_id:{context_id}"
+    return content_expr
+
 
 def score_files_bm25(
     index: LexicalIndex,
@@ -45,65 +101,10 @@ def score_files_bm25(
     """
     index._ensure_initialized()
 
-    # Build an OR query from the terms so partial overlap still yields
-    # a positive score.  Quoted phrases are kept intact.
-    # Tokenize on whitespace, strip punctuation that isn't part of
-    # meaningful identifiers, and escape Tantivy syntax characters.
-    raw_tokens = re.findall(r'"[^"]+"|\S+', query)
-    if not raw_tokens:
-        return {}
-
-    # Tantivy query syntax characters (including : for field prefix,
-    # . and , which commonly appear in natural language task text).
-    _syntax_chars = set(r'+-&|!(){}[]^~*?:\\/".@,;')
-
-    def _clean_token(tok: str) -> str:
-        """Strip Tantivy syntax chars from a token entirely.
-
-        For BM25 scoring we want plain words, not escaped operators.
-        Stripping is safer than escaping because some characters
-        (notably ``:`` for field prefixes) cause parse errors even
-        when escaped in certain positions.
-        """
-        cleaned = "".join(ch for ch in tok if ch not in _syntax_chars)
-        return cleaned
-
-    parts: list[str] = []
-    for token in raw_tokens:
-        upper = token.upper()
-        if upper in ("AND", "OR", "NOT"):
-            continue  # strip boolean operators from the task text
-        if token.startswith('"') and token.endswith('"'):
-            # Strip quotes and clean the inner text
-            inner = token[1:-1]
-            cleaned = _clean_token(inner)
-            if cleaned:
-                parts.append(f'"{cleaned}"')
-        else:
-            cleaned = _clean_token(token)
-            if cleaned and len(cleaned) >= 2:  # skip single-char noise
-                parts.append(cleaned)
-
-    if not parts:
-        return {}
-
-    # OR-join so any token contributes score (unlike search() which AND-joins)
-    or_query = " OR ".join(parts)
-
-    # Prepend worktree filter so BM25 scores only cover the relevant worktrees.
     effective_wt = worktrees if worktrees else ["main"]
-    # Use phrase syntax so the raw tokenizer matches verbatim (see search() for rationale).
-    wt_filter = " OR ".join(
-        'worktree:"{}"'.format(wt.replace("\\", "\\\\").replace('"', '\\"'))
-        for wt in effective_wt
-    )
-    content_expr = f"({wt_filter}) AND ({or_query})"
-
-    full_query = (
-        f"({content_expr}) AND context_id:{context_id}"
-        if context_id is not None
-        else content_expr
-    )
+    full_query = _build_bm25_query(query, context_id, effective_wt)
+    if full_query is None:
+        return {}
 
     searcher = index._index.searcher()
     try:
@@ -111,6 +112,10 @@ def score_files_bm25(
     except ValueError:
         # Bad syntax — try escaping the whole thing
         escaped = _escape_query(query)
+        wt_filter = " OR ".join(
+            'worktree:"{}"'.format(wt.replace("\\", "\\\\").replace('"', '\\"'))
+            for wt in effective_wt
+        )
         content_esc = f"({wt_filter}) AND ({escaped})"
         full_esc = (
             f"({content_esc}) AND context_id:{context_id}"
