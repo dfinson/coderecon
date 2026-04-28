@@ -54,7 +54,7 @@ class FreshnessGate:
         try:
             await asyncio.wait_for(self._get_event(worktree).wait(), timeout)
             return True
-        except asyncio.TimeoutError:
+        except TimeoutError:
             log.warning("freshness_timeout", worktree=worktree, timeout=timeout)
             return False
 
@@ -69,7 +69,7 @@ class FreshnessGate:
                 timeout,
             )
             return True
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return False
 
     def mark_all_stale(self) -> None:

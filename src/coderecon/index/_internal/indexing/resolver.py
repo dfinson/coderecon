@@ -24,16 +24,14 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import text
 
+from coderecon.index._internal.indexing import resolver_cache as _cache
 from coderecon.index.models import (
     BindTargetKind,
     Certainty,
     RefTier,
 )
-from coderecon.index._internal.indexing import resolver_cache as _cache
 
 if TYPE_CHECKING:
-    from coderecon.index._internal.db import Database
-
     from coderecon.index._internal.db import Database
 
 @dataclass
@@ -463,10 +461,10 @@ def resolve_references(
 # Re-exports for backward compatibility — these were moved to separate modules
 # but existing code imports them from here.
 from coderecon.index._internal.indexing.resolver_crossfile import (  # noqa: E402, F401
-    CrossFileResolutionStats,
-    ResolutionPassFn,
     _TYPE_KIND_FILTER,
     _TYPE_KINDS,
+    CrossFileResolutionStats,
+    ResolutionPassFn,
     _build_file_filter,
     _build_unit_filter,
     _find_python_module_file,
