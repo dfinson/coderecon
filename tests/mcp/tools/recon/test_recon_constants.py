@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from coderecon.mcp.tools.recon.recon_constants import (
     ArtifactKind,
     TaskIntent,
@@ -10,6 +12,26 @@ from coderecon.mcp.tools.recon.recon_constants import (
     _is_barrel_file,
     _is_test_file,
 )
+
+
+class TestArtifactKindEnum:
+    def test_values(self) -> None:
+        assert set(ArtifactKind) == {"code", "test", "config", "doc", "build"}
+
+    def test_is_str_enum(self) -> None:
+        assert isinstance(ArtifactKind.code, str)
+        assert ArtifactKind.code == "code"
+
+
+class TestTaskIntentEnum:
+    def test_values(self) -> None:
+        assert set(TaskIntent) == {
+            "debug", "implement", "refactor", "understand", "test", "unknown",
+        }
+
+    def test_is_str_enum(self) -> None:
+        assert isinstance(TaskIntent.debug, str)
+        assert TaskIntent.unknown == "unknown"
 
 
 class TestIsTestFile:
@@ -102,3 +124,9 @@ class TestExtractIntent:
 
     def test_empty_string(self) -> None:
         assert _extract_intent("") == TaskIntent.unknown
+
+    def test_highest_count_wins(self) -> None:
+        """When multiple intents match, the one with more keyword hits wins."""
+        # "fix bug error" has 3 debug keywords vs 1 implement keyword ("add")
+        result = _extract_intent("fix bug error and add something")
+        assert result == TaskIntent.debug
