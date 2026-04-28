@@ -19,21 +19,26 @@ class TestNoOpSpan:
 
     def test_set_attribute(self) -> None:
         span = NoOpSpan()
-        span.set_attribute("key", "value")
+        result = span.set_attribute("key", "value")
+        assert result is None
 
     def test_set_attributes(self) -> None:
         span = NoOpSpan()
-        span.set_attributes({"k": "v"})
+        result = span.set_attributes({"k": "v"})
+        assert result is None
 
     def test_add_event(self) -> None:
         span = NoOpSpan()
-        span.add_event("evt", {"a": 1})
+        result = span.add_event("evt", {"a": 1})
+        assert result is None
 
     def test_set_status(self) -> None:
-        NoOpSpan().set_status("OK")
+        result = NoOpSpan().set_status("OK")
+        assert result is None
 
     def test_record_exception(self) -> None:
-        NoOpSpan().record_exception(RuntimeError("boom"))
+        result = NoOpSpan().record_exception(RuntimeError("boom"))
+        assert result is None
 
     def test_is_recording(self) -> None:
         assert NoOpSpan().is_recording() is False
@@ -57,16 +62,19 @@ class TestNoOpMeter:
     def test_create_counter(self) -> None:
         c = NoOpMeter().create_counter("hits")
         assert isinstance(c, NoOpCounter)
-        c.add(1)
+        result = c.add(1)
+        assert result is None
 
     def test_create_up_down_counter(self) -> None:
         c = NoOpMeter().create_up_down_counter("gauge")
         assert isinstance(c, NoOpCounter)
+        assert c.add(1) is None
 
     def test_create_histogram(self) -> None:
         h = NoOpMeter().create_histogram("latency")
         assert isinstance(h, NoOpHistogram)
-        h.record(42.0)
+        result = h.record(42.0)
+        assert result is None
 
     def test_create_observable_gauge(self) -> None:
         o = NoOpMeter().create_observable_gauge("g")
