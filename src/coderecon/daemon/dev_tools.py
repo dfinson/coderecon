@@ -16,7 +16,7 @@ async def dev_index_facts(app_ctx: AppContext, **kwargs: Any) -> dict[str, Any]:
     """Return structured index metadata for LLM grounding."""
     from sqlmodel import col, select
 
-    from coderecon.index._internal.db.models import DefFact, File, ImportFact
+    from coderecon.index.models import DefFact, File, ImportFact
 
     db = app_ctx.coordinator.db
     worktree_id: int | None = None
@@ -91,7 +91,7 @@ async def dev_lookup_defs(app_ctx: AppContext, **kwargs: Any) -> dict[str, Any]:
     """Look up definitions by coordinates."""
     from sqlmodel import col, select
 
-    from coderecon.index._internal.db.models import DefFact, File
+    from coderecon.index.models import DefFact, File
 
     db = app_ctx.coordinator.db
     worktree_id: int | None = None
@@ -141,13 +141,13 @@ async def dev_lookup_defs(app_ctx: AppContext, **kwargs: Any) -> dict[str, Any]:
                 "kind": d.kind,
                 "start_line": d.start_line,
                 "end_line": d.end_line or 0,
-                "uid": d.uid or "",
+                "uid": d.def_uid or "",
                 "language_family": flang,
                 "qualified_name": d.qualified_name or "",
                 "lexical_path": d.lexical_path or "",
-                "has_docstring": bool(d.has_docstring),
-                "has_decorators": bool(d.has_decorators),
-                "has_return_type": bool(d.has_return_type),
+                "has_docstring": bool(d.docstring),
+                "has_decorators": bool(d.decorators_json),
+                "has_return_type": bool(d.return_type),
                 "object_size_lines": (d.end_line or d.start_line) - d.start_line,
             })
 
@@ -157,7 +157,7 @@ async def dev_index_status(app_ctx: AppContext, **kwargs: Any) -> dict[str, Any]
     """Return file/def counts for a worktree."""
     from sqlmodel import col, func, select
 
-    from coderecon.index._internal.db.models import DefFact, File
+    from coderecon.index.models import DefFact, File
 
     db = app_ctx.coordinator.db
     wt_name = kwargs.get("worktree") or "main"
