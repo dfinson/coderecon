@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 from coderecon.index._internal.parsing.treesitter_models import (
     DynamicAccess,
     IdentifierOccurrence,
+    ParseResult,
     ProbeValidation,
     SyntacticBind,
     SyntacticImport,
@@ -179,3 +182,88 @@ class TestImportUid:
     def test_length(self) -> None:
         uid = _import_uid("file.py", "os", 1)
         assert len(uid) == 16
+
+    def test_different_line_numbers(self) -> None:
+        uid1 = _import_uid("file.py", "os", 1)
+        uid2 = _import_uid("file.py", "os", 2)
+        assert uid1 != uid2
+
+    def test_hex_output(self) -> None:
+        uid = _import_uid("file.py", "os", 1)
+        int(uid, 16)  # must be valid hex — raises ValueError if not
+
+
+class TestSyntacticSymbolAllFields:
+    """Test SyntacticSymbol with all optional fields populated."""
+
+    def test_decorators_and_docstring(self) -> None:
+        s = SyntacticSymbol(
+            name="handler",
+            kind="method",
+            line=5,
+            column=4,
+            end_line=15,
+            end_column=0,
+            signature="(self, request: Request) -> Response",
+            parent_name="MyView",
+            signature_text="(self, request: Request)",
+            decorators=["@login_required", "@cache"],
+            docstring="Handle incoming request.",
+            return_type="Response",
+        )
+        assert s.decorators == ["@login_required", "@cache"]
+        assert s.docstring == "Handle incoming request."
+        assert s.signature is not None
+
+    def test_empty_decorators_list(self) -> None:
+        s = SyntacticSymbol(
+            name="f", kind="function", line=1, column=0,
+            end_line=2, end_column=0, decorators=[],
+        )
+        assert s.decorators == []
+
+
+class TestDynamicAccessFieldSafety:
+    """Ensure default-factory list is independent per instance."""
+
+    def test_independent_default_lists(self) -> None:
+        a = DynamicAccess(pattern_type="eval", start_line=1, start_col=0)
+        b = DynamicAccess(pattern_type="eval", start_line=2, start_col=0)
+        a.extracted_literals.append("x")
+        assert b.extracted_literals == []
+
+
+class TestParseResult:
+    """Test ParseResult construction with mocked tree-sitter objects."""
+
+    def test_construction(self) -> None:
+        tree = MagicMock()
+        root = MagicMock()
+        pr = ParseResult(
+            tree=tree,
+            language="python",
+            error_count=0,
+            total_nodes=50,
+            root_node=root,
+        )
+        assert pr.language == "python"
+        assert pr.error_count == 0
+        assert pr.total_nodes == 50
+        assert pr.ts_language is None
+        assert pr.tree is tree
+        assert pr.root_node is root
+
+    def test_with_ts_language(self) -> None:
+        tree = MagicMock()
+        root = MagicMock()
+        lang = MagicMock()
+        pr = ParseResult(
+            tree=tree,
+            language="javascript",
+            error_count=2,
+            total_nodes=100,
+            root_node=root,
+            ts_language=lang,
+        )
+        assert pr.ts_language is lang
+        assert pr.error_count == 2

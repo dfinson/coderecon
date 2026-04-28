@@ -1,11 +1,13 @@
 """Tests for git/_internal/access_helpers.py — parsing & helper classes.
 
 Covers:
+- _ParseMixin._parse_commit() — mocked git output
 - _ParseMixin._parse_log_output() — pure string parsing
 - _ParseMixin._parse_blame_output() — pure string parsing
 - _ReferenceHelper — GitRunner-dependent ops
 - _BranchHelper / _BranchCategory — GitRunner-dependent ops
 """
+from __future__ import annotations
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -14,10 +16,12 @@ import pytest
 
 from coderecon.git._internal.access_helpers import (
     _BranchCategory,
+    _BranchHelper,
     _ParseMixin,
     _ReferenceHelper,
 )
 from coderecon.git._internal.access_models import GitBranchData, GitReference
+from coderecon.git.errors import GitError
 
 
 # ---------------------------------------------------------------------------
@@ -316,3 +320,127 @@ class TestBranchCategory:
         git.run.return_value = SimpleNamespace(stdout="")
         cat = _BranchCategory(git, remote=False)
         assert list(cat) == []
+
+    def test_contains_false(self) -> None:
+        git = MagicMock()
+        git.run_raw.return_value = (128, "", "fatal")
+        cat = _BranchCategory(git, remote=False)
+        assert "nope" not in cat
+
+    def test_getitem_remote(self) -> None:
+        git = MagicMock()
+        sha = "d" * 40
+        git.run_raw.return_value = (0, sha + "\n", "")
+        cat = _BranchCategory(git, remote=True)
+        branch = cat["origin/main"]
+        assert isinstance(branch, GitBranchData)
+        assert branch.shorthand == "origin/main"
+        assert branch.target == sha
+        assert branch.name == "refs/remotes/origin/main"
+
+
+# ===========================================================================
+# _ParseMixin._parse_commit tests
+# ===========================================================================
+
+class TestParseCommit:
+    """Tests for _ParseMixin._parse_commit with mocked GitRunner."""
+
+    _FMT_LINES = [
+        "a" * 40,          # sha
+        "b" * 40,          # tree
+        "c" * 40,          # parent
+        "Alice",           # author name
+        "alice@example.com",
+        "1700000000",      # author time
+        "Bob",             # committer name
+        "bob@example.com",
+        "1700000001",      # committer time
+        "fix: the thing",  # message
+    ]
+
+    def _make_parser(self, stdout: str) -> _ParseMixin:
+        p = _ParseMixin.__new__(_ParseMixin)
+        p._git = MagicMock()
+        p._git.run.return_value = SimpleNamespace(stdout=stdout)
+        return p
+
+    def test_success_with_parent(self) -> None:
+        p = self._make_parser("\n".join(self._FMT_LINES))
+        commit = p._parse_commit("HEAD")
+        assert commit.sha == "a" * 40
+        assert commit.tree_sha == "b" * 40
+        assert commit.parent_shas == ("c" * 40,)
+        assert commit.author.name == "Alice"
+        assert commit.committer.name == "Bob"
+        assert commit.message == "fix: the thing"
+
+    def test_success_no_parents(self) -> None:
+        lines = list(self._FMT_LINES)
+        lines[2] = ""  # empty parent line
+        p = self._make_parser("\n".join(lines))
+        commit = p._parse_commit("HEAD")
+        assert commit.parent_shas == ()
+
+    def test_multiple_parents(self) -> None:
+        lines = list(self._FMT_LINES)
+        lines[2] = f"{'c' * 40} {'d' * 40}"
+        p = self._make_parser("\n".join(lines))
+        commit = p._parse_commit("HEAD")
+        assert commit.parent_shas == ("c" * 40, "d" * 40)
+
+    def test_multiline_message(self) -> None:
+        lines = list(self._FMT_LINES)
+        lines[9] = "Subject line\n\nBody paragraph."
+        p = self._make_parser("\n".join(lines))
+        commit = p._parse_commit("HEAD")
+        assert commit.message == "Subject line\n\nBody paragraph."
+
+    def test_too_few_lines_raises_git_error(self) -> None:
+        p = self._make_parser("short\noutput\nonly")
+        with pytest.raises(GitError):
+            p._parse_commit("HEAD")
+
+
+# ===========================================================================
+# _BranchHelper tests
+# ===========================================================================
+
+class TestBranchHelper:
+    """Tests for _BranchHelper.local and .remote properties."""
+
+    def test_local_returns_branch_category(self) -> None:
+        git = MagicMock()
+        helper = _BranchHelper(git)
+        cat = helper.local
+        assert isinstance(cat, _BranchCategory)
+
+    def test_remote_returns_branch_category(self) -> None:
+        git = MagicMock()
+        helper = _BranchHelper(git)
+        cat = helper.remote
+        assert isinstance(cat, _BranchCategory)
+
+
+# ===========================================================================
+# _ReferenceHelper — additional edge cases
+# ===========================================================================
+
+class TestReferenceHelperEdgeCases:
+    """Additional edge cases for _ReferenceHelper."""
+
+    def test_getitem_generic_refname_shorthand_equals_name(self) -> None:
+        """A ref not under refs/heads/ or refs/tags/ keeps its full name as shorthand."""
+        git = MagicMock()
+        sha = "e" * 40
+        git.run_raw.return_value = (0, sha + "\n", "")
+        refs = _ReferenceHelper(git)
+        ref = refs["refs/stash"]
+        assert ref.shorthand == "refs/stash"
+        assert ref.target == sha
+
+    def test_iter_empty(self) -> None:
+        git = MagicMock()
+        git.run.return_value = SimpleNamespace(stdout="")
+        refs = _ReferenceHelper(git)
+        assert list(refs) == []
