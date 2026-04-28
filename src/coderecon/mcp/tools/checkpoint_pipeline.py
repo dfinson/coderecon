@@ -23,6 +23,7 @@ from coderecon.mcp.tools.checkpoint_helpers import (
     _ingest_checkpoint_coverage,
     _run_hook_with_retry,
     _summarize_commit,
+    _target_matches_affected_files,
     _validate_commit_message,
     _validate_paths_exist,
 )
