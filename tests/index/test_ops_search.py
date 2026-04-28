@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from coderecon.index.ops_search import score_files_bm25, search, search_symbols
-from coderecon.index.ops_types import SearchMode, SearchResponse, SearchResult
+from coderecon.index.ops_types import SearchMode, SearchResponse
 
 
 def _mock_engine(

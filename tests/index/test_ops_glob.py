@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from coderecon.index.ops_glob import (
     _compile_glob_pattern,
     _compile_glob_set,

@@ -1,7 +1,6 @@
 """Tests for refactor impact-analysis mixin."""
 from __future__ import annotations
 
-import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -11,7 +10,6 @@ from coderecon.refactor.ops_models import (
     EditHunk,
     FileEdit,
     RefactorPreview,
-    RefactorResult,
 )
 from coderecon.refactor.ops_impact import _ImpactMixin
 

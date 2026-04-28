@@ -9,7 +9,7 @@ Covers:
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, PropertyMock
+from unittest.mock import MagicMock
 
 import pytest
 

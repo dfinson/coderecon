@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from coderecon.testing.runtime import ContextRuntime, RuntimeExecutionContext, ToolConfig
+from coderecon.testing.runtime import ContextRuntime, RuntimeExecutionContext
 from coderecon.testing.runtime_builder import ExecutionContextBuilder
 
 

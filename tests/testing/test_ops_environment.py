@@ -6,8 +6,6 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from coderecon.testing.ops_environment import (
     clear_coverage_tools_cache,
     detect_coverage_tools,

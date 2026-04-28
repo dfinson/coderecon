@@ -13,7 +13,6 @@ from coderecon.git.errors import (
     WorktreeLockedError,
     WorktreeNotFoundError,
 )
-from coderecon.git.models import WorktreeInfo
 from coderecon.git.ops_worktree import _WorktreeMixin
 
 

@@ -8,11 +8,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from coderecon.git.errors import SubmoduleError, SubmoduleNotFoundError
-from coderecon.git.models import (
-    SubmoduleInfo,
-    SubmoduleStatus,
-    SubmoduleUpdateResult,
-)
 from coderecon.git.ops_submodule import _SubmoduleMixin
 
 

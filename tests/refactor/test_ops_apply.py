@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -10,7 +10,6 @@ from coderecon.refactor.ops_models import (
     EditHunk,
     FileEdit,
     RefactorPreview,
-    RefactorResult,
 )
 from coderecon.refactor.ops_apply import _ApplyMixin
 

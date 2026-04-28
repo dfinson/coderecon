@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from coderecon.mcp.tools.recon.recon_constants import (
     ArtifactKind,
     TaskIntent,

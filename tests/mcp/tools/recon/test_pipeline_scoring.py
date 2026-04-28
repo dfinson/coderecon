@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from coderecon.mcp.tools.recon.pipeline_scoring import (
     _build_ce_documents,
     _read_signature,

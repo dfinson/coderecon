@@ -6,18 +6,16 @@ All DB access is mocked — no real SQLite needed.
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from coderecon.index.models import (
     Context,
     DefFact,
-    File,
     ImportFact,
     IndexedCoverageCapability,
     IndexedLintTool,
-    ProbeStatus,
     RefFact,
     TestTarget,
 )
@@ -29,7 +27,6 @@ from coderecon.index.ops_getters import (
     get_callees,
     get_contexts,
     get_coverage_capability,
-    get_coverage_gaps,
     get_current_epoch,
     get_def,
     get_file_imports,

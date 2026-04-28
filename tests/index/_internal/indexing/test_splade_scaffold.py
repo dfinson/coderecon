@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 from sqlmodel import Session
 
 from coderecon.index._internal.indexing.splade_scaffold import (
@@ -238,7 +236,6 @@ class TestBuildScaffoldsForDefs:
 
         # Configure session.exec to return files, then refs, then target names, then annotations
         call_count = 0
-        results_sequence = []
 
         def exec_side_effect(stmt):
             nonlocal call_count
