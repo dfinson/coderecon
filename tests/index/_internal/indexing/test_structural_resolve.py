@@ -14,21 +14,9 @@ from coderecon.index._internal.indexing.structural_resolve import (
 )
 
 
-def _make_extraction(
-    file_path: str,
-    language: str | None = None,
-    declared_module: str | None = None,
-    imports: list[dict] | None = None,
-    error: str | None = None,
-    skipped_no_grammar: bool = False,
-) -> ExtractionResult:
-    ex = ExtractionResult(file_path=file_path)
-    ex.language = language
-    ex.declared_module = declared_module
-    ex.imports = imports or []
-    ex.error = error
-    ex.skipped_no_grammar = skipped_no_grammar
-    return ex
+def _extraction(file_path: str, **overrides: object) -> ExtractionResult:
+    """Build an ExtractionResult with sensible defaults, applying overrides."""
+    return ExtractionResult(file_path=file_path, **overrides)  # type: ignore[arg-type]
 
 
 # ── _augment_declared_modules ─────────────────────────────────────
@@ -49,7 +37,7 @@ class TestAugmentDeclaredModules:
         resolver_inst = MockResolver.return_value
         resolver_inst.resolve.return_value = "github.com/user/repo/pkg"
 
-        ex = _make_extraction("pkg/handler.go", language="go", declared_module="pkg")
+        ex = _extraction("pkg/handler.go", language="go", declared_module="pkg")
         _augment_declared_modules(db, tmp_path, [ex])
 
         resolver_inst.resolve.assert_called_once()
@@ -61,7 +49,7 @@ class TestAugmentDeclaredModules:
         resolver_inst = MockResolver.return_value
         resolver_inst.resolve.return_value = "my_crate::auth::token"
 
-        ex = _make_extraction("src/auth/token.rs", language="rust")
+        ex = _extraction("src/auth/token.rs", language="rust")
         _augment_declared_modules(db, tmp_path, [ex])
 
         assert ex.declared_module == "my_crate::auth::token"
@@ -69,14 +57,14 @@ class TestAugmentDeclaredModules:
     @patch("coderecon.index._internal.indexing.config_resolver.ConfigResolver")
     def test_skips_error_extractions(self, MockResolver: MagicMock, tmp_path: Path) -> None:
         db = self._mock_db([])
-        ex = _make_extraction("bad.go", language="go", error="parse error")
+        ex = _extraction("bad.go", language="go", error="parse error")
         _augment_declared_modules(db, tmp_path, [ex])
         MockResolver.return_value.resolve.assert_not_called()
 
     @patch("coderecon.index._internal.indexing.config_resolver.ConfigResolver")
     def test_skips_skipped_no_grammar(self, MockResolver: MagicMock, tmp_path: Path) -> None:
         db = self._mock_db([])
-        ex = _make_extraction("data.json", skipped_no_grammar=True)
+        ex = _extraction("data.json", skipped_no_grammar=True)
         _augment_declared_modules(db, tmp_path, [ex])
         MockResolver.return_value.resolve.assert_not_called()
 
@@ -91,7 +79,7 @@ class TestAugmentDeclaredModules:
         resolver_inst.resolve.return_value = None
         mock_p2m.return_value = "mypackage.utils"
 
-        ex = _make_extraction("mypackage/utils.py", language="python", declared_module=None)
+        ex = _extraction("mypackage/utils.py", language="python", declared_module=None)
         _augment_declared_modules(db, tmp_path, [ex])
 
         mock_p2m.assert_called_once_with("mypackage/utils.py")
@@ -106,7 +94,7 @@ class TestAugmentDeclaredModules:
         resolver_inst = MockResolver.return_value
         resolver_inst.resolve.return_value = "resolved.module"
 
-        ex = _make_extraction("pkg/main.go", language="go", declared_module="main")
+        ex = _extraction("pkg/main.go", language="go", declared_module="main")
         _augment_declared_modules(db, tmp_path, [ex])
 
         # path_to_module should not be called since declared_module was set
@@ -116,7 +104,7 @@ class TestAugmentDeclaredModules:
     def test_overlays_current_batch_paths(self, MockResolver: MagicMock, tmp_path: Path) -> None:
         """Current batch files are included in the resolver's path set."""
         db = self._mock_db(["existing.go"])
-        ex = _make_extraction("new_file.go", language="go")
+        ex = _extraction("new_file.go", language="go")
         _augment_declared_modules(db, tmp_path, [ex])
         # ConfigResolver should have been called with paths including both
         call_args = MockResolver.call_args
@@ -189,7 +177,7 @@ class TestResolveImportPaths:
 
         db = self._mock_db([("main.py", None)])
         imp = {"source_literal": "utils.helper", "import_kind": "python"}
-        ex = _make_extraction("main.py", language="python", imports=[imp])
+        ex = _extraction("main.py", language="python", imports=[imp])
 
         _resolve_import_paths(db, tmp_path, [ex])
 
@@ -204,7 +192,7 @@ class TestResolveImportPaths:
 
         db = self._mock_db([])
         imp = {"source_literal": "unknown.module", "import_kind": "python"}
-        ex = _make_extraction("main.py", language="python", imports=[imp])
+        ex = _extraction("main.py", language="python", imports=[imp])
 
         _resolve_import_paths(db, tmp_path, [ex])
 
@@ -215,7 +203,7 @@ class TestResolveImportPaths:
     def test_skips_error_extractions(self, mock_js_exports: MagicMock, MockResolver: MagicMock, tmp_path: Path) -> None:
         mock_js_exports.return_value = {}
         db = self._mock_db([])
-        ex = _make_extraction("bad.py", error="parse error", imports=[{"source_literal": "x"}])
+        ex = _extraction("bad.py", error="parse error", imports=[{"source_literal": "x"}])
 
         _resolve_import_paths(db, tmp_path, [ex])
 
@@ -226,7 +214,7 @@ class TestResolveImportPaths:
     def test_overlays_batch_declared_modules(self, mock_js_exports: MagicMock, MockResolver: MagicMock, tmp_path: Path) -> None:
         mock_js_exports.return_value = {}
         db = self._mock_db([("old.py", "old_module")])
-        ex = _make_extraction("new.py", language="python", declared_module="new_module", imports=[])
+        ex = _extraction("new.py", language="python", declared_module="new_module", imports=[])
 
         _resolve_import_paths(db, tmp_path, [ex])
 

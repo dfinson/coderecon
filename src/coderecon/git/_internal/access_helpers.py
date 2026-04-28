@@ -110,9 +110,6 @@ class _ParseMixin:
                         "final_line": final_line,
                         "num_lines": num_lines,
                         "orig_line": orig_line,
-                        "author_name": "",
-                        "author_email": "",
-                        "author_time": 0,
                     }
                 else:
                     # Extend current hunk
@@ -126,6 +123,11 @@ class _ParseMixin:
             i += 1
         if current:
             hunks.append(current)
+        # Ensure all hunks have author fields (may be absent in some blame outputs)
+        for hunk in hunks:
+            hunk.setdefault("author_name", "")
+            hunk.setdefault("author_email", "")
+            hunk.setdefault("author_time", 0)
         return hunks
 
 
