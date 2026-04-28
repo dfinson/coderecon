@@ -466,15 +466,15 @@ def _register_resolution_passes() -> None:
 
     Called at module load time after all resolution functions are defined.
     """
-    global _RESOLUTION_PASSES
-    _RESOLUTION_PASSES = [
+    _RESOLUTION_PASSES.clear()
+    _RESOLUTION_PASSES.extend([
         resolve_namespace_refs,  # C# namespace-using
         resolve_same_namespace_refs,  # C# same/parent namespace visibility
         resolve_star_import_refs,  # Python from X import *
         resolve_go_dot_import_refs,  # Go import . "pkg"
         resolve_rust_glob_import_refs,  # Rust use module::*
         resolve_java_star_import_refs,  # Java import pkg.*
-    ]
+    ])
 
 
 def run_pass_1_5(

@@ -224,7 +224,7 @@ async def collect_initial_coverage(
                     base_path=engine.repo_root,
                 )
                 reports.append(report)
-            except (CoverageParseError, Exception):
+            except (CoverageParseError, ValueError, KeyError, OSError):
                 log.debug("initial_coverage.parse_failed", extra={"path": cov_path}, exc_info=True)
         if not reports:
             log.debug("initial_coverage.no_reports")
