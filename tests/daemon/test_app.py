@@ -16,7 +16,6 @@ from starlette.routing import Mount, Route
 
 from coderecon.daemon.app import create_app
 
-
 @pytest.fixture
 def temp_repo(tmp_path: Path) -> Path:
     """Create a temporary repository structure with git initialized."""
@@ -25,7 +24,6 @@ def temp_repo(tmp_path: Path) -> Path:
     (tmp_path / ".recon").mkdir()
     return tmp_path
 
-
 @pytest.fixture
 def mock_coordinator() -> MagicMock:
     """Create a mock IndexCoordinatorEngine."""
@@ -33,14 +31,12 @@ def mock_coordinator() -> MagicMock:
     coordinator.get_db_path.return_value = None
     return coordinator
 
-
 @pytest.fixture
 def mock_controller() -> MagicMock:
     """Create a mock ServerController."""
     controller = MagicMock()
     controller.status = "running"
     return controller
-
 
 class TestCreateApp:
     """Tests for create_app factory function."""
@@ -111,7 +107,6 @@ class TestCreateApp:
         has_mount = any(isinstance(route, Mount) for route in app.routes)
         assert has_mount
 
-
 class TestAppRoutes:
     """Tests for app route functionality."""
 
@@ -154,7 +149,6 @@ class TestAppRoutes:
             for route in app.routes
         )
         assert has_health
-
 
 class TestAppMiddleware:
     """Tests for app middleware behavior."""

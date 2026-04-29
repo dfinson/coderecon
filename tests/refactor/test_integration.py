@@ -20,18 +20,17 @@ from pathlib import Path
 
 import pytest
 
-from coderecon.index._internal.db import Database, create_additional_indexes
-from coderecon.index._internal.indexing import LexicalIndex, StructuralIndexer
+from coderecon.index.db import Database, create_additional_indexes
+from coderecon.index.search.lexical import LexicalIndex
+from coderecon.index.structural.structural import StructuralIndexer
 from coderecon.index.models import Context
 from coderecon.index.ops import IndexCoordinatorEngine
-from coderecon.mutation.ops import MutationOps
+from coderecon.adapters.mutation.ops import MutationOps
 from coderecon.refactor.ops import RefactorOps
-
 
 def rel(path: Path, root: Path) -> str:
     """Get relative path string for index_files."""
     return str(path.relative_to(root))
-
 
 @pytest.fixture
 def test_db(tmp_path: Path) -> Generator[Database, None, None]:
@@ -42,6 +41,11 @@ def test_db(tmp_path: Path) -> Generator[Database, None, None]:
     db = Database(coderecon_dir / "index.db")
     db.create_all()
     create_additional_indexes(db.engine)
+
+    from coderecon.index.models import Worktree
+    with db.session() as session:
+        session.add(Worktree(name="main", root_path=str(tmp_path), is_main=True))
+        session.commit()
 
     # Create a context (required for foreign key constraints)
     # Use root_path that matches the project structure
@@ -57,7 +61,6 @@ def test_db(tmp_path: Path) -> Generator[Database, None, None]:
         session.commit()
 
     yield db
-
 
 @pytest.fixture
 def refactor_project(tmp_path: Path) -> Path:
@@ -121,7 +124,6 @@ def test_my_function():
 
     return tmp_path
 
-
 @pytest.fixture
 def indexed_project(
     refactor_project: Path,
@@ -153,6 +155,7 @@ def indexed_project(
                 path=py_file,
                 content_hash=content_hash,
                 language_family="python",
+                worktree_id=1,
             )
             session.add(file_record)
             session.flush()
@@ -160,7 +163,7 @@ def indexed_project(
                 file_id_map[py_file] = file_record.id
         session.commit()
 
-    result = indexer.index_files(py_files, context_id=1, file_id_map=file_id_map)
+    result = indexer.index_files(py_files, context_id=1, file_id_map=file_id_map, worktree_id=1)
     # Note: Grammar-unavailable errors are expected if tree-sitter-python isn't installed
     # The lexical index will still work for refactoring tests
     real_errors = [e for e in result.errors if "Language not available" not in e]
@@ -183,7 +186,6 @@ def indexed_project(
     lexical_index.reload()
 
     return refactor_project, test_db, lexical_index
-
 
 @pytest.fixture
 async def refactor_ops(
@@ -213,7 +215,6 @@ async def refactor_ops(
     assert loaded, "Coordinator failed to load existing index"
 
     return RefactorOps(repo_root, coordinator)
-
 
 @pytest.mark.asyncio
 class TestRefactorRenameIntegration:
@@ -378,7 +379,6 @@ class TestRefactorRenameIntegration:
                 assert "line" in match
                 assert "snippet" in match
                 assert int(match["line"]) > 0
-
 
 @pytest.mark.asyncio
 class TestRefactorEdgeCases:

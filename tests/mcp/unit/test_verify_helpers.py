@@ -23,7 +23,6 @@ from coderecon.mcp.tools.checkpoint import (
 # _summarize_verify
 # =========================================================================
 
-
 class TestSummarizeVerify:
     """Tests for _summarize_verify."""
 
@@ -47,11 +46,9 @@ class TestSummarizeVerify:
         assert "lint: clean" in result
         assert "tests: completed" in result
 
-
 # =========================================================================
 # _summarize_run
 # =========================================================================
-
 
 class TestSummarizeRun:
     """Tests for _summarize_run."""
@@ -80,11 +77,9 @@ class TestSummarizeRun:
         assert "8 passed" in summary
         assert "2 failed" in summary
 
-
 # =========================================================================
 # _normalize_selector
 # =========================================================================
-
 
 class TestNormalizeSelector:
     """Tests for _normalize_selector."""
@@ -101,11 +96,9 @@ class TestNormalizeSelector:
     def test_plain_path(self) -> None:
         assert _normalize_selector("tests/unit") == "tests/unit"
 
-
 # =========================================================================
 # _target_matches_affected_files
 # =========================================================================
-
 
 class TestTargetMatchesAffectedFiles:
     """Tests for _target_matches_affected_files."""

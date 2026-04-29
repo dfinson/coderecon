@@ -14,8 +14,12 @@ github.com/user/pkg/main.go:15.2,20.16 5 0
 - count: execution count (0 = not covered)
 """
 
+from __future__ import annotations
+
 import contextlib
 from pathlib import Path
+
+import structlog
 
 from coderecon.testing.coverage.models import (
     CoverageParseError,
@@ -47,6 +51,7 @@ class GocovParser:
                 if first_line.startswith("mode:"):
                     return True
         except (OSError, UnicodeDecodeError):
+            structlog.get_logger().debug("go coverage content sniff failed", exc_info=True)
             pass
         return False
 
@@ -122,6 +127,7 @@ class GocovParser:
                     file_cov.lines[line_num] = max(file_cov.lines.get(line_num, 0), count)
 
             except (ValueError, IndexError):
+                structlog.get_logger().debug("skipping malformed go coverage line", exc_info=True)
                 continue
 
         return CoverageReport(source_format="gocov", files=files)

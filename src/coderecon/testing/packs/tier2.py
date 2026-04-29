@@ -1,17 +1,6 @@
-"""Runner packs for Tier-2 languages.
+"""Runner packs for JVM and mobile languages (Tier 2).
 
-This module registers runner packs for:
-- Kotlin (Gradle with Kotlin, kotlintest)
-- Swift (swift test)
-- Scala (sbt test)
-- Dart (dart test, flutter test)
-- Bash (bats)
-- PowerShell (Pester)
-- Lua (busted)
-- Elixir (mix test)
-- Haskell (cabal test)
-- Julia (Pkg.test)
-- OCaml (dune test)
+Kotlin (Gradle), Swift, Scala (sbt), Dart.
 """
 
 from __future__ import annotations
@@ -20,7 +9,6 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from coderecon.index._internal.ignore import PRUNABLE_DIRS
 from coderecon.testing.models import ParsedTestCase, ParsedTestSuite, TestTarget
 from coderecon.testing.runner_pack import (
     MarkerRule,
@@ -33,49 +21,25 @@ from coderecon.testing.runner_pack import (
 if TYPE_CHECKING:
     from coderecon.testing.runtime import RuntimeExecutionContext
 
+import structlog
 
-def _is_prunable_path(
-    path: Path,
-    workspace_root: Path,
-    *,
-    allowed_dirs: frozenset[str] | None = None,
-) -> bool:
-    """Check if path contains any prunable directory components.
+from coderecon.config.constants import MS_PER_SEC
 
-    Args:
-        path: Path to check
-        workspace_root: Root directory for relative path calculation
-        allowed_dirs: Optional set of directories that should be allowed
-            even if they appear in PRUNABLE_DIRS
-    """
-    try:
-        rel = path.relative_to(workspace_root)
-        for part in rel.parts:
-            if part in PRUNABLE_DIRS:
-                if allowed_dirs and part in allowed_dirs:
-                    continue
-                return True
-        return False
-    except ValueError:
-        return True
+log = structlog.get_logger(__name__)
 
-
-# =============================================================================
 # Kotlin - Gradle with Kotlin DSL
-# =============================================================================
 
 
 @runner_registry.register
 class KotlinGradlePack(RunnerPack):
     """Kotlin Gradle runner."""
-
     pack_id = "kotlin.gradle"
     language = "kotlin"
     runner_name = "gradle test"
-    markers = [
+    markers = (
         MarkerRule("build.gradle.kts", content_match="kotlin", confidence="high"),
         MarkerRule("settings.gradle.kts", confidence="medium"),
-    ]
+    )
     output_strategy = OutputStrategy(
         format="junit_xml", file_based=True, file_pattern="build/test-results/test/*.xml"
     )
@@ -86,7 +50,6 @@ class KotlinGradlePack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=True,
     )
-
     def detect(self, workspace_root: Path) -> float:
         build_kts = workspace_root / "build.gradle.kts"
         if build_kts.exists():
@@ -94,13 +57,12 @@ class KotlinGradlePack(RunnerPack):
                 content = build_kts.read_text()
                 if "kotlin" in content.lower():
                     return 1.0
-            except Exception:
-                pass
+            except OSError:
+                log.debug("kotlin_config_read_failed", exc_info=True)
             return 0.7
         if (workspace_root / "settings.gradle.kts").exists():
             return 0.5
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         if (workspace_root / "src" / "test").exists():
@@ -115,7 +77,6 @@ class KotlinGradlePack(RunnerPack):
                 )
             )
         return targets
-
     def build_command(
         self,
         target: TestTarget,
@@ -141,49 +102,21 @@ class KotlinGradlePack(RunnerPack):
         if pattern:
             cmd.extend(["--tests", pattern])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
-        from coderecon.testing.parsers import parse_junit_xml
+        from coderecon.testing.packs import _parse_gradle_test_results
+        return _parse_gradle_test_results(output_path, "kotlin")
 
-        reports_dir = output_path.parent / "build" / "test-results" / "test"
-        if not reports_dir.exists():
-            return ParsedTestSuite(name="kotlin", errors=1)
-
-        all_tests: list[ParsedTestCase] = []
-        total_duration = 0.0
-
-        for xml_file in reports_dir.glob("TEST-*.xml"):
-            suite = parse_junit_xml(xml_file.read_text())
-            all_tests.extend(suite.tests)
-            total_duration += suite.duration_seconds
-
-        return ParsedTestSuite(
-            name="kotlin",
-            tests=all_tests,
-            total=len(all_tests),
-            passed=sum(1 for t in all_tests if t.status == "passed"),
-            failed=sum(1 for t in all_tests if t.status == "failed"),
-            skipped=sum(1 for t in all_tests if t.status == "skipped"),
-            errors=sum(1 for t in all_tests if t.status == "error"),
-            duration_seconds=total_duration,
-        )
-
-
-# =============================================================================
 # Swift - swift test
-# =============================================================================
-
 
 @runner_registry.register
 class SwiftTestPack(RunnerPack):
     """Swift Package Manager test runner."""
-
     pack_id = "swift.swiftpm"
     language = "swift"
     runner_name = "swift test"
-    markers = [
+    markers = (
         MarkerRule("Package.swift", confidence="high"),
-    ]
+    )
     output_strategy = OutputStrategy(
         format="coarse", file_based=False
     )  # swift test has limited output options
@@ -194,12 +127,10 @@ class SwiftTestPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=False,
     )
-
     def detect(self, workspace_root: Path) -> float:
         if (workspace_root / "Package.swift").exists():
             return 1.0
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         if (workspace_root / "Package.swift").exists():
@@ -214,7 +145,6 @@ class SwiftTestPack(RunnerPack):
                 )
             )
         return targets
-
     def build_command(
         self,
         target: TestTarget,  # noqa: ARG002
@@ -228,13 +158,11 @@ class SwiftTestPack(RunnerPack):
         if pattern:
             cmd.extend(["--filter", pattern])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         # Parse coarse swift test output
         lines = stdout.split("\n")
         passed = 0
         failed = 0
-
         for line in lines:
             if "Test Suite" in line and "passed" in line:
                 # e.g., "Test Suite 'All tests' passed at ..."
@@ -245,7 +173,6 @@ class SwiftTestPack(RunnerPack):
                     passed += 1
                 elif "failed" in line:
                     failed += 1
-
         return ParsedTestSuite(
             name="swift test",
             total=passed + failed,
@@ -253,23 +180,18 @@ class SwiftTestPack(RunnerPack):
             failed=failed,
         )
 
-
-# =============================================================================
 # Scala - sbt test
-# =============================================================================
-
 
 @runner_registry.register
 class SbtTestPack(RunnerPack):
     """Scala sbt test runner."""
-
     pack_id = "scala.sbt"
     language = "scala"
     runner_name = "sbt test"
-    markers = [
+    markers = (
         MarkerRule("build.sbt", confidence="high"),
         MarkerRule("project/build.properties", confidence="medium"),
-    ]
+    )
     output_strategy = OutputStrategy(
         format="junit_xml", file_based=True, file_pattern="target/test-reports/*.xml"
     )
@@ -280,14 +202,12 @@ class SbtTestPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=True,  # Via sbt-junit-interface or scalatest junit reporter
     )
-
     def detect(self, workspace_root: Path) -> float:
         if (workspace_root / "build.sbt").exists():
             return 1.0
         if (workspace_root / "project" / "build.properties").exists():
             return 0.8
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
         targets: list[TestTarget] = []
         if (workspace_root / "build.sbt").exists():
@@ -302,7 +222,6 @@ class SbtTestPack(RunnerPack):
                 )
             )
         return targets
-
     def build_command(
         self,
         target: TestTarget,  # noqa: ARG002
@@ -318,22 +237,17 @@ class SbtTestPack(RunnerPack):
         else:
             cmd.append("test")
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         from coderecon.testing.parsers import parse_junit_xml
-
         reports_dir = output_path.parent / "target" / "test-reports"
         if not reports_dir.exists():
             return ParsedTestSuite(name="sbt", errors=1)
-
         all_tests: list[ParsedTestCase] = []
         total_duration = 0.0
-
         for xml_file in reports_dir.glob("*.xml"):
             suite = parse_junit_xml(xml_file.read_text())
             all_tests.extend(suite.tests)
             total_duration += suite.duration_seconds
-
         return ParsedTestSuite(
             name="sbt",
             tests=all_tests,
@@ -345,22 +259,17 @@ class SbtTestPack(RunnerPack):
             duration_seconds=total_duration,
         )
 
-
-# =============================================================================
 # Dart - dart test / flutter test
-# =============================================================================
-
 
 @runner_registry.register
 class DartTestPack(RunnerPack):
     """Dart test runner."""
-
     pack_id = "dart.dart_test"
     language = "dart"
     runner_name = "dart test"
-    markers = [
+    markers = (
         MarkerRule("pubspec.yaml", confidence="high"),
-    ]
+    )
     output_strategy = OutputStrategy(format="json", file_based=False)  # dart test --reporter json
     capabilities = RunnerCapabilities(
         supported_kinds=["file", "package"],
@@ -369,7 +278,6 @@ class DartTestPack(RunnerPack):
         supports_parallel=True,
         supports_junit_output=False,  # Use json reporter
     )
-
     def detect(self, workspace_root: Path) -> float:
         pubspec = workspace_root / "pubspec.yaml"
         if pubspec.exists():
@@ -379,28 +287,12 @@ class DartTestPack(RunnerPack):
                 if "flutter:" in content:
                     return 0.0  # Let FlutterTestPack handle it
                 return 1.0
-            except Exception:
+            except OSError:
                 return 0.8
         return 0.0
-
     async def discover(self, workspace_root: Path) -> list[TestTarget]:
-        targets: list[TestTarget] = []
-        for path in workspace_root.glob("test/**/*_test.dart"):
-            if _is_prunable_path(path, workspace_root):
-                continue
-            rel = str(path.relative_to(workspace_root))
-            targets.append(
-                TestTarget(
-                    target_id=f"test:{rel}",
-                    selector=rel,
-                    kind="file",
-                    language="dart",
-                    runner_pack_id=self.pack_id,
-                    workspace_root=str(workspace_root),
-                )
-            )
-        return targets
-
+        from coderecon.testing.packs import _discover_dart_tests
+        return await _discover_dart_tests(self, workspace_root)
     def build_command(
         self,
         target: TestTarget,
@@ -416,21 +308,18 @@ class DartTestPack(RunnerPack):
         if tags:
             cmd.extend(["--tags", ",".join(tags)])
         return cmd
-
     def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
         # Parse dart test JSON output (NDJSON format)
         tests: dict[int, ParsedTestCase] = {}
-
         for line in stdout.strip().split("\n"):
             if not line.strip():
                 continue
             try:
                 event = json.loads(line)
             except json.JSONDecodeError:
+                log.debug("dart_output_parse_failed", exc_info=True)
                 continue
-
             event_type = event.get("type")
-
             if event_type == "testStart":
                 test = event.get("test", {})
                 test_id = test.get("id")
@@ -455,8 +344,7 @@ class DartTestPack(RunnerPack):
                     else:
                         status = "skipped"
                     tests[test_id].status = status
-                    tests[test_id].duration_seconds = event.get("time", 0) / 1000
-
+                    tests[test_id].duration_seconds = event.get("time", 0) / MS_PER_SEC
         test_list = list(tests.values())
         return ParsedTestSuite(
             name="dart test",
@@ -469,687 +357,16 @@ class DartTestPack(RunnerPack):
         )
 
 
-@runner_registry.register
-class FlutterTestPack(RunnerPack):
-    """Flutter test runner."""
-
-    pack_id = "dart.flutter_test"
-    language = "dart"
-    runner_name = "flutter test"
-    markers = [
-        MarkerRule("pubspec.yaml", content_match="flutter:", confidence="high"),
-    ]
-    output_strategy = OutputStrategy(format="json", file_based=False)
-    capabilities = RunnerCapabilities(
-        supported_kinds=["file", "package"],
-        supports_pattern_filter=True,
-        supports_tag_filter=True,
-        supports_parallel=True,
-        supports_junit_output=False,
-    )
-
-    def detect(self, workspace_root: Path) -> float:
-        pubspec = workspace_root / "pubspec.yaml"
-        if pubspec.exists():
-            try:
-                content = pubspec.read_text()
-                if "flutter:" in content:
-                    return 1.0
-            except Exception:
-                pass
-        return 0.0
-
-    async def discover(self, workspace_root: Path) -> list[TestTarget]:
-        targets: list[TestTarget] = []
-        for path in workspace_root.glob("test/**/*_test.dart"):
-            if _is_prunable_path(path, workspace_root):
-                continue
-            rel = str(path.relative_to(workspace_root))
-            targets.append(
-                TestTarget(
-                    target_id=f"test:{rel}",
-                    selector=rel,
-                    kind="file",
-                    language="dart",
-                    runner_pack_id=self.pack_id,
-                    workspace_root=str(workspace_root),
-                )
-            )
-        return targets
-
-    def build_command(
-        self,
-        target: TestTarget,
-        *,
-        output_path: Path,  # noqa: ARG002
-        pattern: str | None = None,
-        tags: list[str] | None = None,
-        exec_ctx: RuntimeExecutionContext | None = None,  # noqa: ARG002 - Flutter uses standard command
-    ) -> list[str]:
-        cmd = ["flutter", "test", "--machine", target.selector]
-        if pattern:
-            cmd.extend(["--name", pattern])
-        if tags:
-            cmd.extend(["--tags", ",".join(tags)])
-        return cmd
-
-    def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:
-        # Flutter uses same JSON format as dart test
-        dart_pack = DartTestPack()
-        result = dart_pack.parse_output(output_path, stdout)
-        result.name = "flutter test"
-        return result
-
-
-# =============================================================================
-# Bash - bats (Bash Automated Testing System)
-# =============================================================================
-
-
-@runner_registry.register
-class BatsPack(RunnerPack):
-    """Bash bats test runner."""
-
-    pack_id = "bash.bats"
-    language = "bash"
-    runner_name = "bats"
-    markers = [
-        MarkerRule("test/*.bats", confidence="high"),
-        MarkerRule("tests/*.bats", confidence="high"),
-        MarkerRule(".bats", confidence="medium"),
-    ]
-    output_strategy = OutputStrategy(format="tap", file_based=False)  # bats outputs TAP by default
-    capabilities = RunnerCapabilities(
-        supported_kinds=["file"],
-        supports_pattern_filter=True,
-        supports_tag_filter=False,
-        supports_parallel=True,
-        supports_junit_output=True,  # bats --formatter junit
-    )
-
-    def detect(self, workspace_root: Path) -> float:
-        if list(workspace_root.glob("test/*.bats")) or list(workspace_root.glob("tests/*.bats")):
-            return 1.0
-        if list(workspace_root.glob("**/*.bats")):
-            return 0.7
-        return 0.0
-
-    async def discover(self, workspace_root: Path) -> list[TestTarget]:
-        targets: list[TestTarget] = []
-        for path in workspace_root.glob("**/*.bats"):
-            if _is_prunable_path(path, workspace_root):
-                continue
-            rel = str(path.relative_to(workspace_root))
-            targets.append(
-                TestTarget(
-                    target_id=f"test:{rel}",
-                    selector=rel,
-                    kind="file",
-                    language="bash",
-                    runner_pack_id=self.pack_id,
-                    workspace_root=str(workspace_root),
-                )
-            )
-        return targets
-
-    def build_command(
-        self,
-        target: TestTarget,
-        *,
-        output_path: Path,
-        pattern: str | None = None,
-        tags: list[str] | None = None,  # noqa: ARG002
-        exec_ctx: RuntimeExecutionContext | None = None,  # noqa: ARG002 - Bats uses standard command
-    ) -> list[str]:
-        cmd = ["bats", "--formatter", "junit", target.selector]
-        if pattern:
-            cmd.extend(["--filter", pattern])
-        # Redirect to file
-        return cmd + [">", str(output_path)]
-
-    def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:
-        from coderecon.testing.parsers import parse_junit_xml, parse_tap
-
-        # Try JUnit first (if formatter was used)
-        if output_path.exists():
-            content = output_path.read_text()
-            if content.strip().startswith("<"):
-                return parse_junit_xml(content)
-
-        # Fall back to TAP
-        return parse_tap(stdout)
-
-
-# =============================================================================
-# PowerShell - Pester
-# =============================================================================
-
-
-@runner_registry.register
-class PesterPack(RunnerPack):
-    """PowerShell Pester test runner."""
-
-    pack_id = "powershell.pester"
-    language = "powershell"
-    runner_name = "Pester"
-    markers = [
-        MarkerRule("*.Tests.ps1", confidence="high"),
-        MarkerRule("tests/*.Tests.ps1", confidence="high"),
-    ]
-    output_strategy = OutputStrategy(
-        format="junit_xml", file_based=True, file_pattern="testResults.xml"
-    )
-    capabilities = RunnerCapabilities(
-        supported_kinds=["file"],
-        supports_pattern_filter=True,
-        supports_tag_filter=True,
-        supports_parallel=True,
-        supports_junit_output=True,  # Via -OutputFormat JUnitXml
-    )
-
-    def detect(self, workspace_root: Path) -> float:
-        if list(workspace_root.glob("**/*.Tests.ps1")):
-            return 1.0
-        return 0.0
-
-    async def discover(self, workspace_root: Path) -> list[TestTarget]:
-        targets: list[TestTarget] = []
-        for path in workspace_root.glob("**/*.Tests.ps1"):
-            if _is_prunable_path(path, workspace_root):
-                continue
-            rel = str(path.relative_to(workspace_root))
-            targets.append(
-                TestTarget(
-                    target_id=f"test:{rel}",
-                    selector=rel,
-                    kind="file",
-                    language="powershell",
-                    runner_pack_id=self.pack_id,
-                    workspace_root=str(workspace_root),
-                )
-            )
-        return targets
-
-    def build_command(
-        self,
-        target: TestTarget,
-        *,
-        output_path: Path,
-        pattern: str | None = None,
-        tags: list[str] | None = None,
-        exec_ctx: RuntimeExecutionContext | None = None,  # noqa: ARG002 - Pester uses pwsh command
-    ) -> list[str]:
-        # Build Pester invocation
-        pester_config = f"""
-$config = New-PesterConfiguration
-$config.Run.Path = '{target.selector}'
-$config.TestResult.Enabled = $true
-$config.TestResult.OutputPath = '{output_path}'
-$config.TestResult.OutputFormat = 'JUnitXml'
-"""
-        if pattern:
-            pester_config += f"$config.Filter.FullName = '*{pattern}*'\n"
-        if tags:
-            pester_config += f"$config.Filter.Tag = @({', '.join(repr(t) for t in tags)})\n"
-        pester_config += "Invoke-Pester -Configuration $config"
-
-        return ["pwsh", "-NoProfile", "-Command", pester_config]
-
-    def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
-        from coderecon.testing.parsers import parse_junit_xml
-
-        if output_path.exists():
-            return parse_junit_xml(output_path.read_text())
-        return ParsedTestSuite(name="pester", errors=1)
-
-
-# =============================================================================
-# Lua - busted
-# =============================================================================
-
-
-@runner_registry.register
-class BustedPack(RunnerPack):
-    """Lua busted test runner."""
-
-    pack_id = "lua.busted"
-    language = "lua"
-    runner_name = "busted"
-    markers = [
-        MarkerRule(".busted", confidence="high"),
-        MarkerRule("spec/*_spec.lua", confidence="high"),
-    ]
-    output_strategy = OutputStrategy(format="junit_xml", file_based=True, file_pattern="junit.xml")
-    capabilities = RunnerCapabilities(
-        supported_kinds=["file"],
-        supports_pattern_filter=True,
-        supports_tag_filter=True,
-        supports_parallel=True,
-        supports_junit_output=True,  # busted -o junit
-    )
-
-    def detect(self, workspace_root: Path) -> float:
-        if (workspace_root / ".busted").exists():
-            return 1.0
-        if list(workspace_root.glob("spec/*_spec.lua")):
-            return 0.9
-        if list(workspace_root.glob("**/*_spec.lua")):
-            return 0.7
-        return 0.0
-
-    async def discover(self, workspace_root: Path) -> list[TestTarget]:
-        targets: list[TestTarget] = []
-        for path in workspace_root.glob("**/*_spec.lua"):
-            if _is_prunable_path(path, workspace_root):
-                continue
-            rel = str(path.relative_to(workspace_root))
-            targets.append(
-                TestTarget(
-                    target_id=f"test:{rel}",
-                    selector=rel,
-                    kind="file",
-                    language="lua",
-                    runner_pack_id=self.pack_id,
-                    workspace_root=str(workspace_root),
-                )
-            )
-        return targets
-
-    def build_command(
-        self,
-        target: TestTarget,
-        *,
-        output_path: Path,
-        pattern: str | None = None,
-        tags: list[str] | None = None,
-        exec_ctx: RuntimeExecutionContext | None = None,  # noqa: ARG002 - busted uses standard command
-    ) -> list[str]:
-        cmd = ["busted", "-o", "junit", target.selector, ">", str(output_path)]
-        if pattern:
-            cmd.extend(["--filter", pattern])
-        if tags:
-            cmd.extend(["--tags", ",".join(tags)])
-        return cmd
-
-    def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
-        from coderecon.testing.parsers import parse_junit_xml
-
-        if output_path.exists():
-            return parse_junit_xml(output_path.read_text())
-        return ParsedTestSuite(name="busted", errors=1)
-
-
-# =============================================================================
-# Elixir - Mix Test (ExUnit)
-# =============================================================================
-
-
-@runner_registry.register
-class MixTestPack(RunnerPack):
-    """Elixir ExUnit runner (mix test)."""
-
-    pack_id = "elixir.mix_test"
-    language = "elixir"
-    runner_name = "mix_test"
-    markers = [
-        MarkerRule("mix.exs", confidence="high"),
-    ]
-    output_strategy = OutputStrategy(
-        format="junit_xml", file_based=True, file_pattern="_build/test/lib/**/test-junit-report.xml"
-    )
-    capabilities = RunnerCapabilities(
-        supported_kinds=["file"],
-        supports_pattern_filter=True,
-        supports_tag_filter=True,  # Via --only
-        supports_parallel=False,
-        supports_junit_output=True,
-    )
-
-    def detect(self, workspace_root: Path) -> float:
-        if (workspace_root / "mix.exs").exists():
-            # Check it's not a Phoenix umbrella or deps-only project
-            mix_exs = workspace_root / "mix.exs"
-            try:
-                content = mix_exs.read_text()
-                if "def project" in content:
-                    return 1.0
-            except Exception:
-                pass
-            return 0.9
-        return 0.0
-
-    async def discover(self, workspace_root: Path) -> list[TestTarget]:
-        targets: list[TestTarget] = []
-        test_dir = workspace_root / "test"
-        if not test_dir.is_dir():
-            return targets
-        for path in test_dir.rglob("*_test.exs"):
-            if _is_prunable_path(path, workspace_root):
-                continue
-            rel = str(path.relative_to(workspace_root))
-            targets.append(
-                TestTarget(
-                    target_id=f"test:{rel}",
-                    selector=rel,
-                    kind="file",
-                    language="elixir",
-                    runner_pack_id=self.pack_id,
-                    workspace_root=str(workspace_root),
-                )
-            )
-        return targets
-
-    def build_command(
-        self,
-        target: TestTarget,
-        *,
-        output_path: Path,  # noqa: ARG002
-        pattern: str | None = None,
-        tags: list[str] | None = None,
-        exec_ctx: RuntimeExecutionContext | None = None,  # noqa: ARG002
-    ) -> list[str]:
-        cmd = ["mix", "test", target.selector]
-        if pattern:
-            cmd.extend(["--only", f"test:{pattern}"])
-        if tags:
-            for tag in tags:
-                cmd.extend(["--only", tag])
-        return cmd
-
-    def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
-        # ExUnit prints results to stdout; parse from stdout lines
-        suite = ParsedTestSuite(name="mix_test")
-        for line in stdout.splitlines():
-            line = line.strip()
-            # ExUnit format: "  1) test description (Module)\n     test/path:line"
-            if line.startswith("0 failures"):
-                break
-            # Count pass/fail from summary line: "X tests, Y failures" or "1 test, 0 failures"
-            if "test" in line and "failure" in line:
-                parts = line.split(",")
-                for part in parts:
-                    part = part.strip()
-                    # Match both "tests" and "test" (singular)
-                    if part.endswith("tests") or part.endswith("test"):
-                        try:
-                            total = int(part.split()[0])
-                            suite.total = total
-                        except (ValueError, IndexError):
-                            pass
-                    elif "failure" in part:
-                        try:
-                            failures = int(part.split()[0])
-                            suite.failed = failures
-                        except (ValueError, IndexError):
-                            pass
-        return suite
-
-
-# =============================================================================
-# Haskell - Cabal Test
-# =============================================================================
-
-
-@runner_registry.register
-class CabalTestPack(RunnerPack):
-    """Haskell cabal test runner."""
-
-    pack_id = "haskell.cabal_test"
-    language = "haskell"
-    runner_name = "cabal_test"
-    markers = [
-        MarkerRule("*.cabal", confidence="high"),
-    ]
-    output_strategy = OutputStrategy(format="coarse", file_based=False)
-    capabilities = RunnerCapabilities(
-        supported_kinds=["project"],
-        supports_pattern_filter=False,
-        supports_tag_filter=False,
-        supports_parallel=False,
-        supports_junit_output=False,
-    )
-
-    def detect(self, workspace_root: Path) -> float:
-        cabal_files = list(workspace_root.glob("*.cabal"))
-        if cabal_files:
-            # Check for test-suite stanza
-            for cf in cabal_files:
-                try:
-                    content = cf.read_text()
-                    if "test-suite" in content.lower():
-                        return 1.0
-                except Exception:
-                    pass
-            return 0.5  # Cabal file exists but no test-suite stanza
-        return 0.0
-
-    async def discover(self, workspace_root: Path) -> list[TestTarget]:
-        # Project-level target for cabal test
-        return [
-            TestTarget(
-                target_id="test:.",
-                selector=".",
-                kind="project",
-                language="haskell",
-                runner_pack_id=self.pack_id,
-                workspace_root=str(workspace_root),
-            )
-        ]
-
-    def build_command(
-        self,
-        target: TestTarget,  # noqa: ARG002
-        *,
-        output_path: Path,  # noqa: ARG002
-        pattern: str | None = None,  # noqa: ARG002
-        tags: list[str] | None = None,  # noqa: ARG002
-        exec_ctx: RuntimeExecutionContext | None = None,  # noqa: ARG002
-    ) -> list[str]:
-        return ["cabal", "test", "--test-show-details=streaming"]
-
-    def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
-        import re
-
-        suite = ParsedTestSuite(name="cabal_test")
-        # Cabal test output formats:
-        # - "Test Cases: 10  Tried: 10  Errors: 0  Failures: 2"
-        # - "Cases: 15  Tried: 15  Errors: 0  Failures: 3"
-        # - "1 of 1 test suites (1 of 1 test cases) passed."
-        # - "Running X test suites..." then "PASS" or "FAIL" per suite
-        for line in stdout.splitlines():
-            # Parse "Cases: N  Tried: N  Errors: N  Failures: N" format
-            cases_match = re.search(
-                r"(?:Test\s+)?Cases:\s*(\d+).*?Failures:\s*(\d+)", line, re.IGNORECASE
-            )
-            if cases_match:
-                suite.total = int(cases_match.group(1))
-                suite.failed = int(cases_match.group(2))
-                continue
-            # Parse "X of Y test suites (A of B test cases) passed" format
-            suites_match = re.search(
-                r"(\d+)\s+of\s+(\d+)\s+test\s+(?:suites|cases).*passed", line, re.IGNORECASE
-            )
-            if suites_match:
-                passed = int(suites_match.group(1))
-                total = int(suites_match.group(2))
-                suite.total = total
-                suite.failed = total - passed
-        # Fallback: if no counts found but pass/fail detected
-        if suite.total == 0:
-            passed_suites = stdout.lower().count("test suite") and "pass" in stdout.lower()
-            failed_suites = "fail" in stdout.lower()
-            if passed_suites or failed_suites:
-                suite.total = 1
-                suite.failed = 1 if failed_suites else 0
-        return suite
-
-
-# =============================================================================
-# Julia - Pkg.test (Julia standard package testing)
-# =============================================================================
-
-
-@runner_registry.register
-class JuliaPkgTestPack(RunnerPack):
-    """Julia Pkg.test() runner."""
-
-    pack_id = "julia.pkg_test"
-    language = "julia"
-    runner_name = "pkg_test"
-    markers = [
-        MarkerRule("Project.toml", confidence="high"),
-    ]
-    output_strategy = OutputStrategy(format="coarse", file_based=False)
-    capabilities = RunnerCapabilities(
-        supported_kinds=["project"],
-        supports_pattern_filter=False,
-        supports_tag_filter=False,
-        supports_parallel=False,
-        supports_junit_output=False,
-    )
-
-    def detect(self, workspace_root: Path) -> float:
-        project_toml = workspace_root / "Project.toml"
-        if project_toml.exists():
-            test_dir = workspace_root / "test"
-            if test_dir.is_dir() and (test_dir / "runtests.jl").exists():
-                return 1.0
-            return 0.5
-        return 0.0
-
-    async def discover(self, workspace_root: Path) -> list[TestTarget]:
-        # Project-level target
-        return [
-            TestTarget(
-                target_id="test:.",
-                selector=".",
-                kind="project",
-                language="julia",
-                runner_pack_id=self.pack_id,
-                workspace_root=str(workspace_root),
-            )
-        ]
-
-    def build_command(
-        self,
-        target: TestTarget,  # noqa: ARG002
-        *,
-        output_path: Path,  # noqa: ARG002
-        pattern: str | None = None,  # noqa: ARG002
-        tags: list[str] | None = None,  # noqa: ARG002
-        exec_ctx: RuntimeExecutionContext | None = None,  # noqa: ARG002
-    ) -> list[str]:
-        return ["julia", "--project=.", "-e", "using Pkg; Pkg.test()"]
-
-    def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
-        import re
-
-        suite = ParsedTestSuite(name="pkg_test")
-        # Julia Test Summary format:
-        # "Test Summary: | Pass  Fail  Total"
-        # "  MyModule    |    5     2      7"
-        # Look for summary lines with numeric columns
-        for line in stdout.splitlines():
-            # Parse totals from summary table rows (lines after "Test Summary:")
-            # Format: "  name  |  pass  fail  total" where numbers are space-separated
-            if "|" in line and re.search(r"\d", line):
-                # Extract all numbers from the line after the pipe
-                parts = line.split("|")
-                if len(parts) >= 2:
-                    nums = re.findall(r"\d+", parts[1])
-                    # Expect [pass, fail, total] or [pass, total] or [total]
-                    if len(nums) >= 3:
-                        # pass, fail, total format
-                        suite.total = int(nums[-1])  # last is total
-                        suite.failed = int(nums[-2])  # second-to-last is fail
-                    elif len(nums) == 2:
-                        suite.total = int(nums[1])
-                        suite.failed = 0
-        # Fallback: detect pass/fail from text if no table found
-        if suite.total == 0:
-            if "testing" in stdout.lower() and "passed" in stdout.lower():
-                suite.total = 1
-                suite.failed = 0
-            elif "fail" in stdout.lower() or "error" in stdout.lower():
-                suite.total = 1
-                suite.failed = 1
-        return suite
-
-
-# =============================================================================
-# OCaml - Dune Test
-# =============================================================================
-
-
-@runner_registry.register
-class DuneTestPack(RunnerPack):
-    """OCaml Dune test runner."""
-
-    pack_id = "ocaml.dune_test"
-    language = "ocaml"
-    runner_name = "dune_test"
-    markers = [
-        MarkerRule("dune-project", confidence="high"),
-    ]
-    output_strategy = OutputStrategy(format="coarse", file_based=False)
-    capabilities = RunnerCapabilities(
-        supported_kinds=["project"],
-        supports_pattern_filter=False,
-        supports_tag_filter=False,
-        supports_parallel=True,
-        supports_junit_output=False,
-    )
-
-    def detect(self, workspace_root: Path) -> float:
-        if (workspace_root / "dune-project").exists():
-            # Check for test directory or inline_tests
-            test_dir = workspace_root / "test"
-            if test_dir.is_dir():
-                return 1.0
-            # Check for inline_tests in dune files
-            for dune_file in workspace_root.rglob("dune"):
-                try:
-                    content = dune_file.read_text()
-                    if "inline_tests" in content or "(test" in content:
-                        return 0.9
-                except Exception:
-                    pass
-            return 0.5
-        return 0.0
-
-    async def discover(self, workspace_root: Path) -> list[TestTarget]:
-        # Project-level target for dune test
-        return [
-            TestTarget(
-                target_id="test:.",
-                selector=".",
-                kind="project",
-                language="ocaml",
-                runner_pack_id=self.pack_id,
-                workspace_root=str(workspace_root),
-            )
-        ]
-
-    def build_command(
-        self,
-        target: TestTarget,  # noqa: ARG002
-        *,
-        output_path: Path,  # noqa: ARG002
-        pattern: str | None = None,  # noqa: ARG002
-        tags: list[str] | None = None,  # noqa: ARG002
-        exec_ctx: RuntimeExecutionContext | None = None,  # noqa: ARG002
-    ) -> list[str]:
-        return ["dune", "test"]
-
-    def parse_output(self, output_path: Path, stdout: str) -> ParsedTestSuite:  # noqa: ARG002
-        import re
-
-        suite = ParsedTestSuite(name="dune_test")
-        # Dune outputs "PASS" or "FAIL" as whole words in test output.
-        # Use word-boundary regex to avoid matching substrings like "passed", "password".
-        pass_count = len(re.findall(r"\bPASS\b", stdout, re.IGNORECASE))
-        fail_count = len(re.findall(r"\bFAIL\b", stdout, re.IGNORECASE))
-        if pass_count > 0 or fail_count > 0:
-            suite.total = pass_count + fail_count
-            suite.failed = fail_count
-        return suite
+# Re-export classes from split modules for backward compatibility
+from coderecon.testing.packs.tier2_functional import (  # noqa: F401, E402
+    CabalTestPack,
+    DuneTestPack,
+    JuliaPkgTestPack,
+)
+from coderecon.testing.packs.tier2_scripting import (  # noqa: F401, E402
+    BatsPack,
+    BustedPack,
+    FlutterTestPack,
+    MixTestPack,
+    PesterPack,
+)

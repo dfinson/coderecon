@@ -20,33 +20,26 @@ from coderecon.index.ops import (
     SearchResult,
 )
 
-
 def _noop_progress(indexed: int, total: int, files_by_ext: dict[str, int], phase: str = "") -> None:
     """No-op progress callback for tests."""
     pass
 
-
 class TestCoordinatorInitialization:
     """Tests for IndexCoordinatorEngine.initialize()."""
-
     @pytest.mark.asyncio
     async def test_initialize_python_project(self, integration_repo: Path, tmp_path: Path) -> None:
         """Should initialize a Python project."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
-
         try:
             result = await coordinator.initialize(on_index_progress=_noop_progress)
-
             assert isinstance(result, InitResult)
             assert result.contexts_discovered >= 1  # At least Python context
             assert result.files_indexed >= 1
             assert len(result.errors) == 0
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_initialize_creates_database(
         self, integration_repo: Path, tmp_path: Path
@@ -54,17 +47,13 @@ class TestCoordinatorInitialization:
         """Should create database file."""
         db_path = tmp_path / "new_index.db"
         tantivy_path = tmp_path / "tantivy"
-
         assert not db_path.exists()
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
             assert db_path.exists()
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_initialize_creates_tantivy_index(
         self, integration_repo: Path, tmp_path: Path
@@ -72,17 +61,13 @@ class TestCoordinatorInitialization:
         """Should create Tantivy index directory."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy_new"
-
         assert not tantivy_path.exists()
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
             assert tantivy_path.exists()
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_initialize_indexes_all_python_files(
         self, integration_repo: Path, tmp_path: Path
@@ -90,18 +75,14 @@ class TestCoordinatorInitialization:
         """Should index all Python files in the project."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
-
         try:
             result = await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Should have indexed at least the main files
             # src/__init__.py, src/main.py, src/utils.py, tests/__init__.py, tests/test_main.py
             assert result.files_indexed >= 4
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_initialize_calls_progress_callback(
         self, integration_repo: Path, tmp_path: Path
@@ -109,56 +90,43 @@ class TestCoordinatorInitialization:
         """Should call progress callback during indexing."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
         progress_calls: list[tuple[int, int, dict[str, int], str]] = []
-
         def track_progress(
             indexed: int, total: int, files_by_ext: dict[str, int], phase: str = ""
         ) -> None:
             progress_calls.append((indexed, total, files_by_ext.copy(), phase))
-
         try:
             await coordinator.initialize(on_index_progress=track_progress)
-
             # Should have called progress at least once
             assert len(progress_calls) >= 1
-
             # Group progress by phase and verify each phase increases monotonically
             by_phase: dict[str, list[tuple[int, int]]] = {}
             for indexed, total, _, phase in progress_calls:
                 by_phase.setdefault(phase, []).append((indexed, total))
-
             for phase, calls in by_phase.items():
                 for i in range(1, len(calls)):
                     assert calls[i][0] >= calls[i - 1][0], f"Phase {phase} progress not monotonic"
-
             # Should have indexing phase at minimum (unified single-pass)
             assert "indexing" in by_phase
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_progress_phases_unified(self, integration_repo: Path, tmp_path: Path) -> None:
         """Progress phases should use unified naming (no 'lexical' or 'structural')."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
         phases_seen: list[str] = []
-
         def track_phases(
             _indexed: int, _total: int, _files_by_ext: dict[str, int], phase: str = ""
         ) -> None:
             if phase and (not phases_seen or phases_seen[-1] != phase):
                 phases_seen.append(phase)
-
         try:
             await coordinator.initialize(on_index_progress=track_phases)
-
             # "indexing" must appear (unified single-pass replaces old "lexical" + "structural")
             assert "indexing" in phases_seen, f"Expected 'indexing' phase, got: {phases_seen}"
-
             # Old phase names must NOT appear
             assert "lexical" not in phases_seen, (
                 "'lexical' phase should not exist in unified pipeline"
@@ -166,7 +134,6 @@ class TestCoordinatorInitialization:
             assert "structural" not in phases_seen, (
                 "'structural' phase should not exist in unified pipeline"
             )
-
             # "indexing" should appear before any resolution phases
             indexing_idx = phases_seen.index("indexing")
             for resolution_phase in ["resolving_cross_file", "resolving_refs", "resolving_types"]:
@@ -176,105 +143,75 @@ class TestCoordinatorInitialization:
                     )
         finally:
             coordinator.close()
-
-
 class TestCoordinatorSearch:
     """Tests for IndexCoordinatorEngine search operations."""
-
     @pytest.mark.asyncio
     async def test_search_text(self, integration_repo: Path, tmp_path: Path) -> None:
         """Should search file content."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Search for content that exists
             results = await coordinator.search("Hello", mode=SearchMode.TEXT)
-
             assert len(results.results) >= 1
             assert all(isinstance(r, SearchResult) for r in results.results)
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_search_symbols(self, integration_repo: Path, tmp_path: Path) -> None:
         """Should search by symbol name."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Search for function name
             results = await coordinator.search("helper", mode=SearchMode.SYMBOL)
-
             assert len(results.results) >= 1
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_search_path(self, integration_repo: Path, tmp_path: Path) -> None:
         """Should search by file path."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Search for path pattern
             results = await coordinator.search("utils", mode=SearchMode.PATH)
-
             assert len(results.results) >= 1
             assert any("utils" in r.path for r in results.results)
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_search_no_results(self, integration_repo: Path, tmp_path: Path) -> None:
         """Should return empty list when no matches."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             results = await coordinator.search("xyznonexistent123")
-
             assert len(results.results) == 0
         finally:
             coordinator.close()
-
-
 class TestCoordinatorReindex:
     """Tests for IndexCoordinatorEngine reindex operations."""
-
     @pytest.mark.asyncio
     async def test_reindex_incremental(self, integration_repo: Path, tmp_path: Path) -> None:
         """Should perform incremental reindex."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Modify a file
             (integration_repo / "src" / "main.py").write_text('''"""Modified main."""
-
 def main():
     print("Modified!")
-
 
 def new_function():
     """New function added."""
@@ -283,253 +220,194 @@ def new_function():
 
             # Reindex incrementally
             stats = await coordinator.reindex_incremental([Path("src/main.py")])
-
             assert isinstance(stats, IndexStats)
             assert stats.files_processed == 1
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_reindex_full(self, integration_repo: Path, tmp_path: Path) -> None:
         """Should perform full reindex and discover new files."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Add a new file (no git commit needed - we index all files)
             (integration_repo / "src" / "new_module.py").write_text('''"""New module."""
-
 def new_func():
     return "new"
 ''')
 
             # Full reindex should discover the new file
             stats = await coordinator.reindex_full()
-
             assert isinstance(stats, IndexStats)
             assert stats.files_added >= 1
         finally:
             coordinator.close()
 
-
 class TestCoordinatorMonorepo:
     """Tests for IndexCoordinatorEngine with monorepo structure."""
-
     @pytest.mark.asyncio
     async def test_initialize_monorepo(self, integration_monorepo: Path, tmp_path: Path) -> None:
         """Should discover multiple contexts in monorepo."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_monorepo, db_path, tantivy_path)
-
         try:
             result = await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Should discover JavaScript contexts for packages
             assert result.contexts_discovered >= 2  # pkg-a and pkg-b
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_search_across_packages(self, integration_monorepo: Path, tmp_path: Path) -> None:
         """Should search across all packages."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_monorepo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Search for something in both packages
             results = await coordinator.search("hello")
-
             assert len(results.results) >= 1
         finally:
             coordinator.close()
-
-
 class TestCoordinatorCplignore:
     """Tests for .reconignore enforcement during indexing."""
-
     @pytest.mark.asyncio
     async def test_reconignore_excludes_dependencies(self, tmp_path: Path) -> None:
         """Should not index files in dependency directories (node_modules, venv, etc)."""
-        from coderecon.templates import get_reconignore_template
-
+        from coderecon._core.excludes import get_reconignore_template
         # Create project with git repo
         repo_root = tmp_path / "repo"
         repo_root.mkdir()
         subprocess.run(["git", "init"], cwd=repo_root, capture_output=True, check=True)
         (repo_root / "pyproject.toml").write_text('[project]\nname = "test"')
-
         # Create .recon/.reconignore (simulating recon init)
         coderecon_dir = repo_root / ".recon"
         coderecon_dir.mkdir()
         (coderecon_dir / ".reconignore").write_text(get_reconignore_template())
-
         # Create src directory with files
         src = repo_root / "src"
         src.mkdir()
         (src / "__init__.py").write_text("")
         (src / "main.py").write_text("def main(): pass")
-
         # Create dependency directories that should be ignored per .reconignore
         venv = repo_root / ".venv"
         venv.mkdir()
         (venv / "lib.py").write_text("VENV_CODE = True")
-
         node_modules = repo_root / "node_modules"
         node_modules.mkdir()
         (node_modules / "package.js").write_text("module.exports = {}")
-
         pycache = src / "__pycache__"
         pycache.mkdir()
         (pycache / "main.cpython-312.pyc").write_bytes(b"compiled")
-
         # Create initial commit
         subprocess.run(["git", "config", "user.name", "Test"], cwd=repo_root, capture_output=True, check=True)
         subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=repo_root, capture_output=True, check=True)
         subprocess.run(["git", "add", "-A"], cwd=repo_root, capture_output=True, check=True)
         subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_root, capture_output=True, check=True)
-
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(repo_root, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Search for content that should NOT be indexed
             venv_results = await coordinator.search("VENV_CODE")
             node_results = await coordinator.search("module.exports")
-
             # None of these should be found
             assert len(venv_results.results) == 0, ".venv/ should be ignored"
             assert len(node_results.results) == 0, "node_modules/ should be ignored"
-
             # But main.py should be indexed
             main_results = await coordinator.search("main")
             assert len(main_results.results) >= 1, "main.py should be indexed"
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_reconignore_excludes_build_outputs(self, tmp_path: Path) -> None:
         """Should not index build output directories (dist, build, target)."""
-        from coderecon.templates import get_reconignore_template
-
+        from coderecon._core.excludes import get_reconignore_template
         # Create project with git repo
         repo_root = tmp_path / "repo"
         repo_root.mkdir()
         subprocess.run(["git", "init"], cwd=repo_root, capture_output=True, check=True)
         (repo_root / "pyproject.toml").write_text('[project]\nname = "test"')
-
         # Create .recon/.reconignore (simulating recon init)
         coderecon_dir = repo_root / ".recon"
         coderecon_dir.mkdir()
         (coderecon_dir / ".reconignore").write_text(get_reconignore_template())
-
         # Create src directory
         src = repo_root / "src"
         src.mkdir()
         (src / "__init__.py").write_text("")
         (src / "main.py").write_text("def main(): pass")
-
         # Create build output directories
         dist = repo_root / "dist"
         dist.mkdir()
         (dist / "bundle.py").write_text("BUNDLED = True")
-
         build = repo_root / "build"
         build.mkdir()
         (build / "output.py").write_text("BUILD_OUTPUT = True")
-
         # Create initial commit
         subprocess.run(["git", "config", "user.name", "Test"], cwd=repo_root, capture_output=True, check=True)
         subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=repo_root, capture_output=True, check=True)
         subprocess.run(["git", "add", "-A"], cwd=repo_root, capture_output=True, check=True)
         subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_root, capture_output=True, check=True)
-
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(repo_root, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Search for content that should NOT be indexed
             dist_results = await coordinator.search("BUNDLED")
             build_results = await coordinator.search("BUILD_OUTPUT")
-
             assert len(dist_results.results) == 0, "dist/ should be ignored"
             assert len(build_results.results) == 0, "build/ should be ignored"
-
             # But main.py should be indexed
             main_results = await coordinator.search("main")
             assert len(main_results.results) >= 1, "main.py should be indexed"
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_coderecon_directory_always_excluded(self, tmp_path: Path) -> None:
         """Should never index .recon directory itself."""
-        from coderecon.templates import get_reconignore_template
-
+        from coderecon._core.excludes import get_reconignore_template
         # Create project with git repo
         repo_root = tmp_path / "repo"
         repo_root.mkdir()
         subprocess.run(["git", "init"], cwd=repo_root, capture_output=True, check=True)
         (repo_root / "pyproject.toml").write_text('[project]\nname = "test"')
-
         # Create src directory
         src = repo_root / "src"
         src.mkdir()
         (src / "__init__.py").write_text("")
         (src / "main.py").write_text("def main(): pass")
-
         # Create .recon with some files (simulating recon init + artifacts)
         coderecon = repo_root / ".recon"
         coderecon.mkdir()
         (coderecon / ".reconignore").write_text(get_reconignore_template())
-        (coderecon / "config.yaml").write_text("CODEPLANE_CONFIG = true")
+        (coderecon / "config.yaml").write_text("CODERECON_CONFIG = true")
         (coderecon / "index.db").write_bytes(b"database")
-
         # Create initial commit
         subprocess.run(["git", "config", "user.name", "Test"], cwd=repo_root, capture_output=True, check=True)
         subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=repo_root, capture_output=True, check=True)
         subprocess.run(["git", "add", "-A"], cwd=repo_root, capture_output=True, check=True)
         subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_root, capture_output=True, check=True)
-
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(repo_root, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Search for content that should NOT be indexed
-            config_results = await coordinator.search("CODEPLANE_CONFIG")
+            config_results = await coordinator.search("CODERECON_CONFIG")
             assert len(config_results.results) == 0, ".recon/ should always be ignored"
-
             # But main.py should be indexed
             main_results = await coordinator.search("main")
             assert len(main_results.results) >= 1, "main.py should be indexed"
         finally:
             coordinator.close()
-
-
 class TestCplignoreChangeHandling:
     """Tests for .reconignore change detection and index updates."""
-
     @pytest.mark.asyncio
     async def test_reconignore_change_adds_previously_ignored_py_files(
         self, integration_repo: Path, tmp_path: Path
@@ -539,31 +417,23 @@ class TestCplignoreChangeHandling:
         (integration_repo / "src" / "generated_code.py").write_text(
             "GENERATED_CONTENT = 'marker_for_test'\n"
         )
-
         # Add *generated* pattern to .reconignore BEFORE initialization
         reconignore_path = integration_repo / ".recon" / ".reconignore"
         original_content = reconignore_path.read_text()
         reconignore_path.write_text(original_content + "\n**/generated*.py\n")
-
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
-
         try:
             # Initialize - generated_code.py should be ignored per .reconignore
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Verify generated file is NOT indexed
             gen_results = await coordinator.search("GENERATED_CONTENT")
             assert len(gen_results.results) == 0, "generated_code.py should be ignored initially"
-
             # Modify .reconignore to remove the pattern (restore original)
             reconignore_path.write_text(original_content)
-
             # Trigger incremental reindex - this should detect .reconignore change
             await coordinator.reindex_incremental([])
-
             # Now the generated file should be indexed
             gen_results = await coordinator.search("GENERATED_CONTENT")
             assert len(gen_results.results) >= 1, (
@@ -571,7 +441,6 @@ class TestCplignoreChangeHandling:
             )
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_reconignore_change_removes_newly_ignored_py_files(
         self, integration_repo: Path, tmp_path: Path
@@ -579,28 +448,21 @@ class TestCplignoreChangeHandling:
         """When .reconignore adds a pattern, matching .py files should be removed from index."""
         # Create a Python file that will be indexed initially
         (integration_repo / "src" / "temporary.py").write_text("TEMP_CODE = True\n")
-
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
-
         try:
             # Initialize - temporary.py should be indexed
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Verify temporary.py IS indexed
             temp_results = await coordinator.search("TEMP_CODE")
             assert len(temp_results.results) >= 1, "temporary.py should be indexed initially"
-
             # Modify .reconignore to ignore temporary.py
             reconignore_path = integration_repo / ".recon" / ".reconignore"
             original_content = reconignore_path.read_text()
             reconignore_path.write_text(original_content + "\n**/temporary.py\n")
-
             # Trigger incremental reindex
             await coordinator.reindex_incremental([])
-
             # Now temporary.py should NOT be indexed
             temp_results = await coordinator.search("TEMP_CODE")
             assert len(temp_results.results) == 0, (
@@ -608,7 +470,6 @@ class TestCplignoreChangeHandling:
             )
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_reconignore_unchanged_no_reindex(
         self, integration_repo: Path, tmp_path: Path
@@ -616,60 +477,46 @@ class TestCplignoreChangeHandling:
         """When .reconignore hasn't changed, incremental reindex should be efficient."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
-
         try:
             # Initialize
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Get initial file count
             initial_results = await coordinator.search("def")
             initial_count = len(initial_results.results)
-
             # Trigger incremental reindex without any changes
             stats = await coordinator.reindex_incremental([])
-
             # Should have minimal work
             assert stats.files_added == 0
             assert stats.files_removed == 0
-
             # Same files should still be indexed
             final_results = await coordinator.search("def")
             assert len(final_results.results) == initial_count
         finally:
             coordinator.close()
-
-
 class TestCoordinatorSearchFilterLanguages:
     """Tests for search filter_languages parameter."""
-
     @pytest.fixture
     def multilang_repo(self, tmp_path: Path) -> Path:
         """Create a repository with multiple language files."""
-        from coderecon.templates import get_reconignore_template
-
+        from coderecon._core.excludes import get_reconignore_template
         repo_path = tmp_path / "multilang_repo"
         repo_path.mkdir()
         subprocess.run(["git", "init"], cwd=repo_path, capture_output=True, check=True)
         subprocess.run(["git", "config", "user.name", "Test"], cwd=repo_path, capture_output=True, check=True)
         subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=repo_path, capture_output=True, check=True)
-
         # Create .recon/.reconignore
         coderecon_dir = repo_path / ".recon"
         coderecon_dir.mkdir()
         (coderecon_dir / ".reconignore").write_text(get_reconignore_template())
-
         # Create Python files
         (repo_path / "src").mkdir()
         (repo_path / "src" / "main.py").write_text('''"""Python main module."""
-
 def search_handler():
     """Handle search requests."""
     return "python search"
 ''')
         (repo_path / "src" / "utils.py").write_text('''"""Python utils."""
-
 def python_helper():
     return "helper"
 ''')
@@ -703,19 +550,14 @@ func SearchHandler() string {
 
         # Create pyproject.toml for Python context detection
         (repo_path / "pyproject.toml").write_text('[project]\nname = "test"')
-
         # Create package.json for JavaScript context detection
         (repo_path / "package.json").write_text('{"name": "test", "version": "1.0.0"}')
-
         # Create go.mod for Go context detection
         (repo_path / "go.mod").write_text("module test\n\ngo 1.21")
-
         # Commit
         subprocess.run(["git", "add", "-A"], cwd=repo_path, capture_output=True, check=True)
         subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_path, capture_output=True, check=True)
-
         return repo_path
-
     @pytest.mark.asyncio
     async def test_filter_languages_returns_only_matching_language(
         self, multilang_repo: Path, tmp_path: Path
@@ -723,22 +565,17 @@ func SearchHandler() string {
         """filter_languages should only return results from specified languages."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(multilang_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Search for "search" with filter_languages=["python"]
             results = await coordinator.search("search", filter_languages=["python"])
-
             # Should only return Python files
             assert len(results.results) >= 1
             for r in results.results:
                 assert r.path.endswith(".py"), f"Expected .py file, got {r.path}"
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_filter_languages_multiple_languages(
         self, multilang_repo: Path, tmp_path: Path
@@ -746,25 +583,19 @@ func SearchHandler() string {
         """filter_languages with multiple languages should return files from all specified."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(multilang_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Search for "search" with filter_languages=["python", "javascript"]
             results = await coordinator.search("search", filter_languages=["python", "javascript"])
-
             # Should return both Python and JavaScript files
             paths = [r.path for r in results.results]
             has_py = any(p.endswith(".py") for p in paths)
             has_js = any(p.endswith(".js") for p in paths)
-
             assert len(results.results) >= 2
             assert has_py or has_js, f"Expected .py or .js files, got {paths}"
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_filter_languages_none_returns_all(
         self, multilang_repo: Path, tmp_path: Path
@@ -772,25 +603,19 @@ func SearchHandler() string {
         """filter_languages=None should return results from all languages."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(multilang_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Search without filter_languages
             results = await coordinator.search("search", filter_languages=None)
-
             # Should return results from multiple languages
             paths = [r.path for r in results.results]
-
             # We should have results (at least "search" matches in multiple files)
             assert len(results.results) >= 1
             # Verify we can get multiple file types when not filtering
             assert len(paths) >= 1
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_filter_languages_empty_for_nonexistent_language(
         self, multilang_repo: Path, tmp_path: Path
@@ -798,20 +623,15 @@ func SearchHandler() string {
         """filter_languages with nonexistent language should return empty results."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(multilang_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Search with a language that doesn't exist in the repo
             results = await coordinator.search("search", filter_languages=["rust"])
-
             # Should return empty results
             assert len(results.results) == 0
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_filter_languages_excludes_other_languages(
         self, multilang_repo: Path, tmp_path: Path
@@ -819,33 +639,26 @@ func SearchHandler() string {
         """filter_languages should exclude files from non-specified languages."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(multilang_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Search for "helper" which exists in both Python and JavaScript
             # But filter to only Python
             results = await coordinator.search("helper", filter_languages=["python"])
-
             # Should only return Python files
             for r in results.results:
                 assert r.path.endswith(".py"), (
                     f"Got non-Python file {r.path} when filtering for python"
                 )
-
             # Verify JavaScript has the content but wasn't returned
             all_results = await coordinator.search("helper")
             has_js_unfiltered = any(r.path.endswith(".js") for r in all_results.results)
             has_js_filtered = any(r.path.endswith(".js") for r in results.results)
-
             # Should have JS in unfiltered but not in filtered
             assert has_js_unfiltered, "JS helper file should exist"
             assert not has_js_filtered, "JS file should be filtered out"
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_filter_languages_with_symbol_search(
         self, multilang_repo: Path, tmp_path: Path
@@ -853,23 +666,18 @@ func SearchHandler() string {
         """filter_languages should work with symbol search mode."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(multilang_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Search for symbol with language filter
             results = await coordinator.search(
                 "handler", mode=SearchMode.SYMBOL, filter_languages=["python"]
             )
-
             # All results should be from Python files
             for r in results.results:
                 assert r.path.endswith(".py"), f"Symbol search returned non-Python file: {r.path}"
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_filter_languages_respects_limit(
         self, multilang_repo: Path, tmp_path: Path
@@ -877,22 +685,17 @@ func SearchHandler() string {
         """filter_languages should still respect the limit parameter."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(multilang_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Search with low limit
             results = await coordinator.search(
                 "search", filter_languages=["python", "javascript"], limit=1
             )
-
             # Should respect the limit even after filtering
             assert len(results.results) <= 1
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_filter_languages_empty_list_returns_all(
         self, multilang_repo: Path, tmp_path: Path
@@ -900,17 +703,13 @@ func SearchHandler() string {
         """filter_languages=[] (empty list) should be treated as None."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(multilang_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Empty list should behave same as None - note: implementation
             # may treat [] as falsy and skip filtering
             results_empty = await coordinator.search("search", filter_languages=[])
             results_none = await coordinator.search("search", filter_languages=None)
-
             # Both should return similar results (all languages)
             # We can't guarantee exact same order, but count should be similar
             # (empty list might or might not filter depending on implementation)
@@ -920,15 +719,12 @@ func SearchHandler() string {
         finally:
             coordinator.close()
 
-
 class TestCoordinatorTestTargetIncremental:
     """Tests for _update_test_targets_incremental via reindex_incremental.
-
     Validates that incremental reindex correctly identifies test files using
-    the canonical is_test_file from coderecon.core.languages, and that it
+    the canonical is_test_file from coderecon._core.languages, and that it
     creates/removes TestTarget records accordingly.
     """
-
     @pytest.mark.asyncio
     async def test_new_test_file_creates_target(
         self, integration_repo: Path, tmp_path: Path
@@ -936,34 +732,26 @@ class TestCoordinatorTestTargetIncremental:
         """Adding a new test file should create a TestTarget."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Get initial test targets
             initial_targets = await coordinator.get_test_targets()
             initial_count = len(initial_targets)
-
             # Add a new test file
             (integration_repo / "tests" / "test_utils.py").write_text(
                 '"""Tests for utils."""\n\ndef test_helper():\n    assert True\n'
             )
-
             # Reindex incrementally with the new file
             await coordinator.reindex_incremental([Path("tests/test_utils.py")])
-
             # Should have more test targets now
             updated_targets = await coordinator.get_test_targets()
             assert len(updated_targets) > initial_count
-
             # The new target should reference our file
             target_paths = [t.path for t in updated_targets]
             assert "tests/test_utils.py" in target_paths
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_non_test_file_does_not_create_target(
         self, integration_repo: Path, tmp_path: Path
@@ -971,27 +759,20 @@ class TestCoordinatorTestTargetIncremental:
         """Adding a non-test file should not create a TestTarget."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             initial_targets = await coordinator.get_test_targets()
             initial_count = len(initial_targets)
-
             # Add a regular (non-test) Python file
             (integration_repo / "src" / "helpers.py").write_text(
                 '"""Helper module."""\n\ndef helper():\n    return 42\n'
             )
-
             await coordinator.reindex_incremental([Path("src/helpers.py")])
-
             updated_targets = await coordinator.get_test_targets()
             assert len(updated_targets) == initial_count
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_modified_test_file_updates_target(
         self, integration_repo: Path, tmp_path: Path
@@ -999,119 +780,90 @@ class TestCoordinatorTestTargetIncremental:
         """Modifying an existing test file should update its target."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Add a test file via incremental reindex
             test_file = integration_repo / "tests" / "test_updatable.py"
             test_file.write_text('"""First version."""\n\ndef test_v1():\n    assert True\n')
             await coordinator.reindex_incremental([Path("tests/test_updatable.py")])
-
             targets = await coordinator.get_test_targets()
             target_paths = [t.path for t in targets]
             assert "tests/test_updatable.py" in target_paths
-
             # Modify the test file
             test_file.write_text('"""Second version."""\n\ndef test_v2():\n    assert True\n')
             await coordinator.reindex_incremental([Path("tests/test_updatable.py")])
-
             # Target should still exist
             targets = await coordinator.get_test_targets()
             target_paths = [t.path for t in targets]
             assert "tests/test_updatable.py" in target_paths
         finally:
             coordinator.close()
-
     @pytest.mark.asyncio
     async def test_suffix_test_file_detected(self, integration_repo: Path, tmp_path: Path) -> None:
         """Files matching *_test.py pattern are detected as test files."""
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             initial_targets = await coordinator.get_test_targets()
             initial_count = len(initial_targets)
-
             # Add a _test.py suffixed file (alternate Python convention)
             (integration_repo / "tests" / "utils_test.py").write_text(
                 '"""Utils tests."""\n\ndef test_something():\n    assert True\n'
             )
-
             await coordinator.reindex_incremental([Path("tests/utils_test.py")])
-
             updated_targets = await coordinator.get_test_targets()
             assert len(updated_targets) > initial_count
             target_paths = [t.path for t in updated_targets]
             assert "tests/utils_test.py" in target_paths
         finally:
             coordinator.close()
-
-
 class TestCoordinatorStaleTantivyRemoval:
     """Tests that stale Tantivy docs are removed when extraction fails."""
-
     @pytest.mark.asyncio
     async def test_unreadable_file_removes_stale_tantivy_doc(
         self, integration_repo: Path, tmp_path: Path
     ) -> None:
         """When extraction returns content_text=None, its Tantivy doc is removed."""
         from unittest.mock import patch
-
-        from coderecon.index._internal.indexing.structural import (
+        from coderecon.index.structural.structural import (
             ExtractionResult,
             _extract_file,
         )
-
         db_path = tmp_path / "index.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(integration_repo, db_path, tantivy_path)
-
         try:
             await coordinator.initialize(on_index_progress=_noop_progress)
-
             # Confirm the file is searchable before
             results_before = await coordinator.search("helper", mode=SearchMode.TEXT)
             helper_paths = [r.path for r in results_before.results]
             assert "src/utils.py" in helper_paths
-
             # Patch _extract_file to simulate TOCTOU: file passes .exists()
             # but extraction returns content_text=None (file vanished mid-read)
             real_extract = _extract_file
-
             def _failing_extract(file_path: str, repo_root: str, unit_id: int) -> ExtractionResult:
                 if file_path == "src/utils.py":
                     return ExtractionResult(file_path=file_path, error="File not found")
                 return real_extract(file_path, repo_root, unit_id)
-
             with patch(
-                "coderecon.index._internal.indexing.structural._extract_file",
+                "coderecon.index.structural.structural._extract_file",
                 side_effect=_failing_extract,
             ):
                 stats = await coordinator.reindex_incremental([Path("src/utils.py")])
-
             # The file should be counted as removed (stale doc cleaned up)
             assert stats.files_removed >= 1
-
             # Confirm content from the deleted file is no longer searchable
             results_after = await coordinator.search("helper", mode=SearchMode.TEXT)
             after_paths = [r.path for r in results_after.results]
             assert "src/utils.py" not in after_paths
-
             # Confirm structural facts were also purged
             with coordinator.db.session() as session:
                 from sqlmodel import select as sel
-
                 from coderecon.index.models import DefFact
                 from coderecon.index.models import File as FileModel
-
                 file_row = session.exec(
                     sel(FileModel).where(FileModel.path == "src/utils.py")
                 ).first()
@@ -1122,27 +874,21 @@ class TestCoordinatorStaleTantivyRemoval:
                     )
         finally:
             coordinator.close()
-
-
 class TestWorktreeIsolation:
     """Tests for multi-worktree def_uid isolation and per-worktree file extraction.
-
     Regression coverage for:
     - UNIQUE constraint on def_facts.def_uid across worktrees (def_uid collision fix)
     - Feature-branch files being read from the correct worktree checkout directory
     """
-
     @pytest.mark.asyncio
     async def test_def_uid_isolation_across_worktrees(self, tmp_path: Path) -> None:
         """def_uid for the same symbol must differ between main and a feature worktree.
-
         Verifies the _apply_worktree_uid_remap() fix: without it, inserting the same
         symbol (same file path + kind + lexical_path) for two worktrees would produce
         identical def_uid PK values and raise UNIQUE constraint failed.
         """
         import sqlite3
         import subprocess
-
         main_repo = tmp_path / "main_repo"
         main_repo.mkdir()
         subprocess.run(["git", "init", "-b", "main"], cwd=main_repo, check=True, capture_output=True)
@@ -1152,7 +898,6 @@ class TestWorktreeIsolation:
         (main_repo / "src" / "module.py").write_text('"""m"""\ndef original_fn(): return 1\n')
         subprocess.run(["git", "add", "."], cwd=main_repo, check=True, capture_output=True)
         subprocess.run(["git", "commit", "-m", "init"], cwd=main_repo, check=True, capture_output=True)
-
         feat_wt = tmp_path / "feat_wt"
         subprocess.run(
             ["git", "worktree", "add", "-b", "feature/new-fn", str(feat_wt)],
@@ -1162,15 +907,12 @@ class TestWorktreeIsolation:
         (feat_wt / "src" / "module.py").write_text(
             '"""m"""\ndef original_fn(): return 1\ndef feature_fn(): return 99\n'
         )
-
         db_path = tmp_path / "idx.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(main_repo, db_path, tantivy_path)
         try:
             # Phase 1: full init of main (creates DB tables + indexes main checkout)
             await coordinator.initialize(_noop_progress)
-
             # Phase 2: activate feature worktree and reindex changed file
             coordinator.set_freshness_gate(
                 lambda p, l: True, "feature/new-fn", worktree_root=str(feat_wt)
@@ -1181,17 +923,13 @@ class TestWorktreeIsolation:
             )
         finally:
             coordinator.close()
-
         assert stats.files_processed == 1
-
         # Verify DB state via raw SQL to avoid any ORM layer abstraction
         con = sqlite3.connect(str(db_path))
         cur = con.cursor()
-
         wts = dict(cur.execute("SELECT name, id FROM worktrees").fetchall())
         main_id = wts["main"]
         feat_id = wts["feature/new-fn"]
-
         main_defs = dict(cur.execute(
             "SELECT d.name, d.def_uid FROM def_facts d "
             "JOIN files fi ON fi.id=d.file_id "
@@ -1205,28 +943,23 @@ class TestWorktreeIsolation:
             (feat_id,),
         ).fetchall())
         con.close()
-
         # Both worktrees must have original_fn
         assert "original_fn" in main_defs, f"original_fn missing from main: {main_defs}"
         assert "original_fn" in feat_defs, f"original_fn missing from feat: {feat_defs}"
-
         # def_uid for the same symbol must differ (worktree-scoped remap prevents collision)
         assert main_defs["original_fn"] != feat_defs["original_fn"], (
             f"def_uid must differ across worktrees but got same value: {main_defs['original_fn']}"
         )
-
         # Feature-specific symbol must be present (file was read from feat_wt, not main_repo)
         assert "feature_fn" in feat_defs, (
             f"feature_fn missing from feat worktree defs — "
             f"file was probably read from main checkout instead of worktree: {feat_defs}"
         )
-
     @pytest.mark.asyncio
     async def test_feature_worktree_reindex_is_idempotent(self, tmp_path: Path) -> None:
         """Reindexing the same feature-worktree file twice must not create duplicate defs."""
         import sqlite3
         import subprocess
-
         main_repo = tmp_path / "main_repo"
         main_repo.mkdir()
         subprocess.run(["git", "init", "-b", "main"], cwd=main_repo, check=True, capture_output=True)
@@ -1236,7 +969,6 @@ class TestWorktreeIsolation:
         (main_repo / "src" / "module.py").write_text('"""m"""\ndef original_fn(): return 1\n')
         subprocess.run(["git", "add", "."], cwd=main_repo, check=True, capture_output=True)
         subprocess.run(["git", "commit", "-m", "init"], cwd=main_repo, check=True, capture_output=True)
-
         feat_wt = tmp_path / "feat_wt"
         subprocess.run(
             ["git", "worktree", "add", "-b", "feature/idem", str(feat_wt)],
@@ -1245,10 +977,8 @@ class TestWorktreeIsolation:
         (feat_wt / "src" / "module.py").write_text(
             '"""m"""\ndef original_fn(): return 1\ndef feature_fn(): return 99\n'
         )
-
         db_path = tmp_path / "idx.db"
         tantivy_path = tmp_path / "tantivy"
-
         coordinator = IndexCoordinatorEngine(main_repo, db_path, tantivy_path)
         try:
             await coordinator.initialize(_noop_progress)
@@ -1262,7 +992,6 @@ class TestWorktreeIsolation:
             await coordinator.reindex_incremental(changed, worktree="feature/idem")
         finally:
             coordinator.close()
-
         con = sqlite3.connect(str(db_path))
         cur = con.cursor()
         wts = dict(cur.execute("SELECT name, id FROM worktrees").fetchall())
@@ -1275,9 +1004,7 @@ class TestWorktreeIsolation:
             (feat_id,),
         ).fetchone()[0]
         con.close()
-
         assert count == 2, f"Expected 2 defs after idempotent reindex, got {count}"
-
     @pytest.mark.asyncio
     async def test_set_freshness_gate_caches_worktree_root(self, tmp_path: Path) -> None:
         """set_freshness_gate must store non-main worktree roots in _worktree_root_cache."""
@@ -1287,24 +1014,20 @@ class TestWorktreeIsolation:
         repo_root.mkdir()
         feat_root = tmp_path / "feat"
         feat_root.mkdir()
-
         # Need DB tables first; initialize() creates them.
         import subprocess
         subprocess.run(["git", "init", "-b", "main"], cwd=repo_root, check=True, capture_output=True)
         subprocess.run(["git", "config", "user.email", "x@x.com"], cwd=repo_root, check=True, capture_output=True)
         subprocess.run(["git", "config", "user.name", "X"], cwd=repo_root, check=True, capture_output=True)
         subprocess.run(["git", "commit", "--allow-empty", "-m", "init"], cwd=repo_root, check=True, capture_output=True)
-
         coordinator = IndexCoordinatorEngine(repo_root, db_path, tantivy_path)
         try:
             await coordinator.initialize(_noop_progress)
             # Cache should be empty initially (no set_freshness_gate calls with root)
             assert coordinator._worktree_root_cache == {}
-
             # Main worktree — should NOT be cached (main uses self.repo_root)
             coordinator.set_freshness_gate(lambda p, l: True, "main")
             assert "main" not in coordinator._worktree_root_cache
-
             # Non-main worktree with worktree_root — must be cached
             coordinator.set_freshness_gate(
                 lambda p, l: True, "feature/x", worktree_root=str(feat_root)

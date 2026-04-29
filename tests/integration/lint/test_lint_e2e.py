@@ -15,7 +15,6 @@ from coderecon.lint.tools import registry as lint_registry
 
 pytestmark = pytest.mark.integration
 
-
 class TestLintToolsIntegration:
     """Integration tests for lint tool detection."""
 
@@ -38,7 +37,6 @@ class TestLintToolsIntegration:
         tool_ids = {tool.tool_id for tool, _ in detected}
         # Ruff should be detected for Python projects
         assert "python.ruff" in tool_ids or "python.ruff-format" in tool_ids
-
 
 class TestLintBackendIntegration:
     """Tests for specific lint backends."""
@@ -83,7 +81,6 @@ class TestLintBackendIntegration:
 
         # Should complete
         assert result.returncode in [0, 1]  # 0 = formatted, 1 = needs formatting
-
 
 class TestLintTypeCheckIntegration:
     """Integration tests for type checking."""

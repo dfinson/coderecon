@@ -4,13 +4,11 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
 
 from coderecon.cli.main import cli
 
 runner = CliRunner()
-
 
 class TestUpCommand:
     """recon up command tests."""

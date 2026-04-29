@@ -16,7 +16,6 @@ from coderecon.mcp.tools.refactor import (
     _summarize_refactor,
 )
 
-
 class TestSummarizeRefactor:
     """Tests for _summarize_refactor helper."""
 
@@ -58,7 +57,6 @@ class TestSummarizeRefactor:
         """Unknown status returns status itself."""
         result = _summarize_refactor(status="unknown", files_affected=0, preview=None)
         assert result == "unknown"
-
 
 class TestDisplayRefactor:
     """Tests for _display_refactor helper."""
@@ -102,7 +100,6 @@ class TestDisplayRefactor:
             status="pending", files_affected=2, preview=preview, refactor_id="xyz789"
         )
         assert "review" in result.lower()
-
 
 class TestSerializeRefactorResult:
     """Tests for _serialize_refactor_result helper."""
@@ -209,7 +206,6 @@ class TestSerializeRefactorResult:
         assert len(output["preview"]["low_certainty_matches"]) == 1
         assert output["preview"]["low_certainty_matches"][0]["path"] == "a.py"
         assert output["preview"]["low_certainty_matches"][0]["certainty"] == "low"
-
 
 class TestRefactorReconGate:
     """Tests for recon + justification gates on rename/move/impact."""

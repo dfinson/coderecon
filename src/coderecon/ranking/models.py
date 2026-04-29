@@ -18,7 +18,6 @@ class GateLabel(StrEnum):
     BROAD = "BROAD"
     AMBIG = "AMBIG"
 
-
 @dataclass(frozen=True)
 class ScoredCandidate:
     """A DefFact candidate with a ranker score."""
@@ -30,7 +29,6 @@ class ScoredCandidate:
     start_line: int
     end_line: int
     score: float
-
 
 @dataclass(frozen=True)
 class RankingResult:

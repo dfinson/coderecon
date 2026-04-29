@@ -6,7 +6,6 @@ Verifies all registered lint tools have valid configurations.
 from coderecon.lint import registry
 from coderecon.lint.models import ParseResult, ToolCategory
 
-
 class TestToolRegistry:
     """Tests for tool registry and registered tools."""
 
@@ -34,7 +33,6 @@ class TestToolRegistry:
         valid_categories = set(ToolCategory)
         for tool in registry.all():
             assert tool.category in valid_categories
-
 
 class TestPythonTools:
     """Tests for Python lint tools."""
@@ -68,7 +66,6 @@ class TestPythonTools:
         assert tool is not None
         assert tool.category == ToolCategory.SECURITY
 
-
 class TestJavaScriptTools:
     """Tests for JavaScript/TypeScript lint tools."""
 
@@ -96,7 +93,6 @@ class TestJavaScriptTools:
         assert tool is not None
         assert tool.category == ToolCategory.TYPE_CHECK
 
-
 class TestGoTools:
     """Tests for Go lint tools."""
 
@@ -117,7 +113,6 @@ class TestGoTools:
         """golangci-lint should be registered."""
         tool = registry.get("go.golangci-lint")
         assert tool is not None
-
 
 class TestRustTools:
     """Tests for Rust lint tools."""
@@ -140,7 +135,6 @@ class TestRustTools:
         tool = registry.get("rust.cargo-audit")
         assert tool is not None
         assert tool.category == ToolCategory.SECURITY
-
 
 class TestToolQueries:
     """Tests for registry query methods."""
@@ -171,7 +165,6 @@ class TestToolQueries:
         assert len(format_tools) > 0
         for tool in format_tools:
             assert tool.category == ToolCategory.FORMAT
-
 
 class TestToolParsers:
     """Tests that all tools have parsers."""

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Parallel indexer for SWE-bench instance clones."""
+"""Parallel indexer for repo clones."""
 
 import subprocess
 import sys

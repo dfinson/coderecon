@@ -8,8 +8,6 @@ This index provides syntactic facts only. No semantic resolution, no call graph,
 no type information.
 """
 
-from coderecon.index._internal.db import BulkWriter, Database, Reconciler, create_additional_indexes
-from coderecon.index._internal.db.reconcile import ChangedFile, ReconcileResult
 from coderecon.index.models import (
     # Fact tables
     AnchorGroup,
@@ -46,32 +44,30 @@ from coderecon.index.models import (
     ScopeFact,
     ScopeKind,
 )
-from coderecon.index.ops import (
-    IndexCoordinatorEngine,
-    IndexStats,
-    InitResult,
-    SearchMode,
-    SearchResult,
-)
 
-# Import ContextRuntime to register it with SQLModel metadata for create_all()
-# This model lives in testing/runtime.py but is part of the index schema
-from coderecon.testing.runtime import ContextRuntime
+# Lazy imports for ops to avoid circular dependency:
+# discovery/ → index.models → index.__init__ → index.ops → discovery/
+def __getattr__(name: str):  # noqa: N807
+    _OPS_NAMES = {
+        "IndexCoordinatorEngine", "IndexStats", "InitResult",
+        "SearchMode", "SearchResult",
+    }
+    if name in _OPS_NAMES:
+        from coderecon.index import ops as _ops
+        return getattr(_ops, name)
+    if name == "ContextRuntime":
+        from coderecon.testing.runtime import ContextRuntime as _CR
+        return _CR
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
-    # Public API
+    # Public API (lazy)
     "IndexCoordinatorEngine",
     "IndexStats",
     "InitResult",
     "SearchMode",
     "SearchResult",
-    # Database
-    "Database",
-    "BulkWriter",
-    "create_additional_indexes",
-    "Reconciler",
-    "ReconcileResult",
-    "ChangedFile",
+    "ContextRuntime",
     # Enums
     "LanguageFamily",
     "Freshness",

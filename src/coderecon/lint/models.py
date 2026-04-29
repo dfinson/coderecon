@@ -15,7 +15,6 @@ class ToolCategory(Enum):
     FORMAT = "format"
     SECURITY = "security"
 
-
 class Severity(Enum):
     """Diagnostic severity level."""
 
@@ -23,7 +22,6 @@ class Severity(Enum):
     WARNING = "warning"
     INFO = "info"
     HINT = "hint"
-
 
 @dataclass
 class Diagnostic:
@@ -41,7 +39,6 @@ class Diagnostic:
     fix_applied: bool = False  # True if auto-fixed
     fix_diff: str | None = None  # For dry_run mode
 
-
 @dataclass
 class ToolResult:
     """Result from running a single tool."""
@@ -54,7 +51,6 @@ class ToolResult:
     duration_seconds: float = 0.0
     error_detail: str | None = None  # If status=="error"
     command: list[str] | None = None  # Command that was run
-
 
 @dataclass
 class LintResult:
@@ -86,7 +82,6 @@ class LintResult:
         if any(t.status == "dirty" for t in self.tools_run):
             return "dirty"
         return "clean"
-
 
 @dataclass
 class ParseResult:

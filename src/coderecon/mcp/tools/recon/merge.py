@@ -25,7 +25,6 @@ log = structlog.get_logger(__name__)
 
 _TIER_ORDER = {"proven": 0, "strong": 1, "anchored": 2, "unknown": 3}
 
-
 def _merge_candidates(
     *harvests: dict[str, HarvestCandidate],
 ) -> dict[str, HarvestCandidate]:
@@ -67,7 +66,6 @@ def _merge_candidates(
 
     return merged
 
-
 async def _enrich_candidates(
     app_ctx: AppContext,
     candidates: dict[str, HarvestCandidate],
@@ -79,7 +77,7 @@ async def _enrich_candidates(
     Performance: Uses batch file path resolution and hub score caching
     to minimize repeated queries.
     """
-    from coderecon.index._internal.indexing.graph import FactQueries
+    from coderecon.index.graph.code_graph import FactQueries
 
     coordinator = app_ctx.coordinator
 
@@ -92,6 +90,8 @@ async def _enrich_candidates(
 
     # Remove candidates that still lack a DefFact
     dead = [uid for uid, c in candidates.items() if c.def_fact is None]
+    if dead:
+        log.warning("enrich.dropped_candidates", count=len(dead), uids=dead[:10])
     for uid in dead:
         del candidates[uid]
 
@@ -140,7 +140,6 @@ async def _enrich_candidates(
             cand.declared_module = module_cache.get(d.file_id, "")
             cand.artifact_kind = _classify_artifact(cand.file_path)
 
-    # --- Populate structural link fields ---
     anchor_uids: set[str] = set()
     anchor_file_ids: set[int] = set()
     for uid, cand in candidates.items():
@@ -200,7 +199,6 @@ async def _enrich_candidates(
                 if uid in anchor_import_uids:
                     cand.is_imported_by_top = True
 
-
 async def _expand_via_coverage(
     app_ctx: AppContext,
     candidates: dict[str, HarvestCandidate],
@@ -214,7 +212,7 @@ async def _expand_via_coverage(
 
     Returns new candidates (not yet in the pool) to be merged.
     """
-    from coderecon.index._internal.indexing.graph import FactQueries
+    from coderecon.index.graph.code_graph import FactQueries
 
     coordinator = app_ctx.coordinator
     new: dict[str, HarvestCandidate] = {}
@@ -245,14 +243,13 @@ async def _expand_via_coverage(
                     evidence=[
                         EvidenceRecord(
                             category="coverage",
-                            detail=f"covered by candidate test",
+                            detail="covered by candidate test",
                             score=1.0,
                         )
                     ],
                 )
 
     return new
-
 
 def _select_graph_seeds(
     merged: dict[str, HarvestCandidate],
@@ -282,7 +279,6 @@ def _select_graph_seeds(
     term_scored.sort(key=lambda x: x[1], reverse=True)
     return [uid for uid, _ in term_scored[:fallback_top_k]]
 
-
 def _add_file_defs_as_candidates(
     fq: object,  # FactQueries
     file_rec: object,  # File model
@@ -295,7 +291,7 @@ def _add_file_defs_as_candidates(
     import_direction: str | None = None,
 ) -> None:
     """Add defs from a file as import-discovered candidates."""
-    from coderecon.index._internal.indexing.graph import FactQueries as _FQ
+    from coderecon.index.graph.code_graph import FactQueries as _FQ
 
     fq_typed: _FQ = fq  # type: ignore[assignment]
     file_id = getattr(file_rec, "id", None)
@@ -326,7 +322,6 @@ def _add_file_defs_as_candidates(
             import_direction=import_direction,
             evidence=[EvidenceRecord(category=category, detail=detail, score=score)],
         )
-
 
 def _infer_test_paths(source_path: str) -> list[str]:
     """Infer candidate test file paths from a source file path.

@@ -18,7 +18,6 @@ from coderecon.testing.runtime import RuntimeExecutionContext
 # MarkerRule
 # =============================================================================
 
-
 class TestMarkerRule:
     """Tests for MarkerRule dataclass."""
 
@@ -42,11 +41,9 @@ class TestMarkerRule:
         assert rule_medium.confidence == "medium"
         assert rule_low.confidence == "low"
 
-
 # =============================================================================
 # OutputStrategy
 # =============================================================================
-
 
 class TestOutputStrategy:
     """Tests for OutputStrategy dataclass."""
@@ -65,11 +62,9 @@ class TestOutputStrategy:
         strategy = OutputStrategy(format="junit_xml", file_pattern="TEST-*.xml")
         assert strategy.file_pattern == "TEST-*.xml"
 
-
 # =============================================================================
 # RunnerCapabilities
 # =============================================================================
-
 
 class TestRunnerCapabilities:
     """Tests for RunnerCapabilities dataclass."""
@@ -92,11 +87,9 @@ class TestRunnerCapabilities:
         assert caps.supports_tag_filter is True
         assert caps.supports_parallel is False
 
-
 # =============================================================================
 # RunnerPackRegistry
 # =============================================================================
-
 
 class TestRunnerPackRegistry:
     """Tests for RunnerPackRegistry."""
@@ -183,11 +176,9 @@ class TestRunnerPackRegistry:
                 confidences = [conf for _, conf in matches]
                 assert confidences == sorted(confidences, reverse=True)
 
-
 # =============================================================================
 # RunnerPack base class
 # =============================================================================
-
 
 class TestRunnerPackBase:
     """Tests for RunnerPack base class behavior."""
@@ -242,11 +233,9 @@ class TestRunnerPackBase:
         cwd = pack.get_cwd(target)
         assert cwd == Path("/my/repo")
 
-
 # =============================================================================
 # Global registry tests
 # =============================================================================
-
 
 class TestGlobalRegistry:
     """Tests for the global runner_registry."""

@@ -7,15 +7,21 @@ No platform-specific code paths.
 from __future__ import annotations
 
 import json
-import logging
 import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import psutil
+import structlog
 
-log = logging.getLogger(__name__)
+from coderecon.config.constants import BYTES_PER_MB
+from coderecon.adapters.files.ops import atomic_write_text
+
+log = structlog.get_logger(__name__)
+
+_DEFAULT_RESERVE_MB = 1024  # 1 GB — leaves headroom for IDE + OS
+_MIN_SUBPROCESS_CEILING_MB = 128  # floor for ceiling_mb to avoid starving subprocesses
 
 # Patterns emitted by runtimes on OOM. Matched against stderr.
 _OOM_PATTERNS: list[re.Pattern[str]] = [
@@ -29,7 +35,6 @@ _OOM_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"runtime: out of memory", re.IGNORECASE),
 ]
 
-
 class MemoryBudget:
     """Cross-platform memory budget using ``psutil``.
 
@@ -38,12 +43,12 @@ class MemoryBudget:
     ``sysctl``), and Windows (``GlobalMemoryStatusEx``).
     """
 
-    def __init__(self, reserve_mb: int = 1024) -> None:
-        self._reserve_bytes = reserve_mb * 1024 * 1024
+    def __init__(self, reserve_mb: int = _DEFAULT_RESERVE_MB) -> None:
+        self._reserve_bytes = reserve_mb * BYTES_PER_MB
 
     def available_mb(self) -> int:
         """Available memory in MB (kernel estimate)."""
-        return int(psutil.virtual_memory().available // (1024 * 1024))
+        return int(psutil.virtual_memory().available // BYTES_PER_MB)
 
     def can_launch(self) -> bool:
         """True if available memory exceeds the reserve threshold."""
@@ -52,8 +57,7 @@ class MemoryBudget:
     def ceiling_mb(self) -> int:
         """Max MB any single subprocess should use (available − reserve)."""
         raw = psutil.virtual_memory().available - self._reserve_bytes
-        return max(int(raw // (1024 * 1024)), 128)  # floor at 128 MB
-
+        return max(int(raw // BYTES_PER_MB), _MIN_SUBPROCESS_CEILING_MB)  # floor avoids starving subprocesses
 
 def child_rss_mb(pid: int) -> int:
     """Sum of RSS (MB) for *pid* and all its descendants.
@@ -67,11 +71,11 @@ def child_rss_mb(pid: int) -> int:
             try:
                 total += child.memory_info().rss
             except (psutil.NoSuchProcess, psutil.AccessDenied):
+                structlog.get_logger().debug("child_process_memory_unavailable", exc_info=True)
                 pass
-        return int(total // (1024 * 1024))
+        return int(total // BYTES_PER_MB)
     except (psutil.NoSuchProcess, psutil.AccessDenied):
         return 0
-
 
 def classify_oom(
     exit_code: int | None,
@@ -95,26 +99,17 @@ def classify_oom(
         return True
 
     # Runtime printed an OOM message
-    for pat in _OOM_PATTERNS:
-        if pat.search(stderr):
-            return True
+    return any(pat.search(stderr) for pat in _OOM_PATTERNS)
 
-    return False
-
-
-# =========================================================================
 # Persistent per-repo history
-# =========================================================================
 
 _HISTORY_FILENAME = "test_memory_profile.json"
-
 
 @dataclass
 class _TargetProfile:
     peak_rss_mb: int = 0
     last_run_ts: float = 0.0
     oom_count: int = 0
-
 
 @dataclass
 class MemoryHistory:
@@ -168,7 +163,7 @@ class MemoryHistory:
                     last_run_ts=d.get("last_run_ts", 0.0),
                     oom_count=d.get("oom_count", 0),
                 )
-        except Exception:
+        except (OSError, json.JSONDecodeError, KeyError, ValueError):
             log.debug("memory_history.load_failed", exc_info=True)
 
     def _save(self) -> None:
@@ -182,6 +177,6 @@ class MemoryHistory:
                 }
                 for tid, p in self._data.items()
             }
-            self._path.write_text(json.dumps(payload, indent=2) + "\n")
-        except Exception:
+            atomic_write_text(self._path, json.dumps(payload, indent=2) + "\n")
+        except OSError:
             log.debug("memory_history.save_failed", exc_info=True)

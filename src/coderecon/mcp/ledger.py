@@ -15,7 +15,6 @@ import structlog
 
 log = structlog.get_logger(__name__)
 
-
 @dataclass
 class OperationRecord:
     """Immutable record of a mutation operation."""
@@ -58,7 +57,6 @@ class OperationRecord:
             "dry_run_id": self.dry_run_id,
         }
 
-
 @dataclass
 class DryRunRecord:
     """Record of a dry run for validation."""
@@ -74,7 +72,6 @@ class DryRunRecord:
     def is_valid(self) -> bool:
         """Check if dry run is still valid."""
         return time.time() < self.valid_until
-
 
 class OperationLedger:
     """In-memory ledger for mutation operations.
@@ -217,10 +214,8 @@ class OperationLedger:
         for k in expired:
             del self._dry_runs[k]
 
-
 # Global ledger instance
 _ledger: OperationLedger | None = None
-
 
 def get_ledger() -> OperationLedger:
     """Get or create the global ledger instance."""

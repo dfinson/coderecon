@@ -1,6 +1,9 @@
-# MCP Tools Reference
+---
+title: MCP Tools Reference
+description: Complete reference for all CodeRecon MCP tools
+---
 
-CodeRecon exposes **15 MCP tools** across 5 groups. Call `describe(action="tool", name="<tool>")` at any time to get full parameter documentation inline.
+CodeRecon exposes **14 MCP tools** across 5 groups. Call `describe(action="tool", name="<tool>")` at any time to get full parameter documentation inline.
 
 ---
 

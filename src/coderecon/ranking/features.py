@@ -13,168 +13,248 @@ import math
 from collections import Counter
 from typing import Any
 
+from coderecon.ranking._feature_keys import (
+    _K,
+    ARTIFACT_KINDS,
+    CALLER_TIER_ORDINALS,
+    DEF_KINDS,
+    GRAPH_EDGE_TYPES,
+    IMPORT_DIRECTIONS,
+    INTENT_TYPES,
+    LANG_DATA_FAMILIES,
+    LANG_FAMILIES,
+    SYMBOL_SOURCES,
+)
+from coderecon.ranking._feature_types import (
+    AggPair,
+    CutoffFeatures,
+    FieldSpec,
+    FileRankerFeatures,
+    GateFeatures,
+    RankerFeatures,
+)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _one_hot(
+    prefix: str, value: str | None, categories: tuple[str, ...],
+) -> dict[str, bool]:
+    """Encode a categorical as ``{prefix}_{cat}: value == cat`` booleans."""
+    return {f"{prefix}_{cat}": value == cat for cat in categories}
+
+
+def _copy_fields(source: dict[str, Any], spec: FieldSpec) -> dict[str, Any]:
+    """Copy fields from *source* using ``(key, default)`` pairs."""
+    return {key: source.get(key, default) for key, default in spec}
+
+
+def _copy_or(source: dict[str, Any], spec: FieldSpec) -> dict[str, Any]:
+    """Like :func:`_copy_fields` but uses ``or`` to coerce falsy values."""
+    return {key: source.get(key) or default for key, default in spec}
+
+
+def _any_of(defs: list[dict[str, Any]], spec: AggPair) -> dict[str, bool]:
+    """Aggregate booleans: ``out = any(d[inp] for d in defs)``."""
+    return {out: any(d.get(inp, False) for d in defs) for out, inp in spec}
+
+
+def _max_of(
+    defs: list[dict[str, Any]], spec: tuple[tuple[str, str, Any], ...],
+) -> dict[str, Any]:
+    """Aggregate numerics: ``out = max(d[inp] for d in defs)``."""
+    return {
+        out: max((d.get(inp, default) for d in defs), default=default)
+        for out, inp, default in spec
+    }
+
+
+def _sum_of(
+    defs: list[dict[str, Any]], spec: tuple[tuple[str, str, Any], ...],
+) -> dict[str, Any]:
+    """Aggregate numerics: ``out = sum(d[inp] for d in defs)``."""
+    return {out: sum(d.get(inp, default) for d in defs) for out, inp, default in spec}
+
+
+# ---------------------------------------------------------------------------
+# Per-model field specs — each model takes a different subset.
+# ---------------------------------------------------------------------------
+
+_RANKER_SCORE_FIELDS: FieldSpec = (
+    (_K.TERM_MATCH_COUNT, 0), (_K.TERM_TOTAL_MATCHES, 0), (_K.LEX_HIT_COUNT, 0),
+    (_K.BM25_FILE_SCORE, 0.0), (_K.SPLADE_SCORE, 0.0),
+    (_K.CE_SCORE, 0.0), (_K.CE_SCORE_TINY, 0.0),
+)
+
+_RANKER_METADATA_FIELDS: FieldSpec = (
+    (_K.OBJECT_SIZE_LINES, 0), (_K.PATH_DEPTH, 0), (_K.NESTING_DEPTH, 0),
+    (_K.HUB_SCORE, 0), (_K.IS_TEST, False), (_K.IS_BARREL, False),
+    (_K.IS_ENDPOINT, False), (_K.TEST_COVERAGE_COUNT, 0),
+    (_K.HAS_DOCSTRING, False), (_K.HAS_DECORATORS, False),
+    (_K.HAS_RETURN_TYPE, False), (_K.HAS_PARENT_SCOPE, False),
+)
+
+_RANKER_STRUCTURAL_FIELDS: FieldSpec = (
+    (_K.SHARES_FILE_WITH_SEED, False), (_K.IS_CALLEE_OF_TOP, False),
+    (_K.IS_IMPORTED_BY_TOP, False), (_K.FROM_COVERAGE, False),
+    (_K.FROM_TERM_MATCH, False), (_K.FROM_EXPLICIT, False),
+    (_K.FROM_GRAPH, False),
+)
+
+_RANKER_LOCALITY_FIELDS: FieldSpec = (
+    (_K.SEED_PATH_DISTANCE, 999), (_K.SAME_PACKAGE, False),
+    (_K.PACKAGE_DISTANCE, 999),
+)
+
+_RANKER_QUERY_FIELDS: FieldSpec = (
+    (_K.QUERY_LEN, 0), (_K.HAS_IDENTIFIER, False), (_K.HAS_PATH, False),
+    (_K.IDENTIFIER_DENSITY, 0.0), (_K.TERM_COUNT, 0),
+    (_K.HAS_NUMBERS, False), (_K.HAS_QUOTED_STRINGS, False),
+    (_K.IS_STACKTRACE_DRIVEN, False), (_K.IS_TEST_DRIVEN, False),
+)
+
+_CUTOFF_QUERY_FIELDS: FieldSpec = (
+    (_K.QUERY_LEN, 0), (_K.HAS_IDENTIFIER, False), (_K.HAS_PATH, False),
+    (_K.HAS_NUMBERS, False), (_K.HAS_QUOTED_STRINGS, False),
+    (_K.IS_STACKTRACE_DRIVEN, False), (_K.IS_TEST_DRIVEN, False),
+)
+
+_GATE_QUERY_FIELDS: FieldSpec = (
+    (_K.QUERY_LEN, 0), (_K.IDENTIFIER_DENSITY, 0.0), (_K.HAS_PATH, False),
+    (_K.HAS_NUMBERS, False), (_K.HAS_QUOTED_STRINGS, False),
+    (_K.IS_STACKTRACE_DRIVEN, False), (_K.IS_TEST_DRIVEN, False),
+)
+
+_FILE_RANKER_QUERY_FIELDS: FieldSpec = (
+    (_K.QUERY_LEN, 0), (_K.HAS_IDENTIFIER, False), (_K.HAS_PATH, False),
+    (_K.TERM_COUNT, 0),
+)
+
+_REPO_FIELDS: FieldSpec = (
+    (_K.OBJECT_COUNT, 0), (_K.FILE_COUNT, 0),
+)
+
+# ---------------------------------------------------------------------------
+# File ranker aggregation specs — (output_key, input_key[, default]).
+# ---------------------------------------------------------------------------
+
+_FILE_ANY_FIELDS: AggPair = (
+    # Graph
+    (_K.ANY_CALLEE, _K.GRAPH_IS_CALLEE),
+    (_K.ANY_CALLER, _K.GRAPH_IS_CALLER),
+    (_K.ANY_SIBLING, _K.GRAPH_IS_SIBLING),
+    (_K.ANY_DOC_XREF, _K.GRAPH_IS_DOC_XREF),
+    (_K.ANY_IMPLEMENTOR, _K.GRAPH_IS_IMPLEMENTOR),
+    # Symbol
+    (_K.ANY_AGENT_SEED, _K.SYM_AGENT_SEED),
+    (_K.ANY_AUTO_SEED, _K.SYM_AUTO_SEED),
+    (_K.ANY_TASK_EXTRACTED, _K.SYM_TASK_EXTRACTED),
+    (_K.ANY_PATH_MENTION, _K.SYM_PATH_MENTION),
+    # Import
+    (_K.ANY_IMPORT_FORWARD, _K.IMPORT_FORWARD),
+    (_K.ANY_IMPORT_REVERSE, _K.IMPORT_REVERSE),
+    (_K.ANY_IMPORT_BARREL, _K.IMPORT_BARREL),
+    (_K.ANY_IMPORT_TEST_PAIR, _K.IMPORT_TEST_PAIR),
+    # Coverage / structural
+    (_K.ANY_FROM_COVERAGE, _K.FROM_COVERAGE),
+    (_K.ANY_SHARES_FILE_WITH_SEED, _K.SHARES_FILE_WITH_SEED),
+    (_K.ANY_CALLEE_OF_TOP, _K.IS_CALLEE_OF_TOP),
+    (_K.ANY_IMPORTED_BY_TOP, _K.IS_IMPORTED_BY_TOP),
+    # File metadata
+    (_K.IS_TEST, _K.IS_TEST),
+    (_K.IS_BARREL, _K.IS_BARREL),
+    (_K.ANY_DOCSTRING, _K.HAS_DOCSTRING),
+    (_K.ANY_DECORATORS, _K.HAS_DECORATORS),
+    (_K.ANY_RETURN_TYPE, _K.HAS_RETURN_TYPE),
+    (_K.SAME_PACKAGE, _K.SAME_PACKAGE),
+)
+
+_FILE_MAX_FIELDS: tuple[tuple[str, str, Any], ...] = (
+    (_K.MAX_TERM_MATCH, _K.TERM_MATCH_COUNT, 0),
+    (_K.MAX_LEX_HITS, _K.LEX_HIT_COUNT, 0),
+    (_K.MAX_BM25_FILE_SCORE, _K.BM25_FILE_SCORE, 0.0),
+    (_K.BEST_CALLER_TIER, _K.GRAPH_CALLER_TIER, 0),
+    (_K.MAX_RETRIEVER_HITS, _K.RETRIEVER_HITS, 0),
+    (_K.MAX_RRF_SCORE, _K.RRF_SCORE, 0.0),
+    (_K.MAX_SPLADE_SCORE, _K.SPLADE_SCORE, 0.0),
+    (_K.MAX_HUB_SCORE, _K.HUB_SCORE, 0),
+)
+
+_FILE_SUM_FIELDS: tuple[tuple[str, str, Any], ...] = (
+    (_K.SUM_TERM_MATCHES, _K.TERM_TOTAL_MATCHES, 0),
+    (_K.SUM_RETRIEVER_HITS, _K.RETRIEVER_HITS, 0),
+)
+
+
+# ---------------------------------------------------------------------------
+# Extraction functions
+# ---------------------------------------------------------------------------
 
 def extract_ranker_features(
     candidates: list[dict[str, Any]],
     query_features: dict[str, Any],
-) -> list[dict[str, Any]]:
-    """Build per-candidate feature dicts for the ranker model.
-
-    Parameters
-    ----------
-    candidates
-        Raw candidate dicts from ``recon_raw_signals()``.
-    query_features
-        Query-level features (query_len, has_identifier, etc.).
-
-    Returns
-    -------
-    list[dict]
-        One feature dict per candidate, ready for LightGBM prediction.
-    """
-    features_out: list[dict[str, Any]] = []
+) -> list[RankerFeatures]:
+    """Build per-candidate feature dicts for the ranker model."""
+    features_out: list[RankerFeatures] = []
 
     for cand in candidates:
-        f: dict[str, Any] = {}
+        features: dict[str, Any] = _copy_or(cand, _RANKER_SCORE_FIELDS)
 
-        # Term match signal
-        f["term_match_count"] = cand.get("term_match_count") or 0
-        f["term_total_matches"] = cand.get("term_total_matches") or 0
-        f["lex_hit_count"] = cand.get("lex_hit_count") or 0
-        f["bm25_file_score"] = cand.get("bm25_file_score") or 0.0
+        # Language family one-hot
+        lang = cand.get(_K.LANGUAGE_FAMILY, "")
+        features.update(_one_hot(_K.PFX_LANG, lang, LANG_FAMILIES))
+        features[_K.LANG_DATA] = lang in LANG_DATA_FAMILIES
 
-        # SPLADE sparse retrieval score (continuous)
-        f["splade_score"] = cand.get("splade_score") or 0.0
+        # Graph signal one-hot
+        edge_type = cand.get(_K.GRAPH_EDGE_TYPE)
+        features.update(_one_hot(_K.PFX_GRAPH_IS, edge_type, GRAPH_EDGE_TYPES))
+        features[_K.GRAPH_SEED_RANK] = cand.get(_K.GRAPH_SEED_RANK) or 0
+        features[_K.GRAPH_CALLER_TIER] = CALLER_TIER_ORDINALS.get(
+            cand.get(_K.GRAPH_CALLER_MAX_TIER) or "", 0,
+        )
 
-        # Cross-encoder relevance score (continuous)
-        f["ce_score"] = cand.get("ce_score") or 0.0
+        # Symbol source one-hot
+        features.update(_one_hot(_K.PFX_SYM, cand.get(_K.SYMBOL_SOURCE), SYMBOL_SOURCES))
 
-        # TinyBERT cross-encoder score (all candidates, pre-file-prune)
-        f["ce_score_tiny"] = cand.get("ce_score_tiny") or 0.0
+        # Import direction one-hot
+        features.update(_one_hot(_K.PFX_IMPORT, cand.get(_K.IMPORT_DIRECTION), IMPORT_DIRECTIONS))
+        features[_K.RETRIEVER_HITS] = cand.get(_K.RETRIEVER_HITS, 0)
 
-        # Language family (categorical from index language module)
-        lang = cand.get("language_family", "")
-        f["lang_python"] = lang == "python"
-        f["lang_javascript"] = lang == "javascript"
-        f["lang_go"] = lang == "go"
-        f["lang_rust"] = lang == "rust"
-        f["lang_java"] = lang == "java"
-        f["lang_csharp"] = lang == "csharp"
-        f["lang_c_cpp"] = lang == "c_cpp"
-        f["lang_ruby"] = lang == "ruby"
-        f["lang_php"] = lang == "php"
-        f["lang_swift"] = lang == "swift"
-        f["lang_kotlin"] = lang == "kotlin"
-        f["lang_data"] = lang in ("json", "yaml", "toml", "xml")
-
-        # Graph signal (categorical → encoded)
-        edge_type = cand.get("graph_edge_type")
-        f["graph_is_callee"] = edge_type == "callee"
-        f["graph_is_caller"] = edge_type == "caller"
-        f["graph_is_sibling"] = edge_type == "sibling"
-        f["graph_is_implementor"] = edge_type == "implementor"
-        f["graph_is_doc_xref"] = edge_type == "doc_xref"
-        f["graph_seed_rank"] = cand.get("graph_seed_rank") or 0
-
-        # Graph ref tier (ordinal: proven=3, strong=2, anchored=1, unknown/None=0)
-        _tier_val = {"proven": 3, "strong": 2, "anchored": 1, "unknown": 0}
-        f["graph_caller_tier"] = _tier_val.get(cand.get("graph_caller_max_tier") or "", 0)
-
-        # Symbol signal (categorical → encoded) — includes pin
-        sym_src = cand.get("symbol_source")
-        f["sym_agent_seed"] = sym_src == "agent_seed"
-        f["sym_auto_seed"] = sym_src == "auto_seed"
-        f["sym_task_extracted"] = sym_src == "task_extracted"
-        f["sym_path_mention"] = sym_src == "path_mention"
-        f["sym_pin"] = sym_src == "pin"
-
-        # Import signal (categorical → encoded)
-        imp_dir = cand.get("import_direction")
-        f["import_forward"] = imp_dir == "forward"
-        f["import_reverse"] = imp_dir == "reverse"
-        f["import_barrel"] = imp_dir == "barrel"
-        f["import_test_pair"] = imp_dir == "test_pair"
-
-        # Retriever agreement
-        f["retriever_hits"] = cand.get("retriever_hits", 0)
-
-        # Kind one-hot (function/class/method/variable/interface → other)
-        kind = cand.get("kind", "")
-        f["kind_function"] = kind == "function"
-        f["kind_class"] = kind == "class"
-        f["kind_method"] = kind == "method"
-        f["kind_variable"] = kind == "variable"
-        f["kind_interface"] = kind == "interface"
+        # Def kind one-hot
+        features.update(_one_hot(_K.PFX_KIND, cand.get(_K.KIND, ""), DEF_KINDS))
 
         # Object metadata
-        f["object_size_lines"] = cand.get("object_size_lines", 0)
-        f["path_depth"] = cand.get("path_depth", 0)
-        f["nesting_depth"] = cand.get("nesting_depth", 0)
-        f["hub_score"] = cand.get("hub_score", 0)
-        f["is_test"] = cand.get("is_test", False)
-        f["is_barrel"] = cand.get("is_barrel", False)
-        f["is_endpoint"] = cand.get("is_endpoint", False)
-        f["test_coverage_count"] = cand.get("test_coverage_count", 0)
-        f["has_docstring"] = cand.get("has_docstring", False)
-        f["has_decorators"] = cand.get("has_decorators", False)
-        f["has_return_type"] = cand.get("has_return_type", False)
-        f["has_parent_scope"] = cand.get("has_parent_scope", False)
-        f["has_signature"] = cand.get("signature_text") is not None
+        features.update(_copy_fields(cand, _RANKER_METADATA_FIELDS))
+        features[_K.HAS_SIGNATURE] = cand.get(_K.SIGNATURE_TEXT) is not None
 
-        # Structural link signals
-        f["shares_file_with_seed"] = cand.get("shares_file_with_seed", False)
-        f["is_callee_of_top"] = cand.get("is_callee_of_top", False)
-        f["is_imported_by_top"] = cand.get("is_imported_by_top", False)
-        f["from_coverage"] = cand.get("from_coverage", False)
+        # Structural links
+        features.update(_copy_fields(cand, _RANKER_STRUCTURAL_FIELDS))
 
-        # Harvester source flags
-        f["from_term_match"] = cand.get("from_term_match", False)
-        f["from_explicit"] = cand.get("from_explicit", False)
-        f["from_graph"] = cand.get("from_graph", False)
+        # Derived
+        matched_count = cand.get(_K.MATCHED_TERMS_COUNT, 0)
+        total_terms = query_features.get(_K.TERM_COUNT, 0)
+        features[_K.TERM_COVERAGE] = matched_count / total_terms if total_terms > 0 else 0.0
+        features[_K.RRF_SCORE] = cand.get(_K.RRF_SCORE, 0.0)
 
-        # Term coverage: fraction of query terms matched by this def
-        matched_count = cand.get("matched_terms_count", 0)
-        total_terms = query_features.get("term_count", 0)
-        f["term_coverage"] = matched_count / total_terms if total_terms > 0 else 0.0
+        # Artifact kind one-hot
+        features.update(_one_hot(
+            _K.PFX_ARTIFACT, cand.get(_K.ARTIFACT_KIND, _K.VAL_CODE), ARTIFACT_KINDS,
+        ))
 
-        # RRF ensemble score (computed in shared pipeline layer)
-        f["rrf_score"] = cand.get("rrf_score", 0.0)
-
-        # Artifact kind one-hot (code/test/config/doc/build)
-        ak = cand.get("artifact_kind", "code")
-        f["artifact_code"] = ak == "code"
-        f["artifact_test"] = ak == "test"
-        f["artifact_config"] = ak == "config"
-        f["artifact_doc"] = ak == "doc"
-        f["artifact_build"] = ak == "build"
-
-        # Locality signals
-        f["seed_path_distance"] = cand.get("seed_path_distance", 999)
-        f["same_package"] = cand.get("same_package", False)
-        f["package_distance"] = cand.get("package_distance", 999)
+        # Locality
+        features.update(_copy_fields(cand, _RANKER_LOCALITY_FIELDS))
 
         # Query features (same for all candidates in a group)
-        f["query_len"] = query_features.get("query_len", 0)
-        f["has_identifier"] = query_features.get("has_identifier", False)
-        f["has_path"] = query_features.get("has_path", False)
-        f["identifier_density"] = query_features.get("identifier_density", 0.0)
-        f["term_count"] = query_features.get("term_count", 0)
-        f["has_numbers"] = query_features.get("has_numbers", False)
-        f["has_quoted_strings"] = query_features.get("has_quoted_strings", False)
+        features.update(_copy_fields(query_features, _RANKER_QUERY_FIELDS))
 
         # Task intent one-hot
-        intent = query_features.get("intent", "unknown")
-        f["intent_debug"] = intent == "debug"
-        f["intent_implement"] = intent == "implement"
-        f["intent_refactor"] = intent == "refactor"
-        f["intent_understand"] = intent == "understand"
-        f["intent_test"] = intent == "test"
+        features.update(_one_hot(
+            _K.PFX_INTENT, query_features.get(_K.INTENT, _K.VAL_UNKNOWN), INTENT_TYPES,
+        ))
 
-        # Stacktrace / test-driven flags
-        f["is_stacktrace_driven"] = query_features.get("is_stacktrace_driven", False)
-        f["is_test_driven"] = query_features.get("is_test_driven", False)
-
-        features_out.append(f)
+        features_out.append(features)  # type: ignore[arg-type]
 
     return features_out
 
@@ -183,7 +263,7 @@ def extract_cutoff_features(
     ranked_candidates: list[dict[str, Any]],
     query_features: dict[str, Any],
     repo_features: dict[str, Any],
-) -> dict[str, Any]:
+) -> CutoffFeatures:
     """Build query-level feature dict for the cutoff model.
 
     Computes score distribution features from the ranked list.
@@ -196,98 +276,81 @@ def extract_cutoff_features(
         Query-level features.
     repo_features
         Repo-level features (object_count, file_count).
-
-    Returns
-    -------
-    dict
-        Feature dict for cutoff prediction.
     """
-    scores = [c.get("ranker_score", 0.0) for c in ranked_candidates]
+    scores = [c.get(_K.RANKER_SCORE, 0.0) for c in ranked_candidates]
     n = len(scores)
 
-    f: dict[str, Any] = {}
-
-    # Query features
-    f["query_len"] = query_features.get("query_len", 0)
-    f["has_identifier"] = query_features.get("has_identifier", False)
-    f["has_path"] = query_features.get("has_path", False)
-    f["has_numbers"] = query_features.get("has_numbers", False)
-    f["has_quoted_strings"] = query_features.get("has_quoted_strings", False)
-    f["is_stacktrace_driven"] = query_features.get("is_stacktrace_driven", False)
-    f["is_test_driven"] = query_features.get("is_test_driven", False)
-
-    # Repo features
-    f["object_count"] = repo_features.get("object_count", 0)
-    f["file_count"] = repo_features.get("file_count", 0)
+    features: dict[str, Any] = _copy_fields(query_features, _CUTOFF_QUERY_FIELDS)
+    features.update(_copy_fields(repo_features, _REPO_FIELDS))
 
     # Score distribution features
-    f["total_candidates"] = n
+    features[_K.TOTAL_CANDIDATES] = n
     if n == 0:
-        f["top_score"] = 0.0
-        f["score_p10"] = 0.0
-        f["score_p25"] = 0.0
-        f["score_p50"] = 0.0
-        f["score_p75"] = 0.0
-        f["score_p90"] = 0.0
-        f["max_gap"] = 0.0
-        f["max_gap_pos"] = 0.0
-        f["score_var"] = 0.0
-        f["score_entropy"] = 0.0
-        f["cumulative_mass_top10"] = 0.0
+        features[_K.TOP_SCORE] = 0.0
+        features[_K.SCORE_P10] = 0.0
+        features[_K.SCORE_P25] = 0.0
+        features[_K.SCORE_P50] = 0.0
+        features[_K.SCORE_P75] = 0.0
+        features[_K.SCORE_P90] = 0.0
+        features[_K.MAX_GAP] = 0.0
+        features[_K.MAX_GAP_POS] = 0.0
+        features[_K.SCORE_VAR] = 0.0
+        features[_K.SCORE_ENTROPY] = 0.0
+        features[_K.CUMULATIVE_MASS_TOP10] = 0.0
     else:
-        f["top_score"] = scores[0]
-        f["score_p10"] = scores[min(int(n * 0.1), n - 1)]
-        f["score_p25"] = scores[min(int(n * 0.25), n - 1)]
-        f["score_p50"] = scores[min(int(n * 0.5), n - 1)]
-        f["score_p75"] = scores[min(int(n * 0.75), n - 1)]
-        f["score_p90"] = scores[min(int(n * 0.9), n - 1)]
+        features[_K.TOP_SCORE] = scores[0]
+        features[_K.SCORE_P10] = scores[min(int(n * 0.1), n - 1)]
+        features[_K.SCORE_P25] = scores[min(int(n * 0.25), n - 1)]
+        features[_K.SCORE_P50] = scores[min(int(n * 0.5), n - 1)]
+        features[_K.SCORE_P75] = scores[min(int(n * 0.75), n - 1)]
+        features[_K.SCORE_P90] = scores[min(int(n * 0.9), n - 1)]
 
         # Max gap and its position
         gaps = [scores[i] - scores[i + 1] for i in range(n - 1)] if n > 1 else [0.0]
-        f["max_gap"] = max(gaps)
-        f["max_gap_pos"] = (gaps.index(max(gaps)) + 1) / n if gaps else 0.0
+        features[_K.MAX_GAP] = max(gaps)
+        features[_K.MAX_GAP_POS] = (gaps.index(max(gaps)) + 1) / n if gaps else 0.0
 
         # Variance
         mean_s = sum(scores) / n
-        f["score_var"] = sum((s - mean_s) ** 2 for s in scores) / n
+        features[_K.SCORE_VAR] = sum((s - mean_s) ** 2 for s in scores) / n
 
         # Entropy of score distribution
         total = sum(scores) if sum(scores) > 0 else 1.0
         probs = [s / total for s in scores if s > 0]
-        f["score_entropy"] = -sum(p * math.log(p) for p in probs) if probs else 0.0
+        features[_K.SCORE_ENTROPY] = -sum(p * math.log(p) for p in probs) if probs else 0.0
 
         # Cumulative mass in top 10
         top10_sum = sum(scores[:10])
-        f["cumulative_mass_top10"] = top10_sum / total if total > 0 else 0.0
+        features[_K.CUMULATIVE_MASS_TOP10] = top10_sum / total if total > 0 else 0.0
 
     # Multi-retriever agreement distribution
-    hits = [c.get("retriever_hits", 0) for c in ranked_candidates]
-    f["agreement_mean"] = sum(hits) / max(len(hits), 1)
-    f["agreement_max"] = max(hits) if hits else 0
+    hits = [c.get(_K.RETRIEVER_HITS, 0) for c in ranked_candidates]
+    features[_K.AGREEMENT_MEAN] = sum(hits) / max(len(hits), 1)
+    features[_K.AGREEMENT_MAX] = max(hits) if hits else 0
 
     # Retriever composition: what fraction of ranked candidates came from each source
     n_ranked = max(len(ranked_candidates), 1)
-    f["fraction_from_term"] = sum(
-        1 for c in ranked_candidates if c.get("from_term_match")
+    features[_K.FRACTION_FROM_TERM] = sum(
+        1 for c in ranked_candidates if c.get(_K.FROM_TERM_MATCH)
     ) / n_ranked
-    f["fraction_from_graph"] = sum(
-        1 for c in ranked_candidates if c.get("from_graph")
+    features[_K.FRACTION_FROM_GRAPH] = sum(
+        1 for c in ranked_candidates if c.get(_K.FROM_GRAPH)
     ) / n_ranked
-    f["fraction_from_explicit"] = sum(
-        1 for c in ranked_candidates if c.get("from_explicit")
+    features[_K.FRACTION_FROM_EXPLICIT] = sum(
+        1 for c in ranked_candidates if c.get(_K.FROM_EXPLICIT)
     ) / n_ranked
-    f["fraction_from_splade"] = sum(
-        1 for c in ranked_candidates if c.get("splade_score", 0) > 0
+    features[_K.FRACTION_FROM_SPLADE] = sum(
+        1 for c in ranked_candidates if c.get(_K.SPLADE_SCORE, 0) > 0
     ) / n_ranked
 
-    return f
+    return features  # type: ignore[return-value]
 
 
 def extract_gate_features(
     candidates: list[dict[str, Any]],
     query_features: dict[str, Any],
     repo_features: dict[str, Any],
-) -> dict[str, Any]:
+) -> GateFeatures:
     """Build query-level feature dict for the gate classifier.
 
     Computes retrieval distribution features: top score, score decay
@@ -301,108 +364,92 @@ def extract_gate_features(
         Query text features.
     repo_features
         Repo-level features.
-
-    Returns
-    -------
-    dict
-        Feature dict for gate classification.
     """
-    f: dict[str, Any] = {}
-
-    # Query features
-    f["query_len"] = query_features.get("query_len", 0)
-    f["identifier_density"] = query_features.get("identifier_density", 0.0)
-    f["has_path"] = query_features.get("has_path", False)
-    f["has_numbers"] = query_features.get("has_numbers", False)
-    f["has_quoted_strings"] = query_features.get("has_quoted_strings", False)
-    f["is_stacktrace_driven"] = query_features.get("is_stacktrace_driven", False)
-    f["is_test_driven"] = query_features.get("is_test_driven", False)
-    f["has_agent_seeds"] = any(
-        c.get("symbol_source") == "agent_seed" for c in candidates
+    features: dict[str, Any] = _copy_fields(query_features, _GATE_QUERY_FIELDS)
+    features[_K.HAS_AGENT_SEEDS] = any(
+        c.get(_K.SYMBOL_SOURCE) == _K.VAL_AGENT_SEED for c in candidates
     )
-    f["agent_seed_count"] = sum(
-        1 for c in candidates if c.get("symbol_source") == "agent_seed"
+    features[_K.AGENT_SEED_COUNT] = sum(
+        1 for c in candidates if c.get(_K.SYMBOL_SOURCE) == _K.VAL_AGENT_SEED
     )
 
-    # Repo features
-    f["object_count"] = repo_features.get("object_count", 0)
-    f["file_count"] = repo_features.get("file_count", 0)
+    features.update(_copy_fields(repo_features, _REPO_FIELDS))
 
     # Candidate pool features
-    f["total_candidates"] = len(candidates)
+    features[_K.TOTAL_CANDIDATES] = len(candidates)
 
     # Use retriever agreement as the score proxy for distribution features
     pool_scores = sorted(
-        [c.get("retriever_hits", 0) for c in candidates], reverse=True,
+        [c.get(_K.RETRIEVER_HITS, 0) for c in candidates], reverse=True,
     )
     n = len(pool_scores)
 
     if n == 0:
-        f["top_score"] = 0.0
-        f["score_p25"] = 0.0
-        f["score_p50"] = 0.0
-        f["score_p75"] = 0.0
-        f["path_entropy"] = 0.0
-        f["cluster_count"] = 0
-        f["max_splade_score"] = 0.0
-        f["max_bm25_score"] = 0.0
-        f["has_graph_candidates"] = False
-        f["has_explicit_candidates"] = False
+        features[_K.TOP_SCORE] = 0.0
+        features[_K.SCORE_P25] = 0.0
+        features[_K.SCORE_P50] = 0.0
+        features[_K.SCORE_P75] = 0.0
+        features[_K.PATH_ENTROPY] = 0.0
+        features[_K.CLUSTER_COUNT] = 0
+        features[_K.MAX_SPLADE_SCORE] = 0.0
+        features[_K.MAX_BM25_SCORE] = 0.0
+        features[_K.HAS_GRAPH_CANDIDATES] = False
+        features[_K.HAS_EXPLICIT_CANDIDATES] = False
     else:
-        f["top_score"] = pool_scores[0]
-        f["score_p25"] = pool_scores[min(int(n * 0.25), n - 1)]
-        f["score_p50"] = pool_scores[min(int(n * 0.5), n - 1)]
-        f["score_p75"] = pool_scores[min(int(n * 0.75), n - 1)]
+        features[_K.TOP_SCORE] = pool_scores[0]
+        features[_K.SCORE_P25] = pool_scores[min(int(n * 0.25), n - 1)]
+        features[_K.SCORE_P50] = pool_scores[min(int(n * 0.5), n - 1)]
+        features[_K.SCORE_P75] = pool_scores[min(int(n * 0.75), n - 1)]
 
         # Continuous score peaks from best retrievers
-        f["max_splade_score"] = max(
-            (c.get("splade_score", 0.0) for c in candidates), default=0.0
+        features[_K.MAX_SPLADE_SCORE] = max(
+            (c.get(_K.SPLADE_SCORE, 0.0) for c in candidates), default=0.0,
         )
-        f["max_bm25_score"] = max(
-            (c.get("bm25_file_score", 0.0) for c in candidates), default=0.0
+        features[_K.MAX_BM25_SCORE] = max(
+            (c.get(_K.BM25_FILE_SCORE, 0.0) for c in candidates), default=0.0,
         )
-        f["has_graph_candidates"] = any(
-            c.get("graph_edge_type") is not None for c in candidates
+        features[_K.HAS_GRAPH_CANDIDATES] = any(
+            c.get(_K.GRAPH_EDGE_TYPE) is not None for c in candidates
         )
-        f["has_explicit_candidates"] = any(
-            c.get("symbol_source") is not None for c in candidates
+        features[_K.HAS_EXPLICIT_CANDIDATES] = any(
+            c.get(_K.SYMBOL_SOURCE) is not None for c in candidates
         )
 
         # Path entropy: Shannon entropy of directory distribution
-        dirs = [c.get("parent_dir", "") for c in candidates if c.get("parent_dir")]
+        dirs = [c.get(_K.PARENT_DIR, "") for c in candidates if c.get(_K.PARENT_DIR)]
         dir_counts = Counter(dirs)
         total_dirs = sum(dir_counts.values())
         if total_dirs > 0:
             probs = [count / total_dirs for count in dir_counts.values()]
-            f["path_entropy"] = -sum(p * math.log(p) for p in probs if p > 0)
+            features[_K.PATH_ENTROPY] = -sum(p * math.log(p) for p in probs if p > 0)
         else:
-            f["path_entropy"] = 0.0
+            features[_K.PATH_ENTROPY] = 0.0
 
         # Cluster count: number of distinct parent directories at depth 2
         depth2_dirs = set()
         for c in candidates:
-            path = c.get("path", "")
+            path = c.get(_K.PATH, "")
             parts = path.split("/")
             if len(parts) >= 2:
                 depth2_dirs.add("/".join(parts[:2]))
-        f["cluster_count"] = len(depth2_dirs)
+        features[_K.CLUSTER_COUNT] = len(depth2_dirs)
 
     # Multi-retriever agreement
-    hits = [c.get("retriever_hits", 0) for c in candidates]
-    f["agreement_mean"] = sum(hits) / max(len(hits), 1)
-    f["agreement_std"] = (
-        (sum((h - f["agreement_mean"]) ** 2 for h in hits) / max(len(hits), 1)) ** 0.5
+    hits = [c.get(_K.RETRIEVER_HITS, 0) for c in candidates]
+    features[_K.AGREEMENT_MEAN] = sum(hits) / max(len(hits), 1)
+    features[_K.AGREEMENT_STD] = (
+        (sum((h - features[_K.AGREEMENT_MEAN]) ** 2 for h in hits) / max(len(hits), 1)) ** 0.5
         if hits
         else 0.0
     )
 
-    return f
+    return features  # type: ignore[return-value]
 
 
 def extract_file_ranker_features(
     candidates: list[dict[str, Any]],
     query_features: dict[str, Any],
-) -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]]]:
+) -> tuple[list[FileRankerFeatures], dict[str, list[dict[str, Any]]]]:
     """Aggregate def-level candidates to file-level features for the file ranker.
 
     Groups candidates by file path and computes aggregate features
@@ -418,103 +465,66 @@ def extract_file_ranker_features(
     # First compute per-candidate ranker features to get encoded booleans
     per_cand = extract_ranker_features(candidates, query_features)
     # Attach encoded features back to candidates
-    enriched = [{**c, **pf} for c, pf in zip(candidates, per_cand)]
+    enriched = [{**c, **pf} for c, pf in zip(candidates, per_cand, strict=True)]
 
     # Group by file path
     file_to_candidates: dict[str, list[dict[str, Any]]] = {}
     for cand in enriched:
-        path = cand.get("path", "")
+        path = cand.get(_K.PATH, "")
         file_to_candidates.setdefault(path, []).append(cand)
 
-    file_features: list[dict[str, Any]] = []
+    file_features: list[FileRankerFeatures] = []
     for path, defs in file_to_candidates.items():
-        f: dict[str, Any] = {"_path": path}
+        features: dict[str, Any] = {_K.FILE_PATH: path}
 
-        # Term match
-        f["max_term_match"] = max((d.get("term_match_count", 0) for d in defs), default=0)
-        f["sum_term_matches"] = sum(d.get("term_total_matches", 0) for d in defs)
-        f["max_lex_hits"] = max((d.get("lex_hit_count", 0) for d in defs), default=0)
-        f["max_bm25_file_score"] = max((d.get("bm25_file_score", 0.0) for d in defs), default=0.0)
+        # Boolean aggregations (any def in file has this signal)
+        features.update(_any_of(defs, _FILE_ANY_FIELDS))
 
-        # Graph
-        f["any_callee"] = any(d.get("graph_is_callee", False) for d in defs)
-        f["any_caller"] = any(d.get("graph_is_caller", False) for d in defs)
-        f["any_sibling"] = any(d.get("graph_is_sibling", False) for d in defs)
-        f["any_doc_xref"] = any(d.get("graph_is_doc_xref", False) for d in defs)
-        f["any_implementor"] = any(d.get("graph_is_implementor", False) for d in defs)
-        f["best_graph_seed_rank"] = min((d.get("graph_seed_rank", 0) for d in defs), default=0)
-        f["best_caller_tier"] = max((d.get("graph_caller_tier", 0) for d in defs), default=0)
+        # Numeric aggregations
+        features.update(_max_of(defs, _FILE_MAX_FIELDS))
+        features.update(_sum_of(defs, _FILE_SUM_FIELDS))
 
-        # Symbol
-        f["any_agent_seed"] = any(d.get("sym_agent_seed", False) for d in defs)
-        f["any_auto_seed"] = any(d.get("sym_auto_seed", False) for d in defs)
-        f["any_task_extracted"] = any(d.get("sym_task_extracted", False) for d in defs)
-        f["any_path_mention"] = any(d.get("sym_path_mention", False) for d in defs)
-
-        # Import
-        f["any_import_forward"] = any(d.get("import_forward", False) for d in defs)
-        f["any_import_reverse"] = any(d.get("import_reverse", False) for d in defs)
-        f["any_import_barrel"] = any(d.get("import_barrel", False) for d in defs)
-        f["any_import_test_pair"] = any(d.get("import_test_pair", False) for d in defs)
-
-        # Retriever agreement
-        f["max_retriever_hits"] = max((d.get("retriever_hits", 0) for d in defs), default=0)
-        f["sum_retriever_hits"] = sum(d.get("retriever_hits", 0) for d in defs)
-
-        # Coverage
-        f["any_from_coverage"] = any(d.get("from_coverage", False) for d in defs)
-
-        # Structural links
-        f["any_shares_file_with_seed"] = any(d.get("shares_file_with_seed", False) for d in defs)
-        f["any_callee_of_top"] = any(d.get("is_callee_of_top", False) for d in defs)
-        f["any_imported_by_top"] = any(d.get("is_imported_by_top", False) for d in defs)
-
-        # RRF
-        f["max_rrf_score"] = max((d.get("rrf_score", 0.0) for d in defs), default=0.0)
-
-        # SPLADE
-        f["max_splade_score"] = max((d.get("splade_score", 0.0) for d in defs), default=0.0)
+        # Graph seed rank — best (minimum) rank
+        features[_K.BEST_GRAPH_SEED_RANK] = min(
+            (d.get(_K.GRAPH_SEED_RANK, 0) for d in defs), default=0,
+        )
 
         # TinyBERT cross-encoder (all defs, pre-file-prune)
-        ce_tiny_scores = [d.get("ce_score_tiny", 0.0) for d in defs]
-        f["max_ce_tiny"] = max(ce_tiny_scores, default=0.0)
-        f["mean_ce_tiny"] = sum(ce_tiny_scores) / max(len(ce_tiny_scores), 1)
+        ce_tiny_scores = [d.get(_K.CE_SCORE_TINY, 0.0) for d in defs]
+        features[_K.MAX_CE_TINY] = max(ce_tiny_scores, default=0.0)
+        features[_K.MEAN_CE_TINY] = sum(ce_tiny_scores) / max(len(ce_tiny_scores), 1)
 
         # Artifact kind
-        f["any_artifact_test"] = any(d.get("artifact_kind") == "test" for d in defs)
-        f["any_artifact_config"] = any(d.get("artifact_kind") == "config" for d in defs)
-        f["any_artifact_doc"] = any(d.get("artifact_kind") == "doc" for d in defs)
+        features[_K.ANY_ARTIFACT_TEST] = any(
+            d.get(_K.ARTIFACT_KIND) == _K.VAL_TEST for d in defs
+        )
+        features[_K.ANY_ARTIFACT_CONFIG] = any(
+            d.get(_K.ARTIFACT_KIND) == _K.VAL_CONFIG for d in defs
+        )
+        features[_K.ANY_ARTIFACT_DOC] = any(
+            d.get(_K.ARTIFACT_KIND) == _K.VAL_DOC for d in defs
+        )
 
         # File-level metadata
-        f["num_defs_in_file"] = len(defs)
-        hub_scores = [d.get("hub_score", 0) for d in defs]
-        f["mean_hub_score"] = sum(hub_scores) / max(len(hub_scores), 1)
-        f["max_hub_score"] = max(hub_scores, default=0)
-        f["is_test"] = any(d.get("is_test", False) for d in defs)
-        f["is_barrel"] = any(d.get("is_barrel", False) for d in defs)
-        f["path_depth"] = defs[0].get("path_depth", 0)
-        f["any_docstring"] = any(d.get("has_docstring", False) for d in defs)
-        f["any_decorators"] = any(d.get("has_decorators", False) for d in defs)
-        f["any_return_type"] = any(d.get("has_return_type", False) for d in defs)
+        features[_K.NUM_DEFS_IN_FILE] = len(defs)
+        hub_scores = [d.get(_K.HUB_SCORE, 0) for d in defs]
+        features[_K.MEAN_HUB_SCORE] = sum(hub_scores) / max(len(hub_scores), 1)
+        features[_K.PATH_DEPTH] = defs[0].get(_K.PATH_DEPTH, 0)  # all defs share the same file
 
         # Locality
-        f["min_seed_path_distance"] = min(
-            (d.get("seed_path_distance", 999) for d in defs), default=999
+        features[_K.MIN_SEED_PATH_DISTANCE] = min(
+            (d.get(_K.SEED_PATH_DISTANCE, 999) for d in defs), default=999,
         )
-        f["same_package"] = any(d.get("same_package", False) for d in defs)
 
         # Query features
-        f["query_len"] = query_features.get("query_len", 0)
-        f["has_identifier"] = query_features.get("has_identifier", False)
-        f["has_path"] = query_features.get("has_path", False)
-        f["term_count"] = query_features.get("term_count", 0)
+        features.update(_copy_fields(query_features, _FILE_RANKER_QUERY_FIELDS))
 
-        file_features.append(f)
+        file_features.append(features)  # type: ignore[arg-type]
 
     # Return original (un-enriched) candidate mapping for downstream
     raw_file_to_candidates: dict[str, list[dict[str, Any]]] = {}
     for cand in candidates:
-        path = cand.get("path", "")
+        path = cand.get(_K.PATH, "")
         raw_file_to_candidates.setdefault(path, []).append(cand)
 
     return file_features, raw_file_to_candidates

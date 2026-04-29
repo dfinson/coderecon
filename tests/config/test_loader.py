@@ -25,8 +25,7 @@ from coderecon.config.loader import (
     get_index_paths,
     load_config,
 )
-from coderecon.core.errors import ConfigError
-
+from coderecon._core.errors import ConfigError
 
 class TestLoadYaml:
     """Tests for _load_yaml function."""
@@ -68,7 +67,6 @@ class TestLoadYaml:
         with pytest.raises(ConfigError):
             _load_yaml(yaml_file)
 
-
 class TestDeepMerge:
     """Tests for _deep_merge function."""
 
@@ -108,7 +106,6 @@ class TestDeepMerge:
         _deep_merge(base, override)
         assert base == {"a": 1}
 
-
 class TestLoadConfig:
     """Tests for load_config function."""
 
@@ -138,7 +135,7 @@ class TestLoadConfig:
 
         with (
             patch("coderecon.config.loader.GLOBAL_CONFIG_PATH", tmp_path / "none.yaml"),
-            patch.dict(os.environ, {"CODEPLANE__LOGGING__LEVEL": "WARNING"}),
+            patch.dict(os.environ, {"CODERECON__LOGGING__LEVEL": "WARNING"}),
         ):
             config = load_config(tmp_path)
             assert config.logging.level == "WARNING"
@@ -159,11 +156,10 @@ class TestLoadConfig:
         # Use an invalid log level via env var - pydantic will reject it
         with (
             patch("coderecon.config.loader.GLOBAL_CONFIG_PATH", tmp_path / "none.yaml"),
-            patch.dict(os.environ, {"CODEPLANE__LOGGING__LEVEL": "INVALID_LEVEL"}),
+            patch.dict(os.environ, {"CODERECON__LOGGING__LEVEL": "INVALID_LEVEL"}),
             pytest.raises(ConfigError),
         ):
             load_config(tmp_path)
-
 
 class TestGetIndexPaths:
     """Tests for get_index_paths function."""
@@ -187,7 +183,6 @@ class TestGetIndexPaths:
             db_path, tantivy_path = get_index_paths(tmp_path)
             assert db_path == custom_path / "index.db"
             assert tantivy_path == custom_path / "tantivy"
-
 
 class TestGlobalConfigPath:
     """Tests for GLOBAL_CONFIG_PATH constant."""

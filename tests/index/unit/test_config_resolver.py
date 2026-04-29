@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from coderecon.index._internal.indexing.config_resolver import (
+from coderecon.index.resolution.config_resolver import (
     ConfigResolver,
     ImportPathResolver,
     build_js_package_exports,
@@ -17,7 +17,6 @@ from coderecon.index._internal.indexing.config_resolver import (
 # =============================================================================
 # Go Module Tests
 # =============================================================================
-
 
 class TestParseGoMod:
     """Tests for parse_go_mod()."""
@@ -45,7 +44,6 @@ class TestParseGoMod:
         """Parse module even with comments."""
         text = "// Comment\nmodule github.com/user/repo\n"
         assert parse_go_mod(text) == "github.com/user/repo"
-
 
 class TestResolveGoModule:
     """Tests for resolve_go_module()."""
@@ -100,11 +98,9 @@ class TestResolveGoModule:
         )
         assert result is None
 
-
 # =============================================================================
 # Rust Module Tests
 # =============================================================================
-
 
 class TestParseCargoToml:
     """Tests for parse_cargo_toml()."""
@@ -132,7 +128,6 @@ class TestParseCargoToml:
     def test_empty_file(self) -> None:
         """Return None for empty file."""
         assert parse_cargo_toml("") is None
-
 
 class TestResolveRustModule:
     """Tests for resolve_rust_module()."""
@@ -191,11 +186,9 @@ class TestResolveRustModule:
         )
         assert result == "core_crate"
 
-
 # =============================================================================
 # Config Resolver Tests
 # =============================================================================
-
 
 class TestConfigResolver:
     """Tests for ConfigResolver class."""
@@ -293,11 +286,9 @@ class TestConfigResolver:
         )
         assert result is None
 
-
 # =============================================================================
 # JS Exports Tests
 # =============================================================================
-
 
 class TestBuildJsPackageExports:
     """Tests for build_js_package_exports()."""
@@ -348,11 +339,9 @@ class TestBuildJsPackageExports:
         result = build_js_package_exports(file_paths, read_file)
         assert result == {}
 
-
 # =============================================================================
 # ImportPathResolver Tests
 # =============================================================================
-
 
 class TestImportPathResolver:
     """Tests for ImportPathResolver class."""

@@ -9,9 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-# =============================================================================
 # Target Kinds - Per ecosystem semantics
-# =============================================================================
 
 TargetKind = Literal["file", "package", "project"]
 """Test target granularity.
@@ -21,11 +19,7 @@ TargetKind = Literal["file", "package", "project"]
 - project: Project root (dotnet solution, Maven module, Gradle project)
 """
 
-
-# =============================================================================
 # Test Targets
-# =============================================================================
-
 
 @dataclass
 class TestTarget:
@@ -54,11 +48,7 @@ class TestTarget:
             else self.runner_pack_id
         )
 
-
-# =============================================================================
 # Progress Tracking - Separate target vs testcase counters
-# =============================================================================
-
 
 @dataclass
 class TargetProgress:
@@ -69,7 +59,6 @@ class TargetProgress:
     running: int = 0
     failed: int = 0  # Targets that had failures
 
-
 @dataclass
 class TestCaseProgress:
     """Progress at individual test case level."""
@@ -79,7 +68,6 @@ class TestCaseProgress:
     failed: int = 0
     skipped: int = 0
     errors: int = 0
-
 
 @dataclass
 class TestProgress:
@@ -109,11 +97,7 @@ class TestProgress:
     def skipped(self) -> int:
         return self.cases.skipped
 
-
-# =============================================================================
 # Test Failures
-# =============================================================================
-
 
 @dataclass
 class TestFailure:
@@ -127,11 +111,7 @@ class TestFailure:
     classname: str | None = None
     duration_seconds: float = 0.0
 
-
-# =============================================================================
 # Test Results - Parsed output from runners
-# =============================================================================
-
 
 @dataclass
 class ParsedTestCase:
@@ -148,7 +128,6 @@ class ParsedTestCase:
     file_path: str | None = None
     line_number: int | None = None
 
-
 # Error types for explicit failure classification
 ErrorType = Literal[
     "none",  # No error
@@ -161,7 +140,6 @@ ErrorType = Literal[
 ]
 """Explicit error classification for diagnostic clarity."""
 
-
 @dataclass
 class ExecutionContext:
     """Captured execution context for diagnostics."""
@@ -171,7 +149,6 @@ class ExecutionContext:
     exit_code: int | None = None
     raw_stdout: str | None = None
     raw_stderr: str | None = None
-
 
 @dataclass
 class ParsedTestSuite:
@@ -201,7 +178,6 @@ class ParsedTestSuite:
     # - None: Could not parse output (no file, parse error, etc.)
     parsed_test_count: int | None = None
 
-
 @dataclass
 class ParsedTestRun:
     """Aggregated results from a complete test run (multiple targets)."""
@@ -224,11 +200,7 @@ class ParsedTestRun:
         self.errors += suite.errors
         self.duration_seconds += suite.duration_seconds
 
-
-# =============================================================================
 # Run Status
-# =============================================================================
-
 
 @dataclass
 class ExecutionDiagnostic:
@@ -249,7 +221,6 @@ class ExecutionDiagnostic:
     # - None: Could not parse output (no file, parse error, etc.)
     parsed_test_count: int | None = None
 
-
 @dataclass
 class TestRunStatus:
     """Status of a test run."""
@@ -266,7 +237,6 @@ class TestRunStatus:
     coverage: list[dict[str, str]] = field(default_factory=list)  # [{format, path, pack_id}]
     # Target selectors that were executed (for coverage correlation)
     target_selectors: list[str] = field(default_factory=list)
-
 
 @dataclass
 class TestResult:

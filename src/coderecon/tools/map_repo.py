@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING, Literal
 
 from sqlmodel import col, func, select
 
-from coderecon.core.languages import is_test_file
-from coderecon.index._internal.ignore import matches_glob
+from coderecon._core.languages import is_test_file
+from coderecon.index.discovery.ignore import matches_glob
 from coderecon.index.models import (
     Context,
     DefFact,
@@ -32,7 +32,6 @@ IncludeOption = Literal[
     "structure", "languages", "entry_points", "dependencies", "test_layout", "public_api"
 ]
 
-
 @dataclass
 class DirectoryNode:
     """A node in the directory tree."""
@@ -44,7 +43,6 @@ class DirectoryNode:
     file_count: int = 0
     line_count: int | None = None  # Only for files
 
-
 @dataclass
 class LanguageStats:
     """Statistics for a language name."""
@@ -52,7 +50,6 @@ class LanguageStats:
     language: str
     file_count: int
     percentage: float
-
 
 @dataclass
 class EntryPoint:
@@ -63,7 +60,6 @@ class EntryPoint:
     name: str
     qualified_name: str | None
 
-
 @dataclass
 class IndexedDependencies:
     """Dependencies extracted from ImportFact."""
@@ -71,14 +67,12 @@ class IndexedDependencies:
     external_modules: list[str]  # Unique source_literal values
     import_count: int
 
-
 @dataclass
 class TestLayout:
     """Test file layout from index."""
 
     test_files: list[str]
     test_count: int
-
 
 @dataclass
 class PublicSymbol:
@@ -88,7 +82,6 @@ class PublicSymbol:
     def_uid: str | None
     certainty: str
     evidence: str | None
-
 
 @dataclass
 class StructureInfo:
@@ -103,7 +96,6 @@ class StructureInfo:
     formatter to build depth-collapsed directory summaries without
     re-querying the database."""
 
-
 @dataclass
 class MapRepoResult:
     """Result of map_repo tool."""
@@ -114,7 +106,6 @@ class MapRepoResult:
     dependencies: IndexedDependencies | None = None
     test_layout: TestLayout | None = None
     public_api: list[PublicSymbol] | None = None
-
 
 class RepoMapper:
     """Maps repository structure from the index."""
@@ -152,7 +143,6 @@ class RepoMapper:
         if include is None:
             include = ["structure", "languages", "entry_points"]
 
-        # --- single query, single filter pass (Change 2) ----------------
         needs_file_data = {"structure", "languages", "test_layout"} & set(include)
         filtered_files: list[tuple[str, str | None, int | None]] | None = None
         if needs_file_data:
@@ -213,7 +203,7 @@ class RepoMapper:
         sorted by path.  All sections that need File data share this
         result set.  Path ordering is essential so that ``limit``-based
         truncation in ``_build_structure`` produces a balanced cross-section
-        of the repo (e.g. ``benchmarking/ → src/ → tests/``) instead of
+        of the repo (e.g. ``docs/ → src/ → tests/``) instead of
         being biased by SQLite insertion order.
         """
         stmt = select(File.path, File.language_family, File.line_count).order_by(File.path)
@@ -248,9 +238,9 @@ class RepoMapper:
         # Get valid contexts (deduplicated, empty root renamed)
         ctx_stmt = select(Context.root_path).where(Context.probe_status == ProbeStatus.VALID.value)
         raw_contexts = list(self._session.exec(ctx_stmt).all())
-        contexts = sorted(set(
+        contexts = sorted({
             c if c else "root" for c in raw_contexts
-        ))
+        })
 
         # Build tree
         root_node = DirectoryNode(

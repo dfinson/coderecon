@@ -18,16 +18,17 @@ from typing import TYPE_CHECKING
 
 import structlog
 
+from coderecon.testing.coverage.models import CoverageParseError
+
 if TYPE_CHECKING:
     from coderecon.index.ops import IndexCoordinatorEngine, IndexStats
     from coderecon.lint.ops import LintOps
     from coderecon.testing.ops import TestOps
 
-logger = structlog.get_logger(__name__)
+log = structlog.get_logger(__name__)
 
 # Tier 2 debounce: batch rapid changes before running tests
 _TIER2_DEBOUNCE_SEC = 2.0
-
 
 @dataclass
 class AnalysisPipeline:
@@ -76,7 +77,7 @@ class AnalysisPipeline:
             engine = self.coordinator.db.engine
             epoch = self.coordinator.current_epoch
 
-            from coderecon.index._internal.analysis.lint_status import persist_lint_status
+            from coderecon.index.analysis.lint_status import persist_lint_status
 
             for tool_result in result.tools_run:
                 # Group diagnostics by file
@@ -119,7 +120,7 @@ class AnalysisPipeline:
                         )
 
             elapsed = time.monotonic() - t0
-            logger.debug(
+            log.debug(
                 "tier1_complete",
                 files=len(paths),
                 tools=len(result.tools_run),
@@ -128,7 +129,7 @@ class AnalysisPipeline:
             )
 
         except Exception:
-            logger.debug("tier1_failed", exc_info=True)
+            log.warning("tier1_failed", exc_info=True)
 
     def _schedule_tier2(self) -> None:
         """Schedule or reschedule tier 2 with debounce."""
@@ -146,6 +147,7 @@ class AnalysisPipeline:
             await asyncio.sleep(_TIER2_DEBOUNCE_SEC)
             await self._run_tier2()
         except asyncio.CancelledError:
+            structlog.get_logger().debug("tier2_debounce_cancelled", exc_info=True)
             pass
 
     async def _run_tier2(self) -> None:
@@ -161,7 +163,7 @@ class AnalysisPipeline:
             # Discover affected tests via import graph
             graph_result = await self.coordinator.get_affected_test_targets(paths)
             if not graph_result.test_files:
-                logger.debug("tier2_no_affected_tests", changed_files=len(paths))
+                log.debug("tier2_no_affected_tests", changed_files=len(paths))
                 return
 
             # Run tests with coverage — target_ids need "test:" prefix
@@ -175,7 +177,6 @@ class AnalysisPipeline:
             # Ingest coverage from artifacts produced by test runners
             if result.run_status and result.run_status.coverage:
                 from coderecon.testing.coverage import (
-                    CoverageParseError,
                     merge,
                     parse_artifact,
                 )
@@ -193,11 +194,11 @@ class AnalysisPipeline:
                             base_path=self.repo_root,
                         )
                         reports.append(report)
-                    except (CoverageParseError, Exception):
-                        logger.debug("tier2_coverage_parse_failed", path=cov_path, exc_info=True)
+                    except (CoverageParseError, OSError):  # best-effort coverage parse
+                        log.debug("tier2_coverage_parse_failed", path=cov_path, exc_info=True)
 
                 if reports:
-                    from coderecon.index._internal.analysis.coverage_ingestion import (
+                    from coderecon.index.analysis.coverage_ingestion import (
                         ingest_coverage,
                     )
 
@@ -213,10 +214,10 @@ class AnalysisPipeline:
                     written = ingest_coverage(
                         engine, merged, epoch, failed_test_ids=failed_ids,
                     )
-                    logger.debug("tier2_coverage_ingested", facts=written)
+                    log.debug("tier2_coverage_ingested", facts=written)
 
             elapsed = time.monotonic() - t0
-            logger.debug(
+            log.debug(
                 "tier2_complete",
                 affected_tests=len(graph_result.test_files),
                 passed=getattr(result, "passed", 0),
@@ -225,7 +226,7 @@ class AnalysisPipeline:
             )
 
         except Exception:
-            logger.debug("tier2_failed", exc_info=True)
+            log.warning("tier2_failed", exc_info=True)
 
     async def stop(self) -> None:
         """Stop the pipeline gracefully."""
@@ -235,4 +236,5 @@ class AnalysisPipeline:
             try:
                 await self._tier2_task
             except asyncio.CancelledError:
+                structlog.get_logger().debug("tier2_task_stop_cancelled", exc_info=True)
                 pass

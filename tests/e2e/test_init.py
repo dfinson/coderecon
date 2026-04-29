@@ -9,7 +9,6 @@ import pytest
 
 from tests.e2e.expectations.schema import RepoExpectation
 
-
 @pytest.mark.e2e
 def test_server_starts(
     coderecon_server: tuple[str, int],
@@ -18,7 +17,6 @@ def test_server_starts(
     """Verify the server starts and returns a valid port."""
     _url, port = coderecon_server
     assert port > 0, "Server should bind to a valid port"
-
 
 @pytest.mark.e2e
 def test_health_check(

@@ -9,14 +9,13 @@ Tests cover:
 
 from __future__ import annotations
 
-from coderecon.index._internal.discovery import (
+from coderecon.index.discovery import (
     ContextRouter,
     FileRoute,
     RoutingResult,
     route_single_file,
 )
 from coderecon.index.models import CandidateContext, LanguageFamily, ProbeStatus
-
 
 def make_candidate(
     family: LanguageFamily,
@@ -34,7 +33,6 @@ def make_candidate(
         include_spec=include_spec,
         exclude_spec=exclude_spec,
     )
-
 
 class TestContextRouter:
     """Tests for ContextRouter class."""
@@ -117,7 +115,6 @@ class TestContextRouter:
         excluded_result = router.route_files(["src/tests/test_main.py"], contexts)
         assert not excluded_result.routes[0].routed
 
-
 class TestSegmentSafeContainment:
     """Tests for segment-safe path containment."""
 
@@ -139,7 +136,6 @@ class TestSegmentSafeContainment:
         assert result2.routes[0].routed
         assert result2.routes[0].context_root == "apps-legacy"
 
-
 class TestRouteSingleFile:
     """Tests for route_single_file helper."""
 
@@ -158,7 +154,6 @@ class TestRouteSingleFile:
 
         assert result is None
 
-
 class TestFileRoute:
     """Tests for FileRoute dataclass."""
 
@@ -176,7 +171,6 @@ class TestFileRoute:
         assert route.language_family == LanguageFamily.PYTHON
         assert route.routed is True
 
-
 class TestRoutingResult:
     """Tests for RoutingResult dataclass."""
 
@@ -191,7 +185,6 @@ class TestRoutingResult:
         assert len(result.routes) == 1
         assert result.routed_count == 1
         assert result.unrouted_count == 0
-
 
 class TestRouterEdgeCases:
     """Tests for router edge cases."""

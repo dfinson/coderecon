@@ -19,7 +19,6 @@ PRIVATE_REPO = "https://github.com/dfinson/coderecon-test-private.git"
 PUBLIC_REPO_SSH = "git@github.com:dfinson/coderecon-test-public.git"
 PRIVATE_REPO_SSH = "git@github.com:dfinson/coderecon-test-private.git"
 
-
 @pytest.fixture(scope="session", autouse=True)
 def _configure_ci_credentials(
     tmp_path_factory: pytest.TempPathFactory,
@@ -28,7 +27,7 @@ def _configure_ci_credentials(
 
     Uses a session-scoped temporary credential file to avoid polluting global config.
     """
-    token = os.environ.get("CODEPLANE_TEST_PRIVATE_TOKEN")
+    token = os.environ.get("CODERECON_TEST_PRIVATE_TOKEN")
     if not token:
         yield
         return
@@ -64,7 +63,6 @@ def _configure_ci_credentials(
     else:
         os.environ["GIT_CONFIG_VALUE_0"] = old_helper
 
-
 def _can_access_repo(url: str, timeout: int = 10) -> bool:
     """Check if we can access a repository."""
     try:
@@ -77,18 +75,15 @@ def _can_access_repo(url: str, timeout: int = 10) -> bool:
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return False
 
-
 @pytest.fixture(scope="session")
 def public_repo_accessible() -> bool:
     """Check if public test repo is accessible."""
     return _can_access_repo(PUBLIC_REPO)
 
-
 @pytest.fixture(scope="session")
 def private_repo_accessible() -> bool:
     """Check if private test repo is accessible (requires auth via credential helper)."""
     return _can_access_repo(PRIVATE_REPO)
-
 
 @pytest.fixture
 def cloned_public_repo(tmp_path: Path, public_repo_accessible: bool) -> Generator[Path, None, None]:
@@ -103,7 +98,6 @@ def cloned_public_repo(tmp_path: Path, public_repo_accessible: bool) -> Generato
         check=True,
     )
     yield repo_path
-
 
 @pytest.fixture
 def cloned_private_repo(
@@ -120,7 +114,6 @@ def cloned_private_repo(
         check=True,
     )
     yield repo_path
-
 
 @pytest.fixture
 def local_bare_remote(tmp_path: Path) -> Generator[tuple[Path, Path], None, None]:

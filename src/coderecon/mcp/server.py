@@ -4,6 +4,7 @@ Uses native FastMCP @mcp.tool decorators for tool registration.
 Includes logging middleware for tool call instrumentation.
 """
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -11,26 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-# Suppress Rich tracebacks BEFORE importing fastmcp
-# FastMCP configures RichHandler at import time with rich_tracebacks=True
-from rich.logging import RichHandler as _RichHandler
-
-_original_rich_emit = _RichHandler.emit
-
-
-def _patched_rich_emit(self: _RichHandler, record: Any) -> None:
-    """Patched RichHandler.emit that suppresses traceback rendering."""
-    # If this handler has rich_tracebacks enabled and there's exc_info,
-    # clear the exc_info so no traceback is rendered
-    if getattr(self, "rich_tracebacks", False) and record.exc_info:
-        record.exc_info = None
-        record.exc_text = None
-    _original_rich_emit(self, record)
-
-
-_RichHandler.emit = _patched_rich_emit  # type: ignore[method-assign]
-
-import structlog  # noqa: E402  # Must import after patching RichHandler
+import structlog
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -39,6 +21,30 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
+_rich_handler_patched = False
+
+def _patch_rich_handler() -> None:
+    """Suppress Rich tracebacks by patching RichHandler.emit.
+
+    FastMCP configures RichHandler at import time with rich_tracebacks=True.
+    This must be called before importing fastmcp.
+    """
+    global _rich_handler_patched  # noqa: PLW0603
+    if _rich_handler_patched:
+        return
+
+    from rich.logging import RichHandler as _RichHandler
+
+    _original_rich_emit = _RichHandler.emit
+
+    def _patched_rich_emit(self: _RichHandler, record: logging.LogRecord) -> None:
+        if getattr(self, "rich_tracebacks", False) and record.exc_info:
+            record.exc_info = None
+            record.exc_text = None
+        _original_rich_emit(self, record)
+
+    _RichHandler.emit = _patched_rich_emit  # type: ignore[method-assign]
+    _rich_handler_patched = True
 
 @asynccontextmanager
 async def _noop_docket_lifespan(*_args: Any, **_kwargs: Any) -> AsyncIterator[None]:
@@ -49,7 +55,6 @@ async def _noop_docket_lifespan(*_args: Any, **_kwargs: Any) -> AsyncIterator[No
     we replace the lifespan with a no-op to eliminate this CPU drain.
     """
     yield
-
 
 def _patch_fastmcp_docket() -> None:
     """Disable FastMCP's Docket task queue to eliminate idle CPU usage.
@@ -65,7 +70,6 @@ def _patch_fastmcp_docket() -> None:
         FastMCP._docket_lifespan = staticmethod(_noop_docket_lifespan)  # type: ignore[method-assign]
         FastMCP._docket_patched = True  # type: ignore[attr-defined]
         log.debug("fastmcp_docket_disabled")
-
 
 def _enrich_tool_descriptions(mcp: "FastMCP") -> None:
     """Enrich tool descriptions with inline examples from TOOL_DOCS.
@@ -85,7 +89,6 @@ def _enrich_tool_descriptions(mcp: "FastMCP") -> None:
             tool.description = enriched_desc
             enriched_count += 1
 
-
 def create_mcp_server(context: "AppContext", *, dev_mode: bool = False) -> "FastMCP":
     """Create FastMCP server with all tools wired to context.
 
@@ -95,6 +98,9 @@ def create_mcp_server(context: "AppContext", *, dev_mode: bool = False) -> "Fast
     Returns:
         Configured FastMCP server ready to run
     """
+    # Must patch before importing fastmcp (it configures RichHandler at import)
+    _patch_rich_handler()
+
     import fastmcp
     from fastmcp import FastMCP
 
@@ -143,19 +149,18 @@ def create_mcp_server(context: "AppContext", *, dev_mode: bool = False) -> "Fast
 
     return mcp
 
-
 def run_server(repo_root: Path, db_path: Path, tantivy_path: Path) -> None:
     """Create and run the MCP server."""
     from coderecon.config.models import LoggingConfig, LogOutputConfig
-    from coderecon.core.logging import configure_logging
+    from coderecon._core.logging import configure_logging
     from coderecon.daemon.concurrency import FreshnessGate, MutationRouter
-    from coderecon.files.ops import FileOps
-    from coderecon.git.ops import GitOps
+    from coderecon.adapters.files.ops import FileOps
+    from coderecon.adapters.git.ops import GitOps
     from coderecon.index.ops import IndexCoordinatorEngine
     from coderecon.lint.ops import LintOps
     from coderecon.mcp.context import AppContext
     from coderecon.mcp.session import SessionManager
-    from coderecon.mutation.ops import MutationOps
+    from coderecon.adapters.mutation.ops import MutationOps
     from coderecon.refactor.ops import RefactorOps
     from coderecon.testing.ops import TestOps
 

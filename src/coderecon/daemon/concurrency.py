@@ -19,7 +19,6 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-
 class FreshnessGate:
     """Per-worktree freshness tracking for a shared index.
 
@@ -55,7 +54,7 @@ class FreshnessGate:
         try:
             await asyncio.wait_for(self._get_event(worktree).wait(), timeout)
             return True
-        except asyncio.TimeoutError:
+        except TimeoutError:
             log.warning("freshness_timeout", worktree=worktree, timeout=timeout)
             return False
 
@@ -70,7 +69,7 @@ class FreshnessGate:
                 timeout,
             )
             return True
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return False
 
     def mark_all_stale(self) -> None:
@@ -94,18 +93,17 @@ class FreshnessGate:
             self._events[worktree] = evt
         return evt
 
-
 class MutationRouter:
     """Serializes mutations per worktree.  Provides reindex backpressure.
 
     Two sessions on the same worktree cannot interleave mutations.
     Two sessions on different worktrees CAN mutate concurrently — they
-    serialize at the coordinator's ``_reconcile_lock``, but the async
+    serialize at per-worktree locks in the coordinator, but the async
     layer stays responsive.
 
     Lock hierarchy (callers must acquire in this order):
         session._exclusive_lock  →  MutationRouter.mutation()
-        →  _reindex_semaphore  →  coordinator._reconcile_lock
+        →  _reindex_semaphore  →  coordinator._get_worktree_lock()
         →  coordinator._tantivy_write_lock
     """
 
@@ -152,8 +150,12 @@ class MutationRouter:
         async def _reindex() -> None:
             async with self._reindex_semaphore:
                 try:
-                    await self._coordinator.reindex_incremental(paths)
+                    await self._coordinator.reindex_incremental(paths, worktree=worktree)
                 finally:
                     self._gate.mark_fresh(worktree)
 
-        asyncio.create_task(_reindex())
+        task = asyncio.create_task(_reindex())
+        task.add_done_callback(
+            lambda t: log.exception("reindex_task_failed", exc_info=t.exception())
+            if t.exception() else None
+        )

@@ -14,7 +14,6 @@ class CoverageParseError(Exception):
 
     pass
 
-
 @dataclass(frozen=True, slots=True)
 class BranchCoverage:
     """Branch coverage at a specific line.
@@ -27,7 +26,6 @@ class BranchCoverage:
     branch_id: int
     hits: int
 
-
 @dataclass(frozen=True, slots=True)
 class FunctionCoverage:
     """Function/method coverage."""
@@ -35,7 +33,6 @@ class FunctionCoverage:
     name: str
     start_line: int
     hits: int
-
 
 @dataclass(slots=True)
 class FileCoverage:
@@ -106,7 +103,6 @@ class FileCoverage:
             return 0.0
         return self.functions_hit / len(self.functions)
 
-
 @dataclass(frozen=True, slots=True)
 class CoverageSummary:
     """Aggregate coverage statistics.
@@ -123,7 +119,6 @@ class CoverageSummary:
     line_rate: float
     branch_rate: float
     function_rate: float
-
 
 @dataclass(slots=True)
 class CoverageReport:

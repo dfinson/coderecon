@@ -11,15 +11,14 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from coderecon.files.ops import FileOps
-from coderecon.git.ops import GitOps
-from coderecon.mutation.ops import Edit, MutationOps
+from coderecon.adapters.files.ops import FileOps
+from coderecon.adapters.git.ops import GitOps
+from coderecon.adapters.mutation.ops import Edit, MutationOps
 
 if TYPE_CHECKING:
     pass
 
 pytestmark = pytest.mark.integration
-
 
 class TestMCPFilesIntegration:
     """Integration tests for MCP file operations."""
@@ -85,7 +84,6 @@ class TestMCPFilesIntegration:
         for entry in result.entries:
             if entry.type == "file":
                 assert entry.size is not None
-
 
 class TestMCPGitIntegration:
     """Integration tests for MCP git operations."""
@@ -183,7 +181,6 @@ class TestMCPGitIntegration:
         # Switch back
         git_ops.checkout("master")
         assert git_ops.current_branch() == "master"
-
 
 class TestMCPMutationIntegration:
     """Integration tests for MCP mutation operations."""

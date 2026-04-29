@@ -6,8 +6,8 @@ These are protocol constraints, API stability limits, and implementation details
 For configurable values, see models.py (TimeoutsConfig, LimitsConfig, etc.).
 """
 
-# ======================================================================# MCP Tool Limits
-# ======================================================================# These are hard caps for API stability and security. Users can configure
+from __future__ import annotations
+
 # defaults below these, but cannot exceed them.
 SEARCH_MAX_LIMIT = 100
 """Maximum results for index search queries."""
@@ -36,15 +36,10 @@ MOVE_LEXICAL_MAX = 200
 DIFF_CHANGES_MAX = 100
 """Maximum structural changes per page for semantic diff."""
 
-# ======================================================================
 # Delivery Envelope
-# ======================================================================
 
 INLINE_CAP_BYTES = 30_000
 """Default inline cap for delivery envelope. Fits within VS Code's inline display."""
-
-# ======================================================================# Delivery Envelope Constants
-# ======================================================================
 
 MAX_SPAN_LINES = 500
 """Maximum lines per span in read_source."""
@@ -58,17 +53,23 @@ MAX_TARGETS_PER_CALL = 20
 SMALL_FILE_THRESHOLD = 1_000
 """Files under this byte count skip two-phase confirmation in read_file_full."""
 
-# ======================================================================# Internal Implementation Constants
-# ======================================================================# These are not exposed to users and are implementation details.
-
 EPOCH_POLL_MS = 10
 """Polling interval (ms) for epoch await. Tight loop, not configurable."""
 
 INSPECT_CONTEXT_LINES_DEFAULT = 2
 """Default context lines for refactor inspection."""
 
-# ======================================================================# Protocol/Validation Constants
-# ======================================================================
 PORT_MIN = 0
 PORT_MAX = 65535
 """Valid port range."""
+
+# Unit Conversion Constants
+
+MS_PER_SEC = 1000
+"""Milliseconds per second — used for sec→ms timing conversions."""
+
+BYTES_PER_MB = 1024 * 1024
+"""Bytes per mebibyte (MiB) — used for memory/file size conversions."""
+
+DB_FLUSH_BATCH_SIZE = 1000
+"""Flush ORM objects to the DB in batches of this size to cap memory."""

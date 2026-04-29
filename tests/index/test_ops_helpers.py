@@ -18,7 +18,6 @@ from coderecon.index.ops import (
     _matches_glob,
 )
 
-
 class TestMatchesGlob:
     """Tests for _matches_glob helper function."""
 
@@ -72,7 +71,6 @@ class TestMatchesGlob:
         assert _matches_glob("", "*.py") is False
         assert _matches_glob("", "") is True
 
-
 class TestInitResult:
     """Tests for InitResult dataclass."""
 
@@ -119,7 +117,6 @@ class TestInitResult:
         )
         assert len(result.errors) == 2
 
-
 class TestIndexStats:
     """Tests for IndexStats dataclass."""
 
@@ -152,7 +149,6 @@ class TestIndexStats:
         )
         assert stats.files_processed == 0
 
-
 class TestSearchResult:
     """Tests for SearchResult dataclass."""
 
@@ -182,7 +178,6 @@ class TestSearchResult:
         )
         assert result.column is None
 
-
 class TestSearchResponse:
     """Tests for SearchResponse dataclass."""
 
@@ -208,7 +203,6 @@ class TestSearchResponse:
             fallback_reason="Query syntax error: unmatched quote",
         )
         assert response.fallback_reason == "Query syntax error: unmatched quote"
-
 
 class TestSearchMode:
     """Tests for SearchMode enum."""

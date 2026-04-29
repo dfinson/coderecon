@@ -9,8 +9,22 @@ import subprocess
 
 import pytest
 
-from coderecon.templates import get_reconignore_template
+from coderecon._core.excludes import get_reconignore_template
 
+from coderecon.index.ops import IndexCoordinatorEngine
+
+
+def make_coordinator(repo_path: Path) -> IndexCoordinatorEngine:
+    """Create an IndexCoordinatorEngine with proper paths."""
+    coderecon_dir = repo_path / ".recon"
+    coderecon_dir.mkdir(exist_ok=True)
+    db_path = coderecon_dir / "index.db"
+    tantivy_path = coderecon_dir / "tantivy"
+    return IndexCoordinatorEngine(repo_path, db_path, tantivy_path)
+
+
+def noop_progress(indexed: int, total: int, by_ext: dict[str, int], phase: str = "") -> None:
+    """No-op progress callback."""
 
 @pytest.fixture
 def integration_repo(tmp_path: Path) -> Generator[Path, None, None]:
@@ -33,32 +47,26 @@ def integration_repo(tmp_path: Path) -> Generator[Path, None, None]:
     (repo_path / "src" / "__init__.py").write_text("")
     (repo_path / "src" / "main.py").write_text('''"""Main module."""
 
-
 def greet(name: str) -> str:
     """Greet someone by name."""
     return f"Hello, {name}!"
 
-
 def main() -> None:
     """Entry point."""
     print(greet("World"))
-
 
 if __name__ == "__main__":
     main()
 ''')
     (repo_path / "src" / "utils.py").write_text('''"""Utility functions."""
 
-
 def helper(x: int) -> int:
     """Helper function that adds one."""
     return x + 1
 
-
 def another_helper(s: str) -> str:
     """Another helper that uppercases."""
     return s.upper()
-
 
 class Calculator:
     """Simple calculator class."""
@@ -102,11 +110,9 @@ line-length = 100
 
 from src.main import greet
 
-
 def test_greet() -> None:
     """Test greet function."""
     assert greet("World") == "Hello, World!"
-
 
 def test_greet_with_name() -> None:
     """Test greet with custom name."""
@@ -116,17 +122,14 @@ def test_greet_with_name() -> None:
 
 from src.utils import Calculator, another_helper, helper
 
-
 def test_helper() -> None:
     """Test helper function."""
     assert helper(1) == 2
     assert helper(0) == 1
 
-
 def test_another_helper() -> None:
     """Test another_helper function."""
     assert another_helper("hello") == "HELLO"
-
 
 class TestCalculator:
     """Tests for Calculator class."""
@@ -153,7 +156,6 @@ class TestCalculator:
     subprocess.run(["git", "commit", "-m", "Initial structure"], cwd=repo_path, capture_output=True, check=True)
 
     yield repo_path
-
 
 @pytest.fixture
 def integration_repo_with_errors(tmp_path: Path) -> Generator[Path, None, None]:
@@ -184,11 +186,9 @@ def bad_function(x,y):
     (repo_path / "tests").mkdir()
     (repo_path / "tests" / "test_failing.py").write_text('''"""Tests that will fail."""
 
-
 def test_will_fail() -> None:
     """This test always fails."""
     assert False, "Expected failure"
-
 
 def test_will_pass() -> None:
     """This test passes."""

@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import time
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from coderecon.catalog.db import CatalogDB
-from coderecon.catalog.registry import CatalogRegistry
+from coderecon.adapters.catalog.registry import CatalogRegistry
 from coderecon.daemon.global_app import (
     GlobalDaemon,
     RepoSlot,
@@ -20,17 +18,9 @@ from coderecon.daemon.global_app import (
     _DEFAULT_WATCH_CEILING,
 )
 
-
-@pytest.fixture
-def registry(tmp_path: Path) -> CatalogRegistry:
-    catalog = CatalogDB(home=tmp_path / ".coderecon")
-    return CatalogRegistry(catalog)
-
-
 @pytest.fixture
 def daemon(registry: CatalogRegistry) -> GlobalDaemon:
     return GlobalDaemon(registry)
-
 
 def _stub_watcher(watch_count: int = 100) -> Any:
     """Create a minimal stub that quacks like a FileWatcher."""
@@ -38,7 +28,6 @@ def _stub_watcher(watch_count: int = 100) -> Any:
     watcher.watch_count = watch_count
     watcher.stop = AsyncMock()
     return watcher
-
 
 def _make_wt_slot(
     name: str = "wt-1",
@@ -62,11 +51,10 @@ def _make_wt_slot(
         slot.last_request_at = last_request_at
     return slot
 
-
 class TestEvictionLoop:
     """Tests for the idle eviction background task."""
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_evicts_idle_worktree(self, daemon: GlobalDaemon) -> None:
         """A non-main worktree idle beyond the timeout gets torn down."""
         # Set up a repo slot with main + one idle worktree
@@ -98,7 +86,7 @@ class TestEvictionLoop:
         daemon._eviction_task.cancel()
         await asyncio.sleep(0)
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_does_not_evict_active_worktree(self, daemon: GlobalDaemon) -> None:
         """A recently-active non-main worktree is NOT evicted."""
         slot = RepoSlot(
@@ -125,7 +113,7 @@ class TestEvictionLoop:
         daemon._eviction_task.cancel()
         await asyncio.sleep(0)
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_never_evicts_main(self, daemon: GlobalDaemon) -> None:
         """Main worktree is never evicted regardless of idle time."""
         slot = RepoSlot(
@@ -155,14 +143,13 @@ class TestEvictionLoop:
         daemon.start_eviction_loop(idle_timeout=0)
         assert daemon._eviction_task is None
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_stop_all_cancels_eviction(self, daemon: GlobalDaemon) -> None:
         """stop_all() cancels the eviction loop."""
         daemon.start_eviction_loop(idle_timeout=60.0)
         assert daemon._eviction_task is not None
         await daemon.stop_all()
         assert daemon._eviction_task is None
-
 
 class TestWatchCeiling:
     """Tests for inotify watch ceiling enforcement."""
@@ -194,7 +181,7 @@ class TestWatchCeiling:
 
         assert daemon._current_watch_count() == 350
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_lazy_activate_refuses_over_ceiling(
         self, daemon: GlobalDaemon, tmp_path: Path,
     ) -> None:
@@ -225,7 +212,6 @@ class TestWatchCeiling:
             result = await daemon.lazy_activate_worktree("repo-a", "wt-big")
 
         assert result is None
-
 
 class TestWorktreeSlotTimestamps:
     """Tests for activated_at and last_request_at fields."""

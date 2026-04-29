@@ -2,19 +2,19 @@
 
 Configuration Hierarchy (highest to lowest precedence):
 1. Direct kwargs to load_config()
-2. Environment variables (CODEPLANE__SECTION__KEY)
+2. Environment variables (CODERECON__SECTION__KEY)
 3. Repo YAML (.recon/config.yaml)
 4. Global YAML (~/.config/coderecon/config.yaml)
 5. Built-in defaults (this file)
 
 Environment Variable Format:
-    CODEPLANE__<SECTION>__<KEY>=<VALUE>
+    CODERECON__<SECTION>__<KEY>=<VALUE>
 
 Examples:
-    CODEPLANE__LOGGING__LEVEL=DEBUG
-    CODEPLANE__SERVER__PORT=8080
-    CODEPLANE__LIMITS__SEARCH_DEFAULT=50
-    CODEPLANE__INDEXER__MAX_WORKERS=4
+    CODERECON__LOGGING__LEVEL=DEBUG
+    CODERECON__SERVER__PORT=8080
+    CODERECON__LIMITS__SEARCH_DEFAULT=50
+    CODERECON__INDEXER__MAX_WORKERS=4
 
 See .recon/config.template.yaml for documented configuration options.
 """
@@ -24,8 +24,9 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+from coderecon.config.constants import PORT_MAX
 
+LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 class LogOutputConfig(BaseModel):
     """Single logging output configuration.
@@ -47,12 +48,11 @@ class LogOutputConfig(BaseModel):
             raise ValueError(f"File destination must be absolute path: {v}")
         return str(path)
 
-
 class LoggingConfig(BaseModel):
     """Logging configuration.
 
     Env vars:
-        CODEPLANE__LOGGING__LEVEL: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        CODERECON__LOGGING__LEVEL: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     """
 
     level: LogLevel = Field(
@@ -61,15 +61,14 @@ class LoggingConfig(BaseModel):
     )
     outputs: list[LogOutputConfig] = Field(default_factory=lambda: [LogOutputConfig()])
 
-
 class ServerConfig(BaseModel):
     """Server configuration.
 
     Env vars:
-        CODEPLANE__SERVER__HOST: Bind address (default: 127.0.0.1)
-        CODEPLANE__SERVER__PORT: Port number (default: 7654)
-        CODEPLANE__SERVER__POLL_INTERVAL_SEC: File watcher poll interval
-        CODEPLANE__SERVER__DEBOUNCE_SEC: Change debounce window
+        CODERECON__SERVER__HOST: Bind address (default: 127.0.0.1)
+        CODERECON__SERVER__PORT: Port number (default: 7654)
+        CODERECON__SERVER__POLL_INTERVAL_SEC: File watcher poll interval
+        CODERECON__SERVER__DEBOUNCE_SEC: Change debounce window
     """
 
     host: str = Field(
@@ -103,17 +102,16 @@ class ServerConfig(BaseModel):
     @field_validator("port")
     @classmethod
     def validate_port(cls, v: int) -> int:
-        if not (0 <= v <= 65535):
-            raise ValueError(f"Port must be 0-65535, got {v}")
+        if not (0 <= v <= PORT_MAX):
+            raise ValueError(f"Port must be 0-{PORT_MAX}, got {v}")
         return v
-
 
 class IndexConfig(BaseModel):
     """Index configuration.
 
     Env vars:
-        CODEPLANE__INDEX__MAX_FILE_SIZE_MB: Skip files larger than this
-        CODEPLANE__INDEX__INDEX_PATH: Override index storage location
+        CODERECON__INDEX__MAX_FILE_SIZE_MB: Skip files larger than this
+        CODERECON__INDEX__INDEX_PATH: Override index storage location
     """
 
     max_file_size_mb: int = Field(
@@ -131,13 +129,12 @@ class IndexConfig(BaseModel):
         "performance (store index on native FS). Default: .recon/ in repo.",
     )
 
-
 class TimeoutsConfig(BaseModel):
     """Timeout configuration for daemon components.
 
     Env vars:
-        CODEPLANE__TIMEOUTS__EPOCH_AWAIT_SEC: Max wait for epoch freshness
-        CODEPLANE__TIMEOUTS__SESSION_IDLE_SEC: Session idle timeout
+        CODERECON__TIMEOUTS__EPOCH_AWAIT_SEC: Max wait for epoch freshness
+        CODERECON__TIMEOUTS__SESSION_IDLE_SEC: Session idle timeout
     """
 
     server_stop_sec: float = Field(
@@ -166,14 +163,13 @@ class TimeoutsConfig(BaseModel):
         description="TTL for dry-run refactoring previews.",
     )
 
-
 class IndexerConfig(BaseModel):
     """Background indexer configuration.
 
     Env vars:
-        CODEPLANE__INDEXER__DEBOUNCE_SEC: Indexer debounce window
-        CODEPLANE__INDEXER__MAX_WORKERS: Parallel indexing workers
-        CODEPLANE__INDEXER__QUEUE_MAX_SIZE: Max queued paths before dropping
+        CODERECON__INDEXER__DEBOUNCE_SEC: Indexer debounce window
+        CODERECON__INDEXER__MAX_WORKERS: Parallel indexing workers
+        CODERECON__INDEXER__QUEUE_MAX_SIZE: Max queued paths before dropping
     """
 
     debounce_sec: float = Field(
@@ -191,7 +187,6 @@ class IndexerConfig(BaseModel):
         "RISK: Too low loses changes during bulk operations.",
     )
 
-
 class LimitsConfig(BaseModel):
     """Query limit defaults.
 
@@ -199,10 +194,10 @@ class LimitsConfig(BaseModel):
     See constants.py for hard maximums that cannot be exceeded.
 
     Env vars:
-        CODEPLANE__LIMITS__SEARCH_DEFAULT: Default search results
-        CODEPLANE__LIMITS__MAP_DEPTH_DEFAULT: Default repo map depth
-        CODEPLANE__LIMITS__MAP_LIMIT_DEFAULT: Default repo map entries
-        CODEPLANE__LIMITS__FILES_LIST_DEFAULT: Default file list entries
+        CODERECON__LIMITS__SEARCH_DEFAULT: Default search results
+        CODERECON__LIMITS__MAP_DEPTH_DEFAULT: Default repo map depth
+        CODERECON__LIMITS__MAP_LIMIT_DEFAULT: Default repo map entries
+        CODERECON__LIMITS__FILES_LIST_DEFAULT: Default file list entries
     """
 
     search_default: int = Field(
@@ -229,13 +224,12 @@ class LimitsConfig(BaseModel):
         description="Max ledger operation records to return.",
     )
 
-
 class TestingConfig(BaseModel):
     """Testing subsystem configuration.
 
     Env vars:
-        CODEPLANE__TESTING__DEFAULT_PARALLELISM: Parallel test workers
-        CODEPLANE__TESTING__DEFAULT_TIMEOUT_SEC: Test execution timeout
+        CODERECON__TESTING__DEFAULT_PARALLELISM: Parallel test workers
+        CODERECON__TESTING__DEFAULT_TIMEOUT_SEC: Test execution timeout
     """
 
     default_parallelism: int = Field(
@@ -259,14 +253,13 @@ class TestingConfig(BaseModel):
         "If None, computed dynamically from available memory at launch time.",
     )
 
-
 class TelemetryConfig(BaseModel):
     """OpenTelemetry configuration.
 
     Env vars:
-        CODEPLANE__TELEMETRY__ENABLED: Enable/disable telemetry
-        CODEPLANE__TELEMETRY__OTLP_ENDPOINT: OTLP collector endpoint
-        CODEPLANE__TELEMETRY__SERVICE_NAME: Service name for traces
+        CODERECON__TELEMETRY__ENABLED: Enable/disable telemetry
+        CODERECON__TELEMETRY__OTLP_ENDPOINT: OTLP collector endpoint
+        CODERECON__TELEMETRY__SERVICE_NAME: Service name for traces
 
     Note: Also respects standard OTEL_* env vars when enabled.
     """
@@ -285,15 +278,14 @@ class TelemetryConfig(BaseModel):
         description="Service name for traces/metrics.",
     )
 
-
 class DatabaseConfig(BaseModel):
     """Database connection configuration.
 
     Env vars:
-        CODEPLANE__DATABASE__BUSY_TIMEOUT_MS: SQLite busy timeout
-        CODEPLANE__DATABASE__MAX_RETRIES: Max retry attempts for locked DB
-        CODEPLANE__DATABASE__POOL_SIZE: Connection pool size
-        CODEPLANE__DATABASE__CHECKPOINT_INTERVAL: Transactions between checkpoints
+        CODERECON__DATABASE__BUSY_TIMEOUT_MS: SQLite busy timeout
+        CODERECON__DATABASE__MAX_RETRIES: Max retry attempts for locked DB
+        CODERECON__DATABASE__POOL_SIZE: Connection pool size
+        CODERECON__DATABASE__CHECKPOINT_INTERVAL: Transactions between checkpoints
     """
 
     busy_timeout_ms: int = Field(
@@ -320,13 +312,12 @@ class DatabaseConfig(BaseModel):
         "TRADEOFF: Lower = more frequent I/O; higher = larger WAL files.",
     )
 
-
 class DebugConfig(BaseModel):
     """Debug and development configuration.
 
     Env vars:
-        CODEPLANE__DEBUG__ENABLED: Enable debug mode
-        CODEPLANE__DEBUG__VERBOSE_ERRORS: Include stack traces in error responses
+        CODERECON__DEBUG__ENABLED: Enable debug mode
+        CODERECON__DEBUG__VERBOSE_ERRORS: Include stack traces in error responses
     """
 
     enabled: bool = Field(
@@ -338,7 +329,6 @@ class DebugConfig(BaseModel):
         description="Include stack traces in MCP error responses. "
         "SECURITY RISK: May leak sensitive path/code information.",
     )
-
 
 class GovernancePolicyRule(BaseModel):
     """A single governance policy rule.
@@ -361,7 +351,6 @@ class GovernancePolicyRule(BaseModel):
         description="Custom message shown when rule fires.",
     )
 
-
 class GovernanceConfig(BaseModel):
     """Governance policies for checkpoint gating.
 
@@ -369,8 +358,8 @@ class GovernanceConfig(BaseModel):
     block commit (error level) or warn (warning level).
 
     Env vars:
-        CODEPLANE__GOVERNANCE__COVERAGE_FLOOR: Minimum test coverage %
-        CODEPLANE__GOVERNANCE__LINT_CLEAN: Require lint-clean before commit
+        CODERECON__GOVERNANCE__COVERAGE_FLOOR: Minimum test coverage %
+        CODERECON__GOVERNANCE__LINT_CLEAN: Require lint-clean before commit
     """
 
     coverage_floor: GovernancePolicyRule = Field(
@@ -433,12 +422,11 @@ class GovernanceConfig(BaseModel):
         description="Warn when changes affect high-PageRank symbols.",
     )
 
-
 class CodeReconConfig(BaseModel):
     """Root configuration for CodeRecon.
 
     All settings can be configured via:
-    1. Environment variables: CODEPLANE__SECTION__KEY
+    1. Environment variables: CODERECON__SECTION__KEY
     2. YAML config files (repo or global)
     3. Direct kwargs to load_config()
 

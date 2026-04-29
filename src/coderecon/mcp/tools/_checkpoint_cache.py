@@ -15,7 +15,6 @@ from sqlalchemy import text
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
-
 @dataclass(frozen=True, slots=True)
 class CachedLintResult:
     """Lint facts read from the DB instead of running lint live."""
@@ -27,7 +26,6 @@ class CachedLintResult:
     files_checked: int
     issues: list[dict[str, str | int]]
 
-
 @dataclass(frozen=True, slots=True)
 class CachedTestResult:
     """Test coverage facts read from the DB instead of running tests live."""
@@ -37,7 +35,6 @@ class CachedTestResult:
     average_line_rate: float
     stale_count: int
     test_ids: list[str]
-
 
 def try_read_lint_facts(
     engine: Engine,
@@ -103,7 +100,6 @@ def try_read_lint_facts(
             files_checked=len(files_with_facts),
             issues=issues,
         )
-
 
 def try_read_test_facts(
     engine: Engine,

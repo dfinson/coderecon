@@ -1,4 +1,7 @@
-# Locking & Concurrency — One Server, N Repos × M Worktrees
+---
+title: Locking & Concurrency
+description: Concurrency design for one server managing N repos × M worktrees
+---
 
 ## Object Hierarchy
 

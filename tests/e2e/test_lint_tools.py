@@ -11,7 +11,6 @@ import pytest
 from tests.e2e.conftest import TOOL_TIMEOUTS
 from tests.e2e.expectations.schema import RepoExpectation
 
-
 @pytest.mark.e2e
 def test_lint_tools(
     coderecon_server: tuple[str, int],

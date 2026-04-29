@@ -18,9 +18,13 @@ Structure of coverage-final.json:
 }
 """
 
+from __future__ import annotations
+
 import contextlib
 import json
 from pathlib import Path
+
+import structlog
 
 from coderecon.testing.coverage.models import (
     BranchCoverage,
@@ -57,6 +61,7 @@ class IstanbulParser:
                 if '"statementMap"' in header or '"fnMap"' in header:
                     return True
         except (OSError, UnicodeDecodeError):
+            structlog.get_logger().debug("istanbul content sniff failed", exc_info=True)
             pass
         return False
 

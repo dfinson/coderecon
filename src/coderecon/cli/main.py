@@ -1,5 +1,7 @@
 """CodeRecon CLI - recon command."""
 
+from __future__ import annotations
+
 import click
 
 from coderecon.cli.clear import clear_command
@@ -16,7 +18,7 @@ from coderecon.cli.init import init_command
 from coderecon.cli.restart import restart_command
 from coderecon.cli.status import status_command
 from coderecon.cli.up import up_command
-from coderecon.core.logging import configure_logging
+from coderecon._core.logging import configure_logging
 
 
 @click.group()
@@ -28,7 +30,6 @@ def cli(ctx: click.Context, verbose: bool) -> None:
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
     configure_logging(level="DEBUG" if verbose else "INFO")
-
 
 # Per-repo commands (existing)
 cli.add_command(init_command, name="init")
@@ -45,7 +46,6 @@ cli.add_command(register_command, name="register")
 cli.add_command(register_worktree_command, name="register-worktree")
 cli.add_command(unregister_command, name="unregister")
 cli.add_command(worktrees_command, name="worktrees")
-
 
 if __name__ == "__main__":
     cli()

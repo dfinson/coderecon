@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from coderecon.index._internal.db import Database, create_additional_indexes
-from coderecon.index._internal.indexing.graph import FactQueries
+from coderecon.index.db import Database, create_additional_indexes
+from coderecon.index.graph.code_graph import FactQueries
 from coderecon.index.models import (
     Certainty,
     Context,
@@ -19,8 +19,8 @@ from coderecon.index.models import (
     RefFact,
     RefTier,
     Role,
+    Worktree,
 )
-
 
 @pytest.fixture
 def db(temp_dir: Path) -> Database:
@@ -28,9 +28,11 @@ def db(temp_dir: Path) -> Database:
     db_path = temp_dir / "test_callees.db"
     db = Database(db_path)
     db.create_all()
+    with db.session() as session:
+        session.add(Worktree(id=1, name="main", root_path="/test", is_main=True))
+        session.commit()
     create_additional_indexes(db.engine)
     return db
-
 
 @pytest.fixture
 def seeded_db(db: Database) -> Database:
@@ -46,8 +48,8 @@ def seeded_db(db: Database) -> Database:
         session.commit()
         cid = ctx.id
 
-        file1 = File(path="src/main.py", language_family="python")
-        file2 = File(path="src/utils.py", language_family="python")
+        file1 = File(path="src/main.py", language_family="python", worktree_id=1)
+        file2 = File(path="src/utils.py", language_family="python", worktree_id=1)
         session.add_all([file1, file2])
         session.commit()
         f1 = file1.id
@@ -153,7 +155,6 @@ def seeded_db(db: Database) -> Database:
 
     return db
 
-
 class TestListCalleesInScope:
     """Tests for FactQueries.list_callees_in_scope."""
 
@@ -215,7 +216,6 @@ class TestListCalleesInScope:
             callees = fq.list_callees_in_scope(file_rec.id, 10, 20)
             uids = [c.def_uid for c in callees]
             assert len(uids) == len(set(uids)), "Callees should be deduplicated"
-
 
 class TestCountCallers:
     """Tests for FactQueries.count_callers."""

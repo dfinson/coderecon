@@ -7,25 +7,20 @@ to file level.  High-scoring files pass through to the def ranker
 
 from __future__ import annotations
 
-import structlog
 from pathlib import Path
 from typing import Any
 
-log = structlog.get_logger(__name__)
+import structlog
 
+from coderecon.ranking import _load_lgb_model
+
+log = structlog.get_logger(__name__)
 
 class FileRanker:
     """LambdaMART file ranker backed by a serialized LightGBM model."""
 
     def __init__(self, model_path: Path) -> None:
-        self._model = None
-        if model_path.exists():
-            import lightgbm as lgb
-
-            self._model = lgb.Booster(model_file=str(model_path))
-            log.info("ranking.file_ranker.loaded", path=str(model_path))
-        else:
-            log.warning("ranking.file_ranker.no_model", path=str(model_path))
+        self._model = _load_lgb_model(model_path, "file_ranker")
 
     @property
     def is_available(self) -> bool:
@@ -48,7 +43,6 @@ class FileRanker:
             for f in file_features
         ])
         return self._model.predict(X).tolist()
-
 
 def load_file_ranker(model_path: Path | None = None) -> FileRanker:
     """Load the file ranker from package data or an explicit path."""

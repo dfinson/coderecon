@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from coderecon.index._internal.indexing.import_graph import (
+from coderecon.index.graph.import_graph import (
     CoverageSourceResult,
     ImpactConfidence,
     ImpactMatch,
@@ -20,7 +20,6 @@ from coderecon.index._internal.indexing.import_graph import (
 # ---------------------------------------------------------------------------
 # ImportGraphResult fixtures
 # ---------------------------------------------------------------------------
-
 
 def _make_graph_result(
     *,
@@ -43,11 +42,9 @@ def _make_graph_result(
         changed_modules=["mylib.core"],
     )
 
-
 # ---------------------------------------------------------------------------
 # ImportGraphResult model tests
 # ---------------------------------------------------------------------------
-
 
 class TestImportGraphResultModel:
     """Test ImportGraphResult convenience properties."""
@@ -79,11 +76,9 @@ class TestImportGraphResultModel:
         assert result.high_confidence_tests == []
         assert result.low_confidence_tests == []
 
-
 # ---------------------------------------------------------------------------
 # CoverageSourceResult model tests
 # ---------------------------------------------------------------------------
-
 
 class TestCoverageSourceResult:
     """Test CoverageSourceResult."""
@@ -108,11 +103,9 @@ class TestCoverageSourceResult:
         assert result.confidence == "partial"
         assert result.null_import_count == 3
 
-
 # ---------------------------------------------------------------------------
 # Auto-scoped coverage in _execute_tests
 # ---------------------------------------------------------------------------
-
 
 class TestAutoScopedCoverage:
     """Test that _execute_tests auto-scopes coverage via import graph."""
@@ -160,11 +153,9 @@ class TestAutoScopedCoverage:
 
         assert "--cov=." in result
 
-
 # ---------------------------------------------------------------------------
 # Coverage emitter signature tests
 # ---------------------------------------------------------------------------
-
 
 class TestCoverageEmitterSignatures:
     """Verify all emitters accept source_dirs parameter."""

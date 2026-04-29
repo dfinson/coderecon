@@ -11,18 +11,17 @@ Tests cover:
 
 from __future__ import annotations
 
-from coderecon.index._internal.diff.engine import (
+from coderecon.index.diff.engine import (
     _detect_renames,
     _intersects_hunks,
     _is_internal_variable,
     compute_structural_diff,
 )
-from coderecon.index._internal.diff.models import ChangedFile, DefSnapshot
+from coderecon.index.diff.models import ChangedFile, DefSnapshot
 
 # ============================================================================
 # Fixtures
 # ============================================================================
-
 
 def _snap(
     kind: str = "function",
@@ -43,11 +42,9 @@ def _snap(
         end_line=end,
     )
 
-
 # ============================================================================
 # Tests: Hunk Intersection
 # ============================================================================
-
 
 class TestHunkIntersection:
     """Tests for _intersects_hunks."""
@@ -70,11 +67,9 @@ class TestHunkIntersection:
     def test_multiple_hunks_one_match(self) -> None:
         assert _intersects_hunks(5, 8, [(1, 3), (6, 10), (20, 30)]) is True
 
-
 # ============================================================================
 # Tests: Internal Variable Detection
 # ============================================================================
-
 
 class TestInternalVariable:
     """Tests for _is_internal_variable."""
@@ -98,11 +93,9 @@ class TestInternalVariable:
         var = _snap(kind="variable", name="x", start=5, end=5)
         assert _is_internal_variable(var, [cls, var]) is False
 
-
 # ============================================================================
 # Tests: Rename Detection
 # ============================================================================
-
 
 class TestRenameDetection:
     """Tests for _detect_renames."""
@@ -144,11 +137,9 @@ class TestRenameDetection:
         )
         assert len(renames) == 0
 
-
 # ============================================================================
 # Tests: Full Structural Diff
 # ============================================================================
-
 
 class TestComputeStructuralDiff:
     """Tests for compute_structural_diff."""
@@ -275,29 +266,27 @@ class TestComputeStructuralDiff:
         )
         assert result.changes[0].qualified_name == "MyClass.foo"
 
-
 # ============================================================================
 # Tests: Delta Tags
 # ============================================================================
-
 
 class TestDeltaTags:
     """Tests for _compute_delta_tags and derived tag functions."""
 
     def test_added_symbol_tag(self) -> None:
-        from coderecon.index._internal.diff.engine import _compute_delta_tags
+        from coderecon.index.diff.engine import _compute_delta_tags
 
         tags = _compute_delta_tags("added", None, _snap())
         assert tags == ["symbol_added"]
 
     def test_removed_symbol_tag(self) -> None:
-        from coderecon.index._internal.diff.engine import _compute_delta_tags
+        from coderecon.index.diff.engine import _compute_delta_tags
 
         tags = _compute_delta_tags("removed", _snap(), None)
         assert tags == ["symbol_removed"]
 
     def test_renamed_symbol_tag(self) -> None:
-        from coderecon.index._internal.diff.engine import _compute_delta_tags
+        from coderecon.index.diff.engine import _compute_delta_tags
 
         old = _snap(name="old_func", display_name="def old_func()")
         new = _snap(name="new_func", display_name="def new_func()")
@@ -305,7 +294,7 @@ class TestDeltaTags:
         assert "symbol_renamed" in tags
 
     def test_signature_parameters_changed(self) -> None:
-        from coderecon.index._internal.diff.engine import _compute_delta_tags
+        from coderecon.index.diff.engine import _compute_delta_tags
 
         old = _snap(display_name="def foo(x: int)")
         new = _snap(display_name="def foo(x: int, y: str)")
@@ -313,7 +302,7 @@ class TestDeltaTags:
         assert "parameters_changed" in tags
 
     def test_signature_return_type_changed(self) -> None:
-        from coderecon.index._internal.diff.engine import _compute_delta_tags
+        from coderecon.index.diff.engine import _compute_delta_tags
 
         old = _snap(display_name="def foo(x: int) -> int")
         new = _snap(display_name="def foo(x: int) -> str")
@@ -322,7 +311,7 @@ class TestDeltaTags:
         assert "parameters_changed" not in tags
 
     def test_signature_both_changed(self) -> None:
-        from coderecon.index._internal.diff.engine import _compute_delta_tags
+        from coderecon.index.diff.engine import _compute_delta_tags
 
         old = _snap(display_name="def foo(x: int) -> int")
         new = _snap(display_name="def foo(x: str) -> str")
@@ -331,33 +320,33 @@ class TestDeltaTags:
         assert "return_type_changed" in tags
 
     def test_body_minor_change(self) -> None:
-        from coderecon.index._internal.diff.engine import _compute_delta_tags
+        from coderecon.index.diff.engine import _compute_delta_tags
 
         tags = _compute_delta_tags("body_changed", _snap(), _snap(), lines_changed=2)
         assert "minor_change" in tags
         assert "possibly_comment_or_whitespace" in tags
 
     def test_body_logic_change(self) -> None:
-        from coderecon.index._internal.diff.engine import _compute_delta_tags
+        from coderecon.index.diff.engine import _compute_delta_tags
 
         tags = _compute_delta_tags("body_changed", _snap(), _snap(), lines_changed=10)
         assert tags == ["body_logic_changed"]
 
     def test_body_major_change(self) -> None:
-        from coderecon.index._internal.diff.engine import _compute_delta_tags
+        from coderecon.index.diff.engine import _compute_delta_tags
 
         tags = _compute_delta_tags("body_changed", _snap(), _snap(), lines_changed=25)
         assert tags == ["major_change"]
 
     def test_body_no_lines_defaults_to_logic(self) -> None:
-        from coderecon.index._internal.diff.engine import _compute_delta_tags
+        from coderecon.index.diff.engine import _compute_delta_tags
 
         tags = _compute_delta_tags("body_changed", _snap(), _snap())
         assert tags == ["body_logic_changed"]
 
     def test_body_minor_3_lines_no_comment_guard(self) -> None:
         """3 lines_changed gets minor_change but NOT possibly_comment_or_whitespace."""
-        from coderecon.index._internal.diff.engine import _compute_delta_tags
+        from coderecon.index.diff.engine import _compute_delta_tags
 
         tags = _compute_delta_tags("body_changed", _snap(), _snap(), lines_changed=3)
         assert tags == ["minor_change"]
@@ -365,52 +354,50 @@ class TestDeltaTags:
 
     def test_body_1_line_gets_comment_guard(self) -> None:
         """1 line change triggers the comment-only misclassification guard."""
-        from coderecon.index._internal.diff.engine import _compute_delta_tags
+        from coderecon.index.diff.engine import _compute_delta_tags
 
         tags = _compute_delta_tags("body_changed", _snap(), _snap(), lines_changed=1)
         assert "minor_change" in tags
         assert "possibly_comment_or_whitespace" in tags
 
-
 class TestExtractParams:
     """Tests for _extract_params."""
 
     def test_simple_params(self) -> None:
-        from coderecon.index._internal.diff.engine import _extract_params
+        from coderecon.index.diff.engine import _extract_params
 
         assert _extract_params("def foo(x, y)") == "(x, y)"
 
     def test_no_params(self) -> None:
-        from coderecon.index._internal.diff.engine import _extract_params
+        from coderecon.index.diff.engine import _extract_params
 
         assert _extract_params("class Foo") == ""
 
     def test_nested_parens(self) -> None:
-        from coderecon.index._internal.diff.engine import _extract_params
+        from coderecon.index.diff.engine import _extract_params
 
         assert _extract_params("def foo(x: tuple[int, str])") == "(x: tuple[int, str])"
 
     def test_empty_parens(self) -> None:
-        from coderecon.index._internal.diff.engine import _extract_params
+        from coderecon.index.diff.engine import _extract_params
 
         assert _extract_params("def foo()") == "()"
-
 
 class TestExtractReturnType:
     """Tests for _extract_return_type."""
 
     def test_python_style(self) -> None:
-        from coderecon.index._internal.diff.engine import _extract_return_type
+        from coderecon.index.diff.engine import _extract_return_type
 
         assert _extract_return_type("def foo(x: int) -> bool") == "bool"
 
     def test_no_return_type(self) -> None:
-        from coderecon.index._internal.diff.engine import _extract_return_type
+        from coderecon.index.diff.engine import _extract_return_type
 
         assert _extract_return_type("def foo(x: int)") == ""
 
     def test_complex_return_type(self) -> None:
-        from coderecon.index._internal.diff.engine import _extract_return_type
+        from coderecon.index.diff.engine import _extract_return_type
 
         result = _extract_return_type("def foo(x) -> list[int]")
         assert result == "list[int]"

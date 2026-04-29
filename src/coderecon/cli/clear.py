@@ -1,5 +1,7 @@
 """recon clear command - remove CodeRecon data from a repository."""
 
+from __future__ import annotations
+
 import shutil
 from pathlib import Path
 
@@ -88,7 +90,6 @@ def clear_repo(repo_root: Path, *, yes: bool = False) -> bool:
 
     console.print("\n[green]CodeRecon data cleared successfully[/green]")
     return True
-
 
 @click.command()
 @click.argument("path", default=None, required=False, type=click.Path(exists=True, path_type=Path))

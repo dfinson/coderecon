@@ -6,26 +6,22 @@ read_file_full, list_files, reset_budget) have been removed in v2.
 """
 
 import hashlib
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from coderecon.core.languages import EXTENSION_TO_NAME
+from coderecon._core.languages import CONSTANT_KINDS, CONTAINER_KINDS, EXTENSION_TO_NAME
 
 if TYPE_CHECKING:
     from coderecon.mcp.context import AppContext
 
-
-def _compute_file_sha256(full_path: Any) -> str:
+def _compute_file_sha256(full_path: Path) -> str:
     """Compute SHA256 of entire file contents."""
     content = full_path.read_bytes()
     return hashlib.sha256(content).hexdigest()
 
-
-# =============================================================================
 # Parameter Models (used by tests and other modules)
-# =============================================================================
-
 
 class SpanTarget(BaseModel):
     """Span-based read target. Both start_line and end_line are required."""
@@ -44,7 +40,6 @@ class SpanTarget(BaseModel):
             )
         return self
 
-
 class StructuralTarget(BaseModel):
     """Structural-unit-based read target."""
 
@@ -56,15 +51,11 @@ class StructuralTarget(BaseModel):
         "function", description="Structural unit to retrieve"
     )
 
-
-# =============================================================================
 # Summary Helpers
-# =============================================================================
-
 
 def _summarize_read(files: list[dict[str, Any]], not_found: int = 0) -> str:
     """Generate summary for file read results."""
-    from coderecon.core.formatting import compress_path, format_path_list, pluralize
+    from coderecon._core.formatting import compress_path, format_path_list, pluralize
 
     if not files and not_found:
         return f"{not_found} file(s) not found"
@@ -84,18 +75,16 @@ def _summarize_read(files: list[dict[str, Any]], not_found: int = 0) -> str:
     suffix = f", {not_found} not found" if not_found else ""
     return f"{pluralize(len(files), 'file')} ({path_list}), {total_lines} lines{suffix}"
 
-
 def _summarize_list(path: str, total: int, truncated: bool) -> str:
     """Generate summary for directory listing."""
     loc = path or "repo root"
     trunc = " (truncated)" if truncated else ""
     return f"{total} entries in {loc}{trunc}"
 
-
-async def _build_scaffold(
+def _build_scaffold(
     app_ctx: "AppContext",
     rel_path: str,
-    full_path: Any,
+    full_path: Path,
     *,
     include_docstrings: bool = False,
     include_constants: bool = False,
@@ -107,7 +96,7 @@ async def _build_scaffold(
     """
     from pathlib import Path
 
-    from coderecon.index._internal.indexing.graph import FactQueries
+    from coderecon.index.graph.code_graph import FactQueries
     from coderecon.index.models import DefFact, File, ImportFact
 
     # Look up the file in the index
@@ -153,8 +142,7 @@ async def _build_scaffold(
         imports_out.append(f"{source}: {', '.join(names)}")
 
     # Filter defs based on include_constants
-    constant_kinds = frozenset({"variable", "constant", "val", "var", "property", "field"})
-    filtered_defs = [d for d in defs if include_constants or d.kind not in constant_kinds]
+    filtered_defs = [d for d in defs if include_constants or d.kind not in CONSTANT_KINDS]
 
     # Build symbol tree (hierarchical)
     symbols_out = _build_symbol_tree(
@@ -166,7 +154,7 @@ async def _build_scaffold(
     try:
         content = full_path.read_text(encoding="utf-8", errors="replace")
         total_lines = content.count("\n") + (1 if content and not content.endswith("\n") else 0)
-    except Exception:
+    except OSError:
         total_lines = 0
 
     result: dict[str, Any] = {
@@ -182,7 +170,6 @@ async def _build_scaffold(
         ),
     }
     return result
-
 
 def _build_symbol_tree(
     defs: list[Any],
@@ -203,22 +190,7 @@ def _build_symbol_tree(
     # Sort by start_line for stable ordering
     sorted_defs = sorted(defs, key=lambda d: (d.start_line, d.start_col))
 
-    container_kinds = frozenset(
-        {
-            "class",
-            "struct",
-            "enum",
-            "interface",
-            "trait",
-            "module",
-            "namespace",
-            "impl",
-            "protocol",
-            "object",
-            "record",
-            "type_class",
-        }
-    )
+    container_kinds = CONTAINER_KINDS
 
     lines: list[str] = []
     # Stack of (end_line, depth) for nesting
@@ -268,13 +240,12 @@ def _build_symbol_tree(
 
     return lines
 
-
-def _build_unindexed_fallback(full_path: Any, rel_path: str) -> dict[str, Any]:
+def _build_unindexed_fallback(full_path: Path, rel_path: str) -> dict[str, Any]:
     """Fallback for files not in the structural index."""
     try:
         content = full_path.read_text(encoding="utf-8", errors="replace")
         total_lines = content.count("\n") + (1 if content and not content.endswith("\n") else 0)
-    except Exception:
+    except OSError:
         total_lines = 0
 
     return {
@@ -289,11 +260,10 @@ def _build_unindexed_fallback(full_path: Any, rel_path: str) -> dict[str, Any]:
         ),
     }
 
-
-async def _build_lite_scaffold(
+def _build_lite_scaffold(
     app_ctx: "AppContext",
     rel_path: str,
-    full_path: Any,
+    full_path: Path,
 ) -> dict[str, Any]:
     """Build a lightweight scaffold with only symbol names and import sources.
 
@@ -303,14 +273,14 @@ async def _build_lite_scaffold(
     overhead of full signatures, decorators, or line ranges.
     """
 
-    from coderecon.index._internal.indexing.graph import FactQueries
+    from coderecon.index.graph.code_graph import FactQueries
     from coderecon.index.models import DefFact, File, ImportFact
 
     # Compute line count
     try:
         raw_text = full_path.read_text(encoding="utf-8", errors="replace")
         total_lines = raw_text.count("\n") + (1 if raw_text and not raw_text.endswith("\n") else 0)
-    except Exception:
+    except OSError:
         total_lines = 0
 
     # Look up file in the index
@@ -342,8 +312,7 @@ async def _build_lite_scaffold(
     import_sources = sorted(sources)
 
     # Symbol names only — "kind name", skip constants/variables
-    constant_kinds = frozenset({"variable", "constant", "val", "var", "property", "field"})
-    symbol_names = [f"{d.kind} {d.name}" for d in defs if d.kind not in constant_kinds]
+    symbol_names = [f"{d.kind} {d.name}" for d in defs if d.kind not in CONSTANT_KINDS]
 
     return {
         "total_lines": total_lines,

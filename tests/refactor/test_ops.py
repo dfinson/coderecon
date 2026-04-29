@@ -23,66 +23,57 @@ from coderecon.refactor.ops import (
 )
 
 
+@pytest.fixture
+def refactor_ops(tmp_path: Path) -> RefactorOps:
+    coordinator = MagicMock()
+    return RefactorOps(tmp_path, coordinator)
+
+
+@pytest.fixture
+def mock_coordinator() -> MagicMock:
+    coordinator = MagicMock()
+    coordinator.db = MagicMock()
+    coordinator.db.session = MagicMock()
+    search_result = MagicMock()
+    search_result.results = []
+    coordinator.search = AsyncMock(return_value=search_result)
+    return coordinator
+
+
 class TestWordBoundaryMatch:
     """Test _word_boundary_match helper."""
-
     def test_exact_match(self) -> None:
         assert _word_boundary_match("foo bar baz", "bar")
-
     def test_start_of_line(self) -> None:
         assert _word_boundary_match("foo bar", "foo")
-
     def test_end_of_line(self) -> None:
         assert _word_boundary_match("foo bar", "bar")
-
     def test_no_match_substring(self) -> None:
         assert not _word_boundary_match("foobar", "foo")
         assert not _word_boundary_match("foobar", "bar")
-
     def test_with_punctuation(self) -> None:
         assert _word_boundary_match("foo.bar", "foo")
         assert _word_boundary_match("foo.bar", "bar")
-
     def test_special_chars_escaped(self) -> None:
         # Symbol with special regex chars should be escaped
         assert _word_boundary_match("use foo$bar here", "foo$bar")
-
-
 class TestPathToModule:
     """Test _path_to_module conversion."""
-
-    @pytest.fixture
-    def refactor_ops(self, tmp_path: Path) -> RefactorOps:
-        coordinator = MagicMock()
-        return RefactorOps(tmp_path, coordinator)
-
     def test_simple_path(self, refactor_ops: RefactorOps) -> None:
         assert refactor_ops._path_to_module("src/utils/helper.py") == "src.utils.helper"
-
     def test_no_extension(self, refactor_ops: RefactorOps) -> None:
         assert refactor_ops._path_to_module("src/utils") == "src.utils"
-
     def test_single_file(self, refactor_ops: RefactorOps) -> None:
         assert refactor_ops._path_to_module("main.py") == "main"
-
     def test_windows_path(self, refactor_ops: RefactorOps) -> None:
         assert refactor_ops._path_to_module("src\\utils\\helper.py") == "src.utils.helper"
-
-
 class TestBuildPreview:
     """Test _build_preview method."""
-
-    @pytest.fixture
-    def refactor_ops(self, tmp_path: Path) -> RefactorOps:
-        coordinator = MagicMock()
-        return RefactorOps(tmp_path, coordinator)
-
     def test_empty_edits(self, refactor_ops: RefactorOps) -> None:
         preview = refactor_ops._build_preview({})
         assert preview.files_affected == 0
         assert preview.high_certainty_count == 0
         assert not preview.verification_required
-
     def test_high_certainty_only(self, refactor_ops: RefactorOps) -> None:
         edits = {
             "file.py": [
@@ -95,7 +86,6 @@ class TestBuildPreview:
         assert preview.high_certainty_count == 2
         assert preview.low_certainty_count == 0
         assert not preview.verification_required
-
     def test_low_certainty_triggers_verification(self, refactor_ops: RefactorOps) -> None:
         edits = {
             "file.py": [
@@ -107,7 +97,6 @@ class TestBuildPreview:
         assert preview.verification_required
         assert preview.low_certainty_count == 1
         assert "file.py" in preview.low_certainty_files
-
     def test_multiple_files(self, refactor_ops: RefactorOps) -> None:
         edits = {
             "a.py": [EditHunk(old="x", new="y", line=1, certainty="high")],
@@ -119,16 +108,8 @@ class TestBuildPreview:
         assert preview.high_certainty_count == 1
         assert preview.medium_certainty_count == 1
         assert preview.low_certainty_count == 1
-
-
 class TestBuildDeletePreview:
     """Test _build_impact_preview method."""
-
-    @pytest.fixture
-    def refactor_ops(self, tmp_path: Path) -> RefactorOps:
-        coordinator = MagicMock()
-        return RefactorOps(tmp_path, coordinator)
-
     def test_delete_guidance(self, refactor_ops: RefactorOps) -> None:
         edits = {
             "file.py": [
@@ -139,23 +120,9 @@ class TestBuildDeletePreview:
         assert preview.verification_required
         assert "target" in (preview.verification_guidance or "")
         assert "does NOT auto-remove" in (preview.verification_guidance or "")
-
-
 @pytest.mark.asyncio
 class TestRefactorMove:
     """Test refactor_move operation."""
-
-    @pytest.fixture
-    def mock_coordinator(self) -> MagicMock:
-        coordinator = MagicMock()
-        coordinator.db = MagicMock()
-        coordinator.db.session = MagicMock()
-        # search returns an object with .results attribute
-        search_result = MagicMock()
-        search_result.results = []
-        coordinator.search = AsyncMock(return_value=search_result)
-        return coordinator
-
     @pytest.fixture
     def temp_repo(self, tmp_path: Path) -> Path:
         # Create a simple repo structure
@@ -194,12 +161,9 @@ class TestRefactorMove:
 
         assert result.preview is not None
         assert isinstance(result.preview, RefactorPreview)
-
-
 @pytest.mark.asyncio
 class TestRefactorImpact:
     """Test recon_impact operation (RefactorOps.impact backend)."""
-
     @pytest.fixture
     def mock_coordinator(self) -> MagicMock:
         coordinator = MagicMock()
@@ -211,7 +175,6 @@ class TestRefactorImpact:
         search_result.results = []
         coordinator.search = AsyncMock(return_value=search_result)
         return coordinator
-
     @pytest.fixture
     def temp_repo(self, tmp_path: Path) -> Path:
         (tmp_path / "src").mkdir()
@@ -245,16 +208,9 @@ class TestRefactorImpact:
         assert result.status == "previewed"
         # File path detected by / or .py
         assert result.preview is not None
-
-
 @pytest.mark.asyncio
 class TestRefactorCancel:
     """Test refactor_cancel operation."""
-
-    @pytest.fixture
-    def refactor_ops(self, tmp_path: Path) -> RefactorOps:
-        coordinator = MagicMock()
-        return RefactorOps(tmp_path, coordinator)
 
     async def test_cancel_existing(self, refactor_ops: RefactorOps) -> None:
         # Add a pending refactor
@@ -269,17 +225,13 @@ class TestRefactorCancel:
         result = await refactor_ops.cancel("nonexistent")
 
         assert result.status == "cancelled"
-
-
 @pytest.mark.asyncio
 class TestRefactorInspect:
     """Test refactor_inspect operation."""
-
     @pytest.fixture
     def temp_repo(self, tmp_path: Path) -> Path:
         (tmp_path / "test.py").write_text("line 1\nline 2 target here\nline 3\nline 4\nline 5\n")
         return tmp_path
-
     @pytest.fixture
     def refactor_ops(self, temp_repo: Path) -> RefactorOps:
         coordinator = MagicMock()
@@ -323,8 +275,6 @@ class TestRefactorInspect:
 
         # High certainty hunks are skipped
         assert result.matches == []
-
-
 @pytest.mark.asyncio
 class TestRefactorMoveImportVariants:
     """Test refactor_move correctly handles import path variants.
@@ -332,17 +282,6 @@ class TestRefactorMoveImportVariants:
     Issue #153: Files in src/ layout have source_literal WITHOUT 'src.' prefix
     but file paths WITH 'src/' prefix. The move operation must match both.
     """
-
-    @pytest.fixture
-    def mock_coordinator(self) -> MagicMock:
-        coordinator = MagicMock()
-        coordinator.db = MagicMock()
-        coordinator.db.session = MagicMock()
-        search_result = MagicMock()
-        search_result.results = []
-        coordinator.search = AsyncMock(return_value=search_result)
-        return coordinator
-
     @pytest.fixture
     def temp_repo(self, tmp_path: Path) -> Path:
         """Create a repo with src/ layout."""
@@ -387,7 +326,6 @@ class TestRefactorMoveImportVariants:
         # Second query: select ImportFact WHERE source_literal IN (...) -> returns mock_import
         # Third query: get file path by file_id -> returns consumer path
         call_count = [0]
-
         def mock_exec_side_effect(_query: Any) -> MagicMock:
             result = MagicMock()
             call_count[0] += 1
@@ -471,7 +409,6 @@ class TestRefactorMoveImportVariants:
 
         mock_session = MagicMock()
         call_count = [0]
-
         def mock_exec_side_effect(_query: Any) -> MagicMock:
             result = MagicMock()
             call_count[0] += 1

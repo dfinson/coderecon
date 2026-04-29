@@ -18,21 +18,20 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from coderecon.core.excludes import PRUNABLE_DIRS
+from coderecon._core.excludes import PRUNABLE_DIRS
+from coderecon._core.excludes import HARDCODED_DIRS
 from coderecon.daemon.watcher import (
     DEBOUNCE_WINDOW_SEC,
-    HARDCODED_DIRS,
     MAX_DEBOUNCE_WAIT_SEC,
     FileWatcher,
     _collect_watch_dirs,
     _is_cross_filesystem,
     _summarize_changes_by_type,
 )
-from coderecon.index._internal.ignore import IgnoreChecker
+from coderecon.index.discovery.ignore import IgnoreChecker
 
 if TYPE_CHECKING:
     from collections.abc import Generator
-
 
 class TestHardcodedDirs:
     """Tests for HARDCODED_DIRS constant."""
@@ -57,7 +56,6 @@ class TestHardcodedDirs:
     def test_is_frozenset(self) -> None:
         """HARDCODED_DIRS must be immutable."""
         assert isinstance(HARDCODED_DIRS, frozenset)
-
 
 class TestCollectWatchDirs:
     """Tests for _collect_watch_dirs function."""
@@ -172,7 +170,6 @@ class TestCollectWatchDirs:
         # src/ should still be watched
         assert "src" in dir_strs
 
-
 class TestCrossFilesystemDetection:
     """Tests for _is_cross_filesystem function."""
 
@@ -197,7 +194,6 @@ class TestCrossFilesystemDetection:
         assert _is_cross_filesystem(Path("/media/usb")) is True
         assert _is_cross_filesystem(Path("/net/server/share")) is True
 
-
 class TestSummarizeChangesByType:
     """Tests for _summarize_changes_by_type function."""
 
@@ -205,14 +201,14 @@ class TestSummarizeChangesByType:
         """Single Python file uses singular form."""
         paths = [Path("src/main.py")]
         summary = _summarize_changes_by_type(paths)
-        assert "1 Python file" in summary
-        assert "files" not in summary.replace("1 Python file", "")
+        assert "1 python file" in summary
+        assert "files" not in summary.replace("1 python file", "")
 
     def test_multiple_python_files(self) -> None:
         """Multiple Python files use plural form."""
         paths = [Path("a.py"), Path("b.py"), Path("c.py")]
         summary = _summarize_changes_by_type(paths)
-        assert "3 Python files" in summary
+        assert "3 python files" in summary
 
     def test_mixed_file_types(self) -> None:
         """Mixed types are summarized with counts."""
@@ -223,9 +219,9 @@ class TestSummarizeChangesByType:
             Path("style.css"),
         ]
         summary = _summarize_changes_by_type(paths)
-        assert "2 Python files" in summary
-        assert "1 JSON file" in summary
-        assert "1 CSS file" in summary
+        assert "2 python files" in summary
+        assert "1 json file" in summary
+        assert "1 css file" in summary
 
     def test_unknown_extension(self) -> None:
         """Unknown extensions use uppercase extension name."""
@@ -237,7 +233,6 @@ class TestSummarizeChangesByType:
         """Empty list returns empty summary."""
         summary = _summarize_changes_by_type([])
         assert summary == ""
-
 
 class TestFileWatcherDebouncing:
     """Tests for FileWatcher debouncing behavior."""
@@ -306,7 +301,6 @@ class TestFileWatcherDebouncing:
         assert watcher._first_change_time == 0.0
         assert watcher._last_change_time == 0.0
 
-
 class TestFileWatcherPollingMode:
     """Tests for FileWatcher polling mode (cross-filesystem)."""
 
@@ -367,7 +361,6 @@ class TestFileWatcherPollingMode:
 
         # Verify debounce state was cleared (changes were flushed)
         assert polling_watcher._pending_changes == set()
-
 
 class TestFileWatcherNativeMode:
     """Tests for FileWatcher native (non-recursive inotify) mode."""
@@ -434,7 +427,6 @@ class TestFileWatcherNativeMode:
             assert "node_modules" not in watched_names
         finally:
             await native_watcher.stop()
-
 
 class TestFileWatcherCplignore:
     """Tests for reconignore change handling."""

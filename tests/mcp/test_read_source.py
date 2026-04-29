@@ -18,7 +18,6 @@ from coderecon.mcp.tools.files import (
 # SpanTarget / StructuralTarget Validation
 # =============================================================================
 
-
 class TestSpanTargetValidation:
     """SpanTarget model validation."""
 
@@ -43,7 +42,6 @@ class TestSpanTargetValidation:
         t = SpanTarget(path="a.py", start_line=5, end_line=5)
         assert t.start_line == t.end_line
 
-
 class TestStructuralTarget:
     """StructuralTarget model validation."""
 
@@ -58,11 +56,9 @@ class TestStructuralTarget:
             t = StructuralTarget(path="a.py", symbol_id="sym", unit=unit)
             assert t.unit == unit
 
-
 # =============================================================================
 # File SHA256 computation
 # =============================================================================
-
 
 class TestFileSha256:
     """File SHA256 helper."""
@@ -91,11 +87,9 @@ class TestFileSha256:
         f2.write_text("bbb")
         assert _compute_file_sha256(f1) != _compute_file_sha256(f2)
 
-
 # =============================================================================
 # Summary helper
 # =============================================================================
-
 
 class TestSummarizeRead:
     """Read summary formatting."""

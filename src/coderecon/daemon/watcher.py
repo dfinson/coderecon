@@ -18,7 +18,6 @@ import asyncio
 import contextlib
 import os
 import time
-from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,127 +25,22 @@ from pathlib import Path
 import structlog
 from watchfiles import Change, awatch
 
-from coderecon.index._internal.ignore import IgnoreChecker
+from coderecon.daemon.watcher_utils import (
+    collect_watch_dirs as _collect_watch_dirs,
+)
+from coderecon.daemon.watcher_utils import (
+    is_cross_filesystem as _is_cross_filesystem,
+)
+from coderecon.daemon.watcher_utils import (
+    summarize_changes_by_type as _summarize_changes_by_type,
+)
+from coderecon.index.discovery.ignore import IgnoreChecker
 
-logger = structlog.get_logger()
-
-# Directories that are NEVER watched, regardless of other settings.
-# These are hardcoded because:
-# - .recon/logs causes inotify feedback loop (writes trigger more watches)
-# - VCS dirs (.git, .svn, etc.) have their own change detection
-HARDCODED_DIRS: frozenset[str] = frozenset({".git", ".svn", ".hg", ".bzr", ".recon"})
-
-
-def _collect_watch_dirs(
-    repo_root: Path,
-    ignore_checker: IgnoreChecker,
-) -> list[Path]:
-    """Walk the repo tree and collect all directories to watch.
-
-    Respects the directory pruning model implemented by IgnoreChecker:
-    - Tier 0 (HARDCODED_DIRS): Always pruned, never watched
-    - Tier 1 (DEFAULT_PRUNABLE_DIRS): Pruned unless negated in .reconignore at the repo root
-    - Path patterns from .reconignore (e.g. ``ranking/clones/``)
-
-    Returns a flat list of directories. The repo_root itself is always included.
-    Each directory gets a single non-recursive inotify watch.
-    """
-    dirs: list[Path] = [repo_root]
-    try:
-        for dirpath, dirnames, _filenames in os.walk(repo_root):
-            rel_base = os.path.relpath(dirpath, repo_root)
-            surviving: list[str] = []
-            for d in dirnames:
-                if ignore_checker.should_prune_dir(d):
-                    continue
-                rel_child = os.path.join(rel_base, d) if rel_base != "." else d
-                if ignore_checker.should_prune_dir_path(rel_child):
-                    continue
-                surviving.append(d)
-            dirnames[:] = surviving
-            for d in dirnames:
-                dirs.append(Path(dirpath) / d)
-    except OSError:
-        pass
-    return dirs
-
-
-def _is_cross_filesystem(path: Path) -> bool:
-    """Detect if path is on a cross-filesystem mount (WSL /mnt/*, network drives, etc.)."""
-    resolved = path.resolve()
-    path_str = str(resolved)
-    # WSL accessing Windows filesystem: /mnt/c/, /mnt/d/, etc.
-    # Must be single letter followed by / (not /mnt/data/ which is a regular mount)
-    if (
-        path_str.startswith("/mnt/")
-        and len(path_str) > 6
-        and path_str[5].isalpha()
-        and path_str[6] == "/"
-    ):
-        return True
-    # Common network/remote mounts
-    return path_str.startswith(("/run/user/", "/media/", "/net/"))
-
-
-def _summarize_changes_by_type(paths: list[Path]) -> str:
-    """Summarize file changes by extension/type with grammatical correctness.
-
-    Returns a human-readable summary like:
-    - "1 Python file" (singular)
-    - "3 Python files" (plural)
-    - "2 Python files, 1 config file" (multiple types)
-    """
-    # Map extensions to human-readable names
-    ext_names: dict[str, str] = {
-        ".py": "Python",
-        ".pyi": "Python stub",
-        ".js": "JavaScript",
-        ".ts": "TypeScript",
-        ".jsx": "JSX",
-        ".tsx": "TSX",
-        ".json": "JSON",
-        ".yaml": "YAML",
-        ".yml": "YAML",
-        ".toml": "TOML",
-        ".md": "Markdown",
-        ".rs": "Rust",
-        ".go": "Go",
-        ".java": "Java",
-        ".kt": "Kotlin",
-        ".rb": "Ruby",
-        ".css": "CSS",
-        ".html": "HTML",
-        ".sql": "SQL",
-        ".sh": "shell",
-    }
-
-    # Count by extension
-    ext_counts: Counter[str] = Counter()
-    for p in paths:
-        ext = p.suffix.lower()
-        ext_counts[ext] += 1
-
-    # Build summary parts
-    parts: list[str] = []
-    for ext, count in ext_counts.most_common(3):  # Top 3 types
-        name = ext_names.get(ext, ext.lstrip(".").upper() if ext else "other")
-        word = "file" if count == 1 else "files"
-        parts.append(f"{count} {name} {word}")
-
-    # Handle remaining types if more than 3
-    shown_count = sum(ext_counts[ext] for ext, _ in ext_counts.most_common(3))
-    remaining = len(paths) - shown_count
-    if remaining > 0:
-        word = "other" if remaining == 1 else "others"
-        parts.append(f"{remaining} {word}")
-
-    return ", ".join(parts)
-
+log = structlog.get_logger(__name__)
 
 # Debouncing configuration
 DEBOUNCE_WINDOW_SEC = 0.5  # Sliding window for batching rapid changes
 MAX_DEBOUNCE_WAIT_SEC = 2.0  # Maximum wait before forcing flush
-
 
 @dataclass
 class FileWatcher:
@@ -192,12 +86,10 @@ class FileWatcher:
     _watched_dirs: set[Path] = field(default_factory=set, init=False)
     # Whether this watcher degraded to poll mode due to inotify capacity.
     _degraded_to_poll: bool = field(default=False, init=False)
-
     @property
     def watch_count(self) -> int:
         """Number of directories currently being watched via inotify."""
         return len(self._watched_dirs)
-
     @staticmethod
     def estimate_watch_count(repo_root: Path) -> int:
         """Estimate how many inotify watches a repo would need.
@@ -207,7 +99,6 @@ class FileWatcher:
         """
         ignore_checker = IgnoreChecker(repo_root, respect_gitignore=False)
         return len(_collect_watch_dirs(repo_root, ignore_checker))
-
     def __post_init__(self) -> None:
         """Initialize ignore checker and detect cross-filesystem."""
         self._ignore_checker = IgnoreChecker(self.repo_root, respect_gitignore=False)
@@ -226,7 +117,7 @@ class FileWatcher:
         self._stop_event.clear()
         if self._is_cross_fs:
             self._watch_task = asyncio.create_task(self._poll_loop())
-            logger.info(
+            log.info(
                 "file_watcher_started",
                 repo_root=str(self.repo_root),
                 mode="polling",
@@ -237,7 +128,7 @@ class FileWatcher:
             self._watch_task = asyncio.create_task(self._watch_loop())
             # Periodic safety-net scan for directory changes we might have missed
             self._dir_scan_task = asyncio.create_task(self._periodic_dir_scan())
-            logger.info(
+            log.info(
                 "file_watcher_started",
                 repo_root=str(self.repo_root),
                 mode="native_nonrecursive",
@@ -272,8 +163,7 @@ class FileWatcher:
                 await asyncio.wait_for(self._watch_task, timeout=2.0)
             self._watch_task = None
 
-        logger.info("file_watcher_stopped")
-
+        log.info("file_watcher_stopped")
     def _queue_change(self, path: Path) -> None:
         """Queue a change for debounced delivery."""
         now = time.monotonic()
@@ -283,7 +173,6 @@ class FileWatcher:
 
         self._pending_changes.add(path)
         self._last_change_time = now
-
     def _should_flush(self) -> bool:
         """Check if we should flush pending changes."""
         if not self._pending_changes:
@@ -295,7 +184,6 @@ class FileWatcher:
 
         # Flush if quiet window elapsed OR max wait exceeded
         return time_since_last >= self.debounce_window or time_since_first >= self.max_debounce_wait
-
     def _flush_pending(self) -> None:
         """Flush pending changes to callback."""
         if not self._pending_changes:
@@ -308,7 +196,7 @@ class FileWatcher:
 
         # Log with human-readable summary (Issue #4)
         summary = _summarize_changes_by_type(paths)
-        logger.info("changes_detected", count=len(paths), summary=summary)
+        log.info("changes_detected", count=len(paths), summary=summary)
 
         self.on_change(paths)
 
@@ -321,6 +209,7 @@ class FileWatcher:
                 if self._should_flush():
                     self._flush_pending()
         except asyncio.CancelledError:
+            structlog.get_logger().debug("debounce_flush_loop_cancelled", exc_info=True)
             pass
 
     async def _watch_loop(self) -> None:
@@ -344,10 +233,10 @@ class FileWatcher:
                 self._watched_dirs = set(watch_dirs)
 
                 if not watch_dirs:
-                    logger.warning("no_watchable_dirs", repo_root=str(self.repo_root))
+                    log.warning("no_watchable_dirs", repo_root=str(self.repo_root))
                     return
 
-                logger.info(
+                log.info(
                     "watch_dirs_collected",
                     count=len(watch_dirs),
                     repo_root=str(self.repo_root),
@@ -365,13 +254,13 @@ class FileWatcher:
                     ):
                         needs_restart = await self._handle_changes(changes)
                         if needs_restart:
-                            logger.info("watcher_restart_requested", reason="new_directories")
+                            log.info("watcher_restart_requested", reason="new_directories")
                             break  # Break inner loop to re-collect dirs
                 except asyncio.CancelledError:
                     raise
                 except OSError as e:
                     if e.errno == 28:  # ENOSPC — out of inotify watches
-                        logger.warning(
+                        log.warning(
                             "inotify_enospc_fallback",
                             repo_root=str(self.repo_root),
                             watch_dirs=len(watch_dirs),
@@ -388,10 +277,11 @@ class FileWatcher:
                 except Exception as e:
                     if self._stop_event.is_set():
                         return
-                    logger.error("watcher_error", error=str(e))
+                    log.error("watcher_error", error=str(e))
                     # Brief backoff before retry
                     await asyncio.sleep(1.0)
         except asyncio.CancelledError:
+            structlog.get_logger().debug("watch_loop_cancelled", exc_info=True)
             pass
         finally:
             if self._debounce_task:
@@ -411,7 +301,7 @@ class FileWatcher:
                 if current_dirs != self._watched_dirs:
                     new_dirs = current_dirs - self._watched_dirs
                     removed_dirs = self._watched_dirs - current_dirs
-                    logger.info(
+                    log.info(
                         "dir_scan_drift_detected",
                         new_count=len(new_dirs),
                         removed_count=len(removed_dirs),
@@ -427,6 +317,7 @@ class FileWatcher:
                             await self._watch_task
                         self._watch_task = asyncio.create_task(self._watch_loop())
         except asyncio.CancelledError:
+            structlog.get_logger().debug("periodic_dir_scan_cancelled", exc_info=True)
             pass
 
     async def _poll_loop(self) -> None:
@@ -479,11 +370,10 @@ class FileWatcher:
                     mtimes = current_mtimes
 
                 except Exception as e:
-                    logger.error("poll_error", error=str(e))
+                    log.error("poll_error", error=str(e), exc_info=True)
         finally:
             if self._debounce_task:
                 self._debounce_task.cancel()
-
     def _scan_mtimes(self) -> dict[Path, float]:
         """Scan filesystem for file mtimes, respecting prunable dirs."""
         mtimes: dict[Path, float] = {}
@@ -497,7 +387,6 @@ class FileWatcher:
                     mtimes[file_path] = file_path.stat().st_mtime
 
         return mtimes
-
     def _handle_reconignore_change(self, rel_path: Path) -> None:
         """Handle .reconignore change with detailed logging (Issue #6)."""
         reconignore_path = self.repo_root / rel_path
@@ -533,7 +422,7 @@ class FileWatcher:
             diff_parts.append(f"-{len(removed)} pattern{suffix}")
         diff_summary = ", ".join(diff_parts) if diff_parts else "no changes"
 
-        logger.info(
+        log.info(
             "reconignore_changed",
             path=str(rel_path),
             diff=diff_summary,
@@ -542,7 +431,7 @@ class FileWatcher:
         )
 
         # Log consequence (Issue #6 Option A)
-        logger.info(
+        log.info(
             "full_reindex_triggered",
             reason="ignore_patterns_changed",
             patterns_added=len(added),
@@ -566,6 +455,7 @@ class FileWatcher:
             try:
                 rel_path = path.relative_to(self.repo_root)
             except ValueError:
+                structlog.get_logger().debug("path_not_relative_to_repo", path=path_str, exc_info=True)
                 continue
 
             if ".git" in rel_path.parts:
@@ -577,7 +467,7 @@ class FileWatcher:
                     not self._ignore_checker.should_prune_dir(path.name)
                     and path not in self._watched_dirs
                 ):
-                    logger.info(
+                    log.info(
                         "new_directory_detected",
                         path=str(rel_path),
                     )
@@ -592,11 +482,11 @@ class FileWatcher:
 
             # Filter through .reconignore
             if self._ignore_checker.should_ignore(self.repo_root / rel_path):
-                logger.debug("path_ignored", path=str(rel_path))
+                log.debug("path_ignored", path=str(rel_path))
                 continue
 
             self._queue_change(rel_path)
-            logger.debug(
+            log.debug(
                 "path_queued",
                 path=str(rel_path),
                 change_type=change_type.name,

@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from coderecon.index._internal.indexing.scope_resolver import (
+from coderecon.index.resolution.scope import (
     ScopeRegion,
     find_enclosing_scope,
     resolve_scope_region,
@@ -23,8 +23,7 @@ from coderecon.index._internal.indexing.scope_resolver import (
 from coderecon.index.models import Context, File, ScopeFact, ScopeKind
 
 if TYPE_CHECKING:
-    from coderecon.index._internal.db import Database
-
+    from coderecon.index.db import Database
 
 class TestScopeRegion:
     """Tests for ScopeRegion dataclass."""
@@ -63,7 +62,6 @@ class TestScopeRegion:
         )
         assert region.kind == "class"
 
-
 class TestFindEnclosingScope:
     """Tests for find_enclosing_scope function."""
 
@@ -87,6 +85,7 @@ class TestFindEnclosingScope:
                 path="src/example.py",
                 language_family="python",
                 line_count=100,
+                worktree_id=1,
             )
             session.add(file)
             session.commit()
@@ -226,7 +225,7 @@ class TestFindEnclosingScope:
             session.commit()
             session.refresh(context)
 
-            file = File(path="lambda.py", language_family="python", line_count=10)
+            file = File(path="lambda.py", language_family="python", line_count=10, worktree_id=1)
             session.add(file)
             session.commit()
             session.refresh(file)
@@ -247,7 +246,6 @@ class TestFindEnclosingScope:
             scope = find_enclosing_scope(session, file.id, line=3, preference="function")
             assert scope is not None
             assert scope.kind == ScopeKind.LAMBDA.value
-
 
 class TestResolveScopeRegion:
     """Tests for resolve_scope_region function."""
@@ -278,6 +276,7 @@ class TestResolveScopeRegion:
                 path="src/resolver_test.py",
                 language_family="python",
                 line_count=12,
+                worktree_id=1,
             )
             session.add(file)
             session.commit()
@@ -362,6 +361,7 @@ class TestResolveScopeRegion:
                 path="nonexistent/file.py",
                 language_family="python",
                 line_count=10,
+                worktree_id=1,
             )
             session.add(file)
             session.commit()
@@ -371,7 +371,6 @@ class TestResolveScopeRegion:
             region, content = resolve_scope_region(session, temp_repo, file.id, line=5)
             assert region.resolved is False
             assert content == ""
-
 
 class TestResolveScopeRegionForPath:
     """Tests for resolve_scope_region_for_path function."""
@@ -397,6 +396,7 @@ class TestResolveScopeRegionForPath:
                 path="indexed.py",
                 language_family="python",
                 line_count=5,
+                worktree_id=1,
             )
             session.add(file)
             session.commit()

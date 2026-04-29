@@ -16,9 +16,10 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from coderecon.config.constants import BYTES_PER_MB
+
 if TYPE_CHECKING:
     from coderecon.daemon.lifecycle import ServerController
-
 
 def _get_version() -> str:
     """Get package version from installed metadata."""
@@ -27,7 +28,6 @@ def _get_version() -> str:
     except importlib.metadata.PackageNotFoundError:
         return "dev"
 
-
 def _get_db_stats(db_path: Path) -> dict[str, Any]:
     """Get SQLite database statistics."""
     stats: dict[str, Any] = {
@@ -35,14 +35,13 @@ def _get_db_stats(db_path: Path) -> dict[str, Any]:
     }
     if db_path.exists():
         stats["size_bytes"] = db_path.stat().st_size
-        stats["size_mb"] = round(db_path.stat().st_size / 1024 / 1024, 2)
+        stats["size_mb"] = round(db_path.stat().st_size / BYTES_PER_MB, 2)
 
         # Check WAL file size if it exists
         wal_path = Path(str(db_path) + "-wal")
         if wal_path.exists():
             stats["wal_size_bytes"] = wal_path.stat().st_size
     return stats
-
 
 def _get_runtime_info() -> dict[str, Any]:
     """Get Python runtime information."""
@@ -51,14 +50,12 @@ def _get_runtime_info() -> dict[str, Any]:
         "pid": os.getpid(),
     }
 
-
 def _get_ranking_info() -> dict[str, Any]:
     """Get ranking model version and training metadata."""
     from coderecon.ranking.version import load_manifest
 
     manifest = load_manifest()
     return manifest.to_dict()
-
 
 def create_routes(controller: ServerController) -> list[Route]:
     """Create HTTP routes bound to the daemon controller."""

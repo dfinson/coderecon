@@ -18,7 +18,6 @@ from coderecon.lint.models import (
     ToolResult,
 )
 
-
 class TestToolCategory:
     """Tests for ToolCategory enum."""
 
@@ -35,7 +34,6 @@ class TestToolCategory:
         assert ToolCategory.FORMAT.value == "format"
         assert ToolCategory.SECURITY.value == "security"
 
-
 class TestSeverity:
     """Tests for Severity enum."""
 
@@ -51,7 +49,6 @@ class TestSeverity:
         assert Severity.WARNING.value == "warning"
         assert Severity.INFO.value == "info"
         assert Severity.HINT.value == "hint"
-
 
 class TestDiagnostic:
     """Tests for Diagnostic dataclass."""
@@ -108,7 +105,6 @@ class TestDiagnostic:
         assert diag.code == "arg-type"
         assert diag.fix_applied is True
 
-
 class TestToolResult:
     """Tests for ToolResult dataclass."""
 
@@ -149,7 +145,6 @@ class TestToolResult:
         assert result.files_modified == 0
         assert result.duration_seconds == 0.0
         assert result.command is None
-
 
 class TestLintResult:
     """Tests for LintResult dataclass."""

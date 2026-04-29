@@ -9,7 +9,6 @@ import subprocess
 
 import pytest
 
-
 @pytest.fixture
 def integration_repo(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a fully initialized git repository for integration tests."""
@@ -28,7 +27,6 @@ def main():
     """Entry point."""
     print("Hello, World!")
 
-
 if __name__ == "__main__":
     main()
 ''')
@@ -37,7 +35,6 @@ if __name__ == "__main__":
 def helper(x: int) -> int:
     """Helper function."""
     return x + 1
-
 
 def another_helper(s: str) -> str:
     """Another helper."""
@@ -56,7 +53,7 @@ testpaths = ["tests"]
     # Create .recon/.reconignore (simulating recon init)
     coderecon_dir = repo_path / ".recon"
     coderecon_dir.mkdir()
-    from coderecon.templates import get_reconignore_template
+    from coderecon._core.excludes import get_reconignore_template
 
     (coderecon_dir / ".reconignore").write_text(get_reconignore_template())
 
@@ -66,7 +63,6 @@ testpaths = ["tests"]
     (repo_path / "tests" / "test_main.py").write_text('''"""Tests for main module."""
 
 from src.main import main
-
 
 def test_main():
     """Test main function."""
@@ -78,7 +74,6 @@ def test_main():
     subprocess.run(["git", "commit", "-m", "Initial structure"], cwd=repo_path, capture_output=True, check=True)
 
     yield repo_path
-
 
 @pytest.fixture
 def integration_monorepo(tmp_path: Path) -> Generator[Path, None, None]:
@@ -97,7 +92,7 @@ def integration_monorepo(tmp_path: Path) -> Generator[Path, None, None]:
     # Create .recon/.reconignore (simulating recon init)
     coderecon_dir = repo_path / ".recon"
     coderecon_dir.mkdir()
-    from coderecon.templates import get_reconignore_template
+    from coderecon._core.excludes import get_reconignore_template
 
     (coderecon_dir / ".reconignore").write_text(get_reconignore_template())
 

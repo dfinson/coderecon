@@ -14,7 +14,6 @@ from typing import Any
 
 from coderecon.mcp.delivery import wrap_response
 
-
 class TestWrapResponse:
     """Tests for wrap_response inline delivery."""
 

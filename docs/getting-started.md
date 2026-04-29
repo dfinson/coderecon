@@ -1,4 +1,7 @@
-# Getting Started
+---
+title: Getting Started
+description: Walk from zero to a working CodeRecon setup in about 5 minutes
+---
 
 This guide walks from zero to a working CodeRecon + AI tool setup in about 5 minutes.
 

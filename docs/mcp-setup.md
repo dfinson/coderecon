@@ -1,4 +1,7 @@
-# MCP Setup
+---
+title: MCP Setup
+description: Manual MCP configuration, multi-tool targeting, and troubleshooting
+---
 
 `recon register` writes MCP config files automatically. This page covers manual setup, multi-tool targeting, and troubleshooting.
 
@@ -68,7 +71,7 @@ recon register --mcp-target all
   "servers": {
     "coderecon-myapp": {
       "type": "http",
-      "url": "http://127.0.0.1:3100/mcp"
+      "url": "http://127.0.0.1:7654/mcp"
     }
   }
 }
@@ -88,7 +91,7 @@ recon register --mcp-target all
   "mcpServers": {
     "coderecon-myapp": {
       "type": "http",
-      "url": "http://127.0.0.1:3100/mcp"
+      "url": "http://127.0.0.1:7654/mcp"
     }
   }
 }
@@ -105,7 +108,7 @@ recon register --mcp-target all
   "mcpServers": {
     "coderecon-myapp": {
       "type": "http",
-      "url": "http://127.0.0.1:3100/mcp"
+      "url": "http://127.0.0.1:7654/mcp"
     }
   }
 }
@@ -122,7 +125,7 @@ recon register --mcp-target all
   "mcp": {
     "coderecon-myapp": {
       "type": "streamable-http",
-      "url": "http://127.0.0.1:3100/mcp"
+      "url": "http://127.0.0.1:7654/mcp"
     }
   }
 }
@@ -153,7 +156,7 @@ If the file already contains a CodeRecon snippet, it is replaced in-place. If th
 
 ## Port Configuration
 
-The default port is **3100**. To use a different port:
+The default port is **7654**. To use a different port:
 
 ```bash
 recon up --port 4200
@@ -171,14 +174,14 @@ The port is persisted in `.recon/config.yaml` so subsequent `recon register` cal
 1. Confirm the daemon is running: `recon status`
 2. Check the config file was written: `cat .vscode/mcp.json`
 3. Reload the tool (VS Code: restart Copilot Chat; Claude Code: restart session)
-4. Verify the URL is reachable: `curl http://127.0.0.1:3100/health`
+4. Verify the URL is reachable: `curl http://127.0.0.1:7654/health`
 
 ### Wrong port in config file
 
 Re-register with the correct port:
 
 ```bash
-recon register --port 3100
+recon register --port 7654
 ```
 
 ### Multiple repos — wrong server activated

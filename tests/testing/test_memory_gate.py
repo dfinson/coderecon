@@ -21,14 +21,13 @@ from coderecon.testing.models import (
     TestTarget,
 )
 from coderecon.testing.ops import TestOps
-
+from coderecon.testing.ops_runner import _run_single_target
 
 def _make_progress() -> TestProgress:
     return TestProgress(
         targets=TargetProgress(),
         cases=TestCaseProgress(),
     )
-
 
 def _make_target(tid: str = "t1", pack_id: str = "python.pytest") -> TestTarget:
     return TestTarget(
@@ -41,7 +40,6 @@ def _make_target(tid: str = "t1", pack_id: str = "python.pytest") -> TestTarget:
         estimated_cost=1.0,
         test_count=1,
     )
-
 
 def _make_coordinator() -> MagicMock:
     coord = MagicMock()
@@ -56,7 +54,6 @@ def _make_coordinator() -> MagicMock:
         return_value=MagicMock(source_dirs=None)
     )
     return coord
-
 
 class TestTestOpsMemoryParams:
     """Test that TestOps accepts and stores memory parameters."""
@@ -75,7 +72,6 @@ class TestTestOpsMemoryParams:
         )
         assert ops._memory_reserve_mb == 2048
         assert ops._subprocess_memory_limit_mb == 4096
-
 
 class TestMemoryGateIntegration:
     """Integration tests for the memory gate inside _execute_tests."""
@@ -107,7 +103,7 @@ class TestMemoryGateIntegration:
 
         with (
             patch("coderecon.testing.resources.psutil.virtual_memory", side_effect=mock_available),
-            patch.object(ops, "_run_single_target", new=AsyncMock(return_value=normal_result)),
+            patch("coderecon.testing.ops_executor._run_single_target", new=AsyncMock(return_value=normal_result)),
         ):
             cancel = asyncio.Event()
             progress = _make_progress()
@@ -115,8 +111,8 @@ class TestMemoryGateIntegration:
             (tmp_path / "art").mkdir(exist_ok=True)
 
             # Patch asyncio.sleep to not actually wait
-            with patch("coderecon.testing.ops.asyncio.sleep", new=AsyncMock()):
-                result = await ops._execute_tests(
+            with patch("coderecon.testing.ops_executor.asyncio.sleep", new=AsyncMock()):
+                await ops._execute_tests(
                     run_id="test1",
                     targets=[_make_target()],
                     progress=progress,
@@ -159,7 +155,7 @@ class TestMemoryGateIntegration:
 
         with (
             patch("coderecon.testing.resources.psutil.virtual_memory", return_value=vm_ok),
-            patch.object(ops, "_run_single_target", side_effect=capture_single),
+            patch("coderecon.testing.ops_executor._run_single_target", side_effect=capture_single),
         ):
             cancel = asyncio.Event()
             progress = _make_progress()
@@ -182,7 +178,6 @@ class TestMemoryGateIntegration:
             )
 
         assert captured_kwargs.get("subprocess_memory_limit_mb") == 2048
-
 
 class TestOOMRetry:
     """Tests for OOM detection and automatic retry."""
@@ -228,7 +223,7 @@ class TestOOMRetry:
 
         with (
             patch("coderecon.testing.resources.psutil.virtual_memory", return_value=vm_ok),
-            patch.object(ops, "_run_single_target", side_effect=mock_run_single),
+            patch("coderecon.testing.ops_executor._run_single_target", side_effect=mock_run_single),
         ):
             cancel = asyncio.Event()
             progress = _make_progress()
@@ -285,7 +280,7 @@ class TestOOMRetry:
 
         with (
             patch("coderecon.testing.resources.psutil.virtual_memory", return_value=vm_ok),
-            patch.object(ops, "_run_single_target", side_effect=mock_run_single),
+            patch("coderecon.testing.ops_executor._run_single_target", side_effect=mock_run_single),
         ):
             cancel = asyncio.Event()
             progress = _make_progress()
@@ -310,7 +305,6 @@ class TestOOMRetry:
         # Should have been called only once
         assert call_count == 1
 
-
 class TestHistoryRecording:
     """Tests for RSS history recording after execution."""
 
@@ -330,7 +324,7 @@ class TestHistoryRecording:
 
         with (
             patch("coderecon.testing.resources.psutil.virtual_memory", return_value=vm_ok),
-            patch.object(ops, "_run_single_target", side_effect=mock_run_single),
+            patch("coderecon.testing.ops_executor._run_single_target", side_effect=mock_run_single),
         ):
             cancel = asyncio.Event()
             progress = _make_progress()
@@ -385,7 +379,7 @@ class TestHistoryRecording:
 
         with (
             patch("coderecon.testing.resources.psutil.virtual_memory", return_value=vm_ok),
-            patch.object(ops, "_run_single_target", side_effect=mock_run_single),
+            patch("coderecon.testing.ops_executor._run_single_target", side_effect=mock_run_single),
         ):
             cancel = asyncio.Event()
             progress = _make_progress()
@@ -413,7 +407,6 @@ class TestHistoryRecording:
         # Both original OOM and retry OOM should have been recorded
         assert history.oom_count("heavy") >= 1
 
-
 class TestSafeExecutionConfigCeiling:
     """Test that _run_single_target passes ceiling to SafeExecutionConfig."""
 
@@ -429,7 +422,7 @@ class TestSafeExecutionConfigCeiling:
             original_init(self, *args, **kwargs)
             captured_configs.append(self)
 
-        ops = TestOps(tmp_path, _make_coordinator(), subprocess_memory_limit_mb=3000)
+        _ops = TestOps(tmp_path, _make_coordinator(), subprocess_memory_limit_mb=3000)
 
         # Need a registered pack for _run_single_target to proceed
         target = _make_target("t1", "python.pytest")
@@ -438,7 +431,8 @@ class TestSafeExecutionConfigCeiling:
             # This will fail at command building since we're in a fake repo,
             # but SafeExecutionConfig should have been created before that
             try:
-                await ops._run_single_target(
+                await _run_single_target(
+                    _make_coordinator(),
                     target=target,
                     artifact_dir=tmp_path,
                     test_filter=None,

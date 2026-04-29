@@ -17,11 +17,12 @@ from typing import Any
 
 import structlog
 
+from coderecon.adapters.files.ops import atomic_write_text
+
 log = structlog.get_logger(__name__)
 
 _DATA_DIR = Path(__file__).parent / "data"
 _MANIFEST_PATH = _DATA_DIR / "manifest.json"
-
 
 @dataclass(frozen=True)
 class RankingManifest:
@@ -52,7 +53,6 @@ class RankingManifest:
             "repos_trained": self.repos_trained,
             "queries_trained": self.queries_trained,
         }
-
 
 def load_manifest() -> RankingManifest:
     """Load the ranking manifest from package data.
@@ -89,11 +89,10 @@ def load_manifest() -> RankingManifest:
         return RankingManifest(model_version=None, dataset_version=None,
                                trained_at=None, git_sha=None)
 
-
 def write_manifest(manifest: RankingManifest) -> None:
     """Write manifest to package data (called by training pipeline)."""
     _DATA_DIR.mkdir(parents=True, exist_ok=True)
-    _MANIFEST_PATH.write_text(json.dumps({
+    atomic_write_text(_MANIFEST_PATH, json.dumps({
         "model_version": manifest.model_version,
         "dataset_version": manifest.dataset_version,
         "trained_at": manifest.trained_at,

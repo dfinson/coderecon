@@ -1,4 +1,7 @@
-# CodeRecon
+---
+title: CodeRecon
+description: Local repository control plane for AI coding agents
+---
 
 **Local repository control plane for AI coding agents.**
 
@@ -81,11 +84,11 @@ recon register
 
     `checkpoint(changed_files=[...])` runs configured linters, the test suite, and commits — all in one call.
 
--   :material-git: **Full Git Operations**
+-   :material-git: **Git Integration**
 
     ---
 
-    19 git tools: status, diff, commit, branch, stash, rebase, worktrees — structured JSON output, no terminal parsing.
+    `checkpoint` and `semantic_diff` handle git operations (commit, diff, push) with structured JSON output. No terminal parsing.
 
 -   :material-shield-check: **Convergence Controls**
 

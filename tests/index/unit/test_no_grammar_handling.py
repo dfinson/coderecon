@@ -18,9 +18,7 @@ pytestmark = pytest.mark.skip(
     "These tests for 'no grammar' handling are obsolete."
 )
 
-
 # All test classes below are skipped via pytestmark
-
 
 class TestHasGrammarForFile:
     """Tests for _has_grammar_for_file function (skipped)."""

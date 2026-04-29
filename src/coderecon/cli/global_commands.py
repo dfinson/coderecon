@@ -13,12 +13,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
+import structlog
 
+log = structlog.get_logger(__name__)
 
 @click.command("catalog")
 def catalog_command() -> None:
     """List all registered repositories."""
-    from coderecon.catalog import CatalogDB, CatalogRegistry
+    from coderecon.adapters.catalog import CatalogDB, CatalogRegistry
 
     catalog = CatalogDB()
     registry = CatalogRegistry(catalog)
@@ -29,14 +31,13 @@ def catalog_command() -> None:
         return
 
     for repo in repos:
-        worktrees = registry.list_worktrees(repo.id)  # type: ignore[arg-type]
+        worktrees = registry.list_worktrees(repo.id)  # type: ignore[arg-type]  # repo.id is non-None after DB query
         wt_names = [f"{wt.name}{'*' if wt.is_main else ''}" for wt in worktrees]
         click.echo(f"  {repo.name}")
         click.echo(f"    git:        {repo.git_dir}")
         click.echo(f"    storage:    {repo.storage_dir}")
         click.echo(f"    worktrees:  {', '.join(wt_names)}")
         click.echo()
-
 
 @click.command("register")
 @click.argument("path", required=False, type=click.Path(exists=True, path_type=Path))
@@ -64,7 +65,7 @@ def register_command(path: Path | None, reindex: bool, mcp_targets: tuple[str, .
     --reindex is passed). If the daemon is running the repo is activated
     immediately without a restart.
     """
-    from coderecon.catalog import CatalogDB, CatalogRegistry
+    from coderecon.adapters.catalog import CatalogDB, CatalogRegistry
     from coderecon.cli.init import initialize_repo
     from coderecon.cli.utils import find_repo_root
     from coderecon.daemon.global_lifecycle import is_global_server_running, read_global_server_info
@@ -104,18 +105,16 @@ def register_command(path: Path | None, reindex: bool, mcp_targets: tuple[str, .
                 mcp = data.get("mcp_endpoint")
                 if mcp:
                     click.echo(f"  MCP endpoint: http://127.0.0.1:{server_port}{mcp}")
-            except Exception as exc:  # noqa: BLE001
+            except (ImportError, OSError, ValueError, KeyError) as exc:
                 click.echo(f"  Warning: daemon notification failed: {exc}", err=True)
     else:
         click.echo("  (daemon not running — start with 'recon up')")
-
-
 
 @click.command("unregister")
 @click.argument("path", required=False, type=click.Path(exists=True, path_type=Path))
 def unregister_command(path: Path | None) -> None:
     """Remove a repository from the global catalog."""
-    from coderecon.catalog import CatalogDB, CatalogRegistry
+    from coderecon.adapters.catalog import CatalogDB, CatalogRegistry
     from coderecon.cli.utils import find_repo_root
     from coderecon.daemon.global_lifecycle import is_global_server_running, read_global_server_info
 
@@ -141,7 +140,7 @@ def unregister_command(path: Path | None) -> None:
                 else:
                     click.echo(f"Daemon error: {resp.text}", err=True)
                 return
-            except Exception as exc:  # noqa: BLE001
+            except (ImportError, OSError, ValueError, KeyError) as exc:  # noqa: BLE001
                 click.echo(f"Warning: daemon notification failed: {exc}", err=True)
                 # Fall through to direct catalog write below
 
@@ -154,7 +153,6 @@ def unregister_command(path: Path | None) -> None:
     else:
         click.echo(f"Not registered: {repo_root}")
 
-
 @click.command("register-worktree")
 @click.argument("path", required=False, type=click.Path(exists=True, path_type=Path))
 def register_worktree_command(path: Path | None) -> None:
@@ -165,7 +163,7 @@ def register_worktree_command(path: Path | None) -> None:
     Worktrees share the parent repo's index — no separate indexing is needed.
     If the daemon is running, the worktree is activated immediately.
     """
-    from coderecon.catalog import CatalogDB, CatalogRegistry
+    from coderecon.adapters.catalog import CatalogDB, CatalogRegistry
     from coderecon.cli.utils import find_repo_root
     from coderecon.daemon.global_lifecycle import is_global_server_running, read_global_server_info
 
@@ -211,17 +209,16 @@ def register_worktree_command(path: Path | None) -> None:
                         "Restart with 'recon down && recon up'.",
                         err=True,
                     )
-            except Exception as exc:  # noqa: BLE001
+            except (ImportError, OSError, ValueError, KeyError) as exc:
                 click.echo(f"  Warning: daemon notification failed: {exc}", err=True)
     else:
         click.echo("  (daemon not running — start with 'recon up')")
-
 
 @click.command("worktrees")
 @click.argument("name", required=False)
 def worktrees_command(name: str | None) -> None:
     """List worktrees for a repository."""
-    from coderecon.catalog import CatalogDB, CatalogRegistry
+    from coderecon.adapters.catalog import CatalogDB, CatalogRegistry
     from coderecon.cli.utils import find_repo_root
 
     catalog = CatalogDB()
@@ -238,7 +235,7 @@ def worktrees_command(name: str | None) -> None:
         return
 
     repo, _ = result
-    worktrees = registry.list_worktrees(repo.id)  # type: ignore[arg-type]
+    worktrees = registry.list_worktrees(repo.id)  # type: ignore[arg-type]  # repo.id is non-None after DB query
 
     click.echo(f"Worktrees for {repo.name}:")
     for wt in worktrees:
@@ -246,7 +243,6 @@ def worktrees_command(name: str | None) -> None:
         branch = f" [{wt.branch}]" if wt.branch else ""
         click.echo(f"  {wt.name}{main_marker}{branch}")
         click.echo(f"    {wt.root_path}")
-
 
 @click.command("global-status")
 def global_status_command() -> None:
@@ -275,5 +271,5 @@ def global_status_command() -> None:
                 click.echo(f"  Active repos: {', '.join(active)}")
                 for name in active:
                     click.echo(f"    {name}: http://127.0.0.1:{port}/repos/{name}/mcp")
-        except Exception:  # noqa: BLE001
-            pass
+        except (ImportError, OSError, ValueError, KeyError):  # noqa: BLE001
+            log.debug("health_check_failed", exc_info=True)

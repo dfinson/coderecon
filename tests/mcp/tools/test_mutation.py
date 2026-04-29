@@ -8,7 +8,6 @@ from pydantic import ValidationError
 
 from coderecon.mcp.tools.mutation import EditParam
 
-
 class TestEditParam:
     """Tests for EditParam model."""
 

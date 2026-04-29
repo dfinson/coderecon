@@ -9,10 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-# =============================================================================
 # Parameter Models
-# =============================================================================
-
 
 class EditParam(BaseModel):
     """A single file edit.
@@ -74,69 +71,3 @@ class EditParam(BaseModel):
                 msg = f"end_line ({self.end_line}) must be >= start_line ({self.start_line})"
                 raise ValueError(msg)
         return self
-
-
-# =============================================================================
-# Fuzzy Span Matching
-# =============================================================================
-
-_FUZZY_SEARCH_WINDOW = 5  # Max lines to search in each direction
-
-
-def _fuzzy_match_span(
-    lines: list[str],
-    start: int,
-    end: int,
-    expected_content: str,
-) -> tuple[int, int, bool]:
-    """Try to find expected_content near the given span, auto-correcting line numbers.
-
-    Args:
-        lines: All file lines (with line endings).
-        start: 0-indexed start line.
-        end: 0-indexed exclusive end line (like slice notation).
-        expected_content: The content the agent expects at [start:end].
-
-    Returns:
-        (corrected_start, corrected_end, was_corrected) tuple.
-        If no match found nearby, returns original values with was_corrected=False.
-    """
-    expected_lines = expected_content.splitlines(keepends=True)
-    # Normalize: ensure trailing newline for comparison
-    if expected_lines and not expected_lines[-1].endswith("\n"):
-        expected_lines[-1] += "\n"
-    search_len = len(expected_lines)
-    span_width = end - start
-
-    # First check: does expected_content match at the given position and width?
-    actual_at_span = lines[start:end]
-    if _lines_match(actual_at_span, expected_lines):
-        return start, end, False  # Already correct
-
-    # Width-correction: same position but use expected_content's line count.
-    # Catches off-by-one in end_line (agent miscounted span width).
-    if search_len != span_width and start >= 0 and start + search_len <= len(lines):
-        candidate = lines[start : start + search_len]
-        if _lines_match(candidate, expected_lines):
-            return start, start + search_len, True
-
-    # Search nearby positions (both offset and width corrected)
-    for offset in range(1, _FUZZY_SEARCH_WINDOW + 1):
-        for direction in (-1, 1):
-            candidate_start = start + (offset * direction)
-            candidate_end = candidate_start + search_len
-            if candidate_start < 0 or candidate_end > len(lines):
-                continue
-            candidate = lines[candidate_start:candidate_end]
-            if _lines_match(candidate, expected_lines):
-                return candidate_start, candidate_end, True
-
-    # No match found — return original (caller verifies content)
-    return start, end, False
-
-
-def _lines_match(actual: list[str], expected: list[str]) -> bool:
-    """Compare lines with whitespace-normalized matching."""
-    if len(actual) != len(expected):
-        return False
-    return all(a.rstrip() == e.rstrip() for a, e in zip(actual, expected, strict=True))

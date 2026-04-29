@@ -16,7 +16,6 @@ from coderecon.testing.emitters import (
     supports_coverage,
 )
 
-
 class TestCoverageCapability:
     def test_pytest_cov_available_when_tool_present(self) -> None:
         emitter = PytestCovEmitter()
@@ -65,7 +64,6 @@ class TestCoverageCapability:
         )
         assert emitter.capability(runtime) == CoverageCapability.AVAILABLE
 
-
 class TestCommandModification:
     def test_pytest_cov_adds_coverage_flags(self) -> None:
         emitter = PytestCovEmitter()
@@ -96,7 +94,6 @@ class TestCommandModification:
 
             assert any("-coverprofile=" in arg for arg in modified)
 
-
 class TestEmitterRegistry:
     def test_get_emitter_returns_instance(self) -> None:
         emitter = get_emitter("python.pytest")
@@ -120,7 +117,6 @@ class TestEmitterRegistry:
         emitter = get_emitter(pack_id)
         assert emitter is not None
         assert emitter.format_id  # Non-empty string
-
 
 class TestArtifactPaths:
     def test_pytest_artifact_path(self) -> None:
@@ -149,11 +145,9 @@ class TestArtifactPaths:
 
             assert str(path).endswith("coverage.out")
 
-
 # =============================================================================
 # Additional Emitter Tests
 # =============================================================================
-
 
 class TestVitestEmitter:
     """Tests for Vitest coverage emitter."""
@@ -192,7 +186,6 @@ class TestVitestEmitter:
             output_dir = Path(tmpdir)
             path = emitter.artifact_path(output_dir)
             assert "coverage" in str(path)
-
 
 class TestCargoLlvmCovEmitter:
     """Tests for Rust cargo-llvm-cov emitter."""
@@ -233,7 +226,6 @@ class TestCargoLlvmCovEmitter:
             path = emitter.artifact_path(output_dir)
             assert str(path).endswith("lcov.info")
 
-
 class TestMavenJacocoEmitter:
     """Tests for Maven JaCoCo emitter."""
 
@@ -263,7 +255,6 @@ class TestMavenJacocoEmitter:
             modified = emitter.modify_command(["mvn", "test"], output_dir)
             assert "jacoco:report" in modified
 
-
 class TestGradleJacocoEmitter:
     """Tests for Gradle JaCoCo emitter."""
 
@@ -286,7 +277,6 @@ class TestGradleJacocoEmitter:
             output_dir = Path(tmpdir)
             modified = emitter.modify_command(["./gradlew", "test"], output_dir)
             assert "jacocoTestReport" in modified
-
 
 class TestDotnetCoverletEmitter:
     """Tests for .NET Coverlet emitter."""
@@ -316,7 +306,6 @@ class TestDotnetCoverletEmitter:
             output_dir = Path(tmpdir)
             modified = emitter.modify_command(["dotnet", "test"], output_dir)
             assert "--collect:XPlat Code Coverage" in modified or "--collect" in modified
-
 
 class TestSimpleCovEmitter:
     """Tests for Ruby SimpleCov emitter."""
@@ -348,7 +337,6 @@ class TestSimpleCovEmitter:
             # SimpleCov doesn't modify command - it's configured in code
             assert modified is not None
 
-
 class TestPHPUnitCoverageEmitter:
     """Tests for PHPUnit coverage emitter."""
 
@@ -377,7 +365,6 @@ class TestPHPUnitCoverageEmitter:
             output_dir = Path(tmpdir)
             modified = emitter.modify_command(["phpunit"], output_dir)
             assert "--coverage-clover" in " ".join(modified)
-
 
 class TestDartCoverageEmitter:
     """Tests for Dart coverage emitter."""

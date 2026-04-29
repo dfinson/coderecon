@@ -30,10 +30,14 @@ Structure:
 </coverage>
 """
 
+from __future__ import annotations
+
 import contextlib
 import re
-import xml.etree.ElementTree as ET
 from pathlib import Path
+
+import defusedxml.ElementTree as ET
+import structlog
 
 from coderecon.testing.coverage.models import (
     BranchCoverage,
@@ -78,6 +82,7 @@ class CoberturaParser:
                 ):
                     return True
         except (OSError, UnicodeDecodeError):
+            structlog.get_logger().debug("cobertura content sniff failed", exc_info=True)
             pass
         return False
 

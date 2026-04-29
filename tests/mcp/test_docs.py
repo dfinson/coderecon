@@ -22,7 +22,6 @@ from coderecon.mcp.docs import (
     get_tools_by_category,
 )
 
-
 class TestToolCategory:
     """Tests for ToolCategory enum."""
 
@@ -42,7 +41,6 @@ class TestToolCategory:
         assert ToolCategory.MUTATION.value == "mutation"
         # StrEnum: str() returns the value, not the qualified name
         assert str(ToolCategory.REFACTOR) == "refactor"
-
 
 class TestBehaviorFlags:
     """Tests for BehaviorFlags dataclass."""
@@ -67,7 +65,6 @@ class TestBehaviorFlags:
         assert flags.has_side_effects is False
         assert flags.atomic is True
         assert flags.may_be_slow is True
-
 
 class TestToolDocumentation:
     """Tests for ToolDocumentation dataclass."""
@@ -132,7 +129,6 @@ class TestToolDocumentation:
         assert "related_tools" in data
         assert "behavior" in data
 
-
 class TestToolDocs:
     """Tests for TOOL_DOCS registry."""
 
@@ -156,7 +152,6 @@ class TestToolDocs:
         for key, doc in TOOL_DOCS.items():
             assert doc.name == key, f"Name mismatch: {key} vs {doc.name}"
 
-
 class TestGetToolDocumentation:
     """Tests for get_tool_documentation function."""
 
@@ -170,7 +165,6 @@ class TestGetToolDocumentation:
         """Returns None for unknown tools."""
         doc = get_tool_documentation("nonexistent_tool")
         assert doc is None
-
 
 class TestGetToolsByCategory:
     """Tests for get_tools_by_category function."""
@@ -197,7 +191,6 @@ class TestGetToolsByCategory:
             all_tools.update(tools)
 
         assert all_tools == set(TOOL_DOCS.keys())
-
 
 class TestGetCommonWorkflows:
     """Tests for get_common_workflows function."""

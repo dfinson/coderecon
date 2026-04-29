@@ -12,20 +12,20 @@ from pathlib import Path
 
 import pytest
 
-from coderecon.index._internal.db import Database
-from coderecon.index._internal.diff.sources import (
+from coderecon.index.db import Database
+from coderecon.index.diff.sources import (
     _compute_lexical_path,
     snapshots_from_epoch,
     snapshots_from_index,
 )
-from coderecon.index._internal.parsing.treesitter import SyntacticSymbol
+from coderecon.index.parsing.treesitter import SyntacticSymbol
 from coderecon.index.models import (
     Context,
     DefFact,
     DefSnapshotRecord,
     File,
+    Worktree,
 )
-
 
 @pytest.fixture
 def db(temp_dir: Path) -> Database:
@@ -33,8 +33,10 @@ def db(temp_dir: Path) -> Database:
     db_path = temp_dir / "test_sources.db"
     db = Database(db_path)
     db.create_all()
+    with db.session() as session:
+        session.add(Worktree(id=1, name="main", root_path="/test", is_main=True))
+        session.commit()
     return db
-
 
 @pytest.fixture
 def seeded_db(db: Database) -> Database:
@@ -48,7 +50,7 @@ def seeded_db(db: Database) -> Database:
         session.add(ctx)
         session.commit()
 
-        f = File(path="src/main.py", language_family="python")
+        f = File(path="src/main.py", language_family="python", worktree_id=1)
         session.add(f)
         session.commit()
 
@@ -71,11 +73,9 @@ def seeded_db(db: Database) -> Database:
 
     return db
 
-
 # ============================================================================
 # Tests: snapshots_from_index
 # ============================================================================
-
 
 class TestSnapshotsFromIndex:
     """Tests for snapshots_from_index."""
@@ -93,11 +93,9 @@ class TestSnapshotsFromIndex:
             snaps = snapshots_from_index(session, "src/nonexistent.py")
         assert len(snaps) == 0
 
-
 # ============================================================================
 # Tests: snapshots_from_epoch
 # ============================================================================
-
 
 class TestSnapshotsFromEpoch:
     """Tests for snapshots_from_epoch."""
@@ -163,11 +161,9 @@ class TestSnapshotsFromEpoch:
         assert len(snaps) == 1
         assert snaps[0].name == "foo"
 
-
 # ============================================================================
 # Tests: _compute_lexical_path
 # ============================================================================
-
 
 class TestComputeLexicalPath:
     """Tests for _compute_lexical_path."""

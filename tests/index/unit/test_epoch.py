@@ -5,10 +5,9 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from coderecon.index._internal.db import Database, EpochManager
-from coderecon.index._internal.indexing import LexicalIndex
+from coderecon.index.db import Database, EpochManager
+from coderecon.index.search.lexical import LexicalIndex
 from coderecon.index.models import RepoState
-
 
 class TestEpochManager:
     """Tests for EpochManager."""

@@ -16,16 +16,16 @@ from coderecon.config.models import CodeReconConfig, IndexerConfig, ServerConfig
 from coderecon.daemon.concurrency import FreshnessGate
 from coderecon.daemon.indexer import BackgroundIndexer
 from coderecon.daemon.watcher import FileWatcher
+from coderecon.adapters.files.ops import atomic_write_text
 
 if TYPE_CHECKING:
     from coderecon.index.ops import IndexCoordinatorEngine
 
-logger = structlog.get_logger()
+log = structlog.get_logger(__name__)
 
 # PID file location relative to .recon/
 PID_FILE = "daemon.pid"
 PORT_FILE = "daemon.port"
-
 
 @dataclass
 class ServerController:
@@ -68,7 +68,7 @@ class ServerController:
 
     async def start(self) -> None:
         """Start all daemon components."""
-        logger.info("server starting", repo_root=str(self.repo_root))
+        log.info("server starting", repo_root=str(self.repo_root))
 
         # Start indexer thread pool
         self.indexer.start()
@@ -77,14 +77,14 @@ class ServerController:
         await self.watcher.start()
 
         base_url = f"http://{self.server_config.host}:{self.server_config.port}"
-        logger.info("server started")
-        logger.info("endpoint", name="mcp", url=f"{base_url}/mcp")
-        logger.info("endpoint", name="health", url=f"{base_url}/health")
-        logger.info("endpoint", name="status", url=f"{base_url}/status")
+        log.info("server started")
+        log.info("endpoint", name="mcp", url=f"{base_url}/mcp")
+        log.info("endpoint", name="health", url=f"{base_url}/health")
+        log.info("endpoint", name="status", url=f"{base_url}/status")
 
     async def stop(self) -> None:
         """Stop all daemon components gracefully."""
-        logger.info("server stopping")
+        log.info("server stopping")
 
         # Stop with timeout to prevent hanging
         try:
@@ -95,7 +95,7 @@ class ServerController:
                 # Stop indexer (complete pending work)
                 await self.indexer.stop()
         except TimeoutError:
-            logger.warning(
+            log.warning(
                 "server_stop_timeout",
                 message=f"Shutdown timed out after {self.timeouts_config.server_stop_sec}s",
             )
@@ -103,12 +103,11 @@ class ServerController:
         # Signal shutdown complete
         self._shutdown_event.set()
 
-        logger.info("server stopped")
+        log.info("server stopped")
 
     def wait_for_shutdown(self) -> asyncio.Event:
         """Get the shutdown event for external coordination."""
         return self._shutdown_event
-
 
 def write_pid_file(coderecon_dir: Path, port: int) -> None:
     """Write PID and port files for daemon discovery."""
@@ -117,11 +116,10 @@ def write_pid_file(coderecon_dir: Path, port: int) -> None:
     pid_path = coderecon_dir / PID_FILE
     port_path = coderecon_dir / PORT_FILE
 
-    pid_path.write_text(str(os.getpid()))
-    port_path.write_text(str(port))
+    atomic_write_text(pid_path, str(os.getpid()))
+    atomic_write_text(port_path, str(port))
 
-    logger.debug("pid_file_written", pid_path=str(pid_path), port=port)
-
+    log.debug("pid_file_written", pid_path=str(pid_path), port=port)
 
 def remove_pid_file(coderecon_dir: Path) -> None:
     """Remove PID and port files on shutdown."""
@@ -131,7 +129,6 @@ def remove_pid_file(coderecon_dir: Path) -> None:
     for path in (pid_path, port_path):
         with contextlib.suppress(FileNotFoundError):
             path.unlink()
-
 
 def read_server_info(coderecon_dir: Path) -> tuple[int, int] | None:
     """Read daemon PID and port from files. Returns (pid, port) or None."""
@@ -143,8 +140,8 @@ def read_server_info(coderecon_dir: Path) -> tuple[int, int] | None:
         port = int(port_path.read_text().strip())
         return (pid, port)
     except (FileNotFoundError, ValueError):
+        log.debug("server_info_read_failed", exc_info=True)
         return None
-
 
 def is_server_running(coderecon_dir: Path) -> bool:
     """Check if daemon is running by verifying PID file and process."""
@@ -165,7 +162,6 @@ def is_server_running(coderecon_dir: Path) -> bool:
         remove_pid_file(coderecon_dir)
         return False
 
-
 async def run_server(
     repo_root: Path,
     coordinator: IndexCoordinatorEngine,
@@ -174,17 +170,18 @@ async def run_server(
     dev_mode: bool = False,
 ) -> None:
     """Run the daemon until shutdown signal."""
-    from coderecon.daemon.app import create_app
-
     # Ensure index is up-to-date (silent - this is internal housekeeping)
     # Run in background after server starts to avoid blocking startup
     import asyncio
 
+    from coderecon.daemon.app import create_app
+
     async def _bg_reindex() -> None:
         try:
             await coordinator.reindex_full()
-        except Exception:
-            pass  # Non-fatal; server still usable with stale index
+        except (OSError, RuntimeError, ValueError):
+            log.debug("bg_reindex_failed", exc_info=True)
+            # Non-fatal; server still usable with stale index
 
     asyncio.get_event_loop().call_soon(lambda: asyncio.ensure_future(_bg_reindex()))
 
@@ -226,13 +223,13 @@ async def run_server(
     async def force_exit_after_timeout() -> None:
         """Force exit if graceful shutdown takes too long."""
         await asyncio.sleep(config.timeouts.force_exit_sec)
-        logger.info("forcing_exit_after_timeout")
+        log.info("forcing_exit_after_timeout")
         server.force_exit = True
 
     def signal_handler() -> None:
         nonlocal shutdown_count, force_exit_task
         shutdown_count += 1
-        logger.info("shutdown_signal_received", count=shutdown_count)
+        log.info("shutdown_signal_received", count=shutdown_count)
         server.should_exit = True
         if shutdown_count == 1:
             # Schedule force exit after timeout
@@ -253,7 +250,6 @@ async def run_server(
         await controller.stop()
         remove_pid_file(coderecon_dir)
 
-
 def stop_daemon(coderecon_dir: Path) -> bool:
     """Stop a running daemon by sending SIGTERM. Returns True if stopped."""
     import os
@@ -266,7 +262,7 @@ def stop_daemon(coderecon_dir: Path) -> bool:
 
     try:
         os.kill(pid, signal.SIGTERM)
-        logger.info("daemon_stop_signal_sent", pid=pid)
+        log.info("daemon_stop_signal_sent", pid=pid)
         return True
     except (OSError, ProcessLookupError):
         remove_pid_file(coderecon_dir)

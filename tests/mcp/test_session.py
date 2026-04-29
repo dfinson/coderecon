@@ -19,7 +19,6 @@ import pytest
 from coderecon.config.models import TimeoutsConfig
 from coderecon.mcp.session import SessionManager, SessionState
 
-
 class TestSessionState:
     """Tests for SessionState dataclass."""
 
@@ -87,7 +86,6 @@ class TestSessionState:
         assert state.counters["reads"] == 10
         assert state.counters["writes"] == 5
 
-
 class TestSessionManagerGetOrCreate:
     """Tests for SessionManager.get_or_create."""
 
@@ -137,7 +135,6 @@ class TestSessionManagerGetOrCreate:
         assert s2.session_id != s3.session_id
         assert len(mgr._sessions) == 3
 
-
 class TestSessionManagerGet:
     """Tests for SessionManager.get."""
 
@@ -155,7 +152,6 @@ class TestSessionManagerGet:
         result = mgr.get("does_not_exist")
 
         assert result is None
-
 
 class TestSessionManagerClose:
     """Tests for SessionManager.close."""
@@ -184,7 +180,6 @@ class TestSessionManagerClose:
 
         assert mgr.get("keep") is not None
         assert mgr.get("remove") is None
-
 
 class TestSessionManagerCleanupStale:
     """Tests for SessionManager.cleanup_stale."""
@@ -242,7 +237,6 @@ class TestSessionManagerCleanupStale:
         removed = mgr.cleanup_stale()
         assert removed == 0
 
-
 class TestSessionManagerConfig:
     """Tests for SessionManager configuration."""
 
@@ -257,7 +251,6 @@ class TestSessionManagerConfig:
         config = TimeoutsConfig(session_idle_sec=999)
         mgr = SessionManager(config=config)
         assert mgr._config.session_idle_sec == 999
-
 
 class TestSessionManagerIntegration:
     """Integration tests for session lifecycle."""
@@ -296,11 +289,9 @@ class TestSessionManagerIntegration:
         assert mgr.get("s1").fingerprints["key"] == "value1"  # type: ignore[union-attr]
         assert mgr.get("s2").fingerprints["key"] == "value2"  # type: ignore[union-attr]
 
-
 # =========================================================================
 # Exclusive Lock Tests
 # =========================================================================
-
 
 class TestExclusiveLock:
     """Tests for the exclusive session lock used by checkpoint/semantic_diff/map_repo."""
@@ -362,7 +353,6 @@ class TestExclusiveLock:
         assert "semantic_diff" in EXCLUSIVE_TOOLS
         assert "map_repo" not in EXCLUSIVE_TOOLS
 
-
 class TestLastReconId:
     """Tests for last_recon_id on SessionState."""
 
@@ -376,7 +366,6 @@ class TestLastReconId:
         s = SessionState(session_id="s", created_at=0, last_active=0)
         s.last_recon_id = "recon_abc123"
         assert s.last_recon_id == "recon_abc123"
-
 
 class TestMutationContext:
     """Tests for MutationContext lifecycle tracker."""
@@ -413,5 +402,4 @@ class TestMutationContext:
         ctx.clear()
 
         assert ctx.pending_refactors == {}
-
 

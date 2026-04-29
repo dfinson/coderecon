@@ -1,0 +1,256 @@
+"""Validate ground truth JSON files against expected schema.
+
+Run after each repo's analyst + reviewer pass to catch schema drift,
+missing fields, wrong types, and kind vocabulary violations before
+post-processing.
+
+Usage:
+    python -m recon_lab.validate_ground_truth data/python-fastapi
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+VALID_KINDS = frozenset({
+    "function", "method", "class", "struct", "interface", "trait",
+    "enum", "variable", "constant", "module", "property", "pair",
+    "key", "table", "target", "heading",
+})
+
+VALID_QUERY_TYPES = frozenset({
+    "Q_SEMANTIC", "Q_LEXICAL", "Q_IDENTIFIER", "Q_STRUCTURAL",
+    "Q_NAVIGATIONAL", "Q_SEM_IDENT", "Q_IDENT_NAV", "Q_FULL",
+})
+
+VALID_COMPLEXITIES = frozenset({"narrow", "medium", "wide"})
+
+VALID_CONFIDENCES = frozenset({"high", "medium", "low"})
+
+NON_OK_TYPES = frozenset({"UNSAT", "BROAD", "AMBIG"})
+
+
+def _check_def_entry(entry: dict, context: str) -> list[str]:
+    """Validate a single def entry (minimum_sufficient / excluded)."""
+    errors: list[str] = []
+    for field in ("path", "name", "kind", "reason"):
+        if field not in entry:
+            errors.append(f"{context}: missing required field '{field}'")
+    for line_field in ("start_line", "end_line"):
+        if line_field not in entry:
+            errors.append(f"{context}: missing required field '{line_field}'")
+        elif not isinstance(entry[line_field], int):
+            errors.append(
+                f"{context}: '{line_field}' must be int, got {type(entry[line_field]).__name__}"
+            )
+    if entry.get("kind") and entry["kind"] not in VALID_KINDS:
+        errors.append(f"{context}: invalid kind '{entry['kind']}'")
+    return errors
+
+
+def _check_query(query: dict, context: str) -> list[str]:
+    """Validate a single query entry."""
+    errors: list[str] = []
+    for field in ("query_type", "query_text", "seeds", "pins", "justification"):
+        if field not in query:
+            errors.append(f"{context}: missing required field '{field}'")
+    qt = query.get("query_type", "")
+    if qt not in VALID_QUERY_TYPES:
+        errors.append(f"{context}: invalid query_type '{qt}'")
+    return errors
+
+
+def validate_task(task: dict, file_path: str) -> list[str]:
+    """Validate a single task ground truth JSON."""
+    errors: list[str] = []
+    ctx = file_path
+
+    # Required top-level fields
+    for field in (
+        "task_id", "task_complexity", "task_text", "diff", "solve_notes",
+        "confidence",
+        "minimum_sufficient_defs", "excluded_defs", "queries",
+    ):
+        if field not in task:
+            errors.append(f"{ctx}: missing required field '{field}'")
+
+    # task_complexity
+    tc = task.get("task_complexity")
+    if tc and tc not in VALID_COMPLEXITIES:
+        errors.append(f"{ctx}: invalid task_complexity '{tc}'")
+
+    # confidence
+    conf = task.get("confidence")
+    if conf and conf not in VALID_CONFIDENCES:
+        errors.append(f"{ctx}: invalid confidence '{conf}'")
+
+    # Def lists
+    for tier_key in ("minimum_sufficient_defs", "excluded_defs"):
+        defs = task.get(tier_key, [])
+        if not isinstance(defs, list):
+            errors.append(f"{ctx}: '{tier_key}' must be a list")
+            continue
+        for i, d in enumerate(defs):
+            errors.extend(_check_def_entry(d, f"{ctx}/{tier_key}[{i}]"))
+
+    # Queries
+    queries = task.get("queries", [])
+    if not isinstance(queries, list):
+        errors.append(f"{ctx}: 'queries' must be a list")
+    else:
+        query_types_seen = set()
+        for i, q in enumerate(queries):
+            errors.extend(_check_query(q, f"{ctx}/queries[{i}]"))
+            query_types_seen.add(q.get("query_type"))
+        min_queries = 6 if tc == "narrow" else 8
+        if len(queries) < min_queries:
+            errors.append(f"{ctx}: expected >= {min_queries} queries, got {len(queries)}")
+
+    return errors
+
+
+def validate_non_ok(data: dict, file_path: str) -> list[str]:
+    """Validate non_ok_queries.json."""
+    errors: list[str] = []
+    ctx = file_path
+
+    if "repo_id" not in data:
+        errors.append(f"{ctx}: missing 'repo_id'")
+    if "non_ok_queries" not in data:
+        errors.append(f"{ctx}: missing 'non_ok_queries'")
+        return errors
+
+    queries = data["non_ok_queries"]
+    if not isinstance(queries, list):
+        errors.append(f"{ctx}: 'non_ok_queries' must be a list")
+        return errors
+
+    type_counts: dict[str, int] = {"UNSAT": 0, "BROAD": 0, "AMBIG": 0}
+
+    for i, q in enumerate(queries):
+        qctx = f"{ctx}/non_ok_queries[{i}]"
+        qt = q.get("query_type", "")
+        if qt not in NON_OK_TYPES:
+            errors.append(f"{qctx}: invalid query_type '{qt}'")
+            continue
+
+        type_counts[qt] = type_counts.get(qt, 0) + 1
+
+        for field in ("query_text", "seeds", "pins"):
+            if field not in q:
+                errors.append(f"{qctx}: missing '{field}'")
+
+        if qt == "UNSAT":
+            for field in ("false_assumption", "evidence_of_absence"):
+                if field not in q:
+                    errors.append(f"{qctx}: UNSAT missing '{field}'")
+        elif qt == "BROAD":
+            for field in ("why_no_cutoff", "dispersion_description"):
+                if field not in q:
+                    errors.append(f"{qctx}: BROAD missing '{field}'")
+            rrf = q.get("rrf_stats", {})
+            ok_bl = q.get("ok_baseline", {})
+            if rrf and ok_bl:
+                # Validate against the instance's own OK baseline
+                bl_dc = ok_bl.get("max_dir_count", 0)
+                bl_n = ok_bl.get("max_elbow_n", 0)
+                if rrf.get("dir_count", 0) <= bl_dc:
+                    errors.append(
+                        f"{qctx}: BROAD dir_count={rrf.get('dir_count')} "
+                        f"should exceed OK max ({bl_dc})"
+                    )
+                if rrf.get("n", 0) <= bl_n:
+                    errors.append(
+                        f"{qctx}: BROAD n={rrf.get('n')} "
+                        f"should exceed OK max ({bl_n})"
+                    )
+        elif qt == "AMBIG":
+            for field in ("candidate_neighborhoods", "why_ambiguous"):
+                if field not in q:
+                    errors.append(f"{qctx}: AMBIG missing '{field}'")
+            rrf = q.get("rrf_stats", {})
+            ok_bl = q.get("ok_baseline", {})
+            if rrf and ok_bl:
+                bl_dc = ok_bl.get("max_dir_count", 999)
+                bl_bal = ok_bl.get("max_balance", 0)
+                dc = rrf.get("dir_count", 0)
+                if dc < 2:
+                    errors.append(f"{qctx}: AMBIG dir_count={dc} (need >= 2)")
+                if dc > bl_dc:
+                    errors.append(
+                        f"{qctx}: AMBIG dir_count={dc} exceeds "
+                        f"OK max ({bl_dc}) — that's BROAD"
+                    )
+                if rrf.get("balance", 0) <= bl_bal:
+                    errors.append(
+                        f"{qctx}: AMBIG balance={rrf.get('balance')} "
+                        f"should exceed OK max ({bl_bal})"
+                    )
+    for qt, count in type_counts.items():
+        if count < 2:
+            errors.append(f"{ctx}: need >= 2 {qt} queries, got {count}")
+
+    return errors
+
+
+def validate_repo(data_dir: Path) -> list[str]:
+    """Validate all ground truth files for a repo."""
+    from recon_lab.data_manifest import iter_task_json_files
+
+    errors: list[str] = []
+
+    gt_dir = data_dir / "ground_truth"
+    if not gt_dir.exists():
+        errors.append(f"Directory not found: {gt_dir}")
+        return errors
+
+    task_files = iter_task_json_files(gt_dir)
+    if not task_files:
+        errors.append(f"No JSON files in {gt_dir}")
+        return errors
+
+    for tf in task_files:
+        try:
+            task = json.loads(tf.read_text())
+        except json.JSONDecodeError as e:
+            errors.append(f"{tf.name}: invalid JSON — {e}")
+            continue
+        errors.extend(validate_task(task, tf.name))
+
+    sources = {json.loads(tf.read_text()).get("source") for tf in task_files}
+    non_ok_path = gt_dir / "non_ok_queries.json"
+    if non_ok_path.exists():
+        try:
+            non_ok = json.loads(non_ok_path.read_text())
+        except json.JSONDecodeError as e:
+            errors.append(f"non_ok_queries.json: invalid JSON — {e}")
+        else:
+            errors.extend(validate_non_ok(non_ok, "non_ok_queries.json"))
+    elif sources:
+        errors.append("non_ok_queries.json not found")
+
+    return errors
+
+
+def main() -> None:
+    if len(sys.argv) != 2:
+        print("Usage: python -m recon_lab.validate_ground_truth data/{repo_id}")
+        sys.exit(1)
+
+    data_dir = Path(sys.argv[1])
+    errors = validate_repo(data_dir)
+
+    if errors:
+        print(f"VALIDATION FAILED — {len(errors)} error(s):\n")
+        for e in errors:
+            print(f"  ✗ {e}")
+        sys.exit(1)
+    else:
+        print(f"VALIDATION PASSED — {data_dir.name}")
+        sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

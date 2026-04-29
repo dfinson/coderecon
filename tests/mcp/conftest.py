@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator
 from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from coderecon.mcp.registry import ToolRegistry, registry
-
 if TYPE_CHECKING:
     pass
-
 
 @pytest.fixture
 def tmp_repo(tmp_path: Path) -> Path:
@@ -34,18 +30,6 @@ def tmp_repo(tmp_path: Path) -> Path:
         capture_output=True,
     )
     return tmp_path
-
-
-@pytest.fixture
-def clean_registry() -> Generator[ToolRegistry, None, None]:
-    """Clear and yield the global registry, restore after test."""
-    # Store existing registrations
-    original_tools = dict(registry._tools)
-    registry.clear()
-    yield registry
-    # Restore
-    registry._tools = original_tools
-
 
 @pytest.fixture
 def mock_git_ops() -> MagicMock:
@@ -78,7 +62,6 @@ def mock_git_ops() -> MagicMock:
 
     return mock
 
-
 @pytest.fixture
 def mock_coordinator() -> MagicMock:
     """Create a mock IndexCoordinatorEngine."""
@@ -103,7 +86,6 @@ def mock_coordinator() -> MagicMock:
     mock.db = MagicMock()
     return mock
 
-
 @pytest.fixture
 def mock_file_ops() -> MagicMock:
     """Create a mock FileOps."""
@@ -116,7 +98,6 @@ def mock_file_ops() -> MagicMock:
         truncated=False,
     )
     return mock
-
 
 @pytest.fixture
 def mock_mutation_ops() -> MagicMock:
@@ -135,7 +116,6 @@ def mock_mutation_ops() -> MagicMock:
         dry_run_info=None,
     )
     return mock
-
 
 @pytest.fixture
 def mock_refactor_ops() -> MagicMock:
@@ -188,7 +168,6 @@ def mock_refactor_ops() -> MagicMock:
         )
     )
     return mock
-
 
 @pytest.fixture
 def mock_test_ops() -> MagicMock:
@@ -251,7 +230,6 @@ def mock_test_ops() -> MagicMock:
     )
     return mock
 
-
 @pytest.fixture
 def mock_lint_ops() -> MagicMock:
     """Create a mock LintOps."""
@@ -271,12 +249,10 @@ def mock_lint_ops() -> MagicMock:
     )
     return mock
 
-
 @pytest.fixture
 def mock_session_manager() -> MagicMock:
     """Create a mock SessionManager."""
     return MagicMock()
-
 
 @pytest.fixture
 def mock_context(
@@ -301,4 +277,15 @@ def mock_context(
     ctx.test_ops = mock_test_ops
     ctx.lint_ops = mock_lint_ops
     ctx.session_manager = mock_session_manager
+    return ctx
+
+
+@pytest.fixture
+def mock_ctx() -> MagicMock:
+    """Create a lightweight mock MCP context for tool tests."""
+    ctx = MagicMock()
+    ctx.session_id = "test-session"
+    ctx.report_progress = AsyncMock()
+    ctx.info = AsyncMock()
+    ctx.warning = AsyncMock()
     return ctx

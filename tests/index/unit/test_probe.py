@@ -12,15 +12,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from coderecon.index._internal.discovery import (
+from coderecon.index.discovery import (
     BatchProbeResult,
     ContextProbe,
     ProbeConfig,
     ProbeResult,
 )
-from coderecon.index._internal.parsing import TreeSitterParser
+from coderecon.index.parsing import TreeSitterParser
 from coderecon.index.models import CandidateContext, LanguageFamily, ProbeStatus
-
 
 def make_candidate(
     family: LanguageFamily,
@@ -36,7 +35,6 @@ def make_candidate(
         include_spec=include_spec,
         probe_status=ProbeStatus.PENDING,
     )
-
 
 class TestContextProbe:
     """Tests for ContextProbe class."""
@@ -158,7 +156,6 @@ class TestContextProbe:
         # (valid tree with content, zero errors)
         assert result.files_sampled >= 0
 
-
 class TestProbeResult:
     """Tests for ProbeResult dataclass."""
 
@@ -188,7 +185,6 @@ class TestProbeResult:
         assert not result.valid
         assert result.reason == "High error ratio"
 
-
 class TestProbeConfig:
     """Tests for ProbeConfig."""
 
@@ -204,13 +200,12 @@ class TestProbeConfig:
         assert config.max_sample == 5
         assert config.min_ratio == 0.3
 
-
 class TestBatchProbe:
     """Tests for batch probe validation."""
 
     def test_validate_contexts_batch(self, temp_dir: Path) -> None:
         """Should validate multiple contexts in batch."""
-        from coderecon.index._internal.discovery import validate_contexts
+        from coderecon.index.discovery import validate_contexts
 
         repo_path = temp_dir / "repo"
         repo_path.mkdir()

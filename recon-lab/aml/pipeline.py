@@ -1,7 +1,12 @@
 """Submit the Recon Lab pipeline to Azure ML.
 
-Defines the full 8-stage DAG (clone → import ∥ index → resolve → collect →
-merge → train → eval) and submits it to an AML workspace.
+Defines the full pipeline DAG matching the DVC stages::
+
+    clone → index-main ──────────────────────────────────────┐
+         → pr-select → pr-checkout → index-worktrees ───────┤
+                                   → pr-import → non-ok ────┤
+                                                             ↓
+                                                     collect → merge → train → eval
 
 Usage::
 
@@ -11,9 +16,6 @@ Usage::
     # Subset: train-only (assumes merged data already in workspace)
     python -m aml.pipeline --stage train
 
-    # With custom compute
-    python -m aml.pipeline --compute-heavy Standard_D8s_v3
-
     # Dry-run: print pipeline graph without submitting
     python -m aml.pipeline --dry-run
 """
@@ -21,6 +23,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -30,7 +33,7 @@ from azure.identity import DefaultAzureCredential
 
 # ── Defaults ─────────────────────────────────────────────────────
 
-_SUBSCRIPTION_ID = "YOUR_SUBSCRIPTION_ID"
+_SUBSCRIPTION_ID = os.environ.get("AML_SUBSCRIPTION_ID", "")
 _RESOURCE_GROUP = "rg-coderecon-lab"
 _WORKSPACE_NAME = "mlw-coderecon-lab"
 _DATASTORE_NAME = "pipeline_workspace"  # blob container mounted as workspace
@@ -98,19 +101,99 @@ def _clone_component():
     )
 
 
-def _import_component():
+def _index_main_component():
     return _component(
-        "swebench_import",
-        "SWE-bench Import",
+        "index_main",
+        "Index Main Clones",
         (
             "export PYTHONPATH=.:$PYTHONPATH && "
-            "recon-lab swebench-import --workspace ${{inputs.workspace}} "
+            "recon-lab index-main --workspace ${{inputs.workspace}} "
+            "--set ${{inputs.repo_set}}"
+        ),
+        inputs={
+            "workspace": Input(type=AssetTypes.URI_FOLDER),
+            "repo_set": Input(type="string", default="all"),
+        },
+    )
+
+
+def _pr_select_component():
+    return _component(
+        "pr_select",
+        "Select PRs",
+        (
+            "export PYTHONPATH=.:$PYTHONPATH && "
+            "recon-lab pr-select --workspace ${{inputs.workspace}} "
+            "--set ${{inputs.repo_set}}"
+        ),
+        inputs={
+            "workspace": Input(type=AssetTypes.URI_FOLDER),
+            "repo_set": Input(type="string", default="all"),
+        },
+    )
+
+
+def _pr_checkout_component():
+    return _component(
+        "pr_checkout",
+        "Checkout PR Worktrees",
+        (
+            "export PYTHONPATH=.:$PYTHONPATH && "
+            "recon-lab pr-checkout --workspace ${{inputs.workspace}} "
+            "--set ${{inputs.repo_set}}"
+        ),
+        inputs={
+            "workspace": Input(type=AssetTypes.URI_FOLDER),
+            "repo_set": Input(type="string", default="all"),
+        },
+    )
+
+
+def _index_worktrees_component():
+    return _component(
+        "index_worktrees",
+        "Index Worktrees",
+        (
+            "export PYTHONPATH=.:$PYTHONPATH && "
+            "recon-lab index-worktrees --workspace ${{inputs.workspace}} "
+            "--set ${{inputs.repo_set}}"
+        ),
+        inputs={
+            "workspace": Input(type=AssetTypes.URI_FOLDER),
+            "repo_set": Input(type="string", default="all"),
+        },
+    )
+
+
+def _pr_import_component():
+    return _component(
+        "pr_import",
+        "PR Import (GT + Queries)",
+        (
+            "export PYTHONPATH=.:$PYTHONPATH && "
+            "recon-lab pr-import --workspace ${{inputs.workspace}} "
             "--set ${{inputs.repo_set}} --workers ${{inputs.workers}}"
         ),
         inputs={
             "workspace": Input(type=AssetTypes.URI_FOLDER),
             "repo_set": Input(type="string", default="all"),
-            "workers": Input(type="integer", default=10),
+            "workers": Input(type="integer", default=8),
+        },
+    )
+
+
+def _non_ok_queries_component():
+    return _component(
+        "non_ok_queries",
+        "Non-OK Queries",
+        (
+            "export PYTHONPATH=.:$PYTHONPATH && "
+            "recon-lab non-ok-queries --workspace ${{inputs.workspace}} "
+            "--set ${{inputs.repo_set}}"
+        ),
+        inputs={
+            "workspace": Input(type=AssetTypes.URI_FOLDER),
+            "repo_set": Input(type="string", default="all"),
         },
     )
 
@@ -128,22 +211,6 @@ def _index_component():
             "workspace": Input(type=AssetTypes.URI_FOLDER),
             "repo_set": Input(type="string", default="all"),
             "timeout": Input(type="integer", default=1800),
-        },
-    )
-
-
-def _resolve_component():
-    return _component(
-        "swebench_resolve",
-        "SWE-bench Resolve",
-        (
-            "export PYTHONPATH=.:$PYTHONPATH && "
-            "recon-lab swebench-resolve --workspace ${{inputs.workspace}} "
-            "--set ${{inputs.repo_set}}"
-        ),
-        inputs={
-            "workspace": Input(type=AssetTypes.URI_FOLDER),
-            "repo_set": Input(type="string", default="all"),
         },
     )
 
@@ -185,10 +252,8 @@ def _train_component():
         "Train Models",
         (
             "export PYTHONPATH=.:$PYTHONPATH && "
-            "python -m cpl_lab.train_all "
-            "--data-dir ${{inputs.workspace}}/data "
-            "--output-dir ${{outputs.models}} "
-            "--skip-merge"
+            "recon-lab train --workspace ${{inputs.workspace}} "
+            "--output-dir ${{outputs.models}} --skip-merge"
         ),
         inputs={
             "workspace": Input(type=AssetTypes.URI_FOLDER),
@@ -226,7 +291,8 @@ def _eval_component():
     name="recon-lab-pipeline",
     description=(
         "Full Recon Lab training pipeline: "
-        "clone → import ∥ index → resolve → collect → merge → train → eval"
+        "clone → index-main + pr-select → pr-checkout → index-worktrees → "
+        "pr-import → non-ok-queries → collect → merge → train → eval"
     ),
 )
 def recon_lab_pipeline(
@@ -241,31 +307,43 @@ def recon_lab_pipeline(
     # Phase 0: Clone repos
     clone = _clone_component()(workspace=workspace, repo_set=repo_set)
 
-    # Phase 1 & 2 run in parallel after clone
-    swebench_import = _import_component()(workspace=workspace, repo_set=repo_set)
-    swebench_import.after(clone)
+    # Phase 1: Index main clones + select PRs (parallel after clone)
+    index_main = _index_main_component()(workspace=workspace, repo_set=repo_set)
+    index_main.after(clone)
 
-    index = _index_component()(workspace=workspace, repo_set=repo_set)
-    index.after(clone)
+    pr_select = _pr_select_component()(workspace=workspace, repo_set=repo_set)
+    pr_select.after(clone)
 
-    # Phase 3: Resolve (needs both import + index)
-    resolve = _resolve_component()(workspace=workspace, repo_set=repo_set)
-    resolve.after(swebench_import)
-    resolve.after(index)
+    # Phase 2: Checkout PR worktrees (needs pr_select)
+    pr_checkout = _pr_checkout_component()(workspace=workspace, repo_set=repo_set)
+    pr_checkout.after(pr_select)
 
-    # Phase 4: Collect signals
+    # Phase 3: Index worktrees (needs pr_checkout)
+    index_worktrees = _index_worktrees_component()(workspace=workspace, repo_set=repo_set)
+    index_worktrees.after(pr_checkout)
+
+    # Phase 4: PR import — GT + query generation (needs index_worktrees)
+    pr_import = _pr_import_component()(workspace=workspace, repo_set=repo_set)
+    pr_import.after(index_worktrees)
+
+    # Phase 5: Non-OK query generation (needs pr_import)
+    non_ok = _non_ok_queries_component()(workspace=workspace, repo_set=repo_set)
+    non_ok.after(pr_import)
+
+    # Phase 6: Collect signals (needs index_main + non_ok)
     collect = _collect_component()(workspace=workspace, repo_set=repo_set)
-    collect.after(resolve)
+    collect.after(index_main)
+    collect.after(non_ok)
 
-    # Phase 5: Merge
+    # Phase 7: Merge
     merge = _merge_component()(workspace=workspace)
     merge.after(collect)
 
-    # Phase 6: Train
+    # Phase 8: Train
     train = _train_component()(workspace=workspace)
     train.after(merge)
 
-    # Phase 7: Eval
+    # Phase 9: Eval
     evaluate = _eval_component()(workspace=workspace, models=train.outputs.models)
     evaluate.after(train)
 
@@ -365,7 +443,7 @@ def main(argv: list[str] | None = None) -> None:
     # Set compute targets
     pipeline_job.settings.default_compute = args.compute
     # Override heavy stages with beefier compute
-    for step_name in ("index", "collect"):
+    for step_name in ("index_main", "index_worktrees", "collect"):
         step = getattr(pipeline_job.jobs, step_name, None)
         if step is not None:
             step.compute = args.compute_heavy
@@ -387,6 +465,14 @@ def main(argv: list[str] | None = None) -> None:
             print(f"  {name:25s} → {compute}")
         print("\n[dry-run] Pipeline not submitted.")
         return
+
+    if not args.subscription:
+        print(
+            "Subscription ID is required. Set AML_SUBSCRIPTION_ID env var "
+            "or pass --subscription.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
 
     client = _get_client(args.subscription, args.resource_group, args.workspace)
     submitted = client.jobs.create_or_update(pipeline_job)

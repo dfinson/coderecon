@@ -6,17 +6,16 @@ from pathlib import Path
 
 import pytest
 
-from coderecon.catalog.db import CatalogDB
-from coderecon.catalog.registry import CatalogRegistry
-from coderecon.daemon.global_app import GlobalDaemon, _DynamicMcpRouter
-
+from coderecon.adapters.catalog.db import CatalogDB
+from coderecon.adapters.catalog.registry import CatalogRegistry
+from coderecon.daemon.global_app import GlobalDaemon
+from coderecon.daemon.global_routes import DynamicMcpRouter
 
 @pytest.fixture
 def daemon(tmp_path: Path) -> GlobalDaemon:
     catalog = CatalogDB(home=tmp_path / ".coderecon")
     registry = CatalogRegistry(catalog)
     return GlobalDaemon(registry)
-
 
 class TestGlobalDaemon:
     def test_initial_state(self, daemon: GlobalDaemon) -> None:
@@ -41,8 +40,7 @@ class TestGlobalDaemon:
 
     def test_build_app_includes_dynamic_mcp_router(self, daemon: GlobalDaemon) -> None:
         app = daemon.build_app()
-        assert any(isinstance(r, _DynamicMcpRouter) for r in app.routes)
-
+        assert any(isinstance(r, DynamicMcpRouter) for r in app.routes)
 
 class TestGlobalAppRoutes:
     """Test the Starlette routes without actually starting a server."""
@@ -51,7 +49,7 @@ class TestGlobalAppRoutes:
     def app(self, daemon: GlobalDaemon):
         return daemon.build_app()
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_health_endpoint(self, app) -> None:
         from starlette.testclient import TestClient
 
@@ -63,7 +61,7 @@ class TestGlobalAppRoutes:
         assert "active_repos" in data
         assert isinstance(data["active_repos"], list)
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_catalog_endpoint_empty(self, app) -> None:
         from starlette.testclient import TestClient
 
@@ -73,7 +71,7 @@ class TestGlobalAppRoutes:
         data = resp.json()
         assert data["repositories"] == []
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_repo_health_404_for_unknown_repo(self, app) -> None:
         from starlette.testclient import TestClient
 
@@ -81,7 +79,7 @@ class TestGlobalAppRoutes:
         resp = client.get("/repos/nonexistent/health")
         assert resp.status_code == 404
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_mcp_route_404_for_unknown_repo(self, app) -> None:
         from starlette.testclient import TestClient
 
@@ -89,7 +87,7 @@ class TestGlobalAppRoutes:
         resp = client.get("/repos/nonexistent/worktrees/main/mcp")
         assert resp.status_code == 404
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_catalog_register_rejects_invalid_path(self, app) -> None:
         from starlette.testclient import TestClient
 

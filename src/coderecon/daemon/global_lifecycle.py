@@ -11,32 +11,33 @@ from pathlib import Path
 import structlog
 import uvicorn
 
-from coderecon.catalog.db import CatalogDB, _default_coderecon_home
-from coderecon.catalog.registry import CatalogRegistry
+from coderecon.adapters.catalog.db import CatalogDB, _default_coderecon_home
+from coderecon.adapters.catalog.registry import CatalogRegistry
+from coderecon.config.user_config import DEFAULT_PORT
+from coderecon.daemon.lifecycle import PID_FILE, PORT_FILE
+from coderecon.adapters.files.ops import atomic_write_text
 
 log = structlog.get_logger(__name__)
 
-DEFAULT_PORT = 7654
-PID_FILE = "daemon.pid"
-PORT_FILE = "daemon.port"
+class _Server(uvicorn.Server):
+    """Uvicorn server that skips built-in signal handler installation."""
 
+    def install_signal_handlers(self) -> None:
+        return None
 
 def _coderecon_dir() -> Path:
     return _default_coderecon_home()
 
-
 def write_global_pid(home: Path, port: int) -> None:
     """Write PID and port files for global daemon discovery."""
-    (home / PID_FILE).write_text(str(os.getpid()))
-    (home / PORT_FILE).write_text(str(port))
-
+    atomic_write_text(home / PID_FILE, str(os.getpid()))
+    atomic_write_text(home / PORT_FILE, str(port))
 
 def remove_global_pid(home: Path) -> None:
     """Remove PID and port files on shutdown."""
     for name in (PID_FILE, PORT_FILE):
         with contextlib.suppress(FileNotFoundError):
             (home / name).unlink()
-
 
 def read_global_server_info(home: Path | None = None) -> tuple[int, int] | None:
     """Read global daemon PID and port. Returns (pid, port) or None."""
@@ -46,8 +47,8 @@ def read_global_server_info(home: Path | None = None) -> tuple[int, int] | None:
         port = int((home / PORT_FILE).read_text().strip())
         return (pid, port)
     except (FileNotFoundError, ValueError):
+        log.debug("global_server_info_read_failed", exc_info=True)
         return None
-
 
 def is_global_server_running(home: Path | None = None) -> bool:
     """Check if the global daemon is running."""
@@ -64,7 +65,6 @@ def is_global_server_running(home: Path | None = None) -> bool:
         remove_global_pid(home)
         return False
 
-
 def stop_global_daemon(home: Path | None = None) -> bool:
     """Stop the global daemon by sending SIGTERM. Returns True if stopped."""
     home = home or _coderecon_dir()
@@ -80,7 +80,6 @@ def stop_global_daemon(home: Path | None = None) -> bool:
     except (OSError, ProcessLookupError):
         remove_global_pid(home)
         return False
-
 
 async def run_global_server(
     *,
@@ -141,10 +140,6 @@ async def run_global_server(
         timeout_graceful_shutdown=2,
     )
 
-    class _Server(uvicorn.Server):
-        def install_signal_handlers(self) -> None:
-            pass  # handled externally
-
     server = _Server(uvicorn_config)
 
     # Write PID before registering signals so recon down can find us immediately
@@ -171,6 +166,42 @@ async def run_global_server(
         # Hard timeout on cleanup so recon down never waits more than ~4s total
         try:
             await asyncio.wait_for(daemon.stop_all(), timeout=3.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             log.warning("daemon_stop_all_timeout")
         remove_global_pid(home)
+
+async def run_global_server_stdio(
+    *,
+    dev_mode: bool = False,
+) -> None:
+    """Run the global daemon in stdio mode (child process of SDK).
+
+    Reads NDJSON requests from stdin, writes responses + events to stdout.
+    No HTTP server, no PID file — the SDK owns the process lifecycle.
+    """
+    from coderecon.daemon.global_app import GlobalDaemon
+    from coderecon.daemon.stdio_transport import run_stdio_loop
+
+    home = _coderecon_dir()
+    home.mkdir(parents=True, exist_ok=True)
+
+    catalog = CatalogDB(home)
+    registry = CatalogRegistry(catalog)
+    daemon = GlobalDaemon(registry)
+
+    log.info("stdio_daemon_starting", repos=len(registry.list_repos()))
+
+    await daemon.queue_startup_scans()
+
+    from coderecon.config.loader import load_config as _load_cfg
+
+    _cfg = _load_cfg(Path.cwd())
+    daemon.start_eviction_loop(_cfg.server.worktree_idle_timeout_sec)
+
+    try:
+        await run_stdio_loop(daemon, registry)
+    finally:
+        try:
+            await asyncio.wait_for(daemon.stop_all(), timeout=3.0)
+        except TimeoutError:
+            log.warning("daemon_stop_all_timeout")

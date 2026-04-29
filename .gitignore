@@ -208,8 +208,8 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# Benchmark raw chatreplay exports (large)
-benchmarking/**/results/*_raw.json
+# CodeRecon runtime state and artifacts (regenerated on `recon init`)
+.recon/
 
 # Recon-lab pipeline — mutable data lives outside repo at $CPL_LAB_WORKSPACE
 recon-lab/clones/
@@ -220,7 +220,6 @@ recon-lab/infra/.terraform/
 recon-lab/infra/terraform.tfstate*
 recon-lab/infra/coderecon_wheel/
 recon-lab/infra/.terraform.lock.hcl
-.tower-worktrees/
 output/
 recon-lab/src/cpl_lab/eval/output/
 
@@ -235,3 +234,4 @@ infra/tfplan
 # Model package build artifacts (wheels built from model-packages/)
 model-packages/*/dist/
 model-packages/*/models/
+.desloppify/

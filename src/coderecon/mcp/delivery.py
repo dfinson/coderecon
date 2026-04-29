@@ -12,10 +12,7 @@ from typing import Any
 
 from coderecon.config.constants import INLINE_CAP_BYTES
 
-
-def set_server_port(port: int) -> None:
-    """No-op — retained for backward compatibility with startup code."""
-
+_STRUCTURE_TRUNCATION_CHARS = 2000  # keep structure section readable in MCP responses
 
 def wrap_response(
     data: dict[str, Any],
@@ -43,7 +40,6 @@ def wrap_response(
     trimmed = _trim(data, resource_kind, max_bytes)
     return trimmed
 
-
 def _trim(data: dict[str, Any], kind: str, budget: int) -> dict[str, Any]:
     """Trim response to fit within budget."""
     if kind == "recon_result":
@@ -55,7 +51,6 @@ def _trim(data: dict[str, Any], kind: str, budget: int) -> dict[str, Any]:
     # Generic: drop largest key until it fits
     return _trim_generic(data, budget)
 
-
 def _trim_recon(data: dict[str, Any], budget: int) -> dict[str, Any]:
     """Trim recon results by removing snippets from bottom results first."""
     results = data.get("results", [])
@@ -64,17 +59,23 @@ def _trim_recon(data: dict[str, Any], budget: int) -> dict[str, Any]:
 
     # Progressive trimming: remove sig/snippet from bottom up
     trimmed = {**data, "results": list(results)}
+    current_size = len(json.dumps(trimmed, default=str))
+
     for i in range(len(trimmed["results"]) - 1, -1, -1):
-        if len(json.dumps(trimmed, default=str)) <= budget:
+        if current_size <= budget:
             break
-        r = {**trimmed["results"][i]}
-        r.pop("snippet", None)
-        r.pop("sig", None)
-        trimmed["results"][i] = r
+        r = trimmed["results"][i]
+        old_r_size = len(json.dumps(r, default=str))
+        r_stripped = {k: v for k, v in r.items() if k not in ("snippet", "sig")}
+        new_r_size = len(json.dumps(r_stripped, default=str))
+        trimmed["results"][i] = r_stripped
+        current_size += new_r_size - old_r_size
 
     # Still too big? Remove results from bottom
-    while len(json.dumps(trimmed, default=str)) > budget and trimmed["results"]:
-        trimmed["results"].pop()
+    while current_size > budget and trimmed["results"]:
+        removed = trimmed["results"].pop()
+        # Subtract element size + JSON comma/space overhead
+        current_size -= len(json.dumps(removed, default=str)) + 2
 
     if len(trimmed["results"]) < len(results):
         trimmed["hint"] = (
@@ -84,38 +85,38 @@ def _trim_recon(data: dict[str, Any], budget: int) -> dict[str, Any]:
 
     return trimmed
 
-
 def _trim_repo_map(data: dict[str, Any], budget: int) -> dict[str, Any]:
     """Trim repo map by truncating structure."""
     trimmed = dict(data)
     # Drop structure first (largest section)
     if "structure" in trimmed and len(json.dumps(trimmed, default=str)) > budget:
         struct = trimmed["structure"]
-        if isinstance(struct, str) and len(struct) > 2000:
-            trimmed["structure"] = struct[:2000] + "\n... (truncated)"
+        if isinstance(struct, str) and len(struct) > _STRUCTURE_TRUNCATION_CHARS:
+            trimmed["structure"] = struct[:_STRUCTURE_TRUNCATION_CHARS] + "\n... (truncated)"
     # Drop entry_points if still too big
     if len(json.dumps(trimmed, default=str)) > budget:
         trimmed.pop("entry_points", None)
     return trimmed
 
-
 def _trim_raw_signals(data: dict[str, Any], budget: int) -> dict[str, Any]:
     """Raw signals has no budget — always return full inline."""
     return data
 
-
 def _trim_generic(data: dict[str, Any], budget: int) -> dict[str, Any]:
     """Generic trimming: drop largest values until it fits."""
     trimmed = dict(data)
-    keys_by_size = sorted(
-        trimmed.keys(),
-        key=lambda k: len(json.dumps(trimmed[k], default=str)),
-        reverse=True,
-    )
+    # Pre-compute key sizes for sorting (one json.dumps per key)
+    key_sizes = {k: len(json.dumps(v, default=str)) for k, v in trimmed.items()}
+    keys_by_size = sorted(key_sizes, key=key_sizes.get, reverse=True)  # type: ignore[arg-type]
+
+    current_size = len(json.dumps(trimmed, default=str))
     for key in keys_by_size:
-        if len(json.dumps(trimmed, default=str)) <= budget:
+        if current_size <= budget:
             break
         if key in ("hint", "gate", "recon_id", "metrics"):
             continue  # don't drop critical keys
-        trimmed[key] = f"(trimmed — {key} too large for inline)"
+        replacement = f"(trimmed — {key} too large for inline)"
+        new_val_size = len(json.dumps(replacement, default=str))
+        current_size += new_val_size - key_sizes[key]
+        trimmed[key] = replacement
     return trimmed

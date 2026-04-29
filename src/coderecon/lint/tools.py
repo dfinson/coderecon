@@ -6,12 +6,8 @@ import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from coderecon.lint.models import ParseResult, ToolCategory
-
-if TYPE_CHECKING:
-    pass
 
 
 @dataclass
@@ -54,7 +50,6 @@ class LintTool:
             return ParseResult.ok([])
         return self._parser(stdout, stderr)
 
-
 def _check_config_exists(workspace_root: Path, config_spec: str) -> str | None:
     """Check if a config file exists and optionally contains required section.
 
@@ -93,7 +88,7 @@ def _check_config_exists(workspace_root: Path, config_spec: str) -> str | None:
                 # User may want to fix the invalid TOML
                 import structlog
 
-                structlog.get_logger().warning(
+                structlog.get_logger(__name__).warning(
                     "lint_config_parse_error",
                     file=str(file_path),
                     section=section_path,
@@ -110,7 +105,6 @@ def _check_config_exists(workspace_root: Path, config_spec: str) -> str | None:
         # Simple existence check
         file_path = workspace_root / config_spec
         return config_spec if file_path.exists() else None
-
 
 class ToolRegistry:
     """Registry of lint tools."""
@@ -162,7 +156,6 @@ class ToolRegistry:
     def clear(self) -> None:
         """Clear all registered tools."""
         self._tools.clear()
-
 
 # Global registry
 registry = ToolRegistry()

@@ -21,7 +21,6 @@ from coderecon.config.constants import (
     SEARCH_MAX_LIMIT,
 )
 
-
 class TestMCPToolMaximums:
     """Tests for MCP tool pagination maximums."""
 
@@ -49,7 +48,6 @@ class TestMCPToolMaximums:
         """Move lexical max is 200."""
         assert MOVE_LEXICAL_MAX == 200
 
-
 class TestInternalConstants:
     """Tests for internal implementation constants."""
 
@@ -61,7 +59,6 @@ class TestInternalConstants:
     def test_inspect_context_lines_default(self) -> None:
         """Inspect context lines default is 2."""
         assert INSPECT_CONTEXT_LINES_DEFAULT == 2
-
 
 class TestPortConstants:
     """Tests for port validation constants."""

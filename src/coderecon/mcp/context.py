@@ -12,15 +12,14 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from coderecon.daemon.concurrency import FreshnessGate, MutationRouter
-    from coderecon.files.ops import FileOps
-    from coderecon.git.ops import GitOps
+    from coderecon.adapters.files.ops import FileOps
+    from coderecon.adapters.git.ops import GitOps
     from coderecon.index.ops import IndexCoordinatorEngine
     from coderecon.lint.ops import LintOps
     from coderecon.mcp.session import SessionManager
-    from coderecon.mutation.ops import MutationOps
+    from coderecon.adapters.mutation.ops import MutationOps
     from coderecon.refactor.ops import RefactorOps
     from coderecon.testing.ops import TestOps
-
 
 @dataclass
 class AppContext:
@@ -58,12 +57,12 @@ class AppContext:
         Not for use inside the daemon — the daemon builds these per-worktree.
         """
         from coderecon.daemon.concurrency import FreshnessGate, MutationRouter
-        from coderecon.files.ops import FileOps
-        from coderecon.git.ops import GitOps
+        from coderecon.adapters.files.ops import FileOps
+        from coderecon.adapters.git.ops import GitOps
         from coderecon.index.ops import IndexCoordinatorEngine
         from coderecon.lint.ops import LintOps
         from coderecon.mcp.session import SessionManager
-        from coderecon.mutation.ops import MutationOps
+        from coderecon.adapters.mutation.ops import MutationOps
         from coderecon.refactor.ops import RefactorOps
         from coderecon.testing.ops import TestOps
 

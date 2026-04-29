@@ -5,13 +5,24 @@ The MCP tool handlers that were previously in this module (search, map_repo)
 have been removed in v2.
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    pass
+    from coderecon.index.diff.models import StructuralChange
+    from coderecon.tools.map_repo import MapRepoResult
 
+class _DirNode:
+    """Trie node for directory tree formatting."""
 
-def _change_to_text(c: Any, depth: int = 0) -> list[str]:
+    __slots__ = ("children", "files")
+
+    def __init__(self) -> None:
+        self.children: dict[str, _DirNode] = {}
+        self.files: list[str] = []
+
+def _change_to_text(c: StructuralChange, depth: int = 0) -> list[str]:
     """Convert a StructuralChange to compact text lines.
 
     Format: {change} {kind} {name}  {path}:{start}-{end}  Δ{lines}  risk:{risk}  refs:{N}  tests:{list}
@@ -52,7 +63,6 @@ def _change_to_text(c: Any, depth: int = 0) -> list[str]:
             result_lines.extend(_change_to_text(nc, depth + 1))
     return result_lines
 
-
 def _tree_to_text(
     nodes: list[Any], *, include_line_counts: bool = True, depth: int = 0
 ) -> list[str]:
@@ -81,7 +91,6 @@ def _tree_to_text(
                 lines.append(f"{indent}{name}")
     return lines
 
-
 def _tree_to_hybrid_text(
     all_paths: list[tuple[str, int | None]],
 ) -> list[str]:
@@ -108,14 +117,6 @@ def _tree_to_hybrid_text(
     Root-level files appear at indent level 0 at the end.
     """
 
-    # ---- build trie ----
-    class _DirNode:
-        __slots__ = ("children", "files")
-
-        def __init__(self) -> None:
-            self.children: dict[str, _DirNode] = {}
-            self.files: list[str] = []
-
     root = _DirNode()
     for path, lc in all_paths:
         parts = path.split("/")
@@ -131,7 +132,6 @@ def _tree_to_hybrid_text(
             fname = parts[-1]
             node.files.append(f"{fname}:{lc}" if lc else fname)
 
-    # ---- render ----
     def _render(node: _DirNode, indent: int) -> list[str]:
         result: list[str] = []
         for name in sorted(node.children):
@@ -159,9 +159,8 @@ def _tree_to_hybrid_text(
         lines.append(" | ".join(root.files))
     return lines
 
-
 def _map_repo_sections_to_text(
-    result: Any,
+    result: MapRepoResult,
 ) -> dict[str, Any]:
     """Convert map_repo result sections to hybrid text format.
 
@@ -224,8 +223,7 @@ def _map_repo_sections_to_text(
 
     return sections
 
-
-def _build_overview(result: Any) -> dict[str, Any]:
+def _build_overview(result: MapRepoResult) -> dict[str, Any]:
     """Build the always-fits overview block with counts."""
     overview: dict[str, Any] = {}
 

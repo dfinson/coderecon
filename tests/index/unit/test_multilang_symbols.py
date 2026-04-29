@@ -11,19 +11,16 @@ from pathlib import Path
 
 import pytest
 
-from coderecon.index._internal.parsing import TreeSitterParser
-
+from coderecon.index.parsing import TreeSitterParser
 
 @pytest.fixture
 def parser() -> TreeSitterParser:
     """Create a TreeSitterParser instance."""
     return TreeSitterParser()
 
-
 # ---------------------------------------------------------------------------
 # Java
 # ---------------------------------------------------------------------------
-
 
 class TestJavaSymbolExtraction:
     """Tests for Java symbol extraction."""
@@ -61,11 +58,9 @@ class TestJavaSymbolExtraction:
         method = next(s for s in symbols if s.name == "bar")
         assert method.parent_name == "Foo"
 
-
 # ---------------------------------------------------------------------------
 # C#
 # ---------------------------------------------------------------------------
-
 
 class TestCSharpSymbolExtraction:
     """Tests for C# symbol extraction."""
@@ -102,11 +97,9 @@ class TestCSharpSymbolExtraction:
         assert ("Name", "property") in nk
         assert ("Handler", "delegate") in nk
 
-
 # ---------------------------------------------------------------------------
 # Kotlin
 # ---------------------------------------------------------------------------
-
 
 class TestKotlinSymbolExtraction:
     """Tests for Kotlin symbol extraction."""
@@ -127,11 +120,9 @@ class TestKotlinSymbolExtraction:
         assert ("Singleton", "object") in nk
         assert ("RED", "enum_constant") in nk
 
-
 # ---------------------------------------------------------------------------
 # Scala
 # ---------------------------------------------------------------------------
-
 
 class TestScalaSymbolExtraction:
     """Tests for Scala symbol extraction."""
@@ -153,11 +144,9 @@ class TestScalaSymbolExtraction:
         assert ("Qux", "trait") in nk
         assert ("Singleton", "object") in nk
 
-
 # ---------------------------------------------------------------------------
 # PHP
 # ---------------------------------------------------------------------------
-
 
 class TestPHPSymbolExtraction:
     """Tests for PHP symbol extraction."""
@@ -180,11 +169,9 @@ class TestPHPSymbolExtraction:
         assert ("Color", "enum") in nk
         assert ("Red", "enum_case") in nk
 
-
 # ---------------------------------------------------------------------------
 # Ruby
 # ---------------------------------------------------------------------------
-
 
 class TestRubySymbolExtraction:
     """Tests for Ruby symbol extraction."""
@@ -205,11 +192,9 @@ class TestRubySymbolExtraction:
         nk = {(s.name, s.kind) for s in symbols}
         assert ("MyMod", "module") in nk
 
-
 # ---------------------------------------------------------------------------
 # C/C++
 # ---------------------------------------------------------------------------
-
 
 class TestCppSymbolExtraction:
     """Tests for C/C++ symbol extraction."""
@@ -246,11 +231,9 @@ class TestCppSymbolExtraction:
         nk = {(s.name, s.kind) for s in symbols}
         assert ("add", "function") in nk
 
-
 # ---------------------------------------------------------------------------
 # Swift
 # ---------------------------------------------------------------------------
-
 
 class TestSwiftSymbolExtraction:
     """Tests for Swift symbol extraction."""
@@ -280,11 +263,9 @@ class TestSwiftSymbolExtraction:
         assert ("red", "enum_case") in nk
         assert ("green", "enum_case") in nk
 
-
 # ---------------------------------------------------------------------------
 # Elixir
 # ---------------------------------------------------------------------------
-
 
 class TestElixirSymbolExtraction:
     """Tests for Elixir symbol extraction."""
@@ -307,11 +288,9 @@ class TestElixirSymbolExtraction:
         nk = {(s.name, s.kind) for s in symbols}
         assert ("my_macro", "macro") in nk
 
-
 # ---------------------------------------------------------------------------
 # Haskell
 # ---------------------------------------------------------------------------
-
 
 class TestHaskellSymbolExtraction:
     """Tests for Haskell symbol extraction."""
@@ -335,11 +314,9 @@ class TestHaskellSymbolExtraction:
         assert ("foo", "function") in nk
         assert ("foo", "signature") in nk
 
-
 # ---------------------------------------------------------------------------
 # OCaml
 # ---------------------------------------------------------------------------
-
 
 class TestOCamlSymbolExtraction:
     """Tests for OCaml symbol extraction."""
@@ -360,11 +337,9 @@ class TestOCamlSymbolExtraction:
         nk = {(s.name, s.kind) for s in symbols}
         assert ("color", "type") in nk
 
-
 # ---------------------------------------------------------------------------
 # Julia
 # ---------------------------------------------------------------------------
-
 
 class TestJuliaSymbolExtraction:
     """Tests for Julia symbol extraction."""
@@ -407,11 +382,9 @@ class TestJuliaSymbolExtraction:
         nk = {(s.name, s.kind) for s in symbols}
         assert ("Shape", "abstract_type") in nk
 
-
 # ---------------------------------------------------------------------------
 # Lua
 # ---------------------------------------------------------------------------
-
 
 class TestLuaSymbolExtraction:
     """Tests for Lua symbol extraction."""
@@ -426,11 +399,9 @@ class TestLuaSymbolExtraction:
         assert ("foo", "function") in nk
         assert ("bar", "function") in nk
 
-
 # ---------------------------------------------------------------------------
 # Cross-language: verify location info is present
 # ---------------------------------------------------------------------------
-
 
 class TestSymbolLocationInfo:
     """All extracted symbols must have valid location info."""

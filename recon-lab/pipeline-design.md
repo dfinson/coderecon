@@ -1,4 +1,7 @@
-# Training Pipeline Design
+---
+title: Training Pipeline Design
+description: End-to-end pipeline architecture for training CodeRecon ranking models
+---
 
 ## Data Inventory
 

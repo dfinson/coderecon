@@ -2,8 +2,7 @@
 
 from pathlib import Path
 
-from coderecon.index._internal.ignore import IgnoreChecker
-
+from coderecon.index.discovery.ignore import IgnoreChecker
 
 class TestIgnoreChecker:
     """Tests for IgnoreChecker."""
@@ -101,7 +100,6 @@ class TestIgnoreChecker:
         assert checker.should_ignore(tmp_path / "debug.log")
         # Comments/empty aren't patterns
         assert not checker.should_ignore(tmp_path / "# This is a comment")
-
 
 class TestHierarchicalCplignore:
     """Tests for hierarchical .reconignore support (files anywhere in repo)."""

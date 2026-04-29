@@ -8,11 +8,15 @@ from __future__ import annotations
 
 import json
 import re
-import xml.etree.ElementTree as ET
 from typing import Literal
+
+import defusedxml.ElementTree as ET
+import structlog
 
 # Re-export from models for backward compatibility
 from coderecon.testing.models import ParsedTestCase, ParsedTestSuite
+
+log = structlog.get_logger(__name__)
 
 __all__ = [
     "ParsedTestCase",
@@ -23,7 +27,6 @@ __all__ = [
     "parse_tap",
     "auto_parse",
 ]
-
 
 def parse_junit_xml(content: str) -> ParsedTestSuite:
     """Parse JUnit XML format (canonical format)."""
@@ -115,7 +118,6 @@ def parse_junit_xml(content: str) -> ParsedTestSuite:
         duration_seconds=total_duration,
     )
 
-
 def parse_pytest_json(content: str) -> ParsedTestSuite:
     """Parse pytest JSON output (pytest-json-report format)."""
     try:
@@ -191,7 +193,6 @@ def parse_pytest_json(content: str) -> ParsedTestSuite:
         duration_seconds=data.get("duration", sum(t.duration_seconds for t in tests)),
     )
 
-
 def parse_go_test_json(content: str) -> ParsedTestSuite:
     """Parse Go test JSON output (go test -json)."""
     tests: dict[str, ParsedTestCase] = {}
@@ -203,6 +204,7 @@ def parse_go_test_json(content: str) -> ParsedTestSuite:
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
+            log.debug("go_test_json_line_skip", exc_info=True)
             continue
 
         action = event.get("Action")
@@ -255,7 +257,6 @@ def parse_go_test_json(content: str) -> ParsedTestSuite:
         duration_seconds=total_duration,
     )
 
-
 def parse_tap(content: str) -> ParsedTestSuite:
     """Parse TAP (Test Anything Protocol) format."""
     tests: list[ParsedTestCase] = []
@@ -294,7 +295,6 @@ def parse_tap(content: str) -> ParsedTestSuite:
         duration_seconds=0,
     )
 
-
 def auto_parse(content: str, runner: str | None = None) -> ParsedTestSuite:  # noqa: ARG001
     """Auto-detect format and parse.
 
@@ -313,7 +313,7 @@ def auto_parse(content: str, runner: str | None = None) -> ParsedTestSuite:  # n
             if "tests" in data or "summary" in data:
                 return parse_pytest_json(content)
         except json.JSONDecodeError:
-            pass
+            log.debug("pytest_json_detect_failed", exc_info=True)
 
     # Go test JSON (NDJSON)
     if "\n{" in content or content.startswith('{"'):
@@ -331,7 +331,8 @@ def auto_parse(content: str, runner: str | None = None) -> ParsedTestSuite:  # n
             result = parser(content)
             if result.total > 0:
                 return result
-        except Exception:
+        except (OSError, ValueError, KeyError):
+            log.debug("parser_fallback_skip", parser=parser.__name__, exc_info=True)
             continue
 
     return ParsedTestSuite(

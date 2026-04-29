@@ -15,12 +15,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from coderecon.git._internal.hooks import HookResult
-
+from coderecon.adapters.git._internal.hooks import HookResult
 
 def _hook_ok() -> HookResult:
     return HookResult(success=True, exit_code=0, stdout="", stderr="", modified_files=[])
-
 
 def _lint_clean() -> MagicMock:
     return MagicMock(
@@ -33,7 +31,6 @@ def _lint_clean() -> MagicMock:
         agentic_hint=None,
     )
 
-
 def _lint_dirty() -> MagicMock:
     return MagicMock(
         action="check",
@@ -44,7 +41,6 @@ def _lint_dirty() -> MagicMock:
         tools_run=[],
         agentic_hint=None,
     )
-
 
 def _test_result_ok() -> MagicMock:
     from coderecon.testing.models import TestResult, TestRunStatus
@@ -62,19 +58,7 @@ def _test_result_ok() -> MagicMock:
         agentic_hint=None,
     )
 
-
 # ---- Fixtures ---------------------------------------------------------------
-
-
-@pytest.fixture
-def mock_ctx() -> MagicMock:
-    ctx = MagicMock()
-    ctx.session_id = "test-session"
-    ctx.report_progress = AsyncMock()
-    ctx.info = AsyncMock()
-    ctx.warning = AsyncMock()
-    return ctx
-
 
 @pytest.fixture
 def checkpoint_tool(mock_context: MagicMock) -> Any:
@@ -112,9 +96,7 @@ def checkpoint_tool(mock_context: MagicMock) -> Any:
 
     return _wrapper
 
-
 # ---- Tests -------------------------------------------------------------------
-
 
 class TestCheckpointCommitChain:
     """Checkpoint with commit_message chains commit on pass."""
@@ -143,8 +125,8 @@ class TestCheckpointCommitChain:
         fake_diff.files_analyzed = 1
 
         with (
-            patch("coderecon.mcp.tools.checkpoint._validate_paths_exist"),
-            patch("coderecon.mcp.tools.checkpoint._run_hook_with_retry") as mock_hook,
+            patch("coderecon.mcp.tools.checkpoint_pipeline._validate_paths_exist"),
+            patch("coderecon.mcp.tools.checkpoint_pipeline._run_hook_with_retry") as mock_hook,
             patch("coderecon.mcp.tools.diff._run_git_diff", return_value=fake_diff),
         ):
             mock_hook.return_value = (_hook_ok(), None)
@@ -221,9 +203,9 @@ class TestCheckpointCommitChain:
         mock_context.git_ops.repo.workdir = "/tmp/repo"
 
         with (
-            patch("coderecon.mcp.tools.checkpoint._validate_paths_exist"),
-            patch("coderecon.mcp.tools.checkpoint._run_hook_with_retry") as mock_hook,
-            patch("coderecon.mcp.tools.diff._run_git_diff", side_effect=Exception("no index")),
+            patch("coderecon.mcp.tools.checkpoint_pipeline._validate_paths_exist"),
+            patch("coderecon.mcp.tools.checkpoint_pipeline._run_hook_with_retry") as mock_hook,
+            patch("coderecon.mcp.tools.diff._run_git_diff", side_effect=ValueError("no index")),
         ):
             mock_hook.return_value = (_hook_ok(), None)
             result = await checkpoint_tool(
@@ -240,7 +222,6 @@ class TestCheckpointCommitChain:
         mock_context.git_ops.push.assert_called_once_with(remote="origin", force=False)
         # semantic_diff failed gracefully
         assert "diff" not in result["commit"]
-
 
 class TestCheckpointSemanticDiff:
     """Checkpoint with commit_message returns semantic_diff on success."""
@@ -269,8 +250,8 @@ class TestCheckpointSemanticDiff:
         fake_diff.files_analyzed = 2
 
         with (
-            patch("coderecon.mcp.tools.checkpoint._validate_paths_exist"),
-            patch("coderecon.mcp.tools.checkpoint._run_hook_with_retry") as mock_hook,
+            patch("coderecon.mcp.tools.checkpoint_pipeline._validate_paths_exist"),
+            patch("coderecon.mcp.tools.checkpoint_pipeline._run_hook_with_retry") as mock_hook,
             patch("coderecon.mcp.tools.diff._run_git_diff", return_value=fake_diff),
         ):
             mock_hook.return_value = (_hook_ok(), None)
@@ -301,8 +282,8 @@ class TestCheckpointSemanticDiff:
         mock_context.git_ops.repo.workdir = "/tmp/repo"
 
         with (
-            patch("coderecon.mcp.tools.checkpoint._validate_paths_exist"),
-            patch("coderecon.mcp.tools.checkpoint._run_hook_with_retry") as mock_hook,
+            patch("coderecon.mcp.tools.checkpoint_pipeline._validate_paths_exist"),
+            patch("coderecon.mcp.tools.checkpoint_pipeline._run_hook_with_retry") as mock_hook,
             patch("coderecon.mcp.tools.diff._run_git_diff", side_effect=RuntimeError("boom")),
         ):
             mock_hook.return_value = (_hook_ok(), None)
@@ -318,9 +299,7 @@ class TestCheckpointSemanticDiff:
         assert result["commit"]["oid"] == "ddd4444555566667777"
         assert "diff" not in result["commit"]
 
-
 # ---- _validate_paths_exist unit tests ----------------------------------------
-
 
 class TestValidatePathsExist:
     """Unit tests for _validate_paths_exist with git-aware deletion support."""
@@ -332,7 +311,7 @@ class TestValidatePathsExist:
         _validate_paths_exist(tmp_path, ["foo.py"])  # should not raise
 
     def test_missing_untracked_file_raises(self, tmp_path: Path) -> None:
-        from coderecon.git.errors import PathsNotFoundError
+        from coderecon.adapters.git.errors import PathsNotFoundError
         from coderecon.mcp.tools.checkpoint import _validate_paths_exist
 
         with pytest.raises(PathsNotFoundError):
@@ -347,7 +326,7 @@ class TestValidatePathsExist:
 
     def test_deleted_untracked_file_raises(self, tmp_path: Path) -> None:
         """A file that doesn't exist on disk AND isn't tracked is a typo."""
-        from coderecon.git.errors import PathsNotFoundError
+        from coderecon.adapters.git.errors import PathsNotFoundError
         from coderecon.mcp.tools.checkpoint import _validate_paths_exist
 
         tracked = {"other.py"}

@@ -4,7 +4,6 @@ from fastmcp import FastMCP
 
 from coderecon.mcp._compat import get_tools_sync
 
-
 class TestGetToolsSync:
     """Tests for get_tools_sync helper."""
 

@@ -1,11 +1,15 @@
-# recon-lab
+---
+title: recon-lab
+description: Training pipeline for CodeRecon LightGBM ranking models
+---
 
-Training pipeline for CodeRecon's recon models. Produces three LightGBM
+Training pipeline for CodeRecon's recon models. Produces four LightGBM
 models that ship as package data in `src/coderecon/ranking/data/`:
 
 | Model | File | Purpose |
 |-------|------|---------|
 | Ranker | `ranker.lgbm` | LambdaMART object scorer — P(touched \| query, object) |
+| File Ranker | `file_ranker.lgbm` | LambdaMART file-level scorer |
 | Cutoff | `cutoff.lgbm` | Regressor — predict how many top objects to return |
 | Gate | `gate.lgbm` | Multiclass classifier — OK / UNSAT / BROAD / AMBIG |
 
@@ -244,35 +248,36 @@ repos. Cutoff uses only OK queries from cutoff repos.
 
 ### 4.3 Data Collection Pipeline
 
-Ground truth is now imported from SWE-bench base-commit snapshots and
-then adapted into CodeRecon's retrieval schema.
+Ground truth is derived from merged PRs: diffs are parsed into changed hunks,
+mapped to indexed defs, and adapted into CodeRecon's retrieval schema via LLM.
 
-#### SWE-bench stages
+#### PR-based ground truth stages
 
-Each SWE-bench instance is handled as its own snapshot-backed data unit:
+Each merged PR is handled as its own snapshot-backed data unit:
 
 | # | Stage | What it does |
 |---|-------|-------------|
-| 1 | **Load** | Read SWE-bench rows from Hugging Face datasets |
-| 2 | **Assign** | Deterministically route instances into `ranker-gate`, `cutoff`, or `eval` |
-| 3 | **Snapshot** | Materialize a worktree at the instance `base_commit` |
-| 4 | **Index** | Run `cpl init` on that exact snapshot |
-| 5 | **Parse** | Convert `patch` + `test_patch` into changed files and hunks |
-| 6 | **Map** | Resolve changed hunks to indexed defs in `.recon/index.db` |
-| 7 | **Filter context** | Keep broader read-only defs via cheap LLM relevance checks |
-| 8 | **Adapt** | Use an LLM to write task complexity, OK queries, and non-OK queries |
-| 9 | **Emit** | Write one GT task plus manifest metadata under `data/{instance_id}/` |
+| 1 | **PR Select** | Fetch merged PRs from GitHub API, filter for GT suitability |
+| 2 | **Checkout** | Materialize a worktree at the PR `base_commit` |
+| 3 | **Index** | Run `recon init` on main clones and worktrees |
+| 4 | **Import** | Parse diffs, map hunks to indexed defs, generate OK queries via LLM |
+| 5 | **Non-OK** | Generate UNSAT/BROAD/AMBIG queries per repo via agentic pipeline |
+| 6 | **Collect** | Run each query through `raw_signals_pipeline`, record candidates |
+| 7 | **Merge** | Assemble per-repo data into training parquets |
 
 #### Invocation
 
-SWE-bench import is driven from the unified CLI:
+Ground truth generation is driven from the unified CLI:
 
 ```bash
-# Import the evaluation set
-recon-lab swebench --set eval
+# Select PRs for the evaluation set
+recon-lab pr-select --set eval
 
-# Import one repo's training instances
-recon-lab swebench --set ranker-gate --repo django/django --max-instances 25
+# Checkout worktrees at base commits
+recon-lab pr-checkout --set eval
+
+# Import GT + generate queries
+recon-lab pr-import --set ranker-gate --workers 8
 ```
 
 #### Ground truth JSON schema
@@ -285,10 +290,9 @@ Each imported instance produces one file: `data/{workspace_id}/ground_truth/{wor
   "task_complexity": "narrow",
   "task_text": "<problem_statement>",
   "diff": "<patch + test_patch>",
-  "solve_notes": "Fixes the Django migration edge case described in the SWE-bench instance.",
+  "solve_notes": "Fixes the Django migration edge case described in the PR.",
   "confidence": "high|medium|low",
-  "source": "swebench",
-  "source_dataset": "princeton-nlp/SWE-bench",
+  "source": "pr",
   "source_split": "dev",
   "source_instance_id": "django__django-15814",
   "source_repo": "django/django",
@@ -307,7 +311,7 @@ Each imported instance produces one file: `data/{workspace_id}/ground_truth/{wor
 ```
 
 Field details, query type rules, and validation constraints live in
-`src/cpl_lab/patch_ground_truth.py`, `src/cpl_lab/swebench_llm.py`, and `src/cpl_lab/validate_ground_truth.py`.
+`src/recon_lab/pipeline/pr_import.py` and `src/recon_lab/pipeline/non_ok_queries.py`.
 
 #### Data assembly
 
@@ -548,14 +552,17 @@ recon-lab/
 │   ├── ranker-gate/           #   30 repos — training set for ranker + gate
 │   ├── cutoff/                #   48 repos — training set for cutoff
 │   └── eval/                  #   20 repos — held-out evaluation set
-└── src/cpl_lab/               # Training code + unified CLI
+└── src/recon_lab/               # Training code + unified CLI
     ├── cli.py                 # Click CLI entry point (recon-lab)
     ├── config.py              # Configuration resolution
     ├── schema.py              # §5 dataset table schemas
     ├── clone.py               # Repo cloning
     ├── index.py               # Indexing (recon init on all clones)
-    ├── swebench.py            # SWE-bench ground truth import
-    ├── swebench_llm.py        # LLM adaptation for SWE-bench instances
+    ├── pipeline/
+    │   ├── pr_select.py       # PR selection from GitHub API
+    │   ├── pr_checkout.py     # Worktree creation at base commits
+    │   ├── pr_import.py       # GT extraction + LLM query generation
+    │   └── non_ok_queries.py  # UNSAT/BROAD/AMBIG query generation
     ├── patch_ground_truth.py  # Diff parsing, hunk-to-def mapping
     ├── collector.py           # Ground truth collection
     ├── collect.py             # Signal collection adapter (§4.3 Phase 4)
@@ -585,7 +592,7 @@ src/coderecon/ranking/          # Deployed models + inference
 └── data/                       # Serialized .lgbm model artifacts
 ```
 
-### Inspect AI evaluation (in src/cpl_lab/eval/)
+### Inspect AI evaluation (in src/recon_lab/eval/)
 
 ```
 eval/
@@ -639,9 +646,10 @@ recon-lab clone --set all
 # Index cloned repos
 recon-lab index
 
-# Import SWE-bench ground truth
-recon-lab swebench --set ranker-gate
-recon-lab swebench --set all --max-instances 100
+# Generate ground truth from PRs
+recon-lab pr-select --set ranker-gate
+recon-lab pr-checkout --set ranker-gate
+recon-lab pr-import --set ranker-gate
 
 # Collect retrieval signals (§4.3 Phase 4)
 recon-lab collect
@@ -701,7 +709,7 @@ Individual stages:
 
 1. **Clone** — `recon-lab clone --set all`
 2. **Index** — `recon-lab index --set all`
-3. **Ground truth** — `recon-lab swebench --set all` (SWE-bench import + LLM query adaptation)
+3. **Ground truth** — `recon-lab pr-select` → `pr-checkout` → `pr-import` → `non-ok-queries`
 4. **Signals** — `recon-lab collect` runs `raw_signals_pipeline()` per query
 5. **Merge** — `recon-lab merge` assembles training parquets
 6. **Train** — `recon-lab train --model all` runs gate → ranker → cutoff (§6)
@@ -719,11 +727,9 @@ just infra-apply  # Provision: rg-coderecon-lab + AI Services + gpt-4.1-mini
 just infra-output # Show endpoint URL for .env
 ```
 
-Alternatively, the pipeline works with GitHub Models (no infra needed) — see `.env.example`.
-
 ## 14. Archived Artifacts
 
-The original LLM-generated ground truth data (pre-SWE-bench pivot) was removed from
+The original LLM-generated ground truth data (pre-PR-pipeline) was removed from
 the working tree. It is recoverable from git history:
 
 ```bash
@@ -731,4 +737,4 @@ git show f4a0f30:recon-lab/gt-backup/ranking-data-backup-20260311-111812.zip > o
 ```
 
 This data was abandoned after verification showed only 13–46% of LLM-labeled defs
-matched real AST spans. The current pipeline uses SWE-bench patch-based labels instead.
+matched real AST spans. The current pipeline uses PR-patch-based labels instead.

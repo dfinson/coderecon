@@ -11,12 +11,11 @@ Covers:
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from coderecon.git._internal.hooks import HookResult
-
+from coderecon.adapters.git._internal.hooks import HookResult
 
 def _make_hook_result(
     *,
@@ -33,7 +32,6 @@ def _make_hook_result(
         stderr=stderr,
         modified_files=modified_files or [],
     )
-
 
 @pytest.fixture
 def checkpoint_commit_tool(
@@ -76,17 +74,6 @@ def checkpoint_commit_tool(
 
     return _wrapper
 
-
-@pytest.fixture
-def mock_ctx() -> MagicMock:
-    ctx = MagicMock()
-    ctx.session_id = "test-session"
-    ctx.report_progress = AsyncMock()
-    ctx.info = AsyncMock()
-    ctx.warning = AsyncMock()
-    return ctx
-
-
 class TestCheckpointCommitHookAutoRetry:
     """Tests for auto-restage and retry on pre-commit hook auto-fixes."""
 
@@ -99,7 +86,7 @@ class TestCheckpointCommitHookAutoRetry:
         mock_context.git_ops.repo.workdir = "/tmp/repo"
 
         with patch(
-            "coderecon.mcp.tools.checkpoint.run_hook",
+            "coderecon.mcp.tools.checkpoint_helpers.run_hook",
             return_value=_make_hook_result(success=True),
         ):
             result = await checkpoint_commit_tool(mock_ctx, message="test commit")
@@ -118,7 +105,7 @@ class TestCheckpointCommitHookAutoRetry:
         mock_context.git_ops.repo.workdir = "/tmp/repo"
 
         with patch(
-            "coderecon.mcp.tools.checkpoint.run_hook",
+            "coderecon.mcp.tools.checkpoint_helpers.run_hook",
             return_value=_make_hook_result(
                 success=False,
                 exit_code=1,
@@ -159,7 +146,7 @@ class TestCheckpointCommitHookAutoRetry:
                 )
             return _make_hook_result(success=True)
 
-        with patch("coderecon.mcp.tools.checkpoint.run_hook", side_effect=side_effect):
+        with patch("coderecon.mcp.tools.checkpoint_helpers.run_hook", side_effect=side_effect):
             result = await checkpoint_commit_tool(mock_ctx, message="test commit")
 
         # Commit succeeded
@@ -200,7 +187,7 @@ class TestCheckpointCommitHookAutoRetry:
                 stderr="mypy: error in types (still)\n",
             )
 
-        with patch("coderecon.mcp.tools.checkpoint.run_hook", side_effect=side_effect):
+        with patch("coderecon.mcp.tools.checkpoint_helpers.run_hook", side_effect=side_effect):
             result = await checkpoint_commit_tool(mock_ctx, message="test commit")
 
         assert result["passed"] is True
@@ -226,7 +213,7 @@ class TestCheckpointCommitHookAutoRetry:
         mock_context.git_ops.repo.workdir = "/tmp/repo"
 
         with patch(
-            "coderecon.mcp.tools.checkpoint.run_hook",
+            "coderecon.mcp.tools.checkpoint_helpers.run_hook",
             return_value=_make_hook_result(success=True),
         ):
             result = await checkpoint_commit_tool(mock_ctx, message="test")
@@ -250,7 +237,7 @@ class TestCheckpointCommitHookAutoRetry:
         self, checkpoint_commit_tool: Any, mock_ctx: MagicMock, mock_context: MagicMock
     ) -> None:
         """Whitespace-only strings are truthy but semantically empty — raises."""
-        from coderecon.git.errors import EmptyCommitMessageError
+        from coderecon.adapters.git.errors import EmptyCommitMessageError
 
         with pytest.raises(EmptyCommitMessageError):
             await checkpoint_commit_tool(mock_ctx, message="   ")

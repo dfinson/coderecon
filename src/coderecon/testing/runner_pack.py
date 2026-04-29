@@ -7,6 +7,7 @@ run, and parse tests for a specific language/framework combination.
 from __future__ import annotations
 
 import abc
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -15,11 +16,7 @@ if TYPE_CHECKING:
     from coderecon.testing.models import ParsedTestSuite, TargetKind, TestTarget
     from coderecon.testing.runtime import RuntimeExecutionContext
 
-
-# =============================================================================
 # Runner Pack Configuration
-# =============================================================================
-
 
 @dataclass
 class MarkerRule:
@@ -29,7 +26,6 @@ class MarkerRule:
     content_match: str | None = None  # Optional content to check
     confidence: Literal["high", "medium", "low"] = "medium"
 
-
 @dataclass
 class OutputStrategy:
     """How the runner produces machine-readable output."""
@@ -37,7 +33,6 @@ class OutputStrategy:
     format: Literal["junit_xml", "json", "ndjson", "tap", "coarse"]
     file_based: bool = True  # Output to file vs stdout
     file_pattern: str | None = None  # e.g., "junit.xml" or "*.xml"
-
 
 @dataclass
 class RunnerCapabilities:
@@ -49,11 +44,7 @@ class RunnerCapabilities:
     supports_parallel: bool = True
     supports_junit_output: bool = True
 
-
-# =============================================================================
 # Runner Pack Base Class
-# =============================================================================
-
 
 class RunnerPack(abc.ABC):
     """Base class for runner packs.
@@ -69,7 +60,7 @@ class RunnerPack(abc.ABC):
     pack_id: str  # e.g., "python.pytest", "js.jest"
     language: str
     runner_name: str
-    markers: list[MarkerRule]
+    markers: Sequence[MarkerRule]
     output_strategy: OutputStrategy
     capabilities: RunnerCapabilities
 
@@ -150,11 +141,7 @@ class RunnerPack(abc.ABC):
         """Get working directory for running tests."""
         return Path(target.workspace_root)
 
-
-# =============================================================================
 # Runner Pack Registry
-# =============================================================================
-
 
 class RunnerPackRegistry:
     """Registry of available runner packs."""
@@ -194,7 +181,6 @@ class RunnerPackRegistry:
             if confidence > 0:
                 results.append((pack_class, confidence))
         return sorted(results, key=lambda x: -x[1])
-
 
 # Global registry instance
 runner_registry = RunnerPackRegistry()

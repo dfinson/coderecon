@@ -7,7 +7,6 @@ import pytest
 
 from coderecon.testing.runner_pack import runner_registry
 
-
 class TestRunnerRegistry:
     """Tests for runner pack registry."""
 
@@ -32,7 +31,6 @@ class TestRunnerRegistry:
         js_packs = runner_registry.for_language("javascript")
         assert len(js_packs) >= 2  # jest, vitest
         assert all(p.language == "javascript" for p in js_packs)
-
 
 class TestPackDetection:
     """Tests for runner pack detection."""
@@ -92,7 +90,6 @@ class TestPackDetection:
 
             results = runner_registry.detect_all(root)
             assert len(results) == 0
-
 
 class TestPackDiscovery:
     """Tests for runner pack target discovery."""

@@ -26,7 +26,6 @@ from coderecon.lint.parsers import (
     parse_tsc,
 )
 
-
 class TestSeverityFromStr:
     """Tests for _severity_from_str helper."""
 
@@ -53,7 +52,6 @@ class TestSeverityFromStr:
         """Unknown strings default to HINT."""
         assert _severity_from_str("unknown") == Severity.HINT
         assert _severity_from_str("") == Severity.HINT
-
 
 class TestParseRuff:
     """Tests for parse_ruff."""
@@ -91,7 +89,6 @@ class TestParseRuff:
         result = parse_ruff("not json", "")
         assert result.diagnostics == []
 
-
 class TestParseMypy:
     """Tests for parse_mypy."""
 
@@ -125,7 +122,6 @@ class TestParseMypy:
         stdout = "\n".join(json.dumps(line) for line in lines)
         result = parse_mypy(stdout, "")
         assert len(result.diagnostics) == 2
-
 
 class TestParseEslint:
     """Tests for parse_eslint."""
@@ -168,7 +164,6 @@ class TestParseEslint:
         result = parse_eslint(json.dumps(data), "")
         assert result.diagnostics[0].severity == Severity.WARNING
 
-
 class TestParseTsc:
     """Tests for parse_tsc."""
 
@@ -194,7 +189,6 @@ class TestParseTsc:
         result = parse_tsc(stdout, "")
         assert result.diagnostics[0].severity == Severity.WARNING
 
-
 class TestParseBlackCheck:
     """Tests for parse_black_check."""
 
@@ -211,7 +205,6 @@ class TestParseBlackCheck:
         assert result.diagnostics[0].path == "src/app.py"
         assert result.diagnostics[0].source == "black"
 
-
 class TestParsePrettierCheck:
     """Tests for parse_prettier_check."""
 
@@ -226,7 +219,6 @@ class TestParsePrettierCheck:
         result = parse_prettier_check(stdout, "")
         assert len(result.diagnostics) == 2
         assert result.diagnostics[0].path == "src/app.js"
-
 
 class TestParseGoVet:
     """Tests for parse_go_vet."""
@@ -245,7 +237,6 @@ class TestParseGoVet:
         assert result.diagnostics[0].line == 10
         assert result.diagnostics[0].column == 5
         assert result.diagnostics[0].source == "go vet"
-
 
 class TestParseGofmt:
     """Tests for parse_gofmt."""

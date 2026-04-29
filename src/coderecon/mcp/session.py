@@ -18,7 +18,6 @@ from coderecon.config.models import TimeoutsConfig
 # No other tool may execute concurrently on the same session.
 EXCLUSIVE_TOOLS: frozenset[str] = frozenset({"checkpoint", "semantic_diff"})
 
-
 @dataclass
 class MutationContext:
     """Tracks in-flight semantic refactors (rename/move previews).
@@ -44,7 +43,6 @@ class MutationContext:
     def clear(self) -> None:
         """Reset all mutation state.  Called by checkpoint."""
         self.pending_refactors.clear()
-
 
 @dataclass
 class SessionState:
@@ -96,7 +94,6 @@ class SessionState:
     def exclusive_holder(self) -> str | None:
         """Name of the tool currently holding the exclusive lock, or None."""
         return self._exclusive_holder
-
 
 class SessionManager:
     """Manages active sessions."""

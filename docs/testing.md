@@ -1,4 +1,7 @@
-# Testing Subsystem
+---
+title: Testing Subsystem
+description: Unified test discovery, execution, and result parsing across languages
+---
 
 CodeRecon's testing subsystem provides unified test discovery, execution, and result parsing across multiple languages and frameworks.
 
@@ -29,6 +32,7 @@ The testing subsystem is built around **Runner Packs** - first-class plugins tha
 | C# | `csharp.dotnet` | project | JUnit XML | Via JunitXml.TestLogger |
 | C/C++ | `cpp.ctest` | project | Coarse | Limited output format |
 | Ruby | `ruby.rspec` | file | JUnit XML | Via RspecJunitFormatter |
+| Ruby | `ruby.minitest` | file | JUnit XML | Via minitest-junit gem |
 | PHP | `php.phpunit` | file | JUnit XML | Via `--log-junit` |
 
 ### Tier 2 (Standard Support)
@@ -43,6 +47,10 @@ The testing subsystem is built around **Runner Packs** - first-class plugins tha
 | Bash | `bash.bats` | file | JUnit XML | Via `--formatter junit` |
 | PowerShell | `powershell.pester` | file | JUnit XML | Via Pester config |
 | Lua | `lua.busted` | file | JUnit XML | Via `-o junit` |
+| Elixir | `elixir.mix_test` | file | JUnit XML | Via JUnitFormatter |
+| Haskell | `haskell.cabal_test` | project | Coarse | Limited output format |
+| Julia | `julia.pkg_test` | project | Coarse | Limited output format |
+| OCaml | `ocaml.dune_test` | project | Coarse | Limited output format |
 
 ## Target Kinds
 
@@ -68,6 +76,11 @@ build.gradle → java.gradle
 CMakeLists.txt[enable_testing] → cpp.ctest
 .rspec, spec/spec_helper.rb → ruby.rspec
 phpunit.xml → php.phpunit
+Rakefile[Rake::TestTask], test/test_helper.rb → ruby.minitest
+mix.exs → elixir.mix_test
+*.cabal → haskell.cabal_test
+Project.toml → julia.pkg_test
+dune-project → ocaml.dune_test
 ```
 
 ## Configuration Overrides

@@ -1,4 +1,7 @@
-﻿# CodeRecon — Unified System Specification
+﻿---
+title: CodeRecon — Unified System Specification
+description: Authoritative system specification covering all subsystems, protocols, and design decisions
+---
 
 ## Table of Contents
 
@@ -214,7 +217,7 @@ Server model:
 
 - **Foreground process** — `recon up` runs in foreground, Ctrl+C to stop. No background daemonization.
 - **Global multi-repo daemon** — one daemon process manages all registered repos. Repos are added/removed via `recon register` / `recon unregister` without a daemon restart.
-- Transport: **HTTP localhost** with configurable port (default 3100).
+- Transport: **HTTP localhost** with configurable port (default 7654).
   - Cross-platform with identical code (no socket vs named pipe divergence).
   - MCP clients can connect directly via HTTP/SSE transport (no stdio proxy needed).
 - Response header:
@@ -317,9 +320,9 @@ Config precedence:
 3. Global: `~/.config/coderecon/config.yaml`
 4. Built-in defaults
 
-Environment variables use `CODEPLANE__` prefix with double underscore delimiter for nesting:
-- `CODEPLANE__LOGGING__LEVEL=DEBUG`
-- `CODEPLANE__SERVER__PORT=8080`
+Environment variables use `CODERECON__` prefix with double underscore delimiter for nesting:
+- `CODERECON__LOGGING__LEVEL=DEBUG`
+- `CODERECON__SERVER__PORT=8080`
 
 No dedicated config CLI in v1. Edit files directly.
 
@@ -647,6 +650,19 @@ All queries MUST specify a limit. Unbounded queries are forbidden.
 - Indexing throughput: 5k–50k docs/sec
 - Query latency: <10ms warm cache for top-K
 - Incremental updates based on content hash diff
+
+#### SPLADE Sparse Retrieval
+
+SPLADE sparse vectors augment Tantivy's BM25 lexical search. Each definition
+is encoded into a ~100–200 active-dimension sparse vector over the BERT
+WordPiece vocabulary. Vectors are stored in SQLite (`splade_vecs` table) with
+a numpy binary cache (`.splade_vecs.npz`) for bulk operations. Query-time
+retrieval computes sparse dot products; results feed into the ranking pipeline
+as `splade_score` features alongside term-match, graph, and import signals.
+
+Storage in SQLite (not Tantivy) is a deliberate design choice validated by
+benchmarking: Tantivy-backed SPLADE retrieval showed no meaningful latency
+advantage on CPU-only workloads and added index management complexity.
 
 ### 7.3 Tier 1 — Structural Facts (SQLite)
 

@@ -8,7 +8,6 @@ and irrelevant candidates.
 """
 
 import json
-import sys
 import time
 from dataclasses import dataclass, field
 
@@ -244,7 +243,6 @@ def call_raw_signals(query: Query) -> dict:
 def is_gt_candidate(cand: dict, gt_task: dict) -> bool:
     """Check if a candidate matches ground truth (by name or path)."""
     name = cand.get("name", "")
-    path = cand.get("path", "")
     qname = cand.get("qualified_name", "")
 
     # Match by name
@@ -293,7 +291,7 @@ def analyze_signals(candidates: list[dict], gt_task: dict) -> dict:
         ("package_distance", False),
     ]
 
-    for sig_name, higher_better in signals:
+    for sig_name, _higher_better in signals:
         gt_vals = [c[sig_name] for c in gt_cands if c.get(sig_name) is not None]
         non_gt_vals = [c[sig_name] for c in non_gt_cands if c.get(sig_name) is not None]
 

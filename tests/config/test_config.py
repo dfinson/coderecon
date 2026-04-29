@@ -11,7 +11,6 @@ from coderecon.config import CodeReconConfig, load_config
 from coderecon.config.models import LoggingConfig
 from coderecon.config.user_config import UserConfig, write_user_config
 
-
 @pytest.fixture
 def temp_repo(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a temporary git repository."""
@@ -20,21 +19,19 @@ def temp_repo(tmp_path: Path) -> Generator[Path, None, None]:
     (repo / ".git").mkdir()  # Fake git dir
     yield repo
 
-
 @pytest.fixture(autouse=True)
 def clean_env() -> Generator[None, None, None]:
-    """Remove CODEPLANE__* env vars for clean tests."""
-    orig = {k: v for k, v in os.environ.items() if k.startswith("CODEPLANE__")}
+    """Remove CODERECON__* env vars for clean tests."""
+    orig = {k: v for k, v in os.environ.items() if k.startswith("CODERECON__")}
     for k in orig:
         del os.environ[k]
     yield
-    # Clean up any new CODEPLANE__* env vars set during the test
-    current_keys = [k for k in os.environ if k.startswith("CODEPLANE__")]
+    # Clean up any new CODERECON__* env vars set during the test
+    current_keys = [k for k in os.environ if k.startswith("CODERECON__")]
     for k in current_keys:
         del os.environ[k]
     # Restore original values
     os.environ.update(orig)
-
 
 class TestConfigModels:
     """Configuration model validation tests."""
@@ -78,7 +75,6 @@ class TestConfigModels:
             with pytest.raises(ValidationError):
                 CodeReconConfig(server=daemon_config)
 
-
 class TestConfigLoading:
     """Configuration loading and precedence tests."""
 
@@ -113,7 +109,7 @@ class TestConfigLoading:
         config_dir = temp_repo / ".recon"
         config_dir.mkdir()
         write_user_config(config_dir / "config.yaml", UserConfig(log_level="DEBUG"))
-        os.environ["CODEPLANE__LOGGING__LEVEL"] = "ERROR"
+        os.environ["CODERECON__LOGGING__LEVEL"] = "ERROR"
 
         # When
         config = load_config(repo_root=temp_repo)
@@ -124,7 +120,7 @@ class TestConfigLoading:
     def test_given_explicit_kwargs_when_load_then_highest_precedence(self, temp_repo: Path) -> None:
         """Explicit kwargs take highest precedence."""
         # Given
-        os.environ["CODEPLANE__LOGGING__LEVEL"] = "ERROR"
+        os.environ["CODERECON__LOGGING__LEVEL"] = "ERROR"
 
         # When
         config = load_config(repo_root=temp_repo, logging=LoggingConfig(level="WARNING"))
@@ -158,7 +154,6 @@ class TestConfigLoading:
 
         # Then - defaults used
         assert config.server.port == 7654
-
 
 class TestUserConfig:
     """Tests for the new simplified user config format."""

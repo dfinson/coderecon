@@ -6,8 +6,6 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from coderecon.cli.mcp_writers import (
     ALL_TOOLS,
     detect_tools,
@@ -20,14 +18,11 @@ from coderecon.cli.mcp_writers import (
     _write_opencode,
 )
 
-
 SERVER_NAME = "coderecon-testrepo"
-
 
 # =============================================================================
 # detect_tools
 # =============================================================================
-
 
 class TestDetectTools:
     def test_detects_vscode_via_dir(self, tmp_path: Path) -> None:
@@ -81,11 +76,9 @@ class TestDetectTools:
             tools = detect_tools(tmp_path)
         assert tools.count("vscode") == 1
 
-
 # =============================================================================
 # resolve_targets
 # =============================================================================
-
 
 class TestResolveTargets:
     def test_passthrough_concrete_targets(self, tmp_path: Path) -> None:
@@ -117,11 +110,9 @@ class TestResolveTargets:
         assert "claude" in result
         assert "vscode" in result
 
-
 # =============================================================================
 # _write_vscode
 # =============================================================================
-
 
 class TestWriteVscode:
     def test_creates_new_file(self, tmp_path: Path) -> None:
@@ -156,11 +147,9 @@ class TestWriteVscode:
         assert _write_vscode(tmp_path, 3100, SERVER_NAME) is False
         assert (vscode / "mcp.json").read_text() == "{broken"
 
-
 # =============================================================================
 # _write_claude
 # =============================================================================
-
 
 class TestWriteClaude:
     def test_creates_dot_mcp_json(self, tmp_path: Path) -> None:
@@ -191,11 +180,9 @@ class TestWriteClaude:
         (tmp_path / ".mcp.json").write_text("{bad json")
         assert _write_claude(tmp_path, 3100, SERVER_NAME) is False
 
-
 # =============================================================================
 # _write_cursor
 # =============================================================================
-
 
 class TestWriteCursor:
     def test_creates_cursor_mcp_json(self, tmp_path: Path) -> None:
@@ -224,11 +211,9 @@ class TestWriteCursor:
         assert "other" in data["mcpServers"]
         assert SERVER_NAME in data["mcpServers"]
 
-
 # =============================================================================
 # _write_opencode
 # =============================================================================
-
 
 class TestWriteOpencode:
     def test_creates_global_config(self, tmp_path: Path) -> None:
@@ -271,11 +256,9 @@ class TestWriteOpencode:
         assert "other-server" in data["mcp"]
         assert SERVER_NAME in data["mcp"]
 
-
 # =============================================================================
 # write_mcp_configs / sync_mcp_port
 # =============================================================================
-
 
 class TestWriteMcpConfigs:
     def test_writes_only_requested_tools(self, tmp_path: Path) -> None:

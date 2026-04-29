@@ -9,7 +9,6 @@ from coderecon.testing.models import (
     TestTarget,
 )
 
-
 class TestTestTarget:
     """Tests for TestTarget model."""
 
@@ -38,7 +37,6 @@ class TestTestTarget:
 
         assert target.runner == "gotest"
 
-
 class TestTestProgress:
     """Tests for progress tracking."""
 
@@ -54,7 +52,6 @@ class TestTestProgress:
         assert progress.passed == 40  # cases.passed
         assert progress.failed == 5  # cases.failed
         assert progress.skipped == 3  # cases.skipped
-
 
 class TestParsedTestRun:
     """Tests for aggregated test run results."""

@@ -28,7 +28,7 @@ _PATH_REGEX = re.compile(
 
 # Regex for symbol-like identifiers (PascalCase or snake_case, 3+ chars)
 _SYMBOL_REGEX = re.compile(
-    r"\b([A-Z][a-zA-Z0-9]{2,}(?:[A-Z][a-z]+)*"  # PascalCase
+    r"\b([A-Z][a-zA-Z0-9]{2,}"  # PascalCase
     r"|[a-z][a-z0-9]*(?:_[a-z0-9]+)+)"  # snake_case
     r"\b"
 )
@@ -90,7 +90,6 @@ _TEST_DRIVEN_TOKENS = frozenset(
     }
 )
 
-
 def _extract_negative_mentions(task: str) -> list[str]:
     """Extract terms that the user explicitly wants excluded.
 
@@ -105,7 +104,6 @@ def _extract_negative_mentions(task: str) -> list[str]:
             mentions.append(term)
     return mentions
 
-
 def _detect_stacktrace_driven(task: str) -> bool:
     """Detect if the task involves error/stacktrace investigation."""
     lower = task.lower()
@@ -118,14 +116,12 @@ def _detect_stacktrace_driven(task: str) -> bool:
     hits = words & _STACKTRACE_TOKENS
     return len(hits) >= 2  # Require 2+ indicators to avoid false positives
 
-
 def _detect_test_driven(task: str, intent: TaskIntent) -> bool:
     """Detect if the task is primarily about writing/fixing tests."""
     if intent == TaskIntent.test:
         return True
     lower = task.lower()
     return any(phrase in lower for phrase in _TEST_DRIVEN_TOKENS)
-
 
 def parse_task(task: str) -> ParsedTask:
     """Parse a free-text task description into structured fields.
@@ -141,14 +137,12 @@ def parse_task(task: str) -> ParsedTask:
 
     working = task
 
-    # --- Step 1: Extract quoted strings ---
     quoted: list[str] = []
     for match in re.finditer(r"['\"]([^'\"]+)['\"]", working):
         quoted.append(match.group(1))
     for q in quoted:
         working = working.replace(f'"{q}"', " ").replace(f"'{q}'", " ")
 
-    # --- Step 2: Extract file paths ---
     explicit_paths: list[str] = []
     path_seen: set[str] = set()
     for match in _PATH_REGEX.finditer(task):  # Use original task
@@ -157,7 +151,6 @@ def parse_task(task: str) -> ParsedTask:
             path_seen.add(p)
             explicit_paths.append(p)
 
-    # --- Step 3: Extract symbol-like identifiers ---
     explicit_symbols: list[str] = []
     symbol_seen: set[str] = set()
     for match in _SYMBOL_REGEX.finditer(task):
@@ -170,7 +163,6 @@ def parse_task(task: str) -> ParsedTask:
             symbol_seen.add(q)
             explicit_symbols.append(q)
 
-    # --- Step 4: Tokenize into terms ---
     primary_terms: list[str] = []
     secondary_terms: list[str] = []
     seen_terms: set[str] = set()
@@ -222,10 +214,8 @@ def parse_task(task: str) -> ParsedTask:
     keywords = primary_terms + secondary_terms
     intent = _extract_intent(task)
 
-    # --- Step 5: Extract negative mentions ---
     negative_mentions = _extract_negative_mentions(task)
 
-    # --- Step 6: Detect stacktrace-driven and test-driven ---
     is_stacktrace = _detect_stacktrace_driven(task)
     is_test = _detect_test_driven(task, intent)
 

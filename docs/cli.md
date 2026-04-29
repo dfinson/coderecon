@@ -1,4 +1,7 @@
-# CLI Reference
+---
+title: CLI Reference
+description: Operator interface commands for the recon CLI
+---
 
 The `recon` CLI is the operator interface. It is **not** agent-facing — agents interact via MCP tools.
 
@@ -16,7 +19,7 @@ recon up [OPTIONS]
 
 | Option | Default | Description |
 |---|---|---|
-| `--port, -p` | `3100` | Port to bind to |
+| `--port, -p` | `7654` | Port to bind to |
 | `--dev-mode` | off | Enable development endpoints |
 
 The daemon activates all repos already in the catalog on startup. Press `Ctrl+C` to stop.
@@ -204,7 +207,7 @@ recon init [PATH] [--reindex] [--port PORT] [--mcp-target TARGET]
 
 | Variable | Description |
 |---|---|
-| `CODEPLANE__SERVER__PORT` | Override default daemon port |
-| `CODEPLANE__LOGGING__LEVEL` | Override log level (`DEBUG`, `INFO`, `WARN`, `ERROR`) |
+| `CODERECON__SERVER__PORT` | Override default daemon port |
+| `CODERECON__LOGGING__LEVEL` | Override log level (`DEBUG`, `INFO`, `WARN`, `ERROR`) |
 
-Double-underscores separate nesting levels: `CODEPLANE__<SECTION>__<KEY>`.
+Double-underscores separate nesting levels: `CODERECON__<SECTION>__<KEY>`.

@@ -8,8 +8,7 @@ from pathlib import Path
 import pytest
 
 from coderecon.daemon.watcher import FileWatcher, _collect_watch_dirs
-from coderecon.index._internal.ignore import IgnoreChecker
-
+from coderecon.index.discovery.ignore import IgnoreChecker
 
 class TestWatchCount:
     """Tests for the watch_count property."""
@@ -20,7 +19,7 @@ class TestWatchCount:
         watcher = FileWatcher(repo_root=tmp_path, on_change=lambda paths: None)
         assert watcher.watch_count == 0
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_nonzero_after_start(self, tmp_path: Path) -> None:
         """watch_count reflects watched directories after start."""
         (tmp_path / ".recon").mkdir()
@@ -37,7 +36,7 @@ class TestWatchCount:
         finally:
             await watcher.stop()
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_zero_after_stop(self, tmp_path: Path) -> None:
         """After stop, _watched_dirs stays populated (not cleared), but that's OK."""
         (tmp_path / ".recon").mkdir()
@@ -46,7 +45,6 @@ class TestWatchCount:
         await watcher.stop()
         # Implementation note: _watched_dirs is not cleared on stop.
         # watch_count is informational, not a liveness check.
-
 
 class TestEstimateWatchCount:
     """Tests for the static estimate_watch_count method."""
@@ -85,7 +83,6 @@ class TestEstimateWatchCount:
         actual = len(_collect_watch_dirs(tmp_path, ignore_checker))
         estimated = FileWatcher.estimate_watch_count(tmp_path)
         assert estimated == actual
-
 
 class TestDegradedToPoll:
     """Tests for the _degraded_to_poll flag."""

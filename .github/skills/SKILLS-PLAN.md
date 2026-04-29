@@ -1,4 +1,7 @@
-# CodeRecon Skills Plan
+---
+title: CodeRecon Skills Plan
+description: Proposed agent skills packaging domain knowledge for each subsystem
+---
 
 ## Problem
 
@@ -166,7 +169,7 @@ debugs write failures.
 or debugs config precedence issues.
 
 **Wrong assumptions this prevents**:
-- "Env var prefix is CODERECON_" → Prefix is `CODEPLANE__` with double-underscore nesting
+- "Env var prefix is CODERECON_" → Prefix is `CODERECON__` with double-underscore nesting
 - "Typos in env vars raise errors" → Silently ignored; defaults used
 - "All config is user-facing" → UserConfig exposes only port, max_file_size_mb, log_level; most fields internal
 - "WSL needs manual config" → Cross-filesystem auto-detected; index moved to native Linux path transparently
@@ -297,17 +300,17 @@ model hyperparameters, or debugs data quality.
 
 **Wrong assumptions this prevents**:
 - "Training data is random split" → Hash-based deterministic split: `hash(run_id) % 5 == 4` → cutoff shard
-- "SWE-bench instances are all Python" → Python + Rust + Java
+- "Training repos are all Python" → Python + Rust + Java + C# + Go
 - "Train/eval overlap is harmless" → 500 Verified ⊂ test split; training on Verified = data leakage
 - "Import stage is expensive" → 108 dev instances have cached LLM queries; import skips them
 - "DVC caches everything" → `cache: false` on large outputs; `persist: true` on clones
-- "Pipeline stages run sequentially" → DVC DAG: some stages parallelize (e.g., swebench-import + index)
-- "Env vars use CODEPLANE__" → recon-lab uses `CPL_LAB_*` prefix
+- "Pipeline stages run sequentially" → DVC DAG: some stages parallelize (e.g., index-main + pr-select)
+- "Env vars use CODERECON__" → recon-lab uses `CPL_LAB_*` prefix (legacy, may be `RECON_LAB_*`)
 
 **Key references to bundle**:
 - `recon-lab/lab.toml` — Pipeline configuration
 - `recon-lab/dvc.yaml` — 8-stage DAG definition
-- `recon-lab/src/cpl_lab/schema.py` — Ground truth + signal tables
+- `recon-lab/src/recon_lab/schema.py` — Ground truth + signal tables
 - `recon-lab/pipeline-design.md` — Full pipeline architecture
 - `recon-lab/aml/` — Azure ML component definitions
 
@@ -375,7 +378,7 @@ model hyperparameters, or debugs data quality.
 | P0 | `indexing` | Core subsystem; language/tier confusion is the #1 reported issue |
 | P1 | `testing` | Runner pack assumptions ("only pytest") are the motivating example |
 | P1 | `refactoring` | Preview-before-apply pattern trips up every agent |
-| P1 | `config` | CODEPLANE__ prefix and silent env var failures cause subtle bugs |
+| P1 | `config` | CODERECON__ prefix and silent env var failures cause subtle bugs |
 | P2 | `daemon` | Less frequently modified; lock hierarchy matters for concurrency work |
 | P2 | `ranking` | Specialized ML knowledge; needed when touching scoring logic |
 | P2 | `linting` | Tool detection nuances matter when adding new tools |

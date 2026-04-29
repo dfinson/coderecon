@@ -7,29 +7,23 @@ See §2.3 of recon-lab/README.md.
 
 from __future__ import annotations
 
-import structlog
 from pathlib import Path
 from typing import Any
 
+import structlog
+
+from coderecon.ranking import _load_lgb_model
 from coderecon.ranking.models import GateLabel
 
 log = structlog.get_logger(__name__)
 
 _LABEL_MAP = {0: GateLabel.OK, 1: GateLabel.UNSAT, 2: GateLabel.BROAD, 3: GateLabel.AMBIG}
 
-
 class Gate:
     """LightGBM multiclass classifier for query gating."""
 
     def __init__(self, model_path: Path) -> None:
-        self._model = None
-        if model_path.exists():
-            import lightgbm as lgb
-
-            self._model = lgb.Booster(model_file=str(model_path))
-            log.info("ranking.gate.loaded", path=str(model_path))
-        else:
-            log.warning("ranking.gate.no_model", path=str(model_path))
+        self._model = _load_lgb_model(model_path, "gate")
 
     @property
     def is_available(self) -> bool:
@@ -47,7 +41,6 @@ class Gate:
         probs = self._model.predict(X)[0]
         class_idx = int(np.argmax(probs))
         return _LABEL_MAP.get(class_idx, GateLabel.OK)
-
 
 def load_gate(model_path: Path | None = None) -> Gate:
     """Load the gate model from package data or an explicit path."""

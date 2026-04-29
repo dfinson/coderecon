@@ -9,7 +9,6 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 REPO_HEADER = "X-CodeRecon-Repo"
 
-
 class RepoHeaderMiddleware:
     """Inject X-CodeRecon-Repo header into all responses.
 

@@ -23,7 +23,6 @@ from coderecon.mcp.tools import checkpoint as checkpoint_tools
 # Validation Helper Tests
 # =============================================================================
 
-
 class TestValidateCommitMessage:
     """Tests for _validate_commit_message helper."""
 
@@ -31,17 +30,16 @@ class TestValidateCommitMessage:
         checkpoint_tools._validate_commit_message("fix: resolve issue")
 
     def test_empty_string_raises(self) -> None:
-        from coderecon.git.errors import EmptyCommitMessageError
+        from coderecon.adapters.git.errors import EmptyCommitMessageError
 
         with pytest.raises(EmptyCommitMessageError):
             checkpoint_tools._validate_commit_message("")
 
     def test_whitespace_only_raises(self) -> None:
-        from coderecon.git.errors import EmptyCommitMessageError
+        from coderecon.adapters.git.errors import EmptyCommitMessageError
 
         with pytest.raises(EmptyCommitMessageError):
             checkpoint_tools._validate_commit_message("   \n\t  ")
-
 
 class TestValidatePathsExist:
     """Tests for _validate_paths_exist helper."""
@@ -54,16 +52,14 @@ class TestValidatePathsExist:
         checkpoint_tools._validate_paths_exist(tmp_path, ["a.py"])
 
     def test_missing_paths_raises(self, tmp_path: Path) -> None:
-        from coderecon.git.errors import PathsNotFoundError
+        from coderecon.adapters.git.errors import PathsNotFoundError
 
         with pytest.raises(PathsNotFoundError):
             checkpoint_tools._validate_paths_exist(tmp_path, ["nonexistent.py"])
 
-
 # =============================================================================
 # Hook Helper Tests
 # =============================================================================
-
 
 class TestRunHookWithRetry:
     """Tests for _run_hook_with_retry helper."""
@@ -75,7 +71,7 @@ class TestRunHookWithRetry:
         mock_result = MagicMock()
         mock_result.success = True
 
-        with patch("coderecon.mcp.tools.checkpoint.run_hook", return_value=mock_result):
+        with patch("coderecon.mcp.tools.checkpoint_helpers.run_hook", return_value=mock_result):
             hook_result, failure = checkpoint_tools._run_hook_with_retry(
                 tmp_path, ["a.py"], MagicMock()
             )
@@ -94,7 +90,7 @@ class TestRunHookWithRetry:
         mock_result.stdout = "error output"
         mock_result.stderr = ""
 
-        with patch("coderecon.mcp.tools.checkpoint.run_hook", return_value=mock_result):
+        with patch("coderecon.mcp.tools.checkpoint_helpers.run_hook", return_value=mock_result):
             _, failure = checkpoint_tools._run_hook_with_retry(tmp_path, ["a.py"], MagicMock())
 
         assert failure is not None
@@ -117,7 +113,7 @@ class TestRunHookWithRetry:
         stage_fn = MagicMock()
 
         with patch(
-            "coderecon.mcp.tools.checkpoint.run_hook",
+            "coderecon.mcp.tools.checkpoint_helpers.run_hook",
             side_effect=[first_result, retry_result],
         ):
             hook_result, failure = checkpoint_tools._run_hook_with_retry(
@@ -146,7 +142,7 @@ class TestRunHookWithRetry:
         retry_result.modified_files = []
 
         with patch(
-            "coderecon.mcp.tools.checkpoint.run_hook",
+            "coderecon.mcp.tools.checkpoint_helpers.run_hook",
             side_effect=[first_result, retry_result],
         ):
             _, failure = checkpoint_tools._run_hook_with_retry(tmp_path, ["a.py"], MagicMock())
@@ -155,11 +151,9 @@ class TestRunHookWithRetry:
         assert failure["hook_failure"]["code"] == "HOOK_FAILED_AFTER_RETRY"
         assert len(failure["hook_failure"]["attempts"]) == 2
 
-
 # =============================================================================
 # Summary Helper Tests
 # =============================================================================
-
 
 class TestSummarizeCommit:
     """Tests for _summarize_commit helper."""
@@ -189,11 +183,9 @@ class TestSummarizeCommit:
         assert "Second line" not in result
         assert "First line" in result
 
-
 # =============================================================================
 # Tool Registration Tests
 # =============================================================================
-
 
 @pytest.fixture
 def mock_app_ctx() -> MagicMock:
@@ -211,7 +203,6 @@ def mock_app_ctx() -> MagicMock:
     ctx.git_ops.repo.workdir = "/tmp/test-repo"
 
     return ctx
-
 
 class TestCheckpointTool:
     """Tests for the checkpoint tool registration."""

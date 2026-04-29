@@ -1,14 +1,18 @@
 """recon status command - show daemon status."""
 
+from __future__ import annotations
+
 import json
 from pathlib import Path
 
 import click
 import httpx
+import structlog
 
 from coderecon.cli.utils import find_repo_root
 from coderecon.daemon.global_lifecycle import is_global_server_running, read_global_server_info
 
+log = structlog.get_logger(__name__)
 
 @click.command()
 @click.argument("path", default=None, required=False, type=click.Path(exists=True, path_type=Path))
@@ -64,7 +68,6 @@ def status_command(path: Path | None, as_json: bool) -> None:
 
     # Try to find this repo's name in active repos
     active_repos = health_data.get("active_repos", [])
-    repo_name = repo_root.name
 
     # Try querying per-repo status
     status_data: dict = {}
@@ -73,7 +76,8 @@ def status_command(path: Path | None, as_json: bool) -> None:
             resp = httpx.get(f"http://127.0.0.1:{port}/repos/{name}/status", timeout=5.0)
             status_data = resp.json()
             break
-        except Exception:
+        except (ImportError, OSError, ValueError, KeyError):  # noqa: BLE001
+            log.debug("repo_status_query_failed", exc_info=True)
             continue
 
     if as_json:

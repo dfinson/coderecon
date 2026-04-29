@@ -8,8 +8,6 @@ Covers:
 
 from __future__ import annotations
 
-import pytest
-
 from coderecon.mcp.tools.recon.raw_signals import (
     _min_package_distance,
     _min_path_distance,
@@ -17,11 +15,9 @@ from coderecon.mcp.tools.recon.raw_signals import (
 )
 from coderecon.ranking.features import extract_cutoff_features, extract_ranker_features
 
-
 # ===================================================================
 # Locality helpers
 # ===================================================================
-
 
 class TestSharedPrefixDepth:
     def test_same_directory(self):
@@ -38,7 +34,6 @@ class TestSharedPrefixDepth:
 
     def test_empty(self):
         assert _shared_prefix_depth("", "a/b.py") == 0
-
 
 class TestMinPathDistance:
     def test_same_directory(self):
@@ -58,7 +53,6 @@ class TestMinPathDistance:
             ["tests/test_auth.py", "src/auth/utils.py"],
         )
         assert d == 0  # src/auth matches exactly
-
 
 class TestMinPackageDistance:
     def test_same_module(self):
@@ -88,11 +82,9 @@ class TestMinPackageDistance:
         assert same is False
         assert dist == 999
 
-
 # ===================================================================
 # Ranker features
 # ===================================================================
-
 
 class TestNewRankerFeatures:
     """Verify new signal features appear in extract_ranker_features output."""
@@ -184,11 +176,9 @@ class TestNewRankerFeatures:
         assert feats[0]["same_package"] is True
         assert feats[0]["package_distance"] == 0
 
-
 # ===================================================================
 # Cutoff features
 # ===================================================================
-
 
 class TestCutoffEntropy:
     """Verify cutoff now includes score_entropy and cumulative_mass_top10."""

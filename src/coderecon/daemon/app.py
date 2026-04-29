@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from coderecon.daemon.lifecycle import ServerController
     from coderecon.index.ops import IndexCoordinatorEngine
 
-
 def create_app(
     controller: ServerController,
     repo_root: Path,
@@ -27,20 +26,17 @@ def create_app(
     dev_mode: bool = False,
 ) -> Starlette:
     """Create the Starlette application with MCP server mounted."""
-    from coderecon.daemon.indexer import BackgroundIndexer
-    from coderecon.files.ops import FileOps
-    from coderecon.git.ops import GitOps
+    from coderecon.adapters.files.ops import FileOps
+    from coderecon.adapters.git.ops import GitOps
     from coderecon.lint.ops import LintOps
     from coderecon.mcp.context import AppContext
     from coderecon.mcp.server import create_mcp_server
     from coderecon.mcp.session import SessionManager
-    from coderecon.mutation.ops import MutationOps
+    from coderecon.adapters.mutation.ops import MutationOps
     from coderecon.refactor.ops import RefactorOps
     from coderecon.testing.ops import TestOps
 
     routes: list[BaseRoute] = list(create_routes(controller))
-
-    coderecon_dir = repo_root / ".recon"
 
     # Single-repo mode: one worktree named "main"
     gate = FreshnessGate()
@@ -83,20 +79,6 @@ def create_app(
         repo_root=repo_root,
     )
     controller.indexer.add_on_complete(pipeline.on_index_complete)
-
-    @asynccontextmanager
-    async def lifespan(_app: Starlette) -> AsyncIterator[None]:
-        yield
-        # Controller stop is handled in run_server finally block
-        # to ensure it runs even if lifespan exit times out
-
-    @asynccontextmanager
-    async def mcp_lifespan_with_timeout(app: Starlette) -> AsyncIterator[None]:
-        """Wrap MCP lifespan with timeout to prevent hanging on shutdown."""
-        async with mcp_app.lifespan(app):
-            yield
-        # MCP cleanup happens when exiting the context manager
-        # This is wrapped in timeout in combined_lifespan
 
     @asynccontextmanager
     async def combined_lifespan(app: Starlette) -> AsyncIterator[None]:

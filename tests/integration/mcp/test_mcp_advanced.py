@@ -9,27 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from coderecon.files.ops import FileOps
-from coderecon.git.ops import GitOps
-from coderecon.index.ops import IndexCoordinatorEngine
-from coderecon.mutation.ops import Edit, MutationOps
+from coderecon.adapters.files.ops import FileOps
+from coderecon.adapters.git.ops import GitOps
+from coderecon.adapters.mutation.ops import Edit, MutationOps
+from tests.integration.conftest import make_coordinator, noop_progress
 
 pytestmark = pytest.mark.integration
-
-
-def _make_coordinator(repo_path: Path) -> IndexCoordinatorEngine:
-    """Create an IndexCoordinatorEngine with proper paths."""
-    coderecon_dir = repo_path / ".recon"
-    coderecon_dir.mkdir(exist_ok=True)
-    db_path = coderecon_dir / "index.db"
-    tantivy_path = coderecon_dir / "tantivy"
-    return IndexCoordinatorEngine(repo_path, db_path, tantivy_path)
-
-
-def _noop_progress(indexed: int, total: int, by_ext: dict[str, int], phase: str = "") -> None:
-    """No-op progress callback."""
-    pass
-
 
 class TestSearchAfterMutation:
     """Tests that search reflects file mutations."""
@@ -38,15 +23,14 @@ class TestSearchAfterMutation:
     async def test_search_finds_existing_content(self, integration_repo: Path) -> None:
         """Search finds content in repository after initialization."""
         # Initialize index
-        index = _make_coordinator(integration_repo)
-        await index.initialize(_noop_progress)
+        index = make_coordinator(integration_repo)
+        await index.initialize(noop_progress)
 
         # Search should work on existing content
         result = await index.search("def", mode="lexical")
         # SearchResponse has .results attribute which is a list
         assert result is not None
         assert isinstance(result.results, list)
-
 
 class TestGitAfterMutation:
     """Tests git operations after file mutations."""
@@ -120,22 +104,20 @@ class TestGitAfterMutation:
         status = git_ops.status()
         assert "feature.py" not in str(status)
 
-
 class TestMapRepoAfterInit:
     """Tests map_repo after initialization."""
 
     @pytest.mark.asyncio
     async def test_map_repo_returns_structure(self, integration_repo: Path) -> None:
         """map_repo returns structure after init."""
-        index = _make_coordinator(integration_repo)
-        await index.initialize(_noop_progress)
+        index = make_coordinator(integration_repo)
+        await index.initialize(noop_progress)
 
         result = await index.map_repo()
 
         # MapRepoResult has structure which contains tree
         assert result is not None
         assert result.structure is not None
-
 
 class TestFileOpsWithGit:
     """Tests file operations with git tracking."""
@@ -162,7 +144,6 @@ class TestFileOpsWithGit:
 
         # Should return something (possibly error or marker)
         assert len(result.files) == 1
-
 
 class TestMultiFileOperations:
     """Tests involving multiple files."""

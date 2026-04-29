@@ -32,7 +32,6 @@ from coderecon.testing.coverage.report import (
 # _compress_ranges tests
 # =============================================================================
 
-
 class TestCompressRanges:
     """Tests for _compress_ranges helper."""
 
@@ -60,11 +59,9 @@ class TestCompressRanges:
     def test_long_gap(self) -> None:
         assert _compress_ranges([1, 2, 100, 101, 102]) == "1-2,100-102"
 
-
 # =============================================================================
 # _path_matches tests
 # =============================================================================
-
 
 class TestPathMatches:
     """Tests for _path_matches helper."""
@@ -83,11 +80,9 @@ class TestPathMatches:
         # Absolute path matching relative
         assert _path_matches("/workspace/repo/src/foo.py", {"src/foo.py"})
 
-
 # =============================================================================
 # FileCoverage model tests
 # =============================================================================
-
 
 class TestFileCoverage:
     """Tests for FileCoverage model properties."""
@@ -120,11 +115,9 @@ class TestFileCoverage:
         assert fc.line_rate == 0.0
         assert fc.uncovered_lines == [1, 2, 3]
 
-
 # =============================================================================
 # CoverageReport model tests
 # =============================================================================
-
 
 class TestCoverageReport:
     """Tests for CoverageReport model properties."""
@@ -152,11 +145,9 @@ class TestCoverageReport:
         assert summary.lines_hit == 2
         assert pytest.approx(summary.line_rate, 0.01) == 2 / 5
 
-
 # =============================================================================
 # merge tests
 # =============================================================================
-
 
 class TestMerge:
     """Tests for merge function."""
@@ -187,11 +178,9 @@ class TestMerge:
         assert merged.files["a.py"].lines == {1: 1}
         assert merged.files["b.py"].lines == {1: 2}
 
-
 # =============================================================================
 # build_compact_summary tests
 # =============================================================================
-
 
 class TestBuildCompactSummary:
     """Tests for build_compact_summary function."""
@@ -233,11 +222,9 @@ class TestBuildCompactSummary:
         assert "coverage: 100% (2/2 lines)" in result
         assert "a.py" not in result
 
-
 # =============================================================================
 # _compress_ranges_tolerant tests
 # =============================================================================
-
 
 class TestCompressRangesTolerant:
     """Tests for gap-tolerant range compression."""
@@ -271,11 +258,9 @@ class TestCompressRangesTolerant:
         result = _compress_ranges_tolerant(uncovered, instrumented)
         assert result == "1-6,9-10"
 
-
 # =============================================================================
 # build_tiered_coverage tests
 # =============================================================================
-
 
 class TestBuildTieredCoverage:
     """Tests for tiered coverage output."""
@@ -380,11 +365,9 @@ class TestBuildTieredCoverage:
         # 55% coverage (5/9), mid-tier, line 4 not instrumented so bridge
         assert "uncovered: 1-5" in result
 
-
 # =============================================================================
 # Parser tests - LCOV format
 # =============================================================================
-
 
 class TestLcovParser:
     """Tests for LCOV format parser."""
@@ -449,11 +432,9 @@ end_of_record
         assert fc.functions["my_function"].hits == 3
         assert fc.functions["my_function"].start_line == 5
 
-
 # =============================================================================
 # Parser tests - Cobertura format
 # =============================================================================
-
 
 class TestCoberturaParser:
     """Tests for Cobertura XML format parser."""
@@ -487,11 +468,9 @@ class TestCoberturaParser:
         fc = report.files["src/foo.py"]
         assert fc.lines == {1: 5, 2: 0, 3: 1}
 
-
 # =============================================================================
 # Error handling tests
 # =============================================================================
-
 
 class TestParserErrors:
     """Tests for parser error handling."""

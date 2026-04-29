@@ -8,13 +8,16 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from coderecon.core.languages import detect_language_family
+import structlog
+
+from coderecon._core.languages import detect_language_family
 from coderecon.lint.models import LintResult, ToolCategory, ToolResult
 from coderecon.lint.tools import LintTool, registry
 
+log = structlog.get_logger(__name__)
+
 if TYPE_CHECKING:
     from coderecon.index.ops import IndexCoordinatorEngine
-
 
 # Language name to tool language mapping
 _LANGUAGE_TO_TOOL_PREFIX: dict[str, str] = {
@@ -34,7 +37,6 @@ _LANGUAGE_TO_TOOL_PREFIX: dict[str, str] = {
 
 LINT_TIMEOUT_SECONDS: int = 30
 """Default timeout in seconds for lint subprocess execution."""
-
 
 def _generate_agentic_hint(languages: list[str]) -> str:
     """Generate agentic hint for unhandled case based on detected languages."""
@@ -62,7 +64,6 @@ def _generate_agentic_hint(languages: list[str]) -> str:
         )
 
     return "\n".join(hints)
-
 
 class LintOps:
     """Lint operations for a repository.
@@ -279,6 +280,7 @@ class LintOps:
                 return detected
         except (RuntimeError, AttributeError):
             # Coordinator not initialized or doesn't have get_lint_tools
+            structlog.get_logger().debug("coordinator_lint_tools_unavailable", exc_info=True)
             pass
 
         # Fallback: runtime detection
@@ -447,7 +449,7 @@ class LintOps:
                         break
             return count
         except RuntimeError:
-            # Coordinator not initialized - return 0 as fallback
+            log.debug("indexed_count_coordinator_unavailable", exc_info=True)
             return 0
 
     def _build_command(

@@ -1,5 +1,4 @@
 """Tests for file watcher infrastructure."""
-
 from __future__ import annotations
 
 import asyncio
@@ -9,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from coderecon.index._internal.watcher import (
+from coderecon.index._watcher import (
     BackgroundIndexer,
     FileChangeEvent,
     FileChangeKind,
@@ -19,10 +18,8 @@ from coderecon.index._internal.watcher import (
     WatcherQueue,
 )
 
-
 class TestWatcherConfig:
     """Tests for WatcherConfig."""
-
     def test_default_config(self, tmp_path: Path) -> None:
         """Default config has reasonable defaults."""
         config = WatcherConfig(root=tmp_path)
@@ -31,7 +28,6 @@ class TestWatcherConfig:
         assert config.debounce_seconds == 0.5
         assert config.max_queue_size == 10000
         assert len(config.ignore_patterns) > 0
-
     def test_custom_config(self, tmp_path: Path) -> None:
         """Custom config overrides defaults."""
         config = WatcherConfig(
@@ -44,11 +40,8 @@ class TestWatcherConfig:
         assert config.debounce_seconds == 1.0
         assert config.ignore_patterns == ["*.log"]
         assert config.max_queue_size == 100
-
-
 class TestFileChangeEvent:
     """Tests for FileChangeEvent."""
-
     def test_created_event(self) -> None:
         """Created event has correct kind."""
         event = FileChangeEvent(
@@ -59,7 +52,6 @@ class TestFileChangeEvent:
 
         assert event.kind == FileChangeKind.CREATED
         assert event.relative_path == "test.py"
-
     def test_modified_event(self) -> None:
         """Modified event has correct kind."""
         event = FileChangeEvent(
@@ -70,7 +62,6 @@ class TestFileChangeEvent:
 
         assert event.kind == FileChangeKind.MODIFIED
         assert event.relative_path == "src/main.py"
-
     def test_deleted_event(self) -> None:
         """Deleted event has correct kind."""
         event = FileChangeEvent(
@@ -80,18 +71,14 @@ class TestFileChangeEvent:
         )
 
         assert event.kind == FileChangeKind.DELETED
-
-
 class TestIgnoreChecker:
     """Tests for IgnoreChecker."""
-
     def test_empty_root(self, tmp_path: Path) -> None:
         """Checker works with empty root (no gitignore)."""
         checker = IgnoreChecker(tmp_path)
 
         # Nothing should be ignored without patterns
         assert not checker.should_ignore(tmp_path / "test.py")
-
     def test_reconignore_patterns(self, tmp_path: Path) -> None:
         """Checker loads patterns from .recon/.reconignore."""
         cpl_dir = tmp_path / ".recon"
@@ -104,7 +91,6 @@ class TestIgnoreChecker:
         assert checker.should_ignore(tmp_path / "test.pyc")
         assert checker.should_ignore(tmp_path / "__pycache__" / "module.pyc")
         assert not checker.should_ignore(tmp_path / "test.py")
-
     def test_reconignore_directory_patterns(self, tmp_path: Path) -> None:
         """Checker correctly handles directory patterns from .reconignore."""
         cpl_dir = tmp_path / ".recon"
@@ -117,7 +103,6 @@ class TestIgnoreChecker:
         # Patterns from .recon/.reconignore should be applied
         assert checker.should_ignore(tmp_path / "search.tantivy")
         assert checker.should_ignore(tmp_path / "build_output" / "file.txt")
-
     def test_extra_patterns(self, tmp_path: Path) -> None:
         """Extra patterns are applied."""
         checker = IgnoreChecker(tmp_path, extra_patterns=["*.log", "temp/**"])
@@ -125,7 +110,6 @@ class TestIgnoreChecker:
         assert checker.should_ignore(tmp_path / "debug.log")
         assert checker.should_ignore(tmp_path / "temp" / "file.txt")
         assert not checker.should_ignore(tmp_path / "main.py")
-
     def test_comment_lines_ignored(self, tmp_path: Path) -> None:
         """Comment lines in .reconignore are ignored."""
         cpl_dir = tmp_path / ".recon"
@@ -138,7 +122,6 @@ class TestIgnoreChecker:
         assert checker.should_ignore(tmp_path / "test.pyc")
         # "# This is a comment" should not be treated as a pattern
         assert not checker.should_ignore(tmp_path / "# This is a comment")
-
     def test_empty_lines_ignored(self, tmp_path: Path) -> None:
         """Empty lines in .reconignore are ignored."""
         cpl_dir = tmp_path / ".recon"
@@ -150,7 +133,6 @@ class TestIgnoreChecker:
 
         assert checker.should_ignore(tmp_path / "test.pyc")
         assert checker.should_ignore(tmp_path / "debug.log")
-
     def test_path_outside_root_ignored(self, tmp_path: Path) -> None:
         """Paths outside root are always ignored."""
         checker = IgnoreChecker(tmp_path)
@@ -158,11 +140,8 @@ class TestIgnoreChecker:
         # Path outside root
         outside_path = tmp_path.parent / "other_repo" / "file.py"
         assert checker.should_ignore(outside_path)
-
-
 class TestFileWatcher:
     """Tests for FileWatcher."""
-
     def test_initialization(self, tmp_path: Path) -> None:
         """Watcher initializes correctly."""
         config = WatcherConfig(root=tmp_path)
@@ -170,7 +149,6 @@ class TestFileWatcher:
 
         assert watcher.root == tmp_path
         assert not watcher.is_running
-
     def test_should_ignore(self, tmp_path: Path) -> None:
         """Watcher delegates to ignore checker."""
         config = WatcherConfig(root=tmp_path)
@@ -179,7 +157,6 @@ class TestFileWatcher:
         # Default patterns should ignore .git
         assert watcher.should_ignore(tmp_path / ".git" / "config")
         assert not watcher.should_ignore(tmp_path / "src" / "main.py")
-
     @pytest.mark.asyncio
     async def test_detects_created_file(self, tmp_path: Path) -> None:
         """Watcher detects newly created files."""
@@ -219,7 +196,6 @@ class TestFileWatcher:
         all_events = [e for batch in events_received for e in batch]
         created_paths = [e.path for e in all_events if e.kind == FileChangeKind.CREATED]
         assert any("new_file.py" in str(p) for p in created_paths)
-
     @pytest.mark.asyncio
     async def test_detects_modified_file(self, tmp_path: Path) -> None:
         """Watcher detects modified files."""
@@ -259,7 +235,6 @@ class TestFileWatcher:
         all_events = [e for batch in events_received for e in batch]
         modified_paths = [e.path for e in all_events if e.kind == FileChangeKind.MODIFIED]
         assert any("existing.py" in str(p) for p in modified_paths)
-
     @pytest.mark.asyncio
     async def test_detects_deleted_file(self, tmp_path: Path) -> None:
         """Watcher detects deleted files."""
@@ -299,7 +274,6 @@ class TestFileWatcher:
         all_events = [e for batch in events_received for e in batch]
         deleted_paths = [e.path for e in all_events if e.kind == FileChangeKind.DELETED]
         assert any("to_delete.py" in str(p) for p in deleted_paths)
-
     @pytest.mark.asyncio
     async def test_ignores_reconignored_files(self, tmp_path: Path) -> None:
         """Watcher ignores files matching .reconignore patterns."""
@@ -344,11 +318,8 @@ class TestFileWatcher:
         # main.py should be detected, debug.log should not
         assert any("main.py" in p for p in all_paths)
         assert not any("debug.log" in p for p in all_paths)
-
-
 class TestWatcherQueue:
     """Tests for WatcherQueue."""
-
     @pytest.mark.asyncio
     async def test_basic_put_get(self) -> None:
         """Queue supports basic put/get."""
@@ -361,7 +332,6 @@ class TestWatcherQueue:
         result = await queue.get()
         assert len(result) == 1
         assert result[0].path == Path("a.py")
-
     @pytest.mark.asyncio
     async def test_queue_full_drops_events(self) -> None:
         """Queue drops events when full."""
@@ -376,7 +346,6 @@ class TestWatcherQueue:
         # Queue is now full
         assert not await queue.put(events)
         assert queue.dropped_count == 1
-
     @pytest.mark.asyncio
     async def test_empty_check(self) -> None:
         """Queue correctly reports empty state."""
@@ -391,11 +360,8 @@ class TestWatcherQueue:
 
         await queue.get()
         assert queue.empty()
-
-
 class TestBackgroundIndexer:
     """Tests for BackgroundIndexer."""
-
     @pytest.mark.asyncio
     async def test_start_stop(self, tmp_path: Path) -> None:
         """Indexer starts and stops cleanly."""
@@ -414,7 +380,6 @@ class TestBackgroundIndexer:
 
         await indexer.stop()
         assert not indexer.is_running
-
     @pytest.mark.asyncio
     async def test_indexes_changed_files(self, tmp_path: Path) -> None:
         """Indexer calls callback for changed files."""
@@ -443,7 +408,6 @@ class TestBackgroundIndexer:
         # Should have indexed the new file
         all_paths = [p for batch in indexed_paths for p in batch]
         assert any("new_file.py" in str(p) for p in all_paths)
-
     @pytest.mark.asyncio
     async def test_callback_error_doesnt_crash(self, tmp_path: Path) -> None:
         """Indexer survives callback errors."""
@@ -470,7 +434,6 @@ class TestBackgroundIndexer:
         assert indexer.is_running
 
         await indexer.stop()
-
     @pytest.mark.asyncio
     async def test_double_start_noop(self, tmp_path: Path) -> None:
         """Starting twice is a no-op."""
@@ -487,7 +450,6 @@ class TestBackgroundIndexer:
         assert indexer.is_running
 
         await indexer.stop()
-
     @pytest.mark.asyncio
     async def test_double_stop_noop(self, tmp_path: Path) -> None:
         """Stopping twice is a no-op."""

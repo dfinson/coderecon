@@ -159,7 +159,7 @@ async def _process_repo(repo_root: Path) -> tuple[int, int, int]:
 
 async def main() -> None:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-    from cpl_lab.pipeline.clone import clone_dir_for
+    from recon_lab.pipeline.clone import clone_dir_for
 
     # Discover all repos with index.db
     repo_roots: list[Path] = []

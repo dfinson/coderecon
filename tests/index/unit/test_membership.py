@@ -10,13 +10,12 @@ Tests cover:
 
 from __future__ import annotations
 
-from coderecon.index._internal.discovery import (
+from coderecon.index.discovery import (
     MembershipResolver,
     MembershipResult,
     is_inside,
 )
 from coderecon.index.models import CandidateContext, LanguageFamily, ProbeStatus
-
 
 def make_candidate(
     family: LanguageFamily,
@@ -32,7 +31,6 @@ def make_candidate(
         markers=markers or [],
         probe_status=ProbeStatus.PENDING,
     )
-
 
 class TestIsInside:
     """Tests for is_inside containment helper."""
@@ -72,7 +70,6 @@ class TestIsInside:
     def test_empty_path_inside_root(self) -> None:
         """Empty path should be inside empty root."""
         assert is_inside("", "")
-
 
 class TestMembershipResolver:
     """Tests for MembershipResolver class."""
@@ -174,7 +171,6 @@ class TestMembershipResolver:
         if python_ctx.exclude_spec:
             # Should not exclude the JS path
             assert "backend/api" not in str(python_ctx.exclude_spec)
-
 
 class TestMembershipResult:
     """Tests for MembershipResult dataclass."""

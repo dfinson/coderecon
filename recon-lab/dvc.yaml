@@ -7,31 +7,45 @@
 #   dvc repro train
 #
 # Pipeline DAG (PR-based):
-#   clone ──→ pr-select ──→ pr-checkout ──→ pr-import ──→ non-ok-queries ──→ collect ──→ merge ──→ train ──→ eval
+#   clone ──→ index-main ──┐
+#             pr-select ──→ pr-checkout ──→ index-worktrees ──→ pr-import ──→ non-ok-queries ──→ collect ──→ merge ──→ train ──→ eval
 #
 # Pass 1 (clone): Full clone of all 96 repos at HEAD.
-# Pass 2 (pr-select): GitHub API → select PRs, compute diffs, write pr_instances.jsonl.
-# Pass 3 (pr-checkout): Create worktrees at PR base commits.
-#          The daemon handles indexing (main + worktrees) natively via register-worktree.
-# Pass 4 (pr-import): diff → GT defs + GPT-4.1-nano OK query generation.
-# Pass 5 (non-ok-queries): Copilot SDK agent → UNSAT/BROAD/AMBIG queries per repo.
-# Pass 6+ (collect → merge → train → eval).
+# Pass 2 (index-main): Register + index all main repos via SDK.
+# Pass 3 (pr-select): GitHub API → select PRs, compute diffs, write pr_instances.jsonl.
+# Pass 4 (pr-checkout): Create worktrees at PR base commits.
+# Pass 5 (index-worktrees): Register worktrees via SDK for incremental reindex.
+# Pass 6 (pr-import): diff → GT defs + GPT-4.1-nano OK query generation.
+# Pass 7 (non-ok-queries): Copilot SDK agent → UNSAT/BROAD/AMBIG queries per repo.
+# Pass 8+ (collect → merge → train → eval).
 
 stages:
   clone:
-    cmd: recon-lab clone --set all
+    cmd: recon-lab data clone --set all
     deps:
-      - src/cpl_lab/pipeline/clone.py
+      - src/recon_lab/pipeline/clone.py
     outs:
       - ${workspace}/clones:
           persist: true    # don't delete on repro
           cache: false     # too large to cache
 
-  pr-select:
-    cmd: recon-lab pr-select --set all
+  index-main:
+    cmd: recon-lab data index-main --set all
     deps:
-      - src/cpl_lab/pipeline/pr_select.py
-      - src/cpl_lab/pipeline/patch_ground_truth.py
+      - src/recon_lab/pipeline/pr_index.py
+      - ${workspace}/clones
+    params:
+      - lab.toml:
+          - index
+    outs:
+      - ${workspace}/data/index_main.stamp:
+          cache: false
+
+  pr-select:
+    cmd: recon-lab data pr-select --set all
+    deps:
+      - src/recon_lab/pipeline/pr_select.py
+      - src/recon_lab/pipeline/patch_ground_truth.py
       - ${workspace}/clones
     params:
       - lab.toml:
@@ -41,21 +55,31 @@ stages:
           cache: false
 
   pr-checkout:
-    cmd: recon-lab pr-checkout --set all
+    cmd: recon-lab data pr-checkout --set all
     deps:
-      - src/cpl_lab/pipeline/pr_checkout.py
+      - src/recon_lab/pipeline/pr_checkout.py
       - ${workspace}/data/pr_instances.jsonl
     outs:
       - ${workspace}/data/pr_checkout.stamp:
           cache: false
 
-  pr-import:
-    cmd: recon-lab pr-import --set all
+  index-worktrees:
+    cmd: recon-lab data index-worktrees --set all
     deps:
-      - src/cpl_lab/pipeline/pr_import.py
-      - src/cpl_lab/llm/llm_queries.py
-      - src/cpl_lab/pipeline/patch_ground_truth.py
+      - src/recon_lab/pipeline/pr_index.py
       - ${workspace}/data/pr_checkout.stamp
+      - ${workspace}/data/index_main.stamp
+    outs:
+      - ${workspace}/data/index_worktrees.stamp:
+          cache: false
+
+  pr-import:
+    cmd: recon-lab data pr-import --set all
+    deps:
+      - src/recon_lab/pipeline/pr_import.py
+      - src/recon_lab/llm/llm_queries.py
+      - src/recon_lab/pipeline/patch_ground_truth.py
+      - ${workspace}/data/index_worktrees.stamp
     params:
       - lab.toml:
           - pr_select
@@ -64,28 +88,28 @@ stages:
           cache: false
 
   non-ok-queries:
-    cmd: recon-lab non-ok-queries --set all && date -Iseconds > ${workspace}/data/non_ok_queries.stamp
+    cmd: recon-lab data non-ok-queries --set all && date -Iseconds > ${workspace}/data/non_ok_queries.stamp
     deps:
-      - src/cpl_lab/pipeline/non_ok_queries.py
+      - src/recon_lab/pipeline/non_ok_queries.py
       - ${workspace}/data/pr_import.stamp
     outs:
       - ${workspace}/data/non_ok_queries.stamp:
           cache: false
 
   collect:
-    cmd: recon-lab collect --set all && date -Iseconds > ${workspace}/data/signals.stamp
+    cmd: recon-lab pipeline collect --set all && date -Iseconds > ${workspace}/data/signals.stamp
     deps:
-      - src/cpl_lab/collect/collect_signals.py
+      - src/recon_lab/collect/collect_signals.py
       - ${workspace}/data/non_ok_queries.stamp
     outs:
       - ${workspace}/data/signals.stamp:
           cache: false
 
   merge:
-    cmd: recon-lab merge --what all
+    cmd: recon-lab pipeline merge --what all
     deps:
-      - src/cpl_lab/collect/merge_ground_truth.py
-      - src/cpl_lab/collect/merge_signals.py
+      - src/recon_lab/collect/merge_ground_truth.py
+      - src/recon_lab/collect/merge_signals.py
       - ${workspace}/data/signals.stamp
     outs:
       - ${workspace}/data/merged/runs.parquet
@@ -94,9 +118,9 @@ stages:
       - ${workspace}/data/merged/candidates_rank.parquet
 
   train:
-    cmd: recon-lab train --model all
+    cmd: recon-lab pipeline train --model all
     deps:
-      - src/cpl_lab/training/train_all.py
+      - src/recon_lab/training/train_all.py
       - ${workspace}/data/merged/candidates_rank.parquet
     outs:
       - ${workspace}/models/def_ranker.lgbm
@@ -105,12 +129,12 @@ stages:
       - ${workspace}/models/cutoff.lgbm
 
   micro-eval:
-    cmd: recon-lab micro-eval
+    cmd: recon-lab eval micro
     deps:
-      - src/cpl_lab/eval/models/offline_ranking.py
-      - src/cpl_lab/eval/metrics/ranking.py
-      - src/cpl_lab/eval/metrics/gate.py
-      - src/cpl_lab/eval/datasets/eval_gt.py
+      - src/recon_lab/eval/models/offline_ranking.py
+      - src/recon_lab/eval/metrics/ranking.py
+      - src/recon_lab/eval/metrics/gate.py
+      - src/recon_lab/eval/datasets/eval_gt.py
       - ${workspace}/data/merged/candidates_rank.parquet
       - ${workspace}/models/def_ranker.lgbm
       - ${workspace}/models/gate.lgbm
@@ -120,13 +144,13 @@ stages:
           cache: false
 
   eval:
-    cmd: recon-lab eval
+    cmd: recon-lab eval run
     deps:
-      - src/cpl_lab/eval/run.py
-      - src/cpl_lab/eval/models/ranking.py
-      - src/cpl_lab/eval/metrics/ranking.py
-      - src/cpl_lab/eval/metrics/gate.py
-      - src/cpl_lab/eval/datasets/eval_gt.py
+      - src/recon_lab/eval/run.py
+      - src/recon_lab/eval/models/ranking.py
+      - src/recon_lab/eval/metrics/ranking.py
+      - src/recon_lab/eval/metrics/gate.py
+      - src/recon_lab/eval/datasets/eval_gt.py
       - ${workspace}/models/def_ranker.lgbm
       - ${workspace}/models/file_ranker.lgbm
       - ${workspace}/models/gate.lgbm
@@ -139,11 +163,11 @@ stages:
           cache: false
 
   splade-bakeoff:
-    cmd: recon-lab splade-bakeoff
+    cmd: recon-lab experiment splade-bakeoff
     deps:
-      - src/cpl_lab/experiments/splade_bakeoff/run.py
-      - src/cpl_lab/experiments/splade_bakeoff/scaffold.py
-      - src/cpl_lab/experiments/splade_bakeoff/encoder.py
+      - src/recon_lab/experiments/splade_bakeoff/run.py
+      - src/recon_lab/experiments/splade_bakeoff/scaffold.py
+      - src/recon_lab/experiments/splade_bakeoff/encoder.py
       - ${workspace}/data/pr_import.stamp
     params:
       - lab.toml:

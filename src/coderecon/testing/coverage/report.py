@@ -13,26 +13,24 @@ Example:
       models.py: 5%
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Any
 
 from coderecon.testing.coverage.models import CoverageReport, FileCoverage
 
-# ---------------------------------------------------------------------------
 # Tier thresholds
-# ---------------------------------------------------------------------------
 _LOW_COVERAGE_THRESHOLD = 20  # files below this: percent only
 _FULL_COVERAGE_THRESHOLD = 100  # files at this: omitted
 
 # _compress_ranges_tolerant: bridge gaps up to this many non-instrumented lines
 _GAP_BRIDGE_LIMIT = 3  # bridge gaps up to this many non-instrumented lines
 
-
 def _normalize_path(path: str) -> str:
     """Normalize path for matching (strip leading ./ and trailing /)."""
     p = path.lstrip("./").rstrip("/")
     return p
-
 
 def _path_matches(file_path: str, filter_paths: set[str]) -> bool:
     """Check if file_path matches any path in filter_paths."""
@@ -46,7 +44,6 @@ def _path_matches(file_path: str, filter_paths: set[str]) -> bool:
         if fp_norm.endswith("/" + normalized) or fp_norm.endswith("\\" + normalized):
             return True
     return False
-
 
 def _compress_ranges(lines: list[int]) -> str:
     """Compress sorted line numbers into ranges: [1,2,3,5,7,8,9] -> '1-3,5,7-9'."""
@@ -66,7 +63,6 @@ def _compress_ranges(lines: list[int]) -> str:
 
     ranges.append(f"{start}-{end}" if end > start else str(start))
     return ",".join(ranges)
-
 
 def _compress_ranges_tolerant(
     uncovered: list[int],
@@ -111,11 +107,9 @@ def _compress_ranges_tolerant(
     ranges.append(f"{start}-{end}" if end > start else str(start))
     return ",".join(ranges)
 
-
 def _file_basename(path: str) -> str:
     """Extract filename from path."""
     return Path(path).name
-
 
 def build_compact_summary(
     report: CoverageReport,
@@ -171,7 +165,6 @@ def build_compact_summary(
     uncovered_text = " | ".join(uncovered_parts)
     return f"{header}\nuncovered: {uncovered_text}"
 
-
 def _file_coverage_detail(fc: FileCoverage) -> str:
     """Build per-file coverage detail string based on coverage tier.
 
@@ -204,7 +197,6 @@ def _file_coverage_detail(fc: FileCoverage) -> str:
         return f"  {filename}: {pct}% — uncovered: {ranges}"
 
     return f"  {filename}: {pct}%"
-
 
 def build_tiered_coverage(
     report: CoverageReport,
@@ -260,7 +252,6 @@ def build_tiered_coverage(
         return header
 
     return header + "\n" + "\n".join(file_lines)
-
 
 def build_coverage_detail(
     report: CoverageReport,
@@ -327,9 +318,7 @@ def build_coverage_detail(
     }
     return inline, detail
 
-
 # Legacy functions kept for backward compatibility
-
 
 def compute_file_stats(
     report: CoverageReport,
@@ -356,7 +345,6 @@ def compute_file_stats(
             }
         )
     return file_stats
-
 
 def build_summary(
     report: CoverageReport,

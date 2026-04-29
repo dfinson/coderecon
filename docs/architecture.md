@@ -1,4 +1,7 @@
-# Architecture
+---
+title: Architecture
+description: How CodeRecon works under the hood
+---
 
 How CodeRecon works under the hood.
 
@@ -13,7 +16,7 @@ CodeRecon is a **per-repository analysis daemon**. Each registered repository ru
 │           AI Agent (LLM)            │
 │   VS Code / Claude / Cursor / ...   │
 └──────────────┬──────────────────────┘
-               │ MCP (HTTP/SSE, port 3100)
+               │ MCP (HTTP/SSE, port 7654)
                ▼
 ┌─────────────────────────────────────┐
 │         CodeRecon Daemon            │

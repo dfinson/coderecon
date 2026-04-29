@@ -11,6 +11,8 @@ This ensures the merged result represents "covered in any run" rather than
 accidentally dropping coverage from parallel test shards.
 """
 
+from __future__ import annotations
+
 from collections.abc import Iterable
 
 from coderecon.testing.coverage.models import (
@@ -83,7 +85,6 @@ def merge_file_coverage(files: Iterable[FileCoverage]) -> FileCoverage:
 
     return result
 
-
 def merge_reports(reports: Iterable[CoverageReport]) -> CoverageReport:
     """Merge multiple CoverageReport objects.
 
@@ -127,7 +128,6 @@ def merge_reports(reports: Iterable[CoverageReport]) -> CoverageReport:
     source_format = source_formats.pop() if len(source_formats) == 1 else "merged"
 
     return CoverageReport(source_format=source_format, files=merged_files)
-
 
 def merge(*reports: CoverageReport) -> CoverageReport:
     """Convenience function to merge reports as varargs.

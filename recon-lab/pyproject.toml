@@ -29,7 +29,7 @@ dependencies = [
 ]
 
 [project.scripts]
-recon-lab = "cpl_lab.cli:main"
+recon-lab = "recon_lab.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -42,7 +42,7 @@ aml = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/cpl_lab"]
+packages = ["src/recon_lab"]
 
 [tool.uv.sources]
 coderecon = { path = "..", editable = true }
@@ -51,7 +51,7 @@ coderecon-models-splade = { path = "../model-packages/coderecon-models-splade" }
 coderecon-models-ce-tiny = { path = "../model-packages/coderecon-models-ce-tiny" }
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 99
 
 [tool.ruff.lint]

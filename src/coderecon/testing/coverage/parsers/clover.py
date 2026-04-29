@@ -27,9 +27,13 @@ Line types:
 - method: method declaration
 """
 
+from __future__ import annotations
+
 import contextlib
-import xml.etree.ElementTree as ET
 from pathlib import Path
+
+import defusedxml.ElementTree as ET
+import structlog
 
 from coderecon.testing.coverage.models import (
     BranchCoverage,
@@ -70,6 +74,7 @@ class CloverParser:
                 if '<project timestamp="' in header and '<line num="' in header:
                     return True
         except (OSError, UnicodeDecodeError):
+            structlog.get_logger().debug("clover content sniff failed", exc_info=True)
             pass
         return False
 

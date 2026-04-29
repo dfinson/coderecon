@@ -15,7 +15,6 @@ import pytest
 
 from coderecon.cli.utils import find_repo_root
 
-
 class TestFindRepoRoot:
     """Tests for find_repo_root function."""
 

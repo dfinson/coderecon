@@ -1,6 +1,10 @@
-# CodeRecon SDK Spec — Exported Intelligence Layer
+---
+title: CodeRecon SDK Spec — Exported Intelligence Layer
+description: SDK design for embedding CodeRecon as a Python library with stdio daemon communication
+ms.date: 2026-04-22
+---
 
-**Status**: Draft  
+**Status**: Draft
 **Date**: 2026-04-22
 
 ---

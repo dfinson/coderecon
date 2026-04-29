@@ -17,7 +17,6 @@ from coderecon.mcp.tools.files import (
     _summarize_read,
 )
 
-
 class TestSpanTarget:
     """Tests for SpanTarget model."""
 
@@ -52,7 +51,6 @@ class TestSpanTarget:
         """Extra fields are rejected."""
         with pytest.raises(ValidationError):
             SpanTarget(path="a.py", start_line=1, end_line=10, extra_field="bad")  # type: ignore[call-arg]
-
 
 class TestSummarizeRead:
     """Tests for _summarize_read helper."""
@@ -96,7 +94,6 @@ class TestSummarizeRead:
         result = _summarize_read(files, not_found=1)
         assert "2 files" in result
         assert "not found" in result
-
 
 class TestSummarizeList:
     """Tests for _summarize_list helper."""

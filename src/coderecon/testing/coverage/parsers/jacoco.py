@@ -26,8 +26,12 @@ Structure:
 </report>
 """
 
-import xml.etree.ElementTree as ET
+from __future__ import annotations
+
 from pathlib import Path
+
+import defusedxml.ElementTree as ET
+import structlog
 
 from coderecon.testing.coverage.models import (
     BranchCoverage,
@@ -66,6 +70,7 @@ class JacocoParser:
                 if "<report" in header and '<counter type="' in header:
                     return True
         except (OSError, UnicodeDecodeError):
+            structlog.get_logger().debug("jacoco content sniff failed", exc_info=True)
             pass
         return False
 

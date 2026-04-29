@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 
 from coderecon.mcp.context import AppContext
 
-
 class TestAppContext:
     """Tests for AppContext dataclass."""
 

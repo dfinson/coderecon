@@ -22,14 +22,12 @@ from pathlib import Path
 
 import pytest
 
-from coderecon.index._internal.parsing import TreeSitterParser
-
+from coderecon.index.parsing import TreeSitterParser
 
 @pytest.fixture
 def parser() -> TreeSitterParser:
     """Create a TreeSitterParser instance."""
     return TreeSitterParser()
-
 
 class TestGoImportExtraction:
     """Tests for Go import extraction."""
@@ -124,7 +122,6 @@ import _ "database/sql"
         assert imports[0].source_literal == "database/sql"
         assert imports[0].alias == "_"
 
-
 class TestRustImportExtraction:
     """Tests for Rust use declaration extraction."""
 
@@ -171,7 +168,6 @@ use std::collections::HashMap;
         # Look for an import with alias
         aliased = [i for i in imports if i.alias == "Map"]
         assert len(aliased) >= 1
-
 
 class TestJavaImportExtraction:
     """Tests for Java import extraction."""
@@ -226,7 +222,6 @@ import static java.util.Collections.emptyList;
         assert "PI" in names
         assert "emptyList" in names
 
-
 class TestKotlinImportExtraction:
     """Tests for Kotlin import extraction."""
 
@@ -244,7 +239,6 @@ import kotlin.collections.Map
         assert len(imports) >= 1
         # Kotlin syntax varies - just verify we get some imports
         assert all(i.import_kind == "kotlin_import" for i in imports)
-
 
 class TestRubyImportExtraction:
     """Tests for Ruby require extraction."""
@@ -279,7 +273,6 @@ require "yaml"
         assert imports[0].source_literal == "helper"
         assert imports[0].import_kind == "ruby_require_relative"
 
-
 class TestPHPImportExtraction:
     """Tests for PHP use extraction."""
 
@@ -298,7 +291,6 @@ use Illuminate\\Support\\Facades\\Log;
         # PHP parsing may vary - check basic extraction works
         assert len(imports) > 0, "Expected at least one import to be extracted"
         assert all(i.import_kind == "php_use" for i in imports)
-
 
 class TestSwiftImportExtraction:
     """Tests for Swift import extraction."""
@@ -321,7 +313,6 @@ import struct Foundation.URL
         # At least module names should be present
         assert "Foundation" in names or "URL" in names
 
-
 class TestScalaImportExtraction:
     """Tests for Scala import extraction."""
 
@@ -338,7 +329,6 @@ import java.util.Date
 
         assert len(imports) >= 1
         assert all(i.import_kind == "scala_import" for i in imports)
-
 
 class TestCIncludeExtraction:
     """Tests for C/C++ #include extraction."""
@@ -391,7 +381,6 @@ class TestCIncludeExtraction:
         assert "vector" in headers
         assert "mylibrary.hpp" in headers
 
-
 class TestLuaImportExtraction:
     """Tests for Lua require extraction."""
 
@@ -410,7 +399,6 @@ local utils = require("utils")
         assert all(i.import_kind == "lua_require" for i in imports)
         sources = [i.source_literal for i in imports]
         assert "json" in sources or "utils" in sources
-
 
 class TestImportKindEnumValues:
     """Verify all new ImportKind enum values are recognized."""

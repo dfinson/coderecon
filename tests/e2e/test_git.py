@@ -11,7 +11,6 @@ import pytest
 from .conftest import TOOL_TIMEOUTS
 from .expectations.schema import RepoExpectation
 
-
 @pytest.mark.e2e
 def test_git_status(
     coderecon_server: tuple[str, int],
@@ -37,7 +36,6 @@ def test_git_status(
     assert response.status_code == 200
     result = response.json()
     assert "result" in result, f"Expected result in response: {result}"
-
 
 @pytest.mark.e2e
 def test_git_log(

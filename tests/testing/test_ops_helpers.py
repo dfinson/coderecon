@@ -30,7 +30,6 @@ from coderecon.testing.ops import (
 )
 from coderecon.testing.runner_pack import RunnerPack
 
-
 class TestDetectPythonVenv:
     """Tests for detect_python_venv function."""
 
@@ -96,7 +95,6 @@ class TestDetectPythonVenv:
             result = detect_python_venv(Path(tmpdir))
             assert result is None
 
-
 class TestGetPythonExecutable:
     """Tests for get_python_executable function."""
 
@@ -129,7 +127,6 @@ class TestGetPythonExecutable:
 
             result = get_python_executable(Path(tmpdir))
             assert result == str(win_python)
-
 
 class TestDetectCoverageTools:
     """Tests for detect_coverage_tools function."""
@@ -221,7 +218,6 @@ class TestDetectCoverageTools:
             result = detect_coverage_tools(Path(tmpdir), "python.pytest")
             assert result.get("pytest-cov") is False
 
-
 class TestDetectNodePackageManager:
     """Tests for detect_node_package_manager function."""
 
@@ -260,7 +256,6 @@ class TestDetectNodePackageManager:
             result = detect_node_package_manager(Path(tmpdir))
             assert result == "pnpm"
 
-
 class TestDefaultParallelism:
     """Tests for _default_parallelism function."""
 
@@ -286,7 +281,6 @@ class TestDefaultParallelism:
         with patch("os.cpu_count", return_value=None):
             result = _default_parallelism()
             assert result == 8  # 4 * 2
-
 
 class TestIsPrunablePath:
     """Tests for _is_prunable_path function."""
@@ -322,7 +316,6 @@ class TestIsPrunablePath:
     def test_tests_not_prunable(self) -> None:
         """tests directory is not prunable."""
         assert _is_prunable_path(Path("tests/unit")) is False
-
 
 class TestDetectWorkspaces:
     """Tests for detect_workspaces function."""
@@ -407,7 +400,6 @@ class TestDetectWorkspaces:
                 assert key not in seen, f"Duplicate workspace: {key}"
                 seen.add(key)
 
-
 class TestDetectedWorkspace:
     """Tests for DetectedWorkspace dataclass."""
 
@@ -426,7 +418,6 @@ class TestDetectedWorkspace:
         assert ws.confidence == 0.95
         assert ws.pack.pack_id == "python.pytest"
 
-
 class TestClearCoverageToolsCache:
     """Tests for clear_coverage_tools_cache function."""
 
@@ -442,36 +433,35 @@ class TestClearCoverageToolsCache:
             # No exception means success
             assert True
 
-
 class TestOsScriptPath:
     """Tests for _os_script_path OS-aware path conversion."""
 
     def test_unix_unchanged(self) -> None:
         """Unix paths remain unchanged on Unix."""
-        with patch("coderecon.testing.ops.sys.platform", "linux"):
+        with patch("coderecon.testing.ops_workspaces.sys.platform", "linux"):
             assert _os_script_path("./gradlew") == "./gradlew"
             assert _os_script_path("./vendor/bin/phpunit") == "./vendor/bin/phpunit"
 
     def test_macos_unchanged(self) -> None:
         """Unix paths remain unchanged on macOS."""
-        with patch("coderecon.testing.ops.sys.platform", "darwin"):
+        with patch("coderecon.testing.ops_workspaces.sys.platform", "darwin"):
             assert _os_script_path("./gradlew") == "./gradlew"
 
     def test_windows_wrapper_script(self) -> None:
         """On Windows, wrapper script paths are converted."""
-        with patch("coderecon.testing.ops.sys.platform", "win32"):
+        with patch("coderecon.testing.ops_workspaces.sys.platform", "win32"):
             # ./gradlew -> gradlew (Windows finds .bat/.cmd automatically)
             assert _os_script_path("./gradlew") == "gradlew"
             assert _os_script_path("./mvnw") == "mvnw"
 
     def test_windows_subdir_path(self) -> None:
         """On Windows, subdir paths use backslashes."""
-        with patch("coderecon.testing.ops.sys.platform", "win32"):
+        with patch("coderecon.testing.ops_workspaces.sys.platform", "win32"):
             # ./vendor/bin/phpunit -> vendor\bin\phpunit
             assert _os_script_path("./vendor/bin/phpunit") == "vendor\\bin\\phpunit"
 
     def test_non_dotslash_unchanged(self) -> None:
         """Paths without ./ prefix remain unchanged."""
-        with patch("coderecon.testing.ops.sys.platform", "win32"):
+        with patch("coderecon.testing.ops_workspaces.sys.platform", "win32"):
             assert _os_script_path("phpunit") == "phpunit"
             assert _os_script_path("mvn") == "mvn"
