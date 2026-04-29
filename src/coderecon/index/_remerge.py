@@ -195,8 +195,8 @@ def drop_worktree_data(engine: Engine, worktree_id: int) -> int:
     """Remove all data for a deleted worktree.
 
     Relies on FK CASCADE from files → all file_id-based fact tables.
-    UID-based tables (semantic_neighbor_facts, test_coverage_facts) are
-    swept separately since they lack file_id FKs.
+    UID-based tables (test_coverage_facts) are swept separately since
+    they lack file_id FKs.
 
     Returns number of files removed.
     """
@@ -228,10 +228,6 @@ def drop_worktree_data(engine: Engine, worktree_id: int) -> int:
         )
 
         # Sweep UID-based tables that lack FK constraints
-        conn.execute(text(
-            "DELETE FROM semantic_neighbor_facts WHERE "
-            "source_def_uid NOT IN (SELECT def_uid FROM def_facts)"
-        ))
         conn.execute(text(
             "DELETE FROM test_coverage_facts WHERE "
             "target_def_uid NOT IN (SELECT def_uid FROM def_facts)"

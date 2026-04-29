@@ -154,9 +154,7 @@ async def _index_all_files(
             _run_resolution_passes(engine, on_progress, files_by_ext)
             # SPLADE sparse vector encoding
             _index_splade_vectors(engine, on_progress, files_by_ext)
-            # Pass 5: Semantic neighbors
-            _compute_semantic_neighbors(engine, on_progress, files_by_ext)
-            # Pass 6: Doc chunk linking
+            # Doc chunk linking
             _index_doc_chunks(engine, on_progress, files_by_ext)
     return count, indexed_paths, files_by_ext
 
@@ -229,18 +227,7 @@ def _reindex_semantic_passes(
         index_doc_chunk_vectors,
         link_doc_chunks_to_defs,
     )
-    from coderecon.index.search.semantic_neighbors import (
-        compute_semantic_neighbors,
-    )
-    # Pass 6: Semantic neighbors — recompute for changed defs.
-    try:
-        edges = compute_semantic_neighbors(
-            engine.db, changed_file_ids=changed_file_ids
-        )
-        log.debug("reindex.semantic_neighbors.complete", extra={"edges": edges})
-    except (ImportError, OSError, RuntimeError, ValueError):
-        log.warning("reindex.semantic_neighbors.failed", exc_info=True)
-    # Pass 7: Doc chunk linking
+    # Doc chunk linking
     try:
         doc_file_ids = _get_doc_file_ids(engine, changed_file_ids)
         if doc_file_ids:
@@ -268,21 +255,6 @@ def _get_doc_file_ids(
             )
         ).all()
         return [r for r in rows if r is not None]
-
-
-def _compute_semantic_neighbors(
-    engine: IndexCoordinatorEngine,
-    on_progress: Callable[[int, int, dict[str, int], str], None],
-    files_by_ext: dict[str, int],
-) -> None:
-    """Pass 5: Compute semantic neighbor edges."""
-    from coderecon.index.search.semantic_neighbors import (
-        compute_semantic_neighbors,
-    )
-    on_progress(0, 1, files_by_ext, "semantic_neighbors")
-    edges = compute_semantic_neighbors(engine.db)
-    on_progress(1, 1, files_by_ext, "semantic_neighbors")
-    log.info("index.semantic_neighbors.complete", extra={"edges": edges})
 
 
 def _index_doc_chunks(

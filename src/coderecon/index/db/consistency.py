@@ -197,61 +197,8 @@ def _get_signal_checks() -> list[SignalCheck]:
     return [
         _make_splade_check(),
         _make_scaffold_text_check(),
-        _make_semantic_neighbors_check(),
         _make_doc_chunks_check(),
     ]
-
-def _make_semantic_neighbors_check() -> SignalCheck:
-    """Check if semantic neighbor edges need (re)computation."""
-    from coderecon.index.search.splade import MODEL_VERSION
-
-    def _run(db: Database) -> list[SignalGap]:
-        gaps: list[SignalGap] = []
-        with db.session() as session:
-            has_vecs = session.execute(
-                text("SELECT COUNT(*) FROM splade_vecs LIMIT 1")
-            ).scalar() or 0
-            if has_vecs == 0:
-                return []
-
-            # Check if neighbor table exists and has rows
-            neighbor_count = session.execute(
-                text("SELECT COUNT(*) FROM semantic_neighbor_facts")
-            ).scalar() or 0
-
-            # Check version
-            if neighbor_count > 0:
-                stale = session.execute(
-                    text("""
-                        SELECT COUNT(*) FROM semantic_neighbor_facts
-                        WHERE model_version != :expected
-                    """),
-                    {"expected": MODEL_VERSION},
-                ).scalar() or 0
-                if stale > 0:
-                    gaps.append(SignalGap(
-                        signal="semantic_neighbors",
-                        reason="version_mismatch",
-                        file_ids=[],
-                        gap_count=stale,
-                    ))
-            else:
-                # No neighbors computed yet
-                gaps.append(SignalGap(
-                    signal="semantic_neighbors",
-                    reason="missing",
-                    file_ids=[],
-                    gap_count=has_vecs,
-                ))
-        return gaps
-
-    def _backfill(db: Database, _file_ids: list[int]) -> int:
-        from coderecon.index.search.semantic_neighbors import (
-            compute_semantic_neighbors,
-        )
-        return compute_semantic_neighbors(db)
-
-    return SignalCheck(name="semantic_neighbors", run=_run, backfill=_backfill)
 
 def _make_doc_chunks_check() -> SignalCheck:
     """Check for doc/config files missing chunk vectors and edges."""

@@ -144,9 +144,9 @@ class TestSweepOrphanedEdges:
 
         _sweep_orphaned_edges(engine)
 
-        # 4 DELETE statements: semantic_neighbor_facts, test_coverage_facts,
+        # 3 DELETE statements: test_coverage_facts,
         # doc_cross_refs, doc_code_edge_facts
-        assert session.execute.call_count == 4
+        assert session.execute.call_count == 3
         session.commit.assert_called_once()
 
 

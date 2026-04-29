@@ -176,18 +176,11 @@ def _propagate_def_changes(engine: IndexCoordinatorEngine, worktree_id: int) -> 
 
 
 def _sweep_orphaned_edges(engine: IndexCoordinatorEngine) -> None:
-    """Delete semantic_neighbor_facts and test_coverage_facts rows that
+    """Delete orphaned test_coverage_facts and doc edge rows that
     reference def_uids no longer present in def_facts.
     Run after resolution passes so that any newly-created defs are visible.
     """
     with engine.db.session() as session:
-        session.execute(
-            text(
-                "DELETE FROM semantic_neighbor_facts WHERE "
-                "source_def_uid NOT IN (SELECT def_uid FROM def_facts) "
-                "OR neighbor_def_uid NOT IN (SELECT def_uid FROM def_facts)"
-            )
-        )
         session.execute(
             text(
                 "DELETE FROM test_coverage_facts WHERE "
