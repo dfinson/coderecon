@@ -39,7 +39,6 @@ from coderecon.index.models_tables import (  # noqa: F401 — re-exports
     MemberAccessFact,
     ReceiverShapeFact,
     RepoState,
-    SemanticNeighborFact,
     SpladeVec,
     TestCoverageFact,
     TypeAnnotationFact,

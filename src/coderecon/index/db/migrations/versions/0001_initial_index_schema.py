@@ -614,24 +614,6 @@ def upgrade() -> None:
             sa.Column("scaffold_text", sa.String, nullable=True),
             sa.Column("vector_blob", sa.LargeBinary, nullable=True),
         )
-    if "semantic_neighbor_facts" not in existing:
-        op.create_table(
-            "semantic_neighbor_facts",
-            sa.Column("id", sa.Integer, primary_key=True),
-            sa.Column(
-                "source_def_uid", sa.String,
-                sa.ForeignKey("def_facts.def_uid", ondelete="CASCADE"),
-                nullable=False, index=True,
-            ),
-            sa.Column(
-                "neighbor_def_uid", sa.String,
-                sa.ForeignKey("def_facts.def_uid", ondelete="CASCADE"),
-                nullable=False, index=True,
-            ),
-            sa.Column("score", sa.Float, nullable=False),
-            sa.Column("model_version", sa.String, nullable=False, index=True),
-            sa.UniqueConstraint("source_def_uid", "neighbor_def_uid", "model_version", name="uq_semantic_neighbor_pair_model"),
-        )
     if "file_chunk_vecs" not in existing:
         op.create_table(
             "file_chunk_vecs",
@@ -724,7 +706,6 @@ def downgrade() -> None:
         "def_snapshot_record",
         "doc_code_edge_facts",
         "file_chunk_vecs",
-        "semantic_neighbor_facts",
         "splade_vecs",
         "doc_cross_refs",
         "endpoint_facts",

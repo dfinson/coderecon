@@ -15,7 +15,6 @@ from coderecon.index.models_tables import (
     MemberAccessFact,
     ReceiverShapeFact,
     RepoState,
-    SemanticNeighborFact,
     SpladeVec,
     TestCoverageFact,
     TypeAnnotationFact,
@@ -38,7 +37,6 @@ def test_table_models_are_importable():
         EndpointFact,
         DocCrossRef,
         SpladeVec,
-        SemanticNeighborFact,
         FileChunkVec,
         DocCodeEdgeFact,
     ]

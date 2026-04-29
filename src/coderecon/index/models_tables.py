@@ -302,23 +302,6 @@ class SpladeVec(SQLModel, table=True):
     model_version: str = Field(index=True)  # e.g. "splade-mini-v1"
     scaffold_text: str | None = Field(default=None)  # Anglicised scaffold text
     vector_blob: bytes | None = Field(default=None)  # Packed (uint32,float32) pairs
-class SemanticNeighborFact(SQLModel, table=True):
-    """Semantic neighbor edge between two definitions.
-    Pre-computed at index time via SPLADE dot product between def
-    scaffold vectors.  Captures "similar code" relationships invisible
-    to AST analysis — e.g. two parsers in different modules, duplicate
-    implementations, analogous API handlers.
-    """
-    __tablename__ = "semantic_neighbor_facts"
-    id: int | None = Field(default=None, primary_key=True)
-    source_def_uid: str = Field(
-        sa_column=Column(String, ForeignKey("def_facts.def_uid", ondelete="CASCADE"), index=True)
-    )
-    neighbor_def_uid: str = Field(
-        sa_column=Column(String, ForeignKey("def_facts.def_uid", ondelete="CASCADE"), index=True)
-    )
-    score: float  # SPLADE dot-product similarity
-    model_version: str = Field(index=True)
 class FileChunkVec(SQLModel, table=True):
     """SPLADE vector for a non-code file chunk.
     Non-code files (markdown, YAML, TOML, etc.) don't produce DefFacts

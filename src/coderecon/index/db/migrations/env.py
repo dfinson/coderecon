@@ -33,7 +33,6 @@ from coderecon.index.models import (  # noqa: F401
     RefFact,
     RepoState,
     ScopeFact,
-    SemanticNeighborFact,
     SpladeVec,
     TestCoverageFact,
     TestTarget,
