@@ -154,8 +154,6 @@ async def _index_all_files(
             _run_resolution_passes(engine, on_progress, files_by_ext)
             # SPLADE sparse vector encoding
             _index_splade_vectors(engine, on_progress, files_by_ext)
-            # Pass 4: Semantic resolution
-            _semantic_resolve(engine, on_progress, files_by_ext)
             # Pass 5: Semantic neighbors
             _compute_semantic_neighbors(engine, on_progress, files_by_ext)
             # Pass 6: Doc chunk linking
@@ -234,20 +232,6 @@ def _reindex_semantic_passes(
     from coderecon.index.search.semantic_neighbors import (
         compute_semantic_neighbors,
     )
-    from coderecon.index.search.semantic_resolver import (
-        resolve_unresolved_accesses,
-        resolve_unresolved_refs,
-        resolve_unresolved_shapes,
-    )
-    # Pass 5: Semantic resolution — resolve edges in changed files.
-    try:
-        refs = resolve_unresolved_refs(engine.db, file_ids=changed_file_ids)
-        accesses = resolve_unresolved_accesses(engine.db, file_ids=changed_file_ids)
-        shapes = resolve_unresolved_shapes(engine.db, file_ids=changed_file_ids)
-        log.debug("reindex.semantic_resolve.complete",
-                  extra={"refs": refs, "accesses": accesses, "shapes": shapes})
-    except (ImportError, OSError, RuntimeError, ValueError):
-        log.warning("reindex.semantic_resolve.failed", exc_info=True)
     # Pass 6: Semantic neighbors — recompute for changed defs.
     try:
         edges = compute_semantic_neighbors(
@@ -284,28 +268,6 @@ def _get_doc_file_ids(
             )
         ).all()
         return [r for r in rows if r is not None]
-
-
-def _semantic_resolve(
-    engine: IndexCoordinatorEngine,
-    on_progress: Callable[[int, int, dict[str, int], str], None],
-    files_by_ext: dict[str, int],
-) -> None:
-    """Pass 4: Resolve unresolved refs/accesses/shapes via SPLADE+CE."""
-    from coderecon.index.search.semantic_resolver import (
-        resolve_unresolved_accesses,
-        resolve_unresolved_refs,
-        resolve_unresolved_shapes,
-    )
-    on_progress(0, 3, files_by_ext, "semantic_resolve")
-    refs = resolve_unresolved_refs(engine.db)
-    on_progress(1, 3, files_by_ext, "semantic_resolve")
-    accesses = resolve_unresolved_accesses(engine.db)
-    on_progress(2, 3, files_by_ext, "semantic_resolve")
-    shapes = resolve_unresolved_shapes(engine.db)
-    on_progress(3, 3, files_by_ext, "semantic_resolve")
-    log.info("index.semantic_resolve.complete",
-             extra={"refs": refs, "accesses": accesses, "shapes": shapes})
 
 
 def _compute_semantic_neighbors(

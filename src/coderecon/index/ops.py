@@ -356,7 +356,6 @@ class IndexCoordinatorEngine:
     def _reindex_splade_vectors(self, *a, **kw): return ops_indexing._reindex_splade_vectors(self, *a, **kw)
     def _reindex_semantic_passes(self, *a, **kw): return ops_indexing._reindex_semantic_passes(self, *a, **kw)
     def _get_doc_file_ids(self, *a, **kw): return ops_indexing._get_doc_file_ids(self, *a, **kw)
-    def _semantic_resolve(self, *a, **kw): return ops_indexing._semantic_resolve(self, *a, **kw)
     def _compute_semantic_neighbors(self, *a, **kw): return ops_indexing._compute_semantic_neighbors(self, *a, **kw)
     def _index_doc_chunks(self, *a, **kw): return ops_indexing._index_doc_chunks(self, *a, **kw)
     def batch_get_defs(self, *a, **kw): return ops_indexing.batch_get_defs(self, *a, **kw)

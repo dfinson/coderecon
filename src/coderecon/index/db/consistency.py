@@ -197,77 +197,9 @@ def _get_signal_checks() -> list[SignalCheck]:
     return [
         _make_splade_check(),
         _make_scaffold_text_check(),
-        _make_semantic_resolve_check(),
         _make_semantic_neighbors_check(),
         _make_doc_chunks_check(),
     ]
-
-def _make_semantic_resolve_check() -> SignalCheck:
-    """Check for unresolved refs/accesses/shapes that could be semantically resolved.
-
-    Requires SPLADE vectors to exist first (no point resolving without vectors).
-    """
-
-    def _run(db: Database) -> list[SignalGap]:
-        gaps: list[SignalGap] = []
-        with db.session() as session:
-            # Check if we have any SPLADE vectors at all
-            has_vecs = session.execute(
-                text("SELECT COUNT(*) FROM splade_vecs LIMIT 1")
-            ).scalar() or 0
-            if has_vecs == 0:
-                return []  # No vectors → skip (SPLADE backfill will run first)
-
-            # Count unresolved refs (not yet semantically resolved)
-            unresolved_refs = session.execute(
-                text("""
-                    SELECT COUNT(*) FROM ref_facts
-                    WHERE target_def_uid IS NULL
-                    AND role = 'REFERENCE'
-                    AND ref_tier != 'semantic'
-                """)
-            ).scalar() or 0
-
-            # Count unresolved member accesses
-            unresolved_accesses = session.execute(
-                text("""
-                    SELECT COUNT(*) FROM member_access_facts
-                    WHERE final_target_def_uid IS NULL
-                    AND resolution_method != 'semantic'
-                """)
-            ).scalar() or 0
-
-            # Count unresolved shapes
-            unresolved_shapes = session.execute(
-                text("""
-                    SELECT COUNT(*) FROM receiver_shape_facts
-                    WHERE best_match_type IS NULL
-                """)
-            ).scalar() or 0
-
-            total = unresolved_refs + unresolved_accesses + unresolved_shapes
-            if total > 0:
-                gaps.append(SignalGap(
-                    signal="semantic_resolve",
-                    reason="unresolved_edges",
-                    file_ids=[],  # Global pass, not per-file
-                    gap_count=total,
-                ))
-        return gaps
-
-    def _backfill(db: Database, _file_ids: list[int]) -> int:
-        from coderecon.index.search.semantic_resolver import (
-            resolve_unresolved_accesses,
-            resolve_unresolved_refs,
-            resolve_unresolved_shapes,
-        )
-        total = 0
-        total += resolve_unresolved_refs(db)
-        total += resolve_unresolved_accesses(db)
-        total += resolve_unresolved_shapes(db)
-        return total
-
-    return SignalCheck(name="semantic_resolve", run=_run, backfill=_backfill)
 
 def _make_semantic_neighbors_check() -> SignalCheck:
     """Check if semantic neighbor edges need (re)computation."""

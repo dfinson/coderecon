@@ -24,6 +24,7 @@ from typing import Any
 
 import numpy as np
 import onnxruntime as ort
+from onnxruntime.capi.onnxruntime_pybind11_state import RuntimeException as OrtRuntimeException
 import structlog
 from tokenizers import Tokenizer
 
@@ -340,7 +341,7 @@ class SpladeEncoder:
         """
         try:
             return self._encode_batch(texts)
-        except (RuntimeError, MemoryError) as exc:
+        except (RuntimeError, MemoryError, OrtRuntimeException) as exc:
             err_msg = str(exc).lower()
             is_oom = (
                 "out of memory" in err_msg
