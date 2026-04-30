@@ -71,6 +71,13 @@ _RUBY_TYPES = TypeExtractionConfig(
       method: (identifier) @kind
       arguments: (argument_list
         (simple_symbol) @member))))
+(class
+  name: (constant) @parent
+  body: (body_statement
+    (method
+      body: (body_statement
+        (assignment
+          left: (instance_variable) @member)))))
 """,
     member_access_query="""
 (call
@@ -207,6 +214,16 @@ _PHP_TYPES = TypeExtractionConfig(
   body: (declaration_list
     (method_declaration
       name: (name) @member) @method))
+(class_declaration
+  name: (name) @parent
+  body: (declaration_list
+    (method_declaration
+      body: (compound_statement
+        (expression_statement
+          (assignment_expression
+            left: (member_access_expression
+              object: (variable_name (name) @_self)
+              name: (name) @member)))))))
 """,
     member_access_query="""
 (member_access_expression

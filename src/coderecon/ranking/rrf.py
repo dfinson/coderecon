@@ -40,7 +40,7 @@ def rrf_fuse(candidates: list[dict[str, Any]], *, k: int = 60) -> list[dict[str,
 def rrf_file_prune(
     candidates: list[dict[str, Any]],
     *,
-    max_files: int = 20,
+    max_files: int = 20,  # TODO: Replace with elbow cutoff on file scores. Arbitrary cap.
     pinned_paths: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Prune to top files by max RRF score, keeping pinned/seeded files.

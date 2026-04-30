@@ -37,7 +37,7 @@ class QueryBasedExtractor(BaseTypeExtractor):
     def __init__(self, config: TypeExtractionConfig, grammar_name: str) -> None:
         self._config = config
         self._grammar_name = grammar_name
-        self._queries: dict[str, Query] = {}
+        self._queries: dict[tuple[str, int], Query] = {}
         self._language: Language | None = None
 
     @property
@@ -78,26 +78,96 @@ class QueryBasedExtractor(BaseTypeExtractor):
 
         return self._language
 
-    def _get_query(self, query_string: str) -> Query | None:
-        """Compile and cache a query."""
+    def _get_query(self, query_string: str, lang: Language | None = None) -> Query | None:
+        """Compile and cache a query for a specific language."""
         if not query_string.strip():
             return None
 
-        if query_string not in self._queries:
+        if lang is None:
+            lang = self._get_language()
+
+        cache_key = (query_string, id(lang))
+        if cache_key not in self._queries:
+            # Split patterns BEFORE any Query() call — tree-sitter's C code
+            # corrupts the Python string buffer on compilation failure
+            # (replaces \n with \x00 in-place). We reconstruct a fresh string
+            # from the split patterns so the original is never passed to Query.
+            patterns = self._split_patterns(query_string)
+            clean_query = "\n".join(patterns)
             try:
                 from tree_sitter import Query
 
-                lang = self._get_language()
-                self._queries[query_string] = Query(lang, query_string)
+                self._queries[cache_key] = Query(lang, clean_query)
             except (ValueError, RuntimeError):
-                # Query compilation failed - grammar mismatch
-                return None
+                # Full query failed — try per-pattern graceful degradation
+                combined = self._compile_partial(patterns, lang)
+                if combined is None:
+                    return None
+                self._queries[cache_key] = combined
 
-        return self._queries.get(query_string)
+        return self._queries.get(cache_key)
+
+    @staticmethod
+    def _split_patterns(query_string: str) -> list[str]:
+        """Split a query into top-level balanced S-expressions.
+
+        Includes any trailing capture names (e.g. ``@return``) that follow
+        the closing paren of a top-level pattern.
+        """
+        patterns: list[str] = []
+        depth = 0
+        start = -1
+        end_of_sexp = -1
+        for i, ch in enumerate(query_string):
+            if ch == "(":
+                if depth == 0:
+                    # Flush previous pattern (including trailing captures)
+                    if end_of_sexp >= 0 and start >= 0:
+                        patterns.append(query_string[start:i].rstrip())
+                    start = i
+                    end_of_sexp = -1
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    end_of_sexp = i + 1
+        # Flush last pattern
+        if end_of_sexp >= 0 and start >= 0:
+            trailing = query_string[end_of_sexp:].strip()
+            patterns.append(query_string[start:end_of_sexp] + (" " + trailing if trailing else ""))
+        elif start >= 0 and depth == 0:
+            patterns.append(query_string[start:].rstrip())
+        return patterns
+
+    def _compile_partial(self, patterns: list[str], lang: Language) -> Query | None:
+        """Compile patterns with graceful per-pattern degradation.
+
+        Compiles each pattern separately, drops patterns that fail (e.g. use
+        node types not in the grammar). Returns a combined query of all valid
+        patterns, or None if none compiled.
+        """
+        from tree_sitter import Query
+
+        valid_patterns: list[str] = []
+        for pat in patterns:
+            try:
+                Query(lang, pat)
+                valid_patterns.append(pat)
+            except (ValueError, RuntimeError):
+                continue
+
+        if not valid_patterns:
+            return None
+
+        combined_text = "\n".join(valid_patterns)
+        try:
+            return Query(lang, combined_text)
+        except (ValueError, RuntimeError):
+            return None
 
     def _run_query(self, query_string: str, tree: Tree) -> list[dict[str, Node]]:
         """Execute a query and return captures grouped by match."""
-        query = self._get_query(query_string)
+        query = self._get_query(query_string, tree.language)
         if not query:
             return []
 
@@ -212,11 +282,15 @@ class QueryBasedExtractor(BaseTypeExtractor):
         matches = self._run_query(self._config.type_member_query, tree)
 
         def_by_name: dict[str, dict[str, Any]] = {d["name"]: d for d in defs}
+        seen: set[tuple[str, str]] = set()  # (parent_type_name, member_name)
 
         for match in matches:
             member = self._match_to_member(match, def_by_name)
             if member:
-                members.append(member)
+                key = (member.parent_type_name, member.member_name)
+                if key not in seen:
+                    seen.add(key)
+                    members.append(member)
 
         return members
 
@@ -232,8 +306,22 @@ class QueryBasedExtractor(BaseTypeExtractor):
         if not parent_node or not member_node:
             return None
 
+        # Filter instance attribute patterns: only include self/this/cls assignments
+        self_node = match.get("_self")
+        if self_node:
+            self_text = self._node_text(self_node)
+            if self_text not in ("self", "cls", "this"):
+                return None
+
         parent_name = self._node_text(parent_node)
         member_name = self._node_text(member_node)
+
+        # Strip Ruby instance variable prefix (@) and symbol prefix (:)
+        if member_name.startswith("@"):
+            member_name = member_name.lstrip("@")
+        elif member_name.startswith(":"):
+            member_name = member_name.lstrip(":")
+
         parent_def = def_by_name.get(parent_name)
 
         if not parent_def:

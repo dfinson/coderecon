@@ -188,6 +188,8 @@ class JestPack(RunnerPack):
         if pkg.exists():
             try:
                 data = json.loads(pkg.read_text())
+                if not isinstance(data, dict):
+                    return 0.0
                 if "jest" in data:
                     return 0.9
                 deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
@@ -337,6 +339,8 @@ class VitestPack(RunnerPack):
         if pkg.exists():
             try:
                 data = json.loads(pkg.read_text())
+                if not isinstance(data, dict):
+                    return 0.0
                 deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
                 if "vitest" in deps:
                     return 0.7

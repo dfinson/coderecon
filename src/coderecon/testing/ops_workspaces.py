@@ -60,6 +60,8 @@ def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
     if root_pkg.exists():
         try:
             data = json.loads(root_pkg.read_text())
+            if not isinstance(data, dict):
+                raise ValueError("package.json is not an object")
             workspaces_field = data.get("workspaces", [])
             # Handle both array and object format
             if isinstance(workspaces_field, dict):
@@ -75,7 +77,7 @@ def detect_workspaces(repo_root: Path) -> list[DetectedWorkspace]:
                         and (ws_path / "package.json").exists()
                     ):
                         workspace_dirs.add(ws_path)
-        except (OSError, json.JSONDecodeError, KeyError):
+        except (OSError, json.JSONDecodeError, KeyError, ValueError):
             log.debug("npm_workspace_parse_failed", exc_info=True)
     # Check for pnpm workspaces
     pnpm_ws = repo_root / "pnpm-workspace.yaml"

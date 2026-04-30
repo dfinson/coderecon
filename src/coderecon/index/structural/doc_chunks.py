@@ -26,7 +26,6 @@ from coderecon.index.search.splade import (
     _json_to_vec,
     _vec_to_json,
     load_all_vectors_fast,
-    sparse_dot,
 )
 from coderecon.index.models import (
     DocCodeEdgeFact,
@@ -270,8 +269,14 @@ def link_doc_chunks_to_defs(
     (incremental mode) and only delete/replace their edges.  Otherwise
     re-links all chunks globally.
 
+    Uses scipy sparse matrix multiplication to compute all dot products
+    in a single operation rather than O(chunks × defs) Python loops.
+
     Returns number of edges written.
     """
+    import numpy as np
+    from scipy.sparse import csr_matrix
+
     # Load all def vectors (uses binary cache)
     all_vecs = load_all_vectors_fast(db)
     with db.session() as session:
@@ -289,8 +294,70 @@ def link_doc_chunks_to_defs(
              "n_defs": len(all_vecs)})
     t0 = time.monotonic()
 
-    # Parse vectors
-    def_vecs = list(all_vecs.items())
+    # ── Build sparse matrices ──
+    # Determine vocabulary size from max index across all vectors
+    VOCAB_SIZE = 30522  # BERT tokenizer vocab size
+
+    # Build chunk matrix (n_chunks × VOCAB_SIZE)
+    chunk_indices: list[int] = []  # valid chunk row indices
+    chunk_data: list[float] = []
+    chunk_row_ind: list[int] = []
+    chunk_col_ind: list[int] = []
+    chunk_meta: list[FileChunkVec] = []  # parallel to chunk_indices
+
+    for i, chunk in enumerate(chunk_rows):
+        vec = _json_to_vec(chunk.vector_json)
+        if not vec:
+            continue
+        chunk_meta.append(chunk)
+        row_idx = len(chunk_meta) - 1
+        for col_idx, val in vec.items():
+            chunk_row_ind.append(row_idx)
+            chunk_col_ind.append(col_idx)
+            chunk_data.append(val)
+
+    if not chunk_meta:
+        return 0
+
+    n_chunks = len(chunk_meta)
+    chunks_csr = csr_matrix(
+        (chunk_data, (chunk_row_ind, chunk_col_ind)),
+        shape=(n_chunks, VOCAB_SIZE),
+        dtype=np.float32,
+    )
+
+    # Build def matrix (n_defs × VOCAB_SIZE)
+    def_uids: list[str] = []
+    def_data: list[float] = []
+    def_row_ind: list[int] = []
+    def_col_ind: list[int] = []
+
+    for def_uid, vec in all_vecs.items():
+        row_idx = len(def_uids)
+        def_uids.append(def_uid)
+        for col_idx, val in vec.items():
+            def_row_ind.append(row_idx)
+            def_col_ind.append(col_idx)
+            def_data.append(val)
+
+    n_defs = len(def_uids)
+    defs_csr = csr_matrix(
+        (def_data, (def_row_ind, def_col_ind)),
+        shape=(n_defs, VOCAB_SIZE),
+        dtype=np.float32,
+    )
+
+    t_build = time.monotonic() - t0
+    log.info("doc_chunks.link_matrices_built", extra={
+        "n_chunks": n_chunks, "n_defs": n_defs,
+        "elapsed_s": round(t_build, 1),
+    })
+
+    # ── Extract top-k edges per chunk above threshold ──
+    # Process chunks in batches to bound memory: each batch matmul
+    # produces at most (batch_size × n_defs) entries.
+    # batch_size=2000 × 50K defs × 8 bytes ≈ 800MB peak per batch.
+    CHUNK_BATCH = 2000
     edges_written = 0
 
     with db.session() as session:
@@ -308,34 +375,55 @@ def link_doc_chunks_to_defs(
         session.flush()
 
         batch: list[DocCodeEdgeFact] = []
+        defs_csc = defs_csr.T.tocsc()
 
-        for chunk in chunk_rows:
-            chunk_vec = _json_to_vec(chunk.vector_json)
-            if not chunk_vec:
-                continue
+        for batch_start in range(0, n_chunks, CHUNK_BATCH):
+            batch_end = min(batch_start + CHUNK_BATCH, n_chunks)
+            chunk_slice = chunks_csr[batch_start:batch_end]
 
-            # Score against all defs
-            scored: list[tuple[str, float]] = []
-            for def_uid, dv in def_vecs:
-                score = sparse_dot(chunk_vec, dv)
-                if score >= sigma_floor:
-                    scored.append((def_uid, score))
+            # Sparse matmul for this batch
+            scores_batch = chunk_slice @ defs_csc  # (batch × n_defs)
+            scores_batch = scores_batch.tocsr()
 
-            scored.sort(key=lambda x: -x[1])
-            for def_uid, score in scored[:max_per_chunk]:
-                batch.append(DocCodeEdgeFact(
-                    file_id=chunk.file_id,
-                    chunk_key=chunk.chunk_key,
-                    target_def_uid=def_uid,
-                    score=round(score, 3),
-                    model_version=MODEL_VERSION,
-                ))
-                edges_written += 1
+            for local_idx in range(batch_end - batch_start):
+                chunk = chunk_meta[batch_start + local_idx]
+                row_start = scores_batch.indptr[local_idx]
+                row_end = scores_batch.indptr[local_idx + 1]
 
-                if len(batch) >= DB_FLUSH_BATCH_SIZE:
-                    session.add_all(batch)
-                    session.commit()
-                    batch.clear()
+                if row_start == row_end:
+                    continue
+
+                col_indices = scores_batch.indices[row_start:row_end]
+                row_scores = scores_batch.data[row_start:row_end]
+
+                # Filter by threshold
+                mask = row_scores >= sigma_floor
+                if not mask.any():
+                    continue
+
+                filtered_cols = col_indices[mask]
+                filtered_scores = row_scores[mask]
+
+                # Top-k
+                if len(filtered_scores) > max_per_chunk:
+                    top_k_idx = np.argpartition(-filtered_scores, max_per_chunk)[:max_per_chunk]
+                    filtered_cols = filtered_cols[top_k_idx]
+                    filtered_scores = filtered_scores[top_k_idx]
+
+                for def_col, score in zip(filtered_cols, filtered_scores):
+                    batch.append(DocCodeEdgeFact(
+                        file_id=chunk.file_id,
+                        chunk_key=chunk.chunk_key,
+                        target_def_uid=def_uids[def_col],
+                        score=round(float(score), 3),
+                        model_version=MODEL_VERSION,
+                    ))
+                    edges_written += 1
+
+                    if len(batch) >= DB_FLUSH_BATCH_SIZE:
+                        session.add_all(batch)
+                        session.commit()
+                        batch.clear()
 
         if batch:
             session.add_all(batch)

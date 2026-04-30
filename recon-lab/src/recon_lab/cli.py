@@ -416,6 +416,18 @@ def micro_compare_cmd(ctx: click.Context) -> None:
     run("micro-compare")
 
 
+@eval_group.command("gt-discovery")
+@click.option("--model", "model_override", default=None,
+              help="Override model (default: openai/azure/gpt-4o-mini).")
+@click.pass_context
+def gt_discovery_cmd(ctx: click.Context, model_override: str | None) -> None:
+    """Run GT discovery experiment — agent-driven context exploration."""
+    from recon_lab.eval.run import run
+
+    click.echo("Running GT discovery experiment")
+    run("gt-discovery", model_override=model_override)
+
+
 # ── eval: validate ───────────────────────────────────────────────
 
 

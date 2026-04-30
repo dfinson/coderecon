@@ -120,6 +120,28 @@ async def _harvest_graph(
                             f"co-implements interface with {seed_def.name}",
                             None,
                         ))
+
+                # (d2) Superclasses — base class defs
+                super_uids = fq.list_superclass_uids(seed_uid)
+                if super_uids:
+                    super_defs = fq.batch_get_defs(super_uids)
+                    for su_uid, su_def in super_defs.items():
+                        raw_edges.append((
+                            su_uid, su_def, "superclass", seed_idx,
+                            f"base class of {seed_def.name}",
+                            None,
+                        ))
+
+                # (d3) Subclasses — types extending this seed
+                sub_uids = fq.list_subclasses(seed_uid)
+                if sub_uids:
+                    sub_defs = fq.batch_get_defs(sub_uids)
+                    for sb_uid, sb_def in sub_defs.items():
+                        raw_edges.append((
+                            sb_uid, sb_def, "subclass", seed_idx,
+                            f"subclass of {seed_def.name}",
+                            None,
+                        ))
             # (e) DocCrossRef — defs mentioned in this def's docstring
             doc_xrefs = fq.list_doc_xrefs_from(seed_uid)
             for xref in doc_xrefs:

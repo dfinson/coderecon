@@ -148,6 +148,16 @@ def build_export_cache(resolver: ReferenceResolver, session: object) -> None:
         # Per-language visibility check (replaces naive _ prefix heuristic)
         if is_name_exported(d.name, lang):
             resolver._file_exports[d.file_id][d.name] = d.def_uid
+        # Step 1b: Python convention — _-prefixed defs that are imported
+        # externally without the prefix (e.g., `_chord` imported as `chord`).
+        # Register the unprefixed alias as an export so resolution can find it.
+        if d.name.startswith("_") and not d.name.startswith("__") and lang == "python":
+            public_name = d.name[1:]
+            exports = resolver._file_exports.get(d.file_id, {})
+            if public_name not in exports:
+                if d.file_id not in resolver._file_exports:
+                    resolver._file_exports[d.file_id] = {}
+                resolver._file_exports[d.file_id][public_name] = d.def_uid
     # Step 2: Add re-exports (imports that are exposed at module level)
     # These are LocalBindFacts with target_kind='import' - common in __init__.py
     reexport_stmt = (
@@ -250,6 +260,91 @@ def build_export_cache(resolver: ReferenceResolver, session: object) -> None:
                         if imp_name in src_exports and imp_name not in current:
                             current[imp_name] = src_exports[imp_name]
                             changed = True
+
+    # Step 4: Python submodule-as-attribute exports.
+    # In Python, `from pkg import submod` works if pkg/__init__.py exists
+    # and submod.py (or submod/__init__.py) is a sibling file — even without
+    # an explicit re-export in __init__.py.  For each __init__.py, register
+    # sibling submodule files as implicit exports (pointing to the first
+    # top-level class or function in that submodule, or any top-level def).
+    init_files: list[tuple[int, str]] = []
+    for fid, path in resolver._file_paths.items():
+        if path.endswith("__init__.py"):
+            init_files.append((fid, path))
+
+    if init_files:
+        for init_fid, init_path in init_files:
+            pkg_dir = init_path.rsplit("/", 1)[0] if "/" in init_path else ""
+            current_exports = resolver._file_exports.get(init_fid, {})
+            # Find sibling module files in the same directory
+            prefix = f"{pkg_dir}/" if pkg_dir else ""
+            for sibling_path, sibling_fid in resolver._path_to_file.items():
+                if not sibling_path.startswith(prefix):
+                    continue
+                # Must be a direct child (not nested deeper)
+                relative = sibling_path[len(prefix):]
+                if "/" in relative and not relative.endswith("/__init__.py"):
+                    continue
+                # Extract submodule name
+                if relative.endswith("/__init__.py"):
+                    submod_name = relative.split("/")[0]
+                elif relative.endswith(".py") and relative != "__init__.py":
+                    submod_name = relative[:-3]
+                else:
+                    continue
+                # Skip if already exported (explicit re-export takes priority)
+                if submod_name in current_exports:
+                    continue
+                # Find a representative def in the submodule file
+                sub_exports = resolver._file_exports.get(sibling_fid, {})
+                # Use same-name def if it exists (e.g. canvas.py → class canvas)
+                if submod_name in sub_exports:
+                    if init_fid not in resolver._file_exports:
+                        resolver._file_exports[init_fid] = {}
+                    resolver._file_exports[init_fid][submod_name] = sub_exports[submod_name]
+                elif sub_exports:
+                    # Use first exported def as representative
+                    first_uid = next(iter(sub_exports.values()))
+                    if init_fid not in resolver._file_exports:
+                        resolver._file_exports[init_fid] = {}
+                    resolver._file_exports[init_fid][submod_name] = first_uid
+
+    # Step 5: Module-level assignment exports.
+    # In Python, module-level `name = expr` assignments create importable
+    # names.  These are captured as LocalBindFacts with reason_code='local_assign'
+    # at module scope (scope_id IS NULL or 0).
+    # If the assignment targets a known def (target_kind='def'), use that def_uid.
+    # Otherwise, register the name as an export with a synthetic identifier so
+    # the resolver can at least trace the import chain to this file.
+    assign_stmt = select(LocalBindFact).where(
+        LocalBindFact.reason_code == "local_assign",
+        col(LocalBindFact.scope_id).is_(None) | (LocalBindFact.scope_id == 0),
+    )
+    if resolver._worktree_id is not None:
+        wt_file_ids = set(file_lang.keys())
+        assign_stmt = assign_stmt.where(col(LocalBindFact.file_id).in_(wt_file_ids))
+    assigns = session.exec(assign_stmt).all()  # type: ignore[attr-defined]
+    for bind in assigns:
+        lang = file_lang.get(bind.file_id, "")
+        if not is_name_exported(bind.name, lang):
+            continue
+        current = resolver._file_exports.get(bind.file_id, {})
+        if bind.name in current:
+            continue  # Already exported by def or re-export
+        if bind.file_id not in resolver._file_exports:
+            resolver._file_exports[bind.file_id] = {}
+        if bind.target_kind == BindTargetKind.DEF.value and bind.target_uid:
+            resolver._file_exports[bind.file_id][bind.name] = bind.target_uid
+        else:
+            # Synthetic UID — allows import chain to resolve to *this file*
+            # even though there's no DefFact.  The ref will point to a synthetic
+            # uid that won't match any real def, but the resolution succeeds
+            # for connectivity purposes.
+            import hashlib
+            synth_uid = hashlib.sha256(
+                f"assign:{bind.file_id}:{bind.name}".encode()
+            ).hexdigest()[:16]
+            resolver._file_exports[bind.file_id][bind.name] = synth_uid
 
 
 def find_module_file(

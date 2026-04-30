@@ -58,7 +58,8 @@ def get_js_workspace_globs(repo_root: Path, t1: CandidateContext) -> list[str]:
                     globs.extend(content["packages"])
             elif marker.endswith("package.json"):
                 content = json.loads(marker_path.read_text())
-                globs.extend(_extract_package_json_workspaces(content))
+                if isinstance(content, dict):
+                    globs.extend(_extract_package_json_workspaces(content))
             elif marker.endswith("lerna.json"):
                 content = json.loads(marker_path.read_text())
                 if "packages" in content:

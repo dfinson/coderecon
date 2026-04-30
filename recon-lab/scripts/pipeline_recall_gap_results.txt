@@ -1,0 +1,43 @@
+======================================================================
+RECALL GAP ANALYSIS (fast, no model inference)
+======================================================================
+
+[eval/AutoMapper] 100 queries, 4.8s | Pool: 16.1% | +RevPPR: +87 | +Centroid: +481 | ALL: 22.1%
+[eval/Catch2] 105 queries, 2.2s | Pool: 30.0% | +RevPPR: +0 | +Centroid: +283 | ALL: 43.3%
+[eval/RxSwift] 113 queries, 7.1s | Pool: 17.6% | +RevPPR: +0 | +Centroid: +176 | ALL: 25.6%
+[eval/axum] 93 queries, 1.7s | Pool: 30.1% | +RevPPR: +0 | +Centroid: +699 | ALL: 46.1%
+[eval/celery] 143 queries, 3.6s | Pool: 43.0% | +RevPPR: +67 | +Centroid: +214 | ALL: 53.3%
+[eval/diesel] 174 queries, 6.3s | Pool: 32.9% | +RevPPR: +1 | +Centroid: +316 | ALL: 39.0%
+[eval/esbuild] 160 queries, 2.9s | Pool: 24.2% | +RevPPR: +0 | +Centroid: +425 | ALL: 34.7%
+[eval/fiber] 97 queries, 1.8s | Pool: 56.2% | +RevPPR: +0 | +Centroid: +296 | ALL: 63.5%
+[eval/gin] 75 queries, 0.8s | Pool: 50.4% | +RevPPR: +0 | +Centroid: +110 | ALL: 59.4%
+[eval/grpc] 140 queries, 32.6s | Pool: 44.0% | +RevPPR: +0 | +Centroid: +1091 | ALL: 67.3%
+[eval/lombok] 142 queries, 7.6s | Pool: 38.4% | +RevPPR: +9 | +Centroid: +876 | ALL: 51.5%
+[eval/mockito] 60 queries, 3.1s | Pool: 36.6% | +RevPPR: +7 | +Centroid: +432 | ALL: 52.4%
+[eval/pydantic] 159 queries, 11.6s | Pool: 13.2% | +RevPPR: +26 | +Centroid: +478 | ALL: 18.8%
+[eval/sinatra] 111 queries, 1.0s | Pool: 44.1% | +RevPPR: +0 | +Centroid: +128 | ALL: 53.3%
+[eval/swift-composable-architecture] 152 queries, 5.3s | Pool: 28.8% | +RevPPR: +0 | +Centroid: +1366 | ALL: 44.4%
+[eval/vitest] 165 queries, 9.5s | Pool: 16.9% | +RevPPR: +4 | +Centroid: +441 | ALL: 23.4%
+[eval/whoops] 55 queries, 0.7s | Pool: 67.6% | +RevPPR: +0 | +Centroid: +30 | ALL: 71.1%
+[eval/xunit] 88 queries, 5.6s | Pool: 31.9% | +RevPPR: +13 | +Centroid: +785 | ALL: 52.2%
+[ranker-gate/Alamofire] 131 queries, 8.4s | Pool: 16.6% | +RevPPR: +0 | +Centroid: +1664 | ALL: 28.6%
+
+======================================================================
+AGGREGATE RESULTS
+======================================================================
+
+Total queries: 2263
+Total GT items (excl seeds): 93,643
+
+  Signal                   Found     Recall    Adds over pool
+  ------------------------ --------- --------- --------------
+  Current pool                25,796    27.5%   (baseline)
+  SPLADE centroid             24,231    25.9%   +10,291
+  Reverse PPR                  2,541     2.7%   +214
+  Forward PPR                    683     0.7%   +57
+  ALL combined                36,250    38.7%
+
+  Current pool misses: 67,847 (72.5%)
+  With all new signals: recall 27.5% → 38.7% (+11.2%pp)
+
+  Completed in 117s

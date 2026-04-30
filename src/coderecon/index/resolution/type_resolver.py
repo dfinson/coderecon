@@ -108,6 +108,10 @@ class TypeTracedResolver:
             if not rows:
                 return stats
 
+            # Pre-populate receiver_declared_type for 'self' accesses by
+            # finding the enclosing class via line containment in def_facts.
+            self._infer_self_types(session, rows)
+
             self._build_type_cache(session)
             self._build_member_cache(session)
 
@@ -322,6 +326,82 @@ class TypeTracedResolver:
                 ref.ref_tier = RefTier.PROVEN.value
 
         return status
+
+    def _infer_self_types(
+        self, session: object, rows: list
+    ) -> None:
+        """Pre-populate receiver_declared_type for 'self' accesses.
+
+        For each unresolved self.X access without a declared type, finds the
+        enclosing class by line containment in def_facts and sets
+        receiver_declared_type = class name.  Also persists the update so
+        subsequent resolver runs benefit.
+        """
+        # Collect self-access rows needing inference
+        self_rows = [
+            (r[0], r[5], r[6])  # access_id, file_id, start_line
+            for r in rows
+            if r[1] == "self" and not r[2]  # receiver_name='self', no declared_type
+        ]
+        if not self_rows:
+            return
+
+        # Load class defs grouped by file_id for efficient containment lookup
+        file_ids = list({fid for _, fid, _ in self_rows})
+        class_defs_by_file: dict[int, list[tuple[int, int, str]]] = {}
+        for fid in file_ids:
+            cls_rows = session.execute(  # type: ignore[attr-defined]
+                text(
+                    "SELECT start_line, end_line, name FROM def_facts "
+                    "WHERE file_id = :fid AND kind = 'class' "
+                    "ORDER BY start_line"
+                ),
+                {"fid": fid},
+            ).fetchall()
+            class_defs_by_file[fid] = [
+                (sl, el, name) for sl, el, name in cls_rows
+            ]
+
+        # Resolve enclosing class for each self access
+        updates: list[dict] = []
+        # Also patch the in-memory rows for immediate resolution
+        patched_indices: dict[int, str] = {}  # access_id → class_name
+        for access_id, file_id, start_line in self_rows:
+            classes = class_defs_by_file.get(file_id, [])
+            # Find tightest enclosing class (narrowest range containing line)
+            best_class: str | None = None
+            best_span = float("inf")
+            for sl, el, name in classes:
+                if sl <= start_line <= el:
+                    span = el - sl
+                    if span < best_span:
+                        best_span = span
+                        best_class = name
+            if best_class:
+                updates.append({"access_id": access_id, "rdt": best_class})
+                patched_indices[access_id] = best_class
+
+        # Batch-update receiver_declared_type in DB
+        if updates:
+            session.execute(  # type: ignore[attr-defined]
+                text(
+                    "UPDATE member_access_facts "
+                    "SET receiver_declared_type = :rdt "
+                    "WHERE access_id = :access_id"
+                ),
+                updates,
+            )
+            session.commit()  # type: ignore[attr-defined]
+
+        # Patch the in-memory row tuples so resolve_all uses the inferred type
+        # rows is a list of Row tuples — rebuild as mutable lists
+        for i, row in enumerate(rows):
+            if row[0] in patched_indices:
+                # Replace the tuple with patched receiver_declared_type (index 2)
+                rows[i] = (
+                    row[0], row[1], patched_indices[row[0]],
+                    row[3], row[4], row[5], row[6], row[7],
+                )
 
     def _build_type_cache(self, session: object) -> None:
         """Build (name, scope_id) -> base_type mapping."""

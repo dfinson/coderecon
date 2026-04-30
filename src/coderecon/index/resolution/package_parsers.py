@@ -148,6 +148,8 @@ def build_js_package_exports(
         except (json.JSONDecodeError, ValueError):
             log.debug("package_json_parse_skip", path=fp, exc_info=True)
             continue
+        if not isinstance(pkg, dict):
+            continue
         name = pkg.get("name")
         exports = pkg.get("exports")
         if not isinstance(name, str) or not isinstance(exports, dict):

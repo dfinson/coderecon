@@ -202,6 +202,8 @@ def _pipeline_model(
     scored_files = sorted(
         zip(file_features, file_scores, strict=True), key=lambda x: -x[1],
     )
+    # TODO: Replace with elbow/gap-based cutoff on file_scores. Hardcoded 20
+    # silently drops files that could contain relevant defs — caps recall.
     max_files = min(20, len(scored_files))
     top_file_paths = {ff["_path"] for ff, _ in scored_files[:max_files]}
     for c in candidates:

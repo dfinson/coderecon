@@ -162,6 +162,9 @@ def _extract_file(file_path: str, repo_root: str, unit_id: int) -> ExtractionRes
                 result.defs,
             )
         import_uid_by_alias = _process_imports(imports, result, unit_id)
+        _process_module_level_assignments(
+            parse_result, result, unit_id, def_uid_by_name, import_uid_by_alias,
+        )
         _process_identifier_refs(
             parser, parse_result, scopes, result, unit_id,
             def_uid_by_name, _def_by_scope_name, _scope_parent, import_uid_by_alias,
@@ -437,6 +440,65 @@ def _process_imports(
         }
         result.refs.append(ref_dict)
     return import_uid_by_alias
+
+
+def _process_module_level_assignments(
+    parse_result: object,
+    result: ExtractionResult,
+    unit_id: int,
+    def_uid_by_name: dict[str, str],
+    import_uid_by_alias: dict[str, str],
+) -> None:
+    """Extract module-level name assignments as LocalBindFacts.
+
+    Captures patterns like `chord = _chord`, `uuid = gen_unique_id()` that
+    create module-level bindings not covered by def/import extraction.
+    Only emits binds for names not already bound by a DefFact or ImportFact.
+    """
+    root = parse_result.root_node  # type: ignore[attr-defined]
+    # Only process module-root assignments (Python: module node children)
+    if root.type != "module":
+        return
+    for child in root.children:
+        if child.type != "expression_statement":
+            continue
+        assignment = None
+        for sub in child.children:
+            if sub.type == "assignment":
+                assignment = sub
+                break
+        if assignment is None:
+            continue
+        # Get the LHS — only simple identifiers (not tuple unpacking, subscripts, etc.)
+        lhs = assignment.child_by_field_name("left")
+        if lhs is None or lhs.type != "identifier" or not lhs.text:
+            continue
+        name = lhs.text.decode()
+        # Skip if already bound by a def or import
+        if name in def_uid_by_name or name in import_uid_by_alias:
+            continue
+        # Skip dunder attributes (typically __all__, __version__ etc. — not importable symbols)
+        if name.startswith("__") and name.endswith("__"):
+            continue
+        # Determine target: if RHS is a simple identifier that's a known def, link to it
+        rhs = assignment.child_by_field_name("right")
+        target_kind = BindTargetKind.UNKNOWN.value
+        target_uid: str | None = None
+        if rhs and rhs.type == "identifier" and rhs.text:
+            rhs_name = rhs.text.decode()
+            if rhs_name in def_uid_by_name:
+                target_kind = BindTargetKind.DEF.value
+                target_uid = def_uid_by_name[rhs_name]
+        bind_dict = {
+            "unit_id": unit_id,
+            "name": name,
+            "target_kind": target_kind,
+            "target_uid": target_uid,
+            "certainty": Certainty.CERTAIN.value,
+            "reason_code": BindReasonCode.LOCAL_ASSIGN.value,
+            "local_scope_id": 0,  # Module scope
+        }
+        result.binds.append(bind_dict)
 
 
 def _process_identifier_refs(

@@ -373,6 +373,42 @@ class FactQueries:
             .limit(limit)
         )
         return list(self._session.exec(stmt).all())
+
+    def list_subclasses(
+        self, def_uid: str, *, limit: int = 100
+    ) -> list[str]:
+        """Find types that directly extend/implement *def_uid* as a base class.
+
+        Queries interface_impl_facts WHERE interface_def_uid = def_uid.
+        Returns a list of implementor def_uids.
+        """
+        stmt = (
+            select(InterfaceImplFact.implementor_def_uid)
+            .where(InterfaceImplFact.interface_def_uid == def_uid)
+            .distinct()
+            .limit(limit)
+        )
+        return list(self._session.exec(stmt).all())
+
+    def list_superclass_uids(
+        self, def_uid: str, *, limit: int = 50
+    ) -> list[str]:
+        """Find resolved base class def_uids for *def_uid*.
+
+        Returns interface_def_uid values from interface_impl_facts where
+        the implementor is *def_uid* and the interface_def_uid is resolved.
+        """
+        stmt = (
+            select(InterfaceImplFact.interface_def_uid)
+            .where(
+                InterfaceImplFact.implementor_def_uid == def_uid,
+                InterfaceImplFact.interface_def_uid.is_not(None),  # type: ignore[union-attr]
+            )
+            .distinct()
+            .limit(limit)
+        )
+        return [uid for uid in self._session.exec(stmt).all() if uid]
+
     # DocCrossRef lookups
     def list_doc_xrefs_from(
         self, source_def_uid: str, *, limit: int = 50

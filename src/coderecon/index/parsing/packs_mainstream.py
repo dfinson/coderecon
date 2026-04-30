@@ -82,6 +82,16 @@ _PYTHON_TYPES = TypeExtractionConfig(
       (assignment
         left: (identifier) @member
         type: (type) @type))))
+(class_definition
+  name: (identifier) @parent
+  body: (block
+    (function_definition
+      body: (block
+        (expression_statement
+          (assignment
+            left: (attribute
+              object: (identifier) @_self
+              attribute: (identifier) @member)))))))
 """,
     member_access_query="""
 (attribute
@@ -231,27 +241,37 @@ _JS_TS_TYPES = TypeExtractionConfig(
 """,
     type_member_query="""
 (class_declaration
-  name: (type_identifier) @parent
+  name: (_) @parent
   body: (class_body
     (method_definition
       name: (property_identifier) @member) @method))
 (class_declaration
-  name: (type_identifier) @parent
+  name: (_) @parent
   body: (class_body
     (public_field_definition
       name: (property_identifier) @member
       type: (type_annotation (_) @type)?)))
 (interface_declaration
-  name: (type_identifier) @parent
+  name: (_) @parent
   body: (interface_body
     (method_signature
       name: (property_identifier) @member) @method))
 (interface_declaration
-  name: (type_identifier) @parent
+  name: (_) @parent
   body: (interface_body
     (property_signature
       name: (property_identifier) @member
       type: (type_annotation (_) @type)?)))
+(class_declaration
+  name: (_) @parent
+  body: (class_body
+    (method_definition
+      body: (statement_block
+        (expression_statement
+          (assignment_expression
+            left: (member_expression
+              object: (this) @_self
+              property: (property_identifier) @member)))))))
 """,
     member_access_query="""
 (member_expression
