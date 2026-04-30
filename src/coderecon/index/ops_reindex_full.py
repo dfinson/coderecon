@@ -329,6 +329,15 @@ async def _reindex_full_impl(engine: IndexCoordinatorEngine) -> IndexStats:
                 indexed_paths=list(to_add),
             )
     duration = time.time() - start_time
+
+    # Post-reindex: run full test suite with coverage (best-effort, never raises)
+    # Only run if files were actually added/modified — skip when nothing changed
+    # (e.g. `recon up` startup with an already-current index).
+    if to_index or to_remove:
+        from coderecon.index.ops_coverage import run_coverage_full
+
+        await run_coverage_full(engine)
+
     return IndexStats(
         files_processed=len(to_index) + len(to_remove),
         files_added=files_added,

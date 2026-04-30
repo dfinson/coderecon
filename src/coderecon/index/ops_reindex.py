@@ -197,6 +197,15 @@ async def _reindex_incremental_impl(
     except (OSError, RuntimeError):
         logger.debug("wal_checkpoint_skipped_after_reindex", exc_info=True)
     duration = time.time() - start_time
+
+    # Post-reindex: run affected tests with coverage (best-effort, never raises)
+    # Use _effective_root (not repo_root) so worktree paths resolve correctly.
+    str_all_changed = [str(p) for p in changed_paths if (_effective_root / p).exists()]
+    if str_all_changed:
+        from coderecon.index.ops_coverage import run_coverage_for_changed_files
+
+        await run_coverage_for_changed_files(engine, str_all_changed, worktree=worktree)
+
     return IndexStats(
         files_processed=len(changed_paths),
         files_added=files_added,
