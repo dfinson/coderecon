@@ -26,6 +26,7 @@ import structlog
 
 from coderecon._core.excludes import (
     DEFAULT_PRUNABLE_DIRS,
+    GENERATED_FILE_PATTERNS,
     HARDCODED_DIRS,
     PRUNABLE_DIRS,
     is_hardcoded_dir,
@@ -71,7 +72,7 @@ class IgnoreChecker:
         """
         instance = cls.__new__(cls)
         instance._root = root
-        instance._raw_lines = list(DEFAULT_PRUNABLE_DIRS)
+        instance._raw_lines = list(DEFAULT_PRUNABLE_DIRS) + list(GENERATED_FILE_PATTERNS)
         instance._spec: pathspec.PathSpec | None = None
         instance._negated_dirs = set()
         instance._reconignore_paths = []
@@ -103,7 +104,7 @@ class IgnoreChecker:
     ) -> None:
         self._root = root
         # Raw gitignore-syntax lines — compiled lazily into a PathSpec.
-        self._raw_lines: list[str] = list(DEFAULT_PRUNABLE_DIRS)
+        self._raw_lines: list[str] = list(DEFAULT_PRUNABLE_DIRS) + list(GENERATED_FILE_PATTERNS)
         # Compiled pathspec (invalidated on new pattern loads).
         self._spec: pathspec.PathSpec | None = None
         self._negated_dirs: set[str] = set()  # Track negated directory names for pruning override

@@ -135,6 +135,91 @@ DEFAULT_PRUNABLE_DIRS: frozenset[str] = frozenset(
 
 PRUNABLE_DIRS: frozenset[str] = HARDCODED_DIRS | DEFAULT_PRUNABLE_DIRS
 
+# Tier 1b: GENERATED_FILE_PATTERNS - gitignore-syntax patterns for tool-generated files.
+# These are seeded into IgnoreChecker alongside DEFAULT_PRUNABLE_DIRS so that
+# generated files are excluded from the symbol index without requiring a .reconignore.
+#
+# Categories: lockfiles, test snapshots, protobuf/gRPC codegen, .NET codegen,
+# Go codegen, Dart codegen, SWIG wrappers, parser generators (yacc/lex),
+# Qt MOC, GraphQL codegen, minified assets, single-header amalgamations.
+
+GENERATED_FILE_PATTERNS: tuple[str, ...] = (
+    # --- Lockfiles (large, auto-generated, no useful symbols) ---
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "npm-shrinkwrap.json",
+    "poetry.lock",
+    "uv.lock",
+    "Pipfile.lock",
+    "pdm.lock",
+    "Gemfile.lock",
+    "composer.lock",
+    "Cargo.lock",
+    "go.sum",
+    "mix.lock",
+    "pubspec.lock",
+    "Podfile.lock",
+    "Package.resolved",
+    "packages.lock.json",
+    "gradle.lockfile",
+    "flake.lock",
+    "*.lock.yml",
+    "*.lock.yaml",
+    # --- Test snapshots (auto-updated by test frameworks) ---
+    "*.baseline.json",
+    "*.snap",
+    "*.snapshot",
+    "__snapshots__/",
+    "*.approved.txt",
+    "cypress/timings.json",
+    # --- Protobuf / gRPC codegen ---
+    "*.pb.go",
+    "*.pb.cc",
+    "*.pb.h",
+    "*.pb.swift",
+    "*.pb.rs",
+    "*_pb2.py",
+    "*_pb2_grpc.py",
+    # --- .NET codegen ---
+    "*.g.cs",
+    "*.generated.cs",
+    "*.Designer.cs",
+    # --- Go codegen ---
+    "*_generated.go",
+    "*.gen.go",
+    # --- Dart codegen (build_runner) ---
+    "*.g.dart",
+    "*.freezed.dart",
+    "*.auto.dart",
+    # --- Thrift / other IDL codegen output dirs ---
+    "gen-*/",
+    # --- SWIG wrappers ---
+    "*_wrap.c",
+    "*_wrap.cxx",
+    "*_wrap.go",
+    # --- Parser generators (yacc/lex/bison) ---
+    "*.tab.c",
+    "*.tab.h",
+    "*.yy.c",
+    "*.yy.h",
+    "lex.yy.c",
+    # --- Qt MOC/UIC/RCC ---
+    "moc_*.cpp",
+    "ui_*.h",
+    "qrc_*.cpp",
+    # --- GraphQL codegen ---
+    "*.graphql.ts",
+    "*.graphql.js",
+    "generated.ts",
+    "generated.js",
+    # --- Single-header amalgamations ---
+    "singleheader/",
+    # --- Minified assets (no useful symbols) ---
+    "*.min.js",
+    "*.min.css",
+)
+
 def is_hardcoded_dir(dirname: str) -> bool:
     """Check if directory is hardcoded (never traversable, not overridable)."""
     return dirname in HARDCODED_DIRS
@@ -397,6 +482,7 @@ def generate_reconignore_template() -> str:
 __all__ = [
     "HARDCODED_DIRS",
     "DEFAULT_PRUNABLE_DIRS",
+    "GENERATED_FILE_PATTERNS",
     "PRUNABLE_DIRS",
     "UNIVERSAL_EXCLUDE_GLOBS",
     "is_hardcoded_dir",
