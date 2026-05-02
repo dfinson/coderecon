@@ -7,7 +7,13 @@ Authority: SPEC.md wins. If unsure or there is a spec conflict, stop and ask.
 
 ---
 
-## 1) No Hacks (Root Cause Only)
+## 1) No Speculation
+
+The words "likely", "probably", "maybe", "possibly", "perhaps" are categorically forbidden.
+If a cause is worth mentioning, it is worth investigating definitively. Either verify it
+with a tool call or say "I don't know yet — let me check."
+
+## 2) No Hacks (Root Cause Only)
 
 If something fails, diagnose and fix it properly. Do not "make it pass".
 
@@ -21,11 +27,11 @@ Forbidden:
 
 If you cannot solve it correctly with available tools or information, say so and ask.
 
-## 2) All Checks Must Pass
+## 3) All Checks Must Pass
 
 Lint, typecheck, tests, and CI must be green.
 
-## 3) GitHub Remote Actions Must Be Exact
+## 4) GitHub Remote Actions Must Be Exact
 
 When asked to perform a specific remote action (merge, resolve threads, release, etc.):
 - do exactly that action, or
@@ -33,13 +39,13 @@ When asked to perform a specific remote action (merge, resolve threads, release,
 
 No substitutions.
 
-## 4) Change Discipline (Minimal)
+## 5) Change Discipline (Minimal)
 
 - Before coding: read the issue, relevant SPEC.md sections, and match repo patterns
 - Prefer minimal code; do not invent abstractions or reimplement libraries
 - Tests should be small, behavioral, and parameterized when appropriate
 
-## 5) NEVER Reset Hard Without Approval
+## 6) NEVER Reset Hard Without Approval
 
 **ABSOLUTE PROHIBITION**: Never execute `git reset --hard` under any circumstances without explicit user approval.
 
