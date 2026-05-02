@@ -34,6 +34,12 @@ def _recon_env(repo_root: Path | None = None) -> dict[str, str]:
     src_path = str(root / "src")
     existing = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = f"{src_path}:{existing}" if existing else src_path
+
+    # Inject pipeline testing timeout override from lab.toml
+    from recon_lab.config import get_config
+    lab_cfg = get_config()
+    timeout = lab_cfg["testing"]["default_timeout_sec"]
+    env.setdefault("CODERECON__TESTING__DEFAULT_TIMEOUT_SEC", str(timeout))
     return env
 
 

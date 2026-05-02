@@ -100,4 +100,9 @@ def get_config(cli_override: str | None = None) -> dict:
                 "default_experiment", "recon_ranking.yaml"
             ),
         },
+        "testing": {
+            "default_timeout_sec": cfg.get("testing", {}).get(
+                "default_timeout_sec", 600
+            ),
+        },
     }

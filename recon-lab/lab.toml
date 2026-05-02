@@ -25,6 +25,11 @@ data_dir = "auto"
 [eval]
 default_experiment = "recon_ranking.yaml"
 
+[testing]
+# Higher timeout for the lab pipeline: Java/C++ repos may compile
+# before running tests, easily exceeding the prod default of 600s.
+default_timeout_sec = 900
+
 [splade_bakeoff]
 # Models to compare (keys from encoder.MODELS).
 # Default: all three.
