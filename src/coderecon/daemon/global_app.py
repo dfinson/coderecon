@@ -198,7 +198,7 @@ class GlobalDaemon:
                         wt_git = GitOps(wt_path)
                         loop = asyncio.get_event_loop()
                         diff_paths = await loop.run_in_executor(
-                            None, wt_git.files_changed_vs, base_branch,
+                            None, wt_git.files_changed_from, base_branch,
                         )
                         if diff_paths:
                             abs_paths = [wt_path / p for p in diff_paths]

@@ -222,7 +222,8 @@ async def _handle_reindex(
         })
 
     # Non-main worktrees: diff vs default branch and reindex only changed
-    # files.  This mirrors the startup scan logic in global_app_worktrees.
+    # files.  Uses two-arg diff (tree comparison) which works for both
+    # feature branches and detached worktrees at ancestor commits.
     is_non_main = worktree is not None and worktree != "main"
     if is_non_main:
         import asyncio
@@ -235,7 +236,7 @@ async def _handle_reindex(
         except Exception:  # noqa: BLE001
             base_branch = "main"
         diff_paths = await loop.run_in_executor(
-            None, git_ops.files_changed_vs, base_branch
+            None, git_ops.files_changed_from, base_branch
         )
         if not diff_paths:
             return _success_response(request_id, {

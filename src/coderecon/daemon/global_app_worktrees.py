@@ -69,7 +69,7 @@ async def queue_startup_scans(daemon: GlobalDaemon) -> None:
             try:
                 git_ops = GitOps(wt_slot.repo_root)
                 diff_paths = await loop.run_in_executor(
-                    None, git_ops.files_changed_vs, base_branch or "main"
+                    None, git_ops.files_changed_from, base_branch or "main"
                 )
                 if diff_paths:
                     abs_paths = [wt_slot.repo_root / p for p in diff_paths]
@@ -147,7 +147,7 @@ async def refresh_worktrees(
             loop = asyncio.get_event_loop()
             wt_git = GitOps(wt_path)
             diff_paths = await loop.run_in_executor(
-                None, wt_git.files_changed_vs, base_branch
+                None, wt_git.files_changed_from, base_branch
             )
             if diff_paths:
                 abs_paths = [wt_path / p for p in diff_paths]

@@ -130,6 +130,44 @@ class GitOps(_WorktreeMixin, _SubmoduleMixin):
             return [line for line in result.stdout.splitlines() if line]
         except (OSError, subprocess.SubprocessError):  # noqa: BLE001
             return []
+
+    def files_diff_vs(self, base_ref: str) -> list[str]:
+        """Return repo-relative paths whose tree content differs from *base_ref*.
+
+        Uses two-arg ``git diff --name-only <base_ref> HEAD`` (direct tree
+        comparison).  Unlike the three-dot form in :meth:`files_changed_vs`,
+        this works correctly for detached worktrees at ancestor commits where
+        the merge-base equals HEAD.
+        """
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(self._access.path), "diff", "--name-only",
+                 base_ref, "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+            if result.returncode != 0:
+                return []
+            return [line for line in result.stdout.splitlines() if line]
+        except (OSError, subprocess.SubprocessError):  # noqa: BLE001
+            return []
+
+    def files_changed_from(self, base_ref: str) -> list[str]:
+        """Return files that differ from *base_ref*, optimal for any worktree.
+
+        Tries the three-dot merge-base diff first (correct for feature
+        branches ahead of *base_ref*).  Falls back to two-arg tree
+        comparison when the result is empty (handles detached worktrees
+        at ancestor commits where merge-base == HEAD).
+        """
+        result = self.files_changed_vs(base_ref)
+        if not result:
+            result = self.files_diff_vs(base_ref)
+        return result
+
     def diff_summary(
         self,
         base: str | None = None,
