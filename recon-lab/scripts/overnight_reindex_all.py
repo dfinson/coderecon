@@ -1,8 +1,11 @@
-"""Overnight full reindex of all GT repos + worktrees.
+"""Overnight full pipeline: reindex → worktrees → pr-import → collect → merge → train.
 
 Phase 1: Full reindex of all 96 base repos (eval, ranker-gate, cutoff)
-         with --parallel 2 (each daemon uses ~1.7GB for SPLADE model).
-Phase 2: Incremental worktree indexing for all 2844 instances.
+Phase 2: Incremental worktree indexing for all instances.
+Phase 3: PR import (GT defs + LLM query generation)
+Phase 4: Non-OK query generation
+Phase 5: Signal collection
+Phase 6: Merge + Train
 
 Usage:
     python scripts/overnight_reindex_all.py
@@ -12,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -111,14 +115,69 @@ async def phase2_worktrees() -> None:
     await batch_main()
 
 
+def _run_cli(*args: str, timeout: int = 7200) -> None:
+    """Run a recon-lab CLI command as a subprocess."""
+    cmd = [sys.executable, "-m", "recon_lab.cli", *args]
+    print(f"  $ {' '.join(args)}", flush=True)
+    t0 = time.monotonic()
+    result = subprocess.run(
+        cmd,
+        timeout=timeout,
+        cwd=str(Path(__file__).resolve().parents[1]),
+        env={**os.environ, "PYTHONPATH": str(SRC)},
+    )
+    elapsed = time.monotonic() - t0
+    if result.returncode != 0:
+        print(f"  FAILED exit={result.returncode} ({elapsed:.0f}s)", flush=True)
+    else:
+        print(f"  OK ({elapsed:.0f}s)", flush=True)
+
+
+def phase3_pr_import() -> None:
+    """Import PR instances: GT defs + LLM query generation."""
+    print("\n" + "=" * 60, flush=True)
+    print("PHASE 3: PR import (GT + queries)", flush=True)
+    print("=" * 60, flush=True)
+    _run_cli("data", "pr-import", "--set", "all", "--workers", "4")
+
+
+def phase4_non_ok_queries() -> None:
+    """Generate non-OK queries."""
+    print("\n" + "=" * 60, flush=True)
+    print("PHASE 4: Non-OK query generation", flush=True)
+    print("=" * 60, flush=True)
+    _run_cli("data", "non-ok-queries", "--set", "all", "--workers", "2")
+
+
+def phase5_collect() -> None:
+    """Collect retrieval signals."""
+    print("\n" + "=" * 60, flush=True)
+    print("PHASE 5: Signal collection", flush=True)
+    print("=" * 60, flush=True)
+    _run_cli("pipeline", "collect", "--set", "all", "--workers", "4")
+
+
+def phase6_merge_train() -> None:
+    """Merge data and train models."""
+    print("\n" + "=" * 60, flush=True)
+    print("PHASE 6: Merge + Train", flush=True)
+    print("=" * 60, flush=True)
+    _run_cli("pipeline", "merge", "--what", "all")
+    _run_cli("pipeline", "train", "--skip-merge")
+
+
 async def run() -> None:
     overall_t0 = time.monotonic()
-    print(f"Starting overnight reindex at {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
+    print(f"Starting overnight pipeline at {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
     print(f"Clones dir: {CLONES_DIR}", flush=True)
     print(f"PID: {os.getpid()}", flush=True)
 
     await phase1_base_repos()
     await phase2_worktrees()
+    phase3_pr_import()
+    phase4_non_ok_queries()
+    phase5_collect()
+    phase6_merge_train()
 
     elapsed = time.monotonic() - overall_t0
     print(f"\n{'=' * 60}", flush=True)
