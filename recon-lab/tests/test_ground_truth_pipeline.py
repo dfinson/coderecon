@@ -23,8 +23,8 @@ def test_parse_unified_diff_tracks_hunk_end_lines() -> None:
     )
 
     assert file_diffs[0].path == "src/app.py"
-    assert file_diffs[0].hunks[0].start_line == 10
-    assert file_diffs[0].hunks[0].end_line == 12
+    assert file_diffs[0].hunks[0].start_line == 10  # old-side start
+    assert file_diffs[0].hunks[0].end_line == 11  # old-side: 10 + 2 - 1
 
 
 def test_validate_task_accepts_narrow_queries() -> None:

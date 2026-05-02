@@ -48,7 +48,8 @@ class DefEntry:
 
 
 _DIFF_HEADER = re.compile(r"^diff --git a/.+ b/(.+)$")
-_HUNK_HEADER = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+# Capture OLD-side (-start,count) — these align with the base-commit index.
+_HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@")
 
 
 def parse_unified_diff(diff_text: str) -> list[FileDiff]:
@@ -179,6 +180,86 @@ def map_hunks_to_defs(
                     )
 
     return min_suff
+
+
+# ── LLM relevance labeling ───────────────────────────────────────
+
+_RELEVANCE_SYSTEM = """\
+You are labeling candidate definitions for a code retrieval benchmark.
+
+You will receive:
+- A task description (PR title + body)
+- A patch excerpt
+- A list of candidate definitions that overlap the changed lines
+
+For EACH candidate, decide: is this definition relevant context for \
+executing this task? "Relevant" means a developer would need to read or \
+understand this definition to work on this task.
+
+Return ONLY a JSON object mapping each candidate index to true/false:
+{"0": true, "1": false, "2": true, ...}
+
+Rules:
+- A method that was substantively modified → true
+- A class whose body (not just a child method) was modified → true
+- A parent class/function that merely CONTAINS a modified child but \
+whose own logic is untouched → false
+- Docstring-only or comment-only changes → false (unless the task IS about docs)
+- Import-adjacent defs accidentally overlapping → false
+"""
+
+
+def label_candidate_relevance(
+    candidates: list[DefEntry],
+    task_description: str,
+    patch_text: str,
+    *,
+    model: str,
+) -> list[DefEntry]:
+    """Filter candidate defs via LLM relevance judgment.
+
+    Args:
+        candidates: Defs whose spans overlap changed hunks.
+        task_description: PR title + body.
+        patch_text: The unified diff text.
+        model: LLM deployment name (configurable — nano vs mini).
+
+    Returns:
+        Subset of candidates labeled relevant by the LLM.
+    """
+    if not candidates:
+        return []
+
+    from recon_lab.llm.llm_queries import _call_llm_json
+
+    # Format candidate list for the prompt
+    candidate_lines = []
+    for i, d in enumerate(candidates):
+        candidate_lines.append(
+            f"  {i}: {d.path}:{d.start_line}-{d.end_line} ({d.kind}: {d.name})"
+        )
+
+    user_prompt = (
+        f"## Task\n{task_description[:3000]}\n\n"
+        f"## Patch\n{patch_text[:200_000]}\n\n"
+        f"## Candidate definitions\n" + "\n".join(candidate_lines)
+    )
+
+    result = _call_llm_json(
+        model=model,
+        system_prompt=_RELEVANCE_SYSTEM,
+        user_prompt=user_prompt,
+        max_tokens=300,
+    )
+
+    # Parse: result should be {"0": true, "1": false, ...}
+    relevant: list[DefEntry] = []
+    for i, d in enumerate(candidates):
+        verdict = result.get(str(i), result.get(i, True))
+        if verdict is True:
+            relevant.append(d)
+
+    return relevant
 
 
 def expand_defs_via_coverage(
