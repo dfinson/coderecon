@@ -220,7 +220,33 @@ async def _handle_reindex(
             "reindexed": True,
             "files_indexed": result.files_indexed,
         })
-    stats = await coordinator.reindex_full()
+
+    # Non-main worktrees: diff vs default branch and reindex only changed
+    # files.  This mirrors the startup scan logic in global_app_worktrees.
+    is_non_main = worktree is not None and worktree != "main"
+    if is_non_main:
+        import asyncio
+        from coderecon.adapters.git.ops import GitOps
+
+        loop = asyncio.get_event_loop()
+        git_ops = GitOps(wt_slot.repo_root)
+        try:
+            base_branch = await loop.run_in_executor(None, git_ops.default_branch)
+        except Exception:  # noqa: BLE001
+            base_branch = "main"
+        diff_paths = await loop.run_in_executor(
+            None, git_ops.files_changed_vs, base_branch
+        )
+        if not diff_paths:
+            return _success_response(request_id, {
+                "reindexed": True,
+                "files_indexed": 0,
+            })
+        abs_paths = [wt_slot.repo_root / p for p in diff_paths]
+        stats = await coordinator.reindex_incremental(abs_paths, worktree=worktree)
+    else:
+        stats = await coordinator.reindex_full()
+
     return _success_response(request_id, {
         "reindexed": True,
         "files_indexed": getattr(stats, "files_indexed", 0),

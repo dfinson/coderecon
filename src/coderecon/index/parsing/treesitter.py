@@ -137,7 +137,7 @@ class TreeSitterParser:
         try:
             return importlib.import_module(module_name)
         except ImportError:
-            log.debug("language_module_import_failed", exc_info=True)
+            log.debug("language_module_import_failed")
             return None
     def parse(self, path: Path, content: bytes | None = None) -> ParseResult:
         """

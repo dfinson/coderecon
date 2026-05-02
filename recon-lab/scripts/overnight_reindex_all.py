@@ -1,11 +1,11 @@
-"""Overnight full pipeline: reindex → worktrees → pr-import → collect → merge → train.
+"""Overnight pipeline: worktrees → pr-import → non-ok-queries → collect → merge → train.
 
-Phase 1: Full reindex of all 96 base repos (eval, ranker-gate, cutoff)
-Phase 2: Incremental worktree indexing for all instances.
-Phase 3: PR import (GT defs + LLM query generation)
-Phase 4: Non-OK query generation
-Phase 5: Signal collection
-Phase 6: Merge + Train
+Phase 1 (base reindex) is SKIPPED — already completed 94/96 on 2026-05-01.
+Phase 2: Incremental worktree indexing for all instances (re-run with repo_path fix).
+Phase 3: PR import (GT defs + LLM query generation) — re-run to add relevance labeling.
+Phase 4: Non-OK query generation — SKIPPED (already done, stamp 2026-04-22).
+Phase 5: Signal collection (all 2788 from scratch).
+Phase 6: Merge + Train.
 
 Usage:
     python scripts/overnight_reindex_all.py
@@ -116,19 +116,33 @@ async def phase2_worktrees() -> None:
 
 
 def _run_cli(*args: str, timeout: int = 7200) -> None:
-    """Run a recon-lab CLI command as a subprocess."""
+    """Run a recon-lab CLI command as a subprocess with live output."""
     cmd = [sys.executable, "-m", "recon_lab.cli", *args]
     print(f"  $ {' '.join(args)}", flush=True)
     t0 = time.monotonic()
-    result = subprocess.run(
+    proc = subprocess.Popen(
         cmd,
-        timeout=timeout,
         cwd=str(Path(__file__).resolve().parents[1]),
         env={**os.environ, "PYTHONPATH": str(SRC)},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
     )
+    try:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            print(f"    {line}", end="", flush=True)
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+        elapsed = time.monotonic() - t0
+        print(f"  TIMEOUT after {elapsed:.0f}s", flush=True)
+        return
     elapsed = time.monotonic() - t0
-    if result.returncode != 0:
-        print(f"  FAILED exit={result.returncode} ({elapsed:.0f}s)", flush=True)
+    if proc.returncode != 0:
+        print(f"  FAILED exit={proc.returncode} ({elapsed:.0f}s)", flush=True)
     else:
         print(f"  OK ({elapsed:.0f}s)", flush=True)
 
@@ -166,16 +180,47 @@ def phase6_merge_train() -> None:
     _run_cli("pipeline", "train", "--skip-merge")
 
 
+def _wipe_stale_pr_import() -> None:
+    """Remove stale pr-import outputs so phase 3 regenerates with relevance labeling."""
+    import shutil
+
+    data_dir = Path.home() / ".recon/recon-lab/data"
+    wiped = 0
+    for d in data_dir.iterdir():
+        if not d.is_dir() or "_pr" not in d.name:
+            continue
+        gt_dir = d / "ground_truth"
+        if gt_dir.is_dir():
+            shutil.rmtree(gt_dir)
+            wiped += 1
+    # Also remove stale stamps
+    stamp = data_dir / "pr_import.stamp"
+    if stamp.exists():
+        stamp.unlink()
+    print(f"\n  Wiped ground_truth/ from {wiped} instance dirs (stale, no relevance labeling)", flush=True)
+
+
 async def run() -> None:
     overall_t0 = time.monotonic()
     print(f"Starting overnight pipeline at {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
     print(f"Clones dir: {CLONES_DIR}", flush=True)
     print(f"PID: {os.getpid()}", flush=True)
 
-    await phase1_base_repos()
+    # Phase 1 SKIPPED: base repos already indexed (94/96 OK, 2026-05-01)
+    print("\n" + "=" * 60, flush=True)
+    print("PHASE 1: SKIPPED (base repos already indexed)", flush=True)
+
     await phase2_worktrees()
+
+    # Wipe stale pr-import data so phase 3 regenerates with relevance labeling
+    _wipe_stale_pr_import()
+
     phase3_pr_import()
-    phase4_non_ok_queries()
+
+    # Phase 4 SKIPPED: non-OK queries already generated (stamp 2026-04-22)
+    print("\n" + "=" * 60, flush=True)
+    print("PHASE 4: SKIPPED (non-OK queries already done)", flush=True)
+
     phase5_collect()
     phase6_merge_train()
 
