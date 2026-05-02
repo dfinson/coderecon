@@ -67,7 +67,7 @@ async def run_coverage_for_changed_files(
 async def run_coverage_full(
     engine: IndexCoordinatorEngine,
     *,
-    timeout_sec: int = 300,
+    timeout_sec: int = 600,
 ) -> int:
     """Run the full test suite with coverage.
 

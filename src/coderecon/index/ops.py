@@ -201,6 +201,7 @@ class IndexCoordinatorEngine:
         parallelism: int | None = None,
         memory_reserve_mb: int = 1024,
         subprocess_memory_limit_mb: int | None = None,
+        timeout_sec: int = 600,
     ) -> int:
         """Run the full test suite with coverage and ingest results."""
         return await ops_init.collect_initial_coverage(
@@ -208,6 +209,7 @@ class IndexCoordinatorEngine:
             parallelism=parallelism,
             memory_reserve_mb=memory_reserve_mb,
             subprocess_memory_limit_mb=subprocess_memory_limit_mb,
+            timeout_sec=timeout_sec,
         )
 
     async def load_existing(self) -> bool:

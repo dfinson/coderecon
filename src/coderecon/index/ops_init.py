@@ -183,6 +183,7 @@ async def collect_initial_coverage(
     parallelism: int | None = None,
     memory_reserve_mb: int = 1024,
     subprocess_memory_limit_mb: int | None = None,
+    timeout_sec: int = 600,
 ) -> int:
     """Run the full test suite with coverage and ingest results.
     Best-effort: returns 0 and logs on failure.  Never raises.
@@ -194,6 +195,7 @@ async def collect_initial_coverage(
             engine,
             memory_reserve_mb=memory_reserve_mb,
             subprocess_memory_limit_mb=subprocess_memory_limit_mb,
+            timeout_sec=timeout_sec,
         )
         result = await test_ops.run(
             targets=None,

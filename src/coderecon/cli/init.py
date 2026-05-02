@@ -352,6 +352,7 @@ def _run_indexing_phase(
                     parallelism=_cfg.testing.default_parallelism,
                     memory_reserve_mb=_cfg.testing.memory_reserve_mb,
                     subprocess_memory_limit_mb=_cfg.testing.subprocess_memory_limit_mb,
+                    timeout_sec=_cfg.testing.default_timeout_sec,
                 )
             )
         finally:
