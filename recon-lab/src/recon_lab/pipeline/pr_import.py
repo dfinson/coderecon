@@ -40,7 +40,6 @@ def import_single_instance(
     instances_dir: Path,
     data_dir: Path,
     llm_model: str,
-    gt_label_model: str = "openai/gpt-4-1-mini",
     verbose: bool = False,
 ) -> dict[str, Any]:
     """Import a single PR instance: GT defs + queries.
@@ -48,7 +47,6 @@ def import_single_instance(
     Returns a summary dict with status and counts.
     """
     from recon_lab.pipeline.patch_ground_truth import (
-        label_candidate_relevance,
         map_hunks_to_defs,
         parse_unified_diff,
     )
@@ -105,20 +103,6 @@ def import_single_instance(
 
     if not gt_defs:
         summary["error"] = "no defs overlap with diff hunks"
-        return summary
-
-    # LLM relevance labeling: filter candidates down to genuinely relevant defs
-    label_model = gt_label_model or "openai/gpt-4-1-mini"
-    task_desc = _build_problem_statement(title, body)
-    try:
-        gt_defs = label_candidate_relevance(
-            gt_defs, task_desc, diff_text, model=label_model,
-        )
-    except Exception as exc:
-        logger.warning("Relevance labeling failed for %s, using all candidates: %s", iid, exc)
-
-    if not gt_defs:
-        summary["error"] = "no defs labeled relevant by LLM"
         return summary
 
     # Build minimum_sufficient_defs in the expected format
@@ -218,7 +202,6 @@ def run_pr_import(
     data_dir: Path,
     clones_dir: Path,
     llm_model: str = "openai/gpt-4-1-nano",
-    gt_label_model: str = "openai/gpt-4-1-mini",
     repo_set: str = "all",
     repo: str | None = None,
     max_instances: int = 0,
@@ -273,7 +256,6 @@ def run_pr_import(
     def _process(inst: dict) -> dict[str, Any]:
         return import_single_instance(
             inst, instances_dir, data_dir, llm_model,
-            gt_label_model=gt_label_model,
             verbose=verbose,
         )
 

@@ -247,14 +247,12 @@ def index_worktrees(ctx: click.Context, repo_set: str, repo: str | None) -> None
               help="Limit imported instances (0=all).")
 @click.option("--llm-model", default=None,
               help="LLM model for query generation.")
-@click.option("--gt-label-model", default=None,
-              help="LLM model for GT relevance labeling (default: gpt-4-1-mini).")
 @click.option("--workers", type=int, default=8,
               help="Parallel workers for instance processing.")
 @click.pass_context
 def pr_import(ctx: click.Context, repo_set: str, repo: str | None,
               max_instances: int, llm_model: str | None,
-              gt_label_model: str | None, workers: int) -> None:
+              workers: int) -> None:
     """Import PR instances: diff → GT defs + LLM query generation."""
     _preflight(ctx)
     from recon_lab.pipeline.pr_import import run_pr_import
@@ -265,7 +263,6 @@ def pr_import(ctx: click.Context, repo_set: str, repo: str | None,
         data_dir=cfg["data_dir"],
         clones_dir=cfg["clones_dir"],
         llm_model=llm_model or pr_cfg.get("llm_model", "openai/gpt-4-1-nano"),
-        gt_label_model=gt_label_model,
         repo_set=repo_set,
         repo=repo,
         max_instances=max_instances,
