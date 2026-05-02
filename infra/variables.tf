@@ -45,6 +45,18 @@ variable "aml_eval_vm_size" {
   default     = "Standard_E4s_v3" # 4 vCPU, 32 GB — memory-optimized
 }
 
+variable "aml_index_gpu_vm_size" {
+  description = "VM size for GPU indexing cluster (SPLADE vectorization via ONNX Runtime)."
+  type        = string
+  default     = "Standard_NC4as_T4_v3" # 4 vCPU, 28 GB RAM, 1x T4 16 GB VRAM
+}
+
+variable "aml_index_gpu_max_nodes" {
+  description = "Max nodes for GPU indexing cluster (sharded across repos)."
+  type        = number
+  default     = 4
+}
+
 variable "tags" {
   description = "Tags applied to all resources."
   type        = map(string)

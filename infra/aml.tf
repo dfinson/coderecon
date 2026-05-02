@@ -93,6 +93,26 @@ resource "azurerm_machine_learning_compute_cluster" "eval" {
   }
 }
 
+# --- GPU compute cluster for indexing (SPLADE vectorization via ONNX) ---
+
+resource "azurerm_machine_learning_compute_cluster" "index_gpu" {
+  name                          = "index-gpu"
+  machine_learning_workspace_id = azurerm_machine_learning_workspace.lab.id
+  location                      = azurerm_resource_group.lab.location
+  vm_priority                   = "LowPriority"
+  vm_size                       = var.aml_index_gpu_vm_size
+
+  scale_settings {
+    min_node_count                       = 0
+    max_node_count                       = var.aml_index_gpu_max_nodes
+    scale_down_nodes_after_idle_duration  = "PT5M"
+  }
+
+  identity {
+    type = "SystemAssigned"
+  }
+}
+
 # --- Data asset: reference the merged signal data in blob storage ---
 
 data "azurerm_client_config" "current" {}

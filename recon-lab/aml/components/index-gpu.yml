@@ -1,0 +1,51 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+
+name: recon_lab_index_gpu
+display_name: "Index Repos (GPU)"
+version: "1"
+description: |
+  GPU-accelerated indexing: tree-sitter parse + SPLADE vectorization via ONNX Runtime CUDA.
+  Supports sharding across nodes via shard_index/shard_count for multi-node parallelism.
+
+inputs:
+  workspace:
+    type: uri_folder
+    description: "Mounted workspace root (blob datastore)."
+  repo_set:
+    type: string
+    default: "all"
+  timeout:
+    type: integer
+    default: 2400
+    description: "Timeout per repo in seconds."
+  shard_index:
+    type: integer
+    default: 0
+    description: "0-based shard index for this node."
+  shard_count:
+    type: integer
+    default: 1
+    description: "Total number of shards (nodes) for parallel indexing."
+  reindex:
+    type: boolean
+    default: true
+    description: "Force full reindex even if index exists."
+
+environment:
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-cuda12.4-ubuntu22.04
+  conda_file: ../environments/conda-index-gpu.yml
+
+code: ../../src
+
+command: >-
+  export PYTHONPATH=.:$PYTHONPATH &&
+  python -m recon_lab.pipeline.index_shard
+  --workspace ${{inputs.workspace}}
+  --set ${{inputs.repo_set}}
+  --timeout ${{inputs.timeout}}
+  --shard-index ${{inputs.shard_index}}
+  --shard-count ${{inputs.shard_count}}
+  $[[--reindex ${{inputs.reindex}}]]
+
+resources:
+  instance_count: 1

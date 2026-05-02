@@ -42,6 +42,8 @@ _WORKSPACE_PATH = "recon-lab"           # path within the datastore
 # Compute targets (override via CLI)
 _COMPUTE_DEFAULT = "cpu-cluster"
 _COMPUTE_HEAVY = "cpu-cluster-heavy"    # for index / collect (more cores)
+_COMPUTE_GPU = "index-gpu"              # GPU cluster for SPLADE indexing
+_INDEX_SHARD_COUNT = 4                  # default shards for multi-node indexing
 
 # ── Environment ──────────────────────────────────────────────────
 
@@ -215,6 +217,31 @@ def _index_component():
     )
 
 
+def _index_gpu_component():
+    """GPU-accelerated indexing with sharding support."""
+    return _component(
+        "index_gpu",
+        "Index Repos (GPU Shard)",
+        (
+            "export PYTHONPATH=.:$PYTHONPATH && "
+            "python -m recon_lab.pipeline.index_shard "
+            "--workspace ${{inputs.workspace}} "
+            "--set ${{inputs.repo_set}} "
+            "--timeout ${{inputs.timeout}} "
+            "--shard-index ${{inputs.shard_index}} "
+            "--shard-count ${{inputs.shard_count}} "
+            "--reindex"
+        ),
+        inputs={
+            "workspace": Input(type=AssetTypes.URI_FOLDER),
+            "repo_set": Input(type="string", default="all"),
+            "timeout": Input(type="integer", default=2400),
+            "shard_index": Input(type="integer", default=0),
+            "shard_count": Input(type="integer", default=4),
+        },
+    )
+
+
 def _collect_component():
     return _component(
         "collect",
@@ -382,6 +409,30 @@ def collect_to_train_pipeline(workspace: Input, repo_set: str = "all") -> dict:
     }
 
 
+@dsl.pipeline(
+    name="recon-lab-reindex-gpu",
+    description="GPU-accelerated full reindex sharded across N nodes.",
+)
+def reindex_gpu_pipeline(
+    workspace: Input,
+    repo_set: str = "all",
+    shard_count: int = _INDEX_SHARD_COUNT,
+) -> None:
+    """Shard repos across N GPU nodes for parallel indexing.
+
+    Each shard independently runs `recon init` on its subset of repos.
+    After all shards complete, indexes reside in the workspace blob mount.
+    """
+    for shard_idx in range(shard_count):
+        shard = _index_gpu_component()(
+            workspace=workspace,
+            repo_set=repo_set,
+            shard_index=shard_idx,
+            shard_count=shard_count,
+        )
+        shard.compute = _COMPUTE_GPU
+
+
 # ── Submission ───────────────────────────────────────────────────
 
 
@@ -411,13 +462,15 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Submit Recon Lab pipeline to AML.")
     parser.add_argument(
         "--stage",
-        choices=["full", "train", "collect-to-train"],
+        choices=["full", "train", "collect-to-train", "reindex-gpu"],
         default="full",
         help="Pipeline variant to submit.",
     )
     parser.add_argument("--repo-set", default="all", help="Repo set filter.")
     parser.add_argument("--compute", default=_COMPUTE_DEFAULT, help="Default compute target.")
     parser.add_argument("--compute-heavy", default=_COMPUTE_HEAVY, help="Compute for CPU-heavy stages.")
+    parser.add_argument("--compute-gpu", default=_COMPUTE_GPU, help="GPU compute for indexing.")
+    parser.add_argument("--shard-count", type=int, default=_INDEX_SHARD_COUNT, help="Number of GPU shards for reindex-gpu.")
     parser.add_argument("--subscription", default=_SUBSCRIPTION_ID)
     parser.add_argument("--resource-group", default=_RESOURCE_GROUP)
     parser.add_argument("--workspace", default=_WORKSPACE_NAME)
@@ -436,6 +489,10 @@ def main(argv: list[str] | None = None) -> None:
         pipeline_job = train_only_pipeline(workspace=ws_input)
     elif args.stage == "collect-to-train":
         pipeline_job = collect_to_train_pipeline(workspace=ws_input, repo_set=args.repo_set)
+    elif args.stage == "reindex-gpu":
+        pipeline_job = reindex_gpu_pipeline(
+            workspace=ws_input, repo_set=args.repo_set, shard_count=args.shard_count,
+        )
     else:
         print(f"Unknown stage: {args.stage}", file=sys.stderr)
         raise SystemExit(1)
