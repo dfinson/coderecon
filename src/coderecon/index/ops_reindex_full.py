@@ -189,6 +189,7 @@ def _structural_index_added_files(
             worktree_id=engine._get_or_create_worktree_id(_wt),
             is_main_worktree=engine._is_main_worktree(_wt),
             _extractions=extractions,
+            repo_root=_root,
         )
     from coderecon.index.resolution.config_refs import (
         resolve_config_file_refs,

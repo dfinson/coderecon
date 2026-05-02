@@ -281,7 +281,7 @@ def _create_new_file_records(
     with engine.db.session() as session:
         for path in new_paths:
             full_path = effective_root / path
-            if not full_path.exists():
+            if not full_path.is_file():
                 continue
             try:
                 content_hash = hashlib.sha256(full_path.read_bytes()).hexdigest()
@@ -359,6 +359,7 @@ def _extract_stage_context(
         worktree_id=engine._get_or_create_worktree_id(worktree),
         is_main_worktree=engine._is_main_worktree(worktree),
         _extractions=ok_extractions,
+        repo_root=extract_root,
     )
     # Purge stale structural facts for failed extractions
     if failed_paths:

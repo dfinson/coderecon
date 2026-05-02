@@ -107,6 +107,7 @@ class StructuralIndexer:
         worktree_id: int,
         is_main_worktree: bool = True,
         _extractions: list[ExtractionResult] | None = None,
+        repo_root: Path | str | None = None,
     ) -> BatchResult:
         """Index a batch of files.
         If _extractions is provided, uses pre-computed extraction results
@@ -116,6 +117,7 @@ class StructuralIndexer:
         """
         start = time.monotonic()
         result = BatchResult()
+        effective_root = Path(repo_root) if repo_root is not None else self.repo_path
         if _extractions is not None:
             extractions = _extractions
         elif workers > 1:
@@ -125,11 +127,11 @@ class StructuralIndexer:
         # Augment declared_module for languages needing config file resolution
         # (Go → go.mod, Rust → Cargo.toml). Tree-sitter gives Go only the
         # short package name; the full import path needs go.mod context.
-        self._augment_declared_modules(extractions)
+        self._augment_declared_modules(extractions, repo_root=effective_root)
         # Resolve import source_literal → target file path (all languages).
         # Must run after _augment_declared_modules so Go/Rust declared_modules
         # are fully resolved.  Populates import_dict["resolved_path"].
-        self._resolve_import_paths(extractions)
+        self._resolve_import_paths(extractions, repo_root=effective_root)
         # Pre-create all files BEFORE entering bulk_writer to avoid lock contention
         if file_id_map is None:
             file_id_map = {}
@@ -185,15 +187,15 @@ class StructuralIndexer:
                 _persist_single_extraction(writer, extraction, file_id, result, self)
         result.duration_ms = int((time.monotonic() - start) * MS_PER_SEC)
         return result
-    def _augment_declared_modules(self, extractions: list[ExtractionResult]) -> None:
+    def _augment_declared_modules(self, extractions: list[ExtractionResult], *, repo_root: Path | None = None) -> None:
         """Post-process declared_module for languages needing config files."""
-        _augment_declared_modules(self.db, self.repo_path, extractions)
+        _augment_declared_modules(self.db, repo_root or self.repo_path, extractions)
     def _resolve_xref_target(self, writer: BulkWriter, target_name: str) -> str | None:
         """Resolve a cross-ref target name to a def_uid."""
         return _resolve_xref_target(writer, target_name)
-    def _resolve_import_paths(self, extractions: list[ExtractionResult]) -> None:
+    def _resolve_import_paths(self, extractions: list[ExtractionResult], *, repo_root: Path | None = None) -> None:
         """Resolve import source_literal to target file path."""
-        _resolve_import_paths(self.db, self.repo_path, extractions)
+        _resolve_import_paths(self.db, repo_root or self.repo_path, extractions)
     def resolve_all_imports(self) -> int:
         """Re-resolve all unresolved import paths using the complete DB."""
         return _resolve_all_imports_impl(self.db, self.repo_path)

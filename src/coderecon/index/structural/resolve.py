@@ -56,7 +56,7 @@ def _augment_declared_modules(db: Database, repo_path: Path, extractions: list[E
         try:
             return full.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
-            log.debug("module_config_read_failed", exc_info=True)
+            log.debug("module_config_read_failed", path=rel_path)
             return None
     for ex in extractions:
         if ex.error or ex.skipped_no_grammar:
@@ -146,7 +146,7 @@ def _resolve_import_paths(db: Database, repo_path: Path, extractions: list[Extra
         try:
             return full.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
-            log.debug("js_package_read_failed", exc_info=True)
+            log.debug("js_package_read_failed", path=rel_path)
             return None
     js_exports = build_js_package_exports(all_paths_list, _read_file)
     resolver = ImportPathResolver(all_paths_list, declared_modules, js_exports)
@@ -186,7 +186,7 @@ def resolve_all_imports(db: Database, repo_path: Path) -> int:
         try:
             return full.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
-            log.debug("js_package_read_failed", exc_info=True)
+            log.debug("js_package_read_failed", path=rel_path)
             return None
     js_exports = build_js_package_exports(all_paths, _read_file)
     resolver = ImportPathResolver(all_paths, declared_modules, js_exports)
