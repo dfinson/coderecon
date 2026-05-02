@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import signal
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -293,10 +295,19 @@ async def _run_batch_targets(
             stderr=asyncio.subprocess.PIPE,
             cwd=cwd,
             env=safe_env,
+            start_new_session=True,
         )
-        stdout_bytes, stderr_bytes = await asyncio.wait_for(
-            proc.communicate(), timeout=timeout_sec
-        )
+        try:
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                proc.communicate(), timeout=timeout_sec
+            )
+        except asyncio.TimeoutError:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except (OSError, ProcessLookupError):
+                pass
+            await proc.wait()
+            raise TimeoutError
         stdout = stdout_bytes.decode(errors="replace")
         stderr = stderr_bytes.decode(errors="replace")
         exit_code = proc.returncode
@@ -454,11 +465,21 @@ async def _exec_and_parse(
         stderr=asyncio.subprocess.PIPE,
         cwd=cwd,
         env=env,
+        start_new_session=True,
     )
     rss_task = asyncio.create_task(_poll_child_rss(proc))
-    stdout_bytes, stderr_bytes = await asyncio.wait_for(
-        proc.communicate(), timeout=timeout_sec
-    )
+    try:
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(
+            proc.communicate(), timeout=timeout_sec
+        )
+    except asyncio.TimeoutError:
+        # Kill entire process group to reap grandchildren holding pipes
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (OSError, ProcessLookupError):
+            pass
+        await proc.wait()
+        raise TimeoutError
     stdout = stdout_bytes.decode(errors="replace")
     stderr = stderr_bytes.decode(errors="replace")
     exit_code = proc.returncode

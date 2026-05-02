@@ -168,7 +168,7 @@ class TestTestingConfig:
         """Default values."""
         config = TestingConfig()
         assert config.default_parallelism == 4
-        assert config.default_timeout_sec == 300
+        assert config.default_timeout_sec == 600
 
 class TestCodeReconConfig:
     """Tests for CodeReconConfig root model."""

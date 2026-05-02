@@ -48,6 +48,7 @@ async def _execute_tests(
     fail_fast: bool,
     coverage: bool,
     coverage_dir: Path | None,
+    timeout_sec_by_language: dict[str, int] | None = None,
 ) -> TestRunStatus:
     """Execute tests concurrently with semaphore-limited parallelism."""
     start_time = time.time()
@@ -66,6 +67,10 @@ async def _execute_tests(
     history = MemoryHistory.for_repo(workspace_root)
     ceiling = subprocess_memory_limit_mb or budget.ceiling_mb()
     sem = asyncio.Semaphore(parallelism)
+    _lang_timeouts = timeout_sec_by_language or {}
+
+    def _resolve_timeout(target: TestTarget) -> int:
+        return _lang_timeouts.get(target.language, timeout_sec)
     async def run_target(
         target: TestTarget,
     ) -> tuple[TestTarget, ParsedTestSuite | None, CoverageArtifact | None]:
@@ -98,7 +103,7 @@ async def _execute_tests(
                 target_ceiling = budget.ceiling_mb()
             result, cov_artifact, peak_rss = await _run_single_target(
                 coordinator, target=target, artifact_dir=artifact_dir,
-                test_filter=test_filter, tags=tags, timeout_sec=timeout_sec,
+                test_filter=test_filter, tags=tags, timeout_sec=_resolve_timeout(target),
                 coverage=coverage, coverage_dir=coverage_dir,
                 source_dirs=source_dirs,
                 subprocess_memory_limit_mb=target_ceiling,
@@ -122,7 +127,7 @@ async def _execute_tests(
                 )
                 result, cov_artifact, peak_rss = await _run_single_target(
                     coordinator, target=target, artifact_dir=artifact_dir,
-                    test_filter=test_filter, tags=tags, timeout_sec=timeout_sec,
+                    test_filter=test_filter, tags=tags, timeout_sec=_resolve_timeout(target),
                     coverage=coverage, coverage_dir=coverage_dir,
                     source_dirs=source_dirs,
                     subprocess_memory_limit_mb=retry_ceiling,

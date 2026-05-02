@@ -252,7 +252,11 @@ class GlobalDaemon:
         file_ops = FileOps(wt_root)
         mutation_ops = MutationOps(wt_root)
         refactor_ops = RefactorOps(wt_root, repo_slot.coordinator)
-        test_ops = TestOps(wt_root, repo_slot.coordinator)
+        test_ops = TestOps(
+            wt_root, repo_slot.coordinator,
+            timeout_sec=config.testing.default_timeout_sec,
+            timeout_sec_by_language=config.testing.timeout_sec_by_language,
+        )
         lint_ops = LintOps(wt_root, repo_slot.coordinator)
         session_manager = SessionManager(config.timeouts)
         # Inject freshness gate into coordinator for this worktree.

@@ -65,6 +65,8 @@ class TestOps:
         *,
         memory_reserve_mb: int = 1024,
         subprocess_memory_limit_mb: int | None = None,
+        timeout_sec: int = 600,
+        timeout_sec_by_language: dict[str, int] | None = None,
     ) -> None:
         """Initialize test ops."""
         self._repo_root = repo_root
@@ -73,6 +75,8 @@ class TestOps:
         self._artifacts_base = repo_root / ".recon" / "artifacts" / "tests"
         self._memory_reserve_mb = memory_reserve_mb
         self._subprocess_memory_limit_mb = subprocess_memory_limit_mb
+        self._timeout_sec = timeout_sec
+        self._timeout_sec_by_language = timeout_sec_by_language
     async def discover(
         self,
         paths: list[str] | None = None,
@@ -307,7 +311,7 @@ class TestOps:
                 failures=failures, cancel_event=cancel_event,
                 artifact_dir=artifact_dir, test_filter=test_filter, tags=tags,
                 parallelism=parallelism or _default_parallelism(),
-                timeout_sec=timeout_sec or 300, fail_fast=fail_fast,
+                timeout_sec=timeout_sec or self._timeout_sec, fail_fast=fail_fast,
                 coverage=coverage, coverage_dir=effective_coverage_dir,
             )
         )
@@ -342,6 +346,7 @@ class TestOps:
             artifact_dir=artifact_dir, test_filter=test_filter, tags=tags,
             parallelism=parallelism, timeout_sec=timeout_sec,
             fail_fast=fail_fast, coverage=coverage, coverage_dir=coverage_dir,
+            timeout_sec_by_language=self._timeout_sec_by_language,
         )
     def _persist_result(self, artifact_dir: Path, status: TestRunStatus) -> None:
         """Persist test run result to artifact directory."""

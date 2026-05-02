@@ -237,9 +237,15 @@ class TestingConfig(BaseModel):
         description="Default parallel test workers. Adjust based on CPU cores.",
     )
     default_timeout_sec: int = Field(
-        default=300,
-        description="Default test timeout (5 min). "
-        "RISK: Too low may kill slow integration tests; too high wastes CI time.",
+        default=600,
+        description="Default per-target test timeout (10 min). "
+        "Used when no language-specific override is set.",
+    )
+    timeout_sec_by_language: dict[str, int] = Field(
+        default_factory=dict,
+        description="Per-language timeout overrides (seconds). "
+        "Falls back to default_timeout_sec for unlisted languages. "
+        "Example: {\"java\": 900, \"python\": 120}",
     )
     memory_reserve_mb: int = Field(
         default=1024,
@@ -252,6 +258,10 @@ class TestingConfig(BaseModel):
         "env vars (e.g. -Xmx for JVM, --max-old-space-size for Node). "
         "If None, computed dynamically from available memory at launch time.",
     )
+
+    def timeout_for_language(self, language: str) -> int:
+        """Get timeout for a given language, falling back to default."""
+        return self.timeout_sec_by_language.get(language, self.default_timeout_sec)
 
 class TelemetryConfig(BaseModel):
     """OpenTelemetry configuration.
